@@ -41,6 +41,12 @@ window.OC = window.OC || {};
       if (y > -72) return [34, 32, 52];    // котловина рассола
       return [18, 18, 34];                 // глубокий континентальный склон
     }
+    if (theme === 'cenote') {
+      if (y > -22) return [64, 176, 154];
+      if (y > -29) return [42, 106, 108];  // карстовые залы
+      if (y > -40) return [28, 72, 86];    // галоклин Анхелиты
+      return [12, 32, 56];                 // глубокий колодец Эль-Пит
+    }
     if (theme === 'arctic') {
       if (y > -11) return [218, 240, 252]; // кромка пакового припая
       if (y > -18) return [134, 206, 236]; // бирюзовые ледяные поля и полыньи
@@ -84,6 +90,14 @@ window.OC = window.OC || {};
         const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
         if (brine) {
           rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
+        } else if (biomeRef.isCeilingOpen && biomeRef.getCeilingHeight) {
+          if (biomeRef.isCeilingOpen(wx, wz)) {
+            rgb = [48, 224, 204];
+          } else {
+            const ch = biomeRef.getCeilingHeight(wx, wz);
+            if (ch < -10.5) rgb = [Math.round(rgb[0] * 0.54), Math.round(rgb[1] * 0.56), Math.round(rgb[2] * 0.62)];
+            else if (ch > 0) rgb = [164, 154, 126];
+          }
         }
         // Лёгкая изогипса каждые 15 м
         const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
@@ -95,6 +109,24 @@ window.OC = window.OC || {};
       }
     }
     octx.putImageData(img, 0, 0);
+
+    // Ходовые нити Ариадны в пещерном биоме
+    if (biomeRef.ariadnePaths && biomeRef.ariadnePaths.length) {
+      octx.save();
+      octx.strokeStyle = 'rgba(255, 168, 46, 0.85)';
+      octx.lineWidth = 1.6;
+      octx.setLineDash([3, 2]);
+      for (const path of biomeRef.ariadnePaths) {
+        octx.beginPath();
+        for (let i = 0; i < path.length; i++) {
+          const mp = worldToMap(path[i][0], path[i][2]);
+          if (i === 0) octx.moveTo(mp[0], mp[1]);
+          else octx.lineTo(mp[0], mp[1]);
+        }
+        octx.stroke();
+      }
+      octx.restore();
+    }
 
     // Сетка координат
     octx.strokeStyle = 'rgba(180,235,255,0.08)';

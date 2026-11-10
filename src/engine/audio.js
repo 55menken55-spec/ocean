@@ -157,6 +157,8 @@ window.OC = window.OC || {};
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') {
           if (S.currentDepth < 32 && Math.random() < 0.55) S.iceCrack();
+        } else if (S.currentBiomeId === 'cenote_caves') {
+          if (Math.random() < 0.25) S.caveDrip();
         } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') {
           S.shrimpSnap();
         }
@@ -164,6 +166,25 @@ window.OC = window.OC || {};
       S.scheduleShrimp();
     }, rnd(220, 1050) * nightBoost);
     S.timers.push(t);
+  };
+
+  S.caveDrip = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    osc.type = 'sine';
+    const f0 = rnd(580, 960);
+    osc.frequency.setValueAtTime(f0, now);
+    osc.frequency.exponentialRampToValueAtTime(f0 * 1.65, now + 0.085);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.015, now + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    osc.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.85, 0.85); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
+    osc.start(now); osc.stop(now + 0.18);
   };
 
   S.iceCrack = function () {
@@ -276,7 +297,7 @@ window.OC = window.OC || {};
     const t = setTimeout(() => {
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') S.belugaCall();
-        else if (S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') S.whale();
+        else if (S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool' && S.currentBiomeId !== 'cenote_caves') S.whale();
       }
       S.scheduleWhale();
     }, rnd(14000, 32000));
@@ -432,6 +453,9 @@ window.OC = window.OC || {};
     if (key === 'brine_pool_lake') return 'Резонанс галоклина и плотного рассола';
     if (key === 'methane_hydrate' || key === 'halite_spire' || key === 'cold_tubeworm') return 'Пульс газового гидрата и сипа';
     if (key === 'siphonophore' || key === 'oarfish' || key === 'chimaera' || key === 'myctophid' || key === 'hatchetfish') return 'Био-перелив сумеречной зоны';
+    if (key === 'halocline_layer') return 'Акустика галоклина и облака H₂S';
+    if (key === 'stalactite' || key === 'stalagmite' || key === 'ariadne_line') return 'Пещерный резонанс и капля воды';
+    if (key === 'cave_remipede' || key === 'blind_brotula' || key === 'blind_tetra' || key === 'cave_shrimp' || key === 'cenote_molly') return 'Гидроотклик стигобионтов';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
@@ -596,6 +620,36 @@ window.OC = window.OC || {};
           bo.connect(bg); bg.connect(out);
           bo.start(t); bo.stop(t + 0.58);
         });
+      } else if (key === 'halocline_layer') {
+        // Мерцающий двухслойный резонанс пресной и солёной воды галоклина
+        [135, 270, 540].forEach((f, i) => {
+          const t = now + i * 0.14;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = i === 0 ? 'triangle' : 'sine';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * 1.12, t + 0.8);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.055 / (i + 1), t + 0.08);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 1.0);
+        });
+      } else if (key === 'stalactite' || key === 'stalagmite' || key === 'ariadne_line') {
+        // Звонкие карстовые капли с пещерной реверберацией
+        [780, 1170, 1560].forEach((f, i) => {
+          const t = now + i * 0.22;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * 1.38, t + 0.14);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.06 / (i * 0.4 + 1), t + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.52);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.55);
+        });
       } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') {
         const dur = 1.2;
         const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
@@ -611,7 +665,7 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
         src.connect(bp); bp.connect(g); g.connect(out);
         src.start(now); src.stop(now + dur + 0.05);
-      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo' || key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge' || key === 'siphonophore' || key === 'oarfish' || key === 'chimaera' || key === 'myctophid' || key === 'hatchetfish') {
+      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo' || key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge' || key === 'siphonophore' || key === 'oarfish' || key === 'chimaera' || key === 'myctophid' || key === 'hatchetfish' || key === 'cave_remipede' || key === 'blind_brotula' || key === 'blind_tetra' || key === 'cave_shrimp' || key === 'cenote_molly') {
         [660, 990, 1320].forEach((f, i) => {
           const t = now + i * 0.14;
           const o = ctx.createOscillator();

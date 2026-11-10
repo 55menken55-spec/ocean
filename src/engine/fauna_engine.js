@@ -77,13 +77,15 @@ window.OC = window.OC || {};
       list.push(st);
     }
 
-    /* глаза */
-    const eyeG = new T.SphereGeometry(o.height * 0.085 * o.eyeScale, 6, 5);
-    OC.geoPrep(eyeG);
-    OC.paint(eyeG, 0x0a0a0a);
-    const e1 = eyeG.clone(); OC.xform(e1, { p: [o.len * 0.33, o.height * 0.12, o.width * 0.40] });
-    const e2 = eyeG.clone(); OC.xform(e2, { p: [o.len * 0.33, o.height * 0.12, -o.width * 0.40] });
-    list.push(e1, e2);
+    /* глаза (у слепых пещерных видов eyeScale === 0) */
+    if (o.eyeScale > 0) {
+      const eyeG = new T.SphereGeometry(o.height * 0.085 * o.eyeScale, 6, 5);
+      OC.geoPrep(eyeG);
+      OC.paint(eyeG, 0x0a0a0a);
+      const e1 = eyeG.clone(); OC.xform(e1, { p: [o.len * 0.33, o.height * 0.12, o.width * 0.40] });
+      const e2 = eyeG.clone(); OC.xform(e2, { p: [o.len * 0.33, o.height * 0.12, -o.width * 0.40] });
+      list.push(e1, e2);
+    }
 
     return OC.mergeGeometries(list);
   }
@@ -300,6 +302,10 @@ window.OC = window.OC || {};
         let ay = isHostAnemone
           ? OC.clamp(hideInAnemone ? floorC + 0.95 : floorC + 2.25 + Math.sin(t * 0.6) * 0.55, floorC + 0.75, -1.2)
           : OC.clamp(yDepth + depthShift + Math.sin(t * 0.25) * yAmp, floorC + 2.2, -1.4);
+        if (biome.getCeilingHeight) {
+          const chA = biome.getCeilingHeight(ax, az);
+          if (chA < 20.0) ay = Math.min(ay, Math.max(floorC + 2.2, chA - 2.0));
+        }
 
         // Наведение хищной стаи на жертву во время броска
         if (huntTimer > 0 && huntTarget) {
@@ -503,7 +509,12 @@ window.OC = window.OC || {};
             fl = floorY[i];
           }
           if (y < fl + 1.9) fy += (fl + 1.9 - y) * 14.0;
-          if (y > -1.3) fy -= (y + 1.3) * 10.0;
+          let maxFishY = -1.3;
+          if (biome.getCeilingHeight) {
+            const chF = biome.getCeilingHeight(x, z);
+            if (chF < 20.0) maxFishY = Math.min(maxFishY, chF - 1.6);
+          }
+          if (y > maxFishY) fy -= (y - maxFishY) * 11.0;
 
           // Лёгкое органическое рысканье
           const ph = phase[i];
@@ -3318,6 +3329,470 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Ходовая нить Ариадны для пещерного дайвинга (Ariadne Guideline) ---------- */
+  function makeAriadneGuideline(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    group.userData.key = 'ariadne_line';
+
+    const ptsRaw = preview
+      ? [[-3.2, -0.4, 1.4], [-1.1, 0.2, 0.2], [1.2, 0.1, -0.5], [3.3, 0.5, -1.5]]
+      : (opts.waypoints || [[0, -14, -60]]);
+
+    const pts = [];
+    for (let i = 0; i < ptsRaw.length; i++) {
+      const p = ptsRaw[i];
+      if (preview) {
+        pts.push(new T.Vector3(p[0], p[1], p[2]));
+      } else {
+        const fl = biome && biome.getHeight ? biome.getHeight(p[0], p[2]) : -18;
+        const ceil = biome && biome.getCeilingHeight ? biome.getCeilingHeight(p[0], p[2]) : 20;
+        const y = OC.clamp(p[1] !== undefined ? p[1] : (fl + 1.55), fl + 1.15, ceil < 30 ? ceil - 1.8 : -2.5);
+        pts.push(new T.Vector3(p[0], y, p[2]));
+      }
+    }
+
+    const lineMat = new T.MeshStandardMaterial({
+      color: 0xffa82e,
+      emissive: new T.Color(0xe66810),
+      emissiveIntensity: 0.75,
+      roughness: 0.35
+    });
+    const stakeMat = new T.MeshStandardMaterial({
+      color: 0xb6a488,
+      roughness: 0.88
+    });
+    const arrowMat = new T.MeshStandardMaterial({
+      color: 0xffe44d,
+      emissive: new T.Color(0xc89a14),
+      emissiveIntensity: 0.68,
+      roughness: 0.32,
+      side: T.DoubleSide
+    });
+
+    const markers = [];
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      // Известняковый анкерный столбик / обвязка
+      const stake = new T.Mesh(new T.CylinderGeometry(preview ? 0.08 : 0.12, preview ? 0.14 : 0.22, preview ? 0.65 : 1.45, 6), stakeMat);
+      stake.position.set(p.x, p.y - (preview ? 0.28 : 0.65), p.z);
+      stake.userData.key = 'ariadne_line';
+      group.add(stake);
+
+      if (i > 0) {
+        const a = pts[i - 1];
+        const b = p;
+        const segVec = new T.Vector3().subVectors(b, a);
+        const len = segVec.length();
+        if (len > 0.1) {
+          const cord = new T.Mesh(
+            new T.CylinderGeometry(preview ? 0.036 : 0.055, preview ? 0.036 : 0.055, len, 6),
+            lineMat
+          );
+          cord.position.addVectors(a, b).multiplyScalar(0.5);
+          cord.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), segVec.clone().normalize());
+          cord.userData.key = 'ariadne_line';
+          group.add(cord);
+
+          // Треугольный пещерный маркер-стрелка (указывает в сторону выхода i-1 -> к свету!)
+          const steps = preview ? 2 : Math.max(1, Math.floor(len / 34));
+          for (let s = 1; s <= steps; s++) {
+            const f = s / (steps + 1);
+            const arrow = new T.Mesh(
+              new T.ConeGeometry(preview ? 0.14 : 0.34, preview ? 0.36 : 0.85, 3),
+              arrowMat
+            );
+            arrow.position.lerpVectors(a, b, f);
+            arrow.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), segVec.clone().negate().normalize());
+            arrow.userData.key = 'ariadne_line';
+            group.add(arrow);
+            markers.push(arrow);
+          }
+        }
+      }
+    }
+
+    scene.add(group);
+    return {
+      key: 'ariadne_line',
+      sonarLabel: 'Ходовая нить Ариадны (маркер выхода)',
+      getPosition: () => pts[0],
+      update(dt, time) {
+        if (preview) return;
+        lineMat.emissiveIntensity = 0.68 + 0.18 * Math.sin(time * 2.2);
+      }
+    };
+  }
+
+  /* ---------- Слой галоклина и сероводородного облака (Сенот Анхелита) ---------- */
+  function makeHaloclineLayer(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const cx = preview ? 0 : (opts.cx || -210);
+    const cz = preview ? 0 : (opts.cz || 130);
+    const levelY = preview ? 0.15 : (opts.y || -24.5);
+    const rad = preview ? 3.2 : (opts.r || 74);
+
+    const group = new T.Group();
+    group.position.set(cx, levelY, cz);
+    group.userData.key = 'halocline_layer';
+
+    function makeDiskGeo(rDisk) {
+      const rings = 14, segs = 36;
+      const pos = [], edge = [], idx = [];
+      for (let r = 0; r <= rings; r++) {
+        const u = r / rings;
+        for (let s = 0; s <= segs; s++) {
+          const a = (s / segs) * Math.PI * 2;
+          const wobble = 1 + 0.08 * Math.sin(a * 3 + 0.6) + 0.05 * Math.cos(a * 5 - 1.1);
+          pos.push(Math.cos(a) * rDisk * u * wobble, 0, Math.sin(a) * rDisk * u * wobble);
+          edge.push(u);
+        }
+      }
+      const stride = segs + 1;
+      for (let r = 0; r < rings; r++) {
+        for (let s = 0; s < segs; s++) {
+          const p0 = r * stride + s, p1 = p0 + 1, p2 = (r + 1) * stride + s, p3 = p2 + 1;
+          idx.push(p0, p2, p1, p1, p2, p3);
+        }
+      }
+      const g = new T.BufferGeometry();
+      g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+      g.setAttribute('aEdge', new T.Float32BufferAttribute(edge, 1));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      return g;
+    }
+
+    const haloMat = new T.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: T.DoubleSide,
+      fog: !preview,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        { uTime: OC.uTime, uAmp: { value: preview ? 0.05 : 0.28 } }
+      ]),
+      vertexShader: `
+        attribute float aEdge;
+        uniform float uTime, uAmp;
+        varying float vEdge;
+        varying vec3 vWorld;
+        #include <fog_pars_vertex>
+        void main(){
+          vEdge = aEdge;
+          vec3 p = position;
+          float damp = 1.0 - smoothstep(0.72, 1.0, aEdge);
+          p.y += (sin(p.x * 0.14 + uTime * 1.1) * cos(p.z * 0.16 - uTime * 0.9) * 0.65
+                + sin((p.x - p.z) * 0.26 + uTime * 1.55) * 0.35) * uAmp * damp;
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          vWorld = (modelMatrix * vec4(p, 1.0)).xyz;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform float uTime;
+        varying float vEdge;
+        varying vec3 vWorld;
+        #include <fog_pars_fragment>
+        void main(){
+          float w = 0.5 + 0.5 * sin(vWorld.x * 0.32 + uTime * 1.2) * cos(vWorld.z * 0.28 - uTime * 0.95);
+          vec3 toCam = normalize(cameraPosition - vWorld);
+          float fres = pow(1.0 - abs(toCam.y), 1.85);
+          vec3 col = mix(vec3(0.28, 0.78, 0.82), vec3(0.84, 0.98, 0.90), clamp(w * 0.52 + fres * 0.65, 0.0, 1.0));
+          float edgeFade = 1.0 - smoothstep(0.75, 1.0, vEdge);
+          float alpha = mix(0.24, 0.62, fres) * edgeFade;
+          gl_FragColor = vec4(col, alpha);
+          #include <fog_fragment>
+        }`
+    });
+
+    const cloudMat = new T.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: T.DoubleSide,
+      fog: !preview,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        { uTime: OC.uTime }
+      ]),
+      vertexShader: `
+        attribute float aEdge;
+        uniform float uTime;
+        varying float vEdge;
+        varying vec3 vWorld;
+        #include <fog_pars_vertex>
+        void main(){
+          vEdge = aEdge;
+          vec3 p = position;
+          p.y += sin(p.x * 0.09 - uTime * 0.6) * cos(p.z * 0.11 + uTime * 0.5) * 0.45 * (1.0 - aEdge);
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          vWorld = (modelMatrix * vec4(p, 1.0)).xyz;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform float uTime;
+        varying float vEdge;
+        varying vec3 vWorld;
+        #include <fog_pars_fragment>
+        void main(){
+          float n = 0.5 + 0.5 * sin(vWorld.x * 0.16 + uTime * 0.45 + sin(vWorld.z * 0.14) * 1.6);
+          vec3 mistA = vec3(0.58, 0.66, 0.48);
+          vec3 mistB = vec3(0.86, 0.90, 0.74);
+          vec3 col = mix(mistA, mistB, n);
+          float edgeFade = 1.0 - smoothstep(0.68, 1.0, vEdge);
+          gl_FragColor = vec4(col, (0.42 + n * 0.26) * edgeFade);
+          #include <fog_fragment>
+        }`
+    });
+
+    const haloDisk = new T.Mesh(makeDiskGeo(rad), haloMat);
+    haloDisk.userData.key = 'halocline_layer';
+    group.add(haloDisk);
+
+    const cloudDisk = new T.Mesh(makeDiskGeo(rad * 0.94), cloudMat);
+    cloudDisk.position.y = preview ? -0.52 : -1.35;
+    cloudDisk.userData.key = 'halocline_layer';
+    group.add(cloudDisk);
+
+    // Древние затонувшие стволы деревьев Юкатана, выступающие из сероводородного облака Анхелиты
+    const logParts = [];
+    const logCount = preview ? 3 : 7;
+    const rng = OC.mulberry32(7731);
+    for (let i = 0; i < logCount; i++) {
+      const a = (i / logCount) * Math.PI * 2 + 0.4;
+      const dist = preview ? (0.8 + i * 0.55) : (12 + rng() * (rad * 0.58));
+      const hLog = preview ? (1.2 + rng() * 0.7) : (5.5 + rng() * 6.5);
+      const rLog = preview ? 0.08 : (0.28 + rng() * 0.24);
+      const trunk = new T.CylinderGeometry(rLog * 0.52, rLog, hLog, 6);
+      OC.geoPrep(trunk);
+      OC.paint(trunk, 0x5d4c3b);
+      OC.xform(trunk, {
+        r: [(rng() - 0.5) * 0.45, rng() * 3.1, (rng() - 0.5) * 0.45],
+        p: [Math.cos(a) * dist, preview ? -0.15 : -0.8, Math.sin(a) * dist]
+      });
+      logParts.push(trunk);
+
+      const branch = new T.CylinderGeometry(rLog * 0.2, rLog * 0.42, hLog * 0.45, 5);
+      OC.geoPrep(branch);
+      OC.paint(branch, 0x6e5b48);
+      OC.xform(branch, {
+        r: [0.65, a, 0.42],
+        p: [Math.cos(a) * dist + hLog * 0.14, preview ? 0.12 : 0.6, Math.sin(a) * dist]
+      });
+      logParts.push(branch);
+    }
+    const deadwood = new T.Mesh(OC.mergeGeometries(logParts), creatureMat);
+    deadwood.userData.key = 'halocline_layer';
+    group.add(deadwood);
+
+    let glow = null;
+    if (!preview) {
+      glow = new T.PointLight(0x76f0c8, 1.45, rad * 1.6, 1.4);
+      glow.position.set(0, 4.2, 0);
+      group.add(glow);
+    }
+
+    scene.add(group);
+    return {
+      key: 'halocline_layer',
+      sonarLabel: 'Облако галоклина и сероводорода (Анхелита)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (preview) return;
+        const d = Math.hypot(cx - camPos.x, cz - camPos.z);
+        group.visible = d < 460;
+        if (glow) glow.intensity = group.visible ? (1.25 + 0.28 * Math.sin(time * 1.4)) : 0;
+      }
+    };
+  }
+
+  /* ---------- Слепой пещерный гребненосец (Xibalbanus tulumensis) ---------- */
+  function makeCaveRemipede(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    group.userData.key = 'cave_remipede';
+
+    const segs = [];
+    const nSeg = 16;
+    const bodyMat = new T.MeshStandardMaterial({
+      color: 0xf4ece2,
+      emissive: new T.Color(0x3a6a70),
+      emissiveIntensity: 0.24,
+      roughness: 0.32,
+      transparent: true,
+      opacity: 0.88
+    });
+
+    for (let i = 0; i < nSeg; i++) {
+      const sg = new T.Group();
+      const f = i === 0 ? 1.05 : (1.0 - (i / nSeg) * 0.42);
+      const torso = new T.SphereGeometry(0.14 * f, 8, 6);
+      torso.scale(1.15, 0.55, 1.45);
+      sg.add(new T.Mesh(torso, bodyMat));
+
+      if (i === 0) {
+        for (const s of [-1, 1]) {
+          const ant = new T.CylinderGeometry(0.008, 0.018, 0.72, 4);
+          const am = new T.Mesh(ant, bodyMat);
+          am.position.set(s * 0.16, 0.04, 0.36);
+          am.rotation.x = Math.PI * 0.46;
+          am.rotation.z = -s * 0.42;
+          sg.add(am);
+        }
+      } else {
+        for (const s of [-1, 1]) {
+          const leg = new T.BoxGeometry(0.32 * f, 0.025, 0.08);
+          const lm = new T.Mesh(leg, bodyMat);
+          lm.position.set(s * 0.22 * f, -0.02, 0);
+          lm.rotation.y = s * 0.28;
+          sg.add(lm);
+        }
+      }
+      sg.userData.key = 'cave_remipede';
+      group.add(sg);
+      segs.push(sg);
+    }
+
+    group.scale.setScalar(opts.scale || (preview ? 0.95 : 1.15));
+    scene.add(group);
+
+    if (preview) {
+      for (let i = 0; i < segs.length; i++) {
+        segs[i].position.set(Math.sin(i * 0.46) * 0.36, 0, (nSeg * 0.13) - i * 0.22);
+        segs[i].rotation.y = Math.cos(i * 0.46) * 0.25;
+      }
+      return { key: 'cave_remipede', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || -200, cz = opts.cz || 126, r = opts.r || 16, yBase = opts.y || -22.5;
+    let ang = Math.random() * 6.28;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'cave_remipede',
+      sonarLabel: 'Пещерный гребненосец (Xibalbanus tulumensis)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 280) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 1.35) / Math.max(8, r)) * dt;
+        const ax = cx + Math.cos(ang) * r;
+        const az = cz + Math.sin(ang) * r * 0.85;
+        const bx = cx + Math.cos(ang + 0.09) * r;
+        const bz = cz + Math.sin(ang + 0.09) * r * 0.85;
+        const flA = biome.getHeight(ax, az);
+        const ceilA = biome.getCeilingHeight ? biome.getCeilingHeight(ax, az) : 20;
+        const ay = OC.clamp(yBase + Math.sin(time * 0.7 + ang) * 1.4, flA + 1.8, ceilA < 25 ? ceilA - 1.6 : -2.0);
+        const by = OC.clamp(yBase + Math.sin(time * 0.7 + ang + 0.09) * 1.4, biome.getHeight(bx, bz) + 1.8, ceilA < 25 ? ceilA - 1.6 : -2.0);
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        for (let i = 0; i < segs.length; i++) {
+          const ph = time * 4.8 - i * 0.55;
+          segs[i].position.set(Math.sin(ph) * (0.04 + i * 0.015), 0, -i * 0.21);
+          segs[i].rotation.y = Math.cos(ph) * 0.26;
+        }
+      }
+    };
+  }
+
+  /* ---------- Юкатанская слепая бротула / Белая дама пещер (Typhliasina pearsei) ---------- */
+  function makeBlindBrotula(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    group.userData.key = 'blind_brotula';
+
+    const nSeg = 9;
+    const segs = [];
+    const paleMat = new T.MeshStandardMaterial({
+      vertexColors: true,
+      emissive: new T.Color(0x285660),
+      emissiveIntensity: 0.28,
+      roughness: 0.36,
+      side: T.DoubleSide
+    });
+
+    for (let i = 0; i < nSeg; i++) {
+      const sg = new T.Group();
+      const f = Math.max(0.22, 1.0 - (i / nSeg) * 0.78);
+      const segG = new T.SphereGeometry(0.18 * f, 8, 6);
+      segG.scale(0.85, 1.05, 1.55);
+      OC.geoPrep(segG);
+      OC.paint(segG, (x, y, z, c) => c.set(y > 0 ? 0xf6efe6 : 0xe8b8c0));
+      sg.add(new T.Mesh(segG, paleMat));
+
+      if (i > 0) {
+        const finG = new T.PlaneGeometry(0.42, 0.22 * f);
+        finG.rotateY(Math.PI / 2);
+        OC.geoPrep(finG);
+        OC.paint(finG, 0xfdf8f2);
+        const fm = new T.Mesh(finG, paleMat);
+        fm.position.y = 0.20 * f;
+        sg.add(fm);
+      } else {
+        for (const s of [-1, 1]) {
+          const pFin = new T.ConeGeometry(0.08, 0.28, 4);
+          OC.geoPrep(pFin);
+          OC.paint(pFin, 0xf2d4da);
+          const pm = new T.Mesh(pFin, paleMat);
+          pm.position.set(s * 0.16, -0.05, -0.04);
+          pm.rotation.z = s * 1.15;
+          sg.add(pm);
+        }
+      }
+      sg.userData.key = 'blind_brotula';
+      group.add(sg);
+      segs.push(sg);
+    }
+
+    group.scale.setScalar(opts.scale || (preview ? 1.0 : 1.18));
+    scene.add(group);
+
+    if (preview) {
+      for (let i = 0; i < segs.length; i++) {
+        segs[i].position.set(Math.sin(i * 0.55) * 0.26, 0, 1.2 - i * 0.32);
+        segs[i].rotation.y = Math.cos(i * 0.55) * 0.24;
+      }
+      return { key: 'blind_brotula', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 180, cz = opts.cz || 210, r = opts.r || 24, yBase = opts.y || -40;
+    let ang = Math.random() * 6.28;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'blind_brotula',
+      sonarLabel: 'Слепая бротула — Белая дама пещер (Typhliasina)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 320) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 1.75) / Math.max(10, r)) * dt;
+        const ax = cx + Math.cos(ang) * r;
+        const az = cz + Math.sin(ang) * r;
+        const bx = cx + Math.cos(ang + 0.08) * r;
+        const bz = cz + Math.sin(ang + 0.08) * r;
+        const flA = biome.getHeight(ax, az);
+        const ceilA = biome.getCeilingHeight ? biome.getCeilingHeight(ax, az) : 20;
+        const ay = OC.clamp(yBase + Math.sin(time * 0.55 + ang) * 2.2, flA + 1.8, ceilA < 25 ? ceilA - 1.8 : -2.0);
+        const by = OC.clamp(yBase + Math.sin(time * 0.55 + ang + 0.08) * 2.2, biome.getHeight(bx, bz) + 1.8, ceilA < 25 ? ceilA - 1.8 : -2.0);
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        for (let i = 0; i < segs.length; i++) {
+          const ph = time * 3.6 - i * 0.52;
+          segs[i].position.set(Math.sin(ph) * (0.04 + i * 0.025), 0, -i * 0.30);
+          segs[i].rotation.y = Math.cos(ph) * 0.22;
+        }
+      }
+    };
+  }
+
   /* ---------- Надводное научно-исследовательское судно (Mother-Ship НИС) ---------- */
   function makeResearchVessel(scene, biome, opts) {
     opts = opts || {};
@@ -4647,6 +5122,30 @@ window.OC = window.OC || {};
         sonarTargets.push(cho);
       }
 
+      for (const al of (plan.ariadneLines || [])) {
+        const alo = makeAriadneGuideline(faunaGroup, biome, al);
+        agents.push(alo);
+        sonarTargets.push(alo);
+      }
+
+      for (const hc of (plan.haloclines || [])) {
+        const hco = makeHaloclineLayer(faunaGroup, biome, hc);
+        agents.push(hco);
+        sonarTargets.push(hco);
+      }
+
+      for (const rm of (plan.remipedes || [])) {
+        const rmo = makeCaveRemipede(faunaGroup, biome, rm);
+        agents.push(rmo);
+        sonarTargets.push(rmo);
+      }
+
+      for (const br of (plan.blindBrotulas || [])) {
+        const bro = makeBlindBrotula(faunaGroup, biome, br);
+        agents.push(bro);
+        sonarTargets.push(bro);
+      }
+
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
@@ -4971,6 +5470,8 @@ window.OC = window.OC || {};
               c.setHex(0x282c36).lerp(new T.Color(0x6d8492), Math.sin(x * 0.45 + z * 0.35) * 0.25 + 0.25);
             } else if (bId === 'brine_pool') {
               c.setHex(0x3a3248).lerp(new T.Color(0x8cd2d8), Math.sin(x * 0.42 + z * 0.42) * 0.32 + 0.35);
+            } else if (bId === 'cenote_caves') {
+              c.setHex(0x8e836e).lerp(new T.Color(0xcab999), Math.sin(x * 0.44 + z * 0.4) * 0.38 + 0.4);
             } else {
               c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
             }
@@ -5052,6 +5553,14 @@ window.OC = window.OC || {};
           makeOarfish(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'chimaera') {
           makeChimaera(tmpGroup, dummyBiome, { cx: 0, cz: 0, scale: 1.25 });
+        } else if (key === 'ariadne_line') {
+          makeAriadneGuideline(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'halocline_layer') {
+          makeHaloclineLayer(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'cave_remipede') {
+          makeCaveRemipede(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'blind_brotula') {
+          makeBlindBrotula(tmpGroup, dummyBiome, { preview: true });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;

@@ -78,6 +78,10 @@ window.OC = window.OC || {};
     'Острова атолла': 'rock_islands',
     'Лагуна саргасса': 'jellyfish_lagoon',
     'Синий угол': 'blue_corner',
+    'Портал сенота': 'cenote_portal',
+    'Зал сталактитов': 'stalactite_cathedral',
+    'Галоклин Анхелиты': 'angelita_halocline',
+    'Бездна Эль-Пит': 'el_pit_depth',
     'Все зоны': 'crest'
   };
 

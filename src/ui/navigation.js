@@ -24,6 +24,7 @@ window.OC = window.OC || {};
     targetPitch: -0.14,
     swimSpeed: 18,
     inBrine: false,
+    inHalocline: false,
     // Вид от 3-го лица за аппаратом ROV
     rovView: false,
     chasePos: new T.Vector3(),
@@ -139,7 +140,12 @@ window.OC = window.OC || {};
         ).normalize();
         state.orbitTarget.copy(state.pos).addScaledVector(_fwd, 34);
         const fl = biomeRef.getHeight(state.orbitTarget.x, state.orbitTarget.z);
-        state.orbitTarget.y = Math.max(state.orbitTarget.y, fl + 1.5);
+        let orbCeil = 1e6;
+        if (biomeRef && biomeRef.getCeilingHeight) {
+          const ch = biomeRef.getCeilingHeight(state.orbitTarget.x, state.orbitTarget.z);
+          if (ch < 35.0) orbCeil = ch - 2.4;
+        }
+        state.orbitTarget.y = Math.min(orbCeil, Math.max(state.orbitTarget.y, fl + 1.5));
         state.orbitDist = 34;
         state.orbitTargetDist = 34;
         // В орбите камера смотрит НА target, поэтому разворачиваем yaw
@@ -156,7 +162,12 @@ window.OC = window.OC || {};
       ).normalize();
       state.cinemaCenter.copy(state.pos).addScaledVector(_fwd, 28);
       const fl = biomeRef ? biomeRef.getHeight(state.cinemaCenter.x, state.cinemaCenter.z) : -10;
-      state.cinemaCenter.y = Math.max(state.cinemaCenter.y, fl + 3.0);
+      let cinCeil = 1e6;
+      if (biomeRef && biomeRef.getCeilingHeight) {
+        const ch = biomeRef.getCeilingHeight(state.cinemaCenter.x, state.cinemaCenter.z);
+        if (ch < 35.0) cinCeil = ch - 2.4;
+      }
+      state.cinemaCenter.y = Math.min(cinCeil, Math.max(state.cinemaCenter.y, fl + 3.0));
       state.cinemaPhase = Math.atan2(state.pos.z - state.cinemaCenter.z, state.pos.x - state.cinemaCenter.x);
       state.cinemaYawOffset = 0;
       state.cinemaPitchOffset = 0;
@@ -274,7 +285,12 @@ window.OC = window.OC || {};
       const brine = biomeRef.getBrineSurfaceAt(p.x, p.z);
       if (brine) minY = Math.max(minY, brine.level - 1.1);
     }
-    const maxY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+    let maxY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+    if (biomeRef && biomeRef.getCeilingHeight) {
+      const ceil = biomeRef.getCeilingHeight(p.x, p.z);
+      if (ceil < 35.0) maxY = Math.min(maxY, ceil - 1.75);
+    }
+    if (maxY < minY) maxY = minY;
     p.y = OC.clamp(p.y, minY, maxY);
   }
 
@@ -421,6 +437,7 @@ window.OC = window.OC || {};
     getTourState: buildTourState,
     getMode: () => state.mode,
     isInBrine: () => state.inBrine,
+    isInHalocline: () => state.inHalocline,
     isRovView: () => state.rovView,
     setRovView(on) {
       state.rovView = !!on;
@@ -461,6 +478,7 @@ window.OC = window.OC || {};
       state.pos.set(sp.pos[0], sp.pos[1], sp.pos[2]);
       state.vel.set(0, 0, 0);
       state.inBrine = false;
+      state.inHalocline = false;
       state.yaw = sp.yaw;
       state.targetYaw = sp.yaw;
       state.pitch = sp.pitch;
@@ -477,14 +495,27 @@ window.OC = window.OC || {};
         const brine = biomeRef.getBrineSurfaceAt(x, z);
         if (brine) minSafe = Math.max(minSafe, brine.level + 0.8);
       }
-      const safeY = Math.max(y, minSafe);
+      let maxSafe = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+      if (biomeRef && biomeRef.getCeilingHeight) {
+        const cEnd = biomeRef.getCeilingHeight(x, z);
+        if (cEnd < 35.0) maxSafe = Math.min(maxSafe, cEnd - 2.2);
+      }
+      const safeY = OC.clamp(y, minSafe, Math.max(minSafe, maxSafe));
       const dist = Math.hypot(x - state.pos.x, safeY - state.pos.y, z - state.pos.z);
 
       // Если точка далеко (> 380 м), телепортируемся в окрестность с коротким плавным подлётом
       if (dist > 380) {
         const dirX = (state.pos.x - x) / dist;
         const dirZ = (state.pos.z - z) / dist;
-        state.pos.set(x + dirX * 55, Math.max(safeY + 4, biomeRef.getHeight(x + dirX * 55, z + dirZ * 55) + 3), z + dirZ * 55);
+        const nearX = x + dirX * 55;
+        const nearZ = z + dirZ * 55;
+        const nearFl = biomeRef.getHeight(nearX, nearZ) + 3;
+        let nearMax = maxSafe;
+        if (biomeRef && biomeRef.getCeilingHeight) {
+          const cNear = biomeRef.getCeilingHeight(nearX, nearZ);
+          if (cNear < 35.0) nearMax = Math.min(nearMax, cNear - 2.2);
+        }
+        state.pos.set(nearX, OC.clamp(safeY + 4, nearFl, Math.max(nearFl, nearMax)), nearZ);
       }
 
       const endYaw = yaw !== undefined ? yaw : Math.atan2(x - state.pos.x, z - state.pos.z);
@@ -684,6 +715,7 @@ window.OC = window.OC || {};
           const brEnd = biomeRef.getBrineSurfaceAt(state.pos.x, state.pos.z);
           state.inBrine = !!(brEnd && state.pos.y <= brEnd.level + 0.45);
         }
+        state.inHalocline = !!(biomeRef && biomeRef.getHaloclineAt && biomeRef.getHaloclineAt(state.pos.x, state.pos.y, state.pos.z));
       }
 
       _fwd.set(
@@ -704,8 +736,13 @@ window.OC = window.OC || {};
         );
         if (biomeRef) {
           const flCam = biomeRef.getHeight(_chaseGoal.x, _chaseGoal.z);
-          const maxCamY = (biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
-          _chaseGoal.y = OC.clamp(_chaseGoal.y, flCam + 0.85, maxCamY);
+          let maxCamY = (biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+          if (biomeRef.getCeilingHeight) {
+            const cCam = biomeRef.getCeilingHeight(_chaseGoal.x, _chaseGoal.z);
+            if (cCam < 35.0) maxCamY = Math.min(maxCamY, cCam - 0.95);
+          }
+          const loY = flCam + 0.85;
+          _chaseGoal.y = OC.clamp(_chaseGoal.y, loY, Math.max(loY, maxCamY));
         }
         if (!state.chaseInited || state.chasePos.distanceToSquared(_chaseGoal) > 2500) {
           state.chasePos.copy(_chaseGoal);

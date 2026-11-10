@@ -18,8 +18,9 @@ window.OC = window.OC || {};
   ]);
   const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm']);
   const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle', 'halite_spire']);
+  const KARST_SPECIES = new Set(['stalactite', 'stalagmite']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine']);
 
   let sceneRef = null;
   let rovGroup = null;
@@ -413,7 +414,11 @@ window.OC = window.OC || {};
     const hx = origin.x + (rng() - 0.5) * STREAM_BOX_XZ;
     const hz = origin.z + (rng() - 0.5) * STREAM_BOX_XZ;
     const fl = biome ? biome.getHeight(hx, hz) : -25;
-    const maxY = (biome && biome.noSurface) ? Math.min(-2418, origin.y + 22) : -0.45;
+    let maxY = (biome && biome.noSurface) ? Math.min(-3.5, origin.y + 22) : -0.45;
+    if (biome && biome.getCeilingHeight) {
+      const ch = biome.getCeilingHeight(hx, hz);
+      if (ch < 25.0) maxY = Math.min(maxY, ch - 1.2);
+    }
     const minY = Math.max(fl + 0.9, origin.y - STREAM_BOX_Y * 0.5);
     const spanY = Math.max(2.0, maxY - minY);
     const hy = minY + rng() * spanY;
@@ -437,7 +442,7 @@ window.OC = window.OC || {};
     const mult = labState ? labState.currentMult : 1.0;
     const halfXZ = STREAM_BOX_XZ * 0.5;
     const halfY = STREAM_BOX_Y * 0.5;
-    const maxSurf = (biome && biome.noSurface) ? -2400 : -0.35;
+    const maxSurf = (biome && biome.noSurface) ? -3.5 : -0.35;
 
     for (let i = 0; i < STREAM_COUNT; i++) {
       let x = streamHeadX[i];
@@ -661,6 +666,10 @@ window.OC = window.OC || {};
           chemNote = `Рассол 42‰ · ${waterTemp.toFixed(1)} °C`;
           colorHex = 0x8ae8ff;
         }
+      } else if (KARST_SPECIES.has(sp)) {
+        category = 'Карстовый спелеотем';
+        chemNote = sp === 'stalactite' ? 'Кальцит CaCO₃ · Рост ~0.1 мм/год' : 'Травертин CaCO₃ · Климатическая запись';
+        colorHex = 0xe4d4b8;
       } else if (WRECK_SPECIES.has(sp)) {
         category = 'Архео-фрагмент';
         chemNote = `Патина бронзы и карбонат`;
@@ -681,9 +690,11 @@ window.OC = window.OC || {};
         ? `Радиоляриевый ил · ${depthM.toFixed(0)} м`
         : (biome.id === 'brine_pool'
           ? `Рассол 230‰ и карбонатный ил · ${depthM.toFixed(0)} м`
-          : (biome.id === 'hydrothermal_vents'
-            ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-            : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`)));
+          : (biome.id === 'cenote_caves'
+            ? `Карстовый известняк · ${depthM.toFixed(0)} м`
+            : (biome.id === 'hydrothermal_vents'
+              ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
+              : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`))));
     }
 
     return {
@@ -732,7 +743,10 @@ window.OC = window.OC || {};
 
       // Термоклин / галоклин / придонный подогрев у курильщиков
       let Tval = baseT + deltaT;
-      if (!biome.noSurface && !biome.hasAurora) {
+      if (biome.id === 'cenote_caves') {
+        // Инверсия галоклина сенотов: прохладная пресная вода сверху, теплее под галоклином (24+ м)
+        Tval += OC.smoothstep(22, 28, d) * 0.6;
+      } else if (!biome.noSurface && !biome.hasAurora) {
         const thermoDrop = OC.smoothstep(18, 65, d) * 3.8;
         Tval -= thermoDrop;
       } else if (biome.hasAurora) {

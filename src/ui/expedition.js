@@ -300,6 +300,44 @@ window.OC = window.OC || {};
       landmarkId: 'twilight_column',
       goal: 1,
       progress: (ctx) => ctx.hasPhoto(['siphonophore', 'oarfish', 'chimaera', 'myctophid', 'hatchetfish']) ? 1 : 0
+    },
+
+    // 8. Подводные карстовые пещеры и сеноты Юкатана (Сак-Актун, 0–58 м)
+    {
+      id: 'cc_atlas_6',
+      biomeId: 'cenote_caves',
+      title: 'Спелеодайвер Юкатана',
+      desc: 'Откройте 6 карстовых образований или стигобионтов системы Сак-Актун.',
+      landmarkId: 'cenote_portal',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'cc_ariadne_stalactite',
+      biomeId: 'cenote_caves',
+      title: 'Нить Ариадны и свод сталактитов',
+      desc: 'Войдите в Галерею сталактитов (stalactite_gallery) и снимите или просканируйте сонаром (G) сталактит, сталагмит или нить Ариадны.',
+      landmarkId: 'stalactite_cathedral',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('stalactite_gallery') && ctx.hasPhotoOrPing(['stalactite', 'stalagmite', 'ariadne_line']) ? 1 : 0
+    },
+    {
+      id: 'cc_angelita_halocline',
+      biomeId: 'cenote_caves',
+      title: 'Призрачная река Анхелиты',
+      desc: 'Доплывите до облака галоклина и сероводорода (halocline_cloud) и снимите (P) галоклин или гребненосца Xibalbanus.',
+      landmarkId: 'angelita_halocline',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('halocline_cloud') && ctx.hasPhotoOrPing(['halocline_layer', 'cave_remipede', 'cave_shrimp']) ? 1 : 0
+    },
+    {
+      id: 'cc_el_pit_blind',
+      biomeId: 'cenote_caves',
+      title: 'Белая дама бездны Эль-Пит',
+      desc: 'Погрузитесь в колодец Эль-Пит на 38+ м и сфотографируйте (P) слепую бротулу или слепую мексиканскую тетру.',
+      landmarkId: 'el_pit_depth',
+      goal: 1,
+      progress: (ctx) => (ctx.depthM >= 38 && ctx.hasPhoto(['blind_brotula', 'blind_tetra', 'cave_remipede'])) ? 1 : 0
     }
   ];
 

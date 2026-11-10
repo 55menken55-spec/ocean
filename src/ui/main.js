@@ -1086,7 +1086,8 @@ window.OC = window.OC || {};
       arctic_sea: 'Арктика',
       wreck_atoll: 'Атолл и Корабль',
       mariana_trench: 'Марианская 10920м',
-      brine_pool: 'Соляной бассейн'
+      brine_pool: 'Соляной бассейн',
+      cenote_caves: 'Сеноты Юкатана'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
@@ -1095,7 +1096,8 @@ window.OC = window.OC || {};
       arctic_sea: 'Баффин · 74° с.ш.',
       wreck_atoll: 'Палау · Микронезия',
       mariana_trench: 'Челленджер · 10 920 м',
-      brine_pool: 'Мексиканский залив · 650 м'
+      brine_pool: 'Мексиканский залив · 650 м',
+      cenote_caves: 'Юкатан · Сак-Актун 58 м'
     };
 
     function renderBiomeUI() {
@@ -1514,7 +1516,7 @@ window.OC = window.OC || {};
 
   function runLoop(renderer, scene, camera) {
     let last = performance.now();
-    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100;
+    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100, wasInHalocline = false, lastHaloToastAt = -100;
 
     function resize() {
       const w = window.innerWidth, h = window.innerHeight;
@@ -1656,6 +1658,13 @@ window.OC = window.OC || {};
         }
         wasInBrine = inBrineNow;
 
+        const inHaloNow = !!(OC.Navigation.isInHalocline && OC.Navigation.isInHalocline());
+        if (inHaloNow && !wasInHalocline && time - lastHaloToastAt > 8) {
+          lastHaloToastAt = time;
+          toast('Галоклин Анхелиты (0‰ / 35‰): пресная вода переходит в облако H₂S!');
+        }
+        wasInHalocline = inHaloNow;
+
         if (subMode) {
           const flHere = biome.getHeight(craftPos.x, craftPos.z);
           const clearance = Math.max(0, craftPos.y - flHere);
@@ -1674,14 +1683,19 @@ window.OC = window.OC || {};
             subCurrentEl.classList.toggle('warn', cKnots > 1.8);
           }
           if (subPhaseEl) {
+            const inCaveCeiling = !!(biome.getCeilingHeight && biome.getCeilingHeight(craftPos.x, craftPos.z) < 25.0);
             subPhaseEl.textContent = inBrineNow
               ? 'Галоклин · Рассол 230‰'
-              : (biome.noSurface
-                ? (biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
-                  : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м'))
-                : (biome.hasAurora
-                  ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
-                  : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'))));
+              : (inHaloNow
+                ? 'Галоклин сенота · Облако H₂S'
+                : (inCaveCeiling
+                  ? 'Карстовая пещера · Свод'
+                  : (biome.noSurface
+                    ? (biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
+                      : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м'))
+                    : (biome.hasAurora
+                      ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
+                      : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'))))));
           }
           drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }

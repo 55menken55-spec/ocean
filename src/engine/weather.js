@@ -94,14 +94,18 @@ window.OC = window.OC || {};
       }
 
       const k = Math.min(1, dt * 0.65);
-      state.waveAmp = OC.lerp(state.waveAmp, targetPreset.waveAmp, k);
+      const sheltered = !!(biome && biome.shelteredSurface);
+      const waveMult = sheltered ? 0.22 : 1.0;
+      const turbMult = sheltered ? 0.25 : 1.0;
+      state.waveAmp = OC.lerp(state.waveAmp, targetPreset.waveAmp * waveMult, k);
       state.cloudCover = OC.lerp(state.cloudCover, targetPreset.cloudCover, k);
       state.stormMix = OC.lerp(state.stormMix, targetPreset.stormMix, k);
       state.precip = OC.lerp(state.precip, targetPreset.precip, k);
-      state.turbidity = OC.lerp(state.turbidity, targetPreset.turbidity, k);
+      state.turbidity = OC.lerp(state.turbidity, targetPreset.turbidity * turbMult, k);
 
-      // Вспышки молний в грозу (в неарктических штормовых фронтах)
-      if (!isArctic && state.stormMix > 0.62) {
+      const underCaveRoof = !!(biome && biome.getCeilingHeight && camPos && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
+      // Вспышки молний в грозу (в неарктических штормовых фронтах и вне пещер)
+      if (!isArctic && !underCaveRoof && state.stormMix > 0.62) {
         if (time >= state.nextLightningAt) {
           state.lightning = 1.0;
           state.nextLightningAt = time + 7.5 + (Math.sin(time * 13.7) * 0.5 + 0.5) * 11.0;
@@ -117,7 +121,7 @@ window.OC = window.OC || {};
         if (camPos.y < -0.25) {
           state.droplets = Math.min(1.0, state.droplets + dt * 2.5);
         } else {
-          const rainKeep = (!isArctic && state.precip > 0.3) ? state.precip * 0.52 : 0.0;
+          const rainKeep = (!isArctic && !underCaveRoof && state.precip > 0.3) ? state.precip * 0.52 : 0.0;
           state.droplets = Math.max(rainKeep, state.droplets - dt * 0.24);
         }
       }

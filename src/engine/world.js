@@ -955,8 +955,23 @@ window.OC = window.OC || {};
     const rayIntensity = opt.rayStrength * (1.0 - wState.stormMix * 0.65) * bloomAtten;
     raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && rayIntensity > 0.02;
     if (raysGroup.visible) {
-      raysGroup.position.x = Math.round(camPos.x / 60) * 60;
-      raysGroup.position.z = Math.round(camPos.z / 60) * 60;
+      if (biome && biome.getCenoteShafts) {
+        const shafts = biome.getCenoteShafts();
+        let best = shafts && shafts[0];
+        let bestD2 = 1e9;
+        for (let i = 0; shafts && i < shafts.length; i++) {
+          const s = shafts[i];
+          const d2 = (camPos.x - s.x) * (camPos.x - s.x) + (camPos.z - s.z) * (camPos.z - s.z);
+          if (d2 < bestD2) { bestD2 = d2; best = s; }
+        }
+        if (best) {
+          raysGroup.position.x = best.x;
+          raysGroup.position.z = best.z;
+        }
+      } else {
+        raysGroup.position.x = Math.round(camPos.x / 60) * 60;
+        raysGroup.position.z = Math.round(camPos.z / 60) * 60;
+      }
       // Закон Снеллиуса сжимает наклон луча в воде (~0.75 от горизонтального отклонения)
       _refractRayDir.set(sunDir.x * 0.68, Math.max(0.45, sunDir.y), sunDir.z * 0.68).normalize();
       _rayQuat.setFromUnitVectors(_upAxis, _refractRayDir);
@@ -970,7 +985,8 @@ window.OC = window.OC || {};
 
     /* надводные осадки (штормовой дождь / арктический снегопад) */
     if (precipPts && precipMat) {
-      precipPts.visible = !(biome && biome.noSurface) && wState.precip > 0.03 && camPos.y > -12.0;
+      const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
+      precipPts.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && camPos.y > -12.0;
       if (precipPts.visible) {
         precipMat.uniforms.uCamPos.value.copy(camPos);
         precipMat.uniforms.uPrecip.value = wState.precip;

@@ -7,8 +7,9 @@ window.OC = window.OC || {};
   let sceneRef = null;
   let biomeRef = null;
   let terrainMat = null;
+  let ceilingMat = null;
   let group = null;
-  const chunks = new Map(); // key "cx,cz" -> { cx, cz, wx, wz, segs, mesh }
+  const chunks = new Map(); // key "cx,cz" -> { cx, cz, wx, wz, segs, mesh, ceilMesh }
   let chunkRadiusCount = 8; // [-8 .. 7] = 16x16 для 2400 м при chunkSize=150
   let chunkSize = 150;
   let initialized = false;
@@ -121,6 +122,120 @@ window.OC = window.OC || {};
     return geo;
   }
 
+  function buildCeilingChunkGeometry(cx, cz, segs) {
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+    const n = segs + 1;
+    const gridCount = n * n;
+    const skirtVerts = n * 4 * 2;
+    const totalVerts = gridCount + skirtVerts;
+
+    const pos = new Float32Array(totalVerts * 3);
+    const norm = new Float32Array(totalVerts * 3);
+    const col = new Float32Array(totalVerts * 3);
+    const openMask = new Uint8Array(gridCount);
+
+    const eps = Math.max(1.2, chunkSize / segs * 0.45);
+    const sampleCeil = (sx, sz) => Math.min(22.0, biomeRef.getCeilingHeight(sx, sz));
+    let anyClosed = false;
+
+    for (let iz = 0; iz <= segs; iz++) {
+      const z = z0 + (iz / segs) * chunkSize;
+      for (let ix = 0; ix <= segs; ix++) {
+        const x = x0 + (ix / segs) * chunkSize;
+        const rawY = biomeRef.getCeilingHeight(x, z);
+        const y = Math.min(22.0, rawY);
+        const idx = iz * n + ix;
+        const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(x, z) : (rawY > 38.0);
+        openMask[idx] = isOpen ? 1 : 0;
+        if (!isOpen) anyClosed = true;
+
+        const p3 = idx * 3;
+        pos[p3] = x;
+        pos[p3 + 1] = y;
+        pos[p3 + 2] = z;
+
+        // Нормали потолка пещеры смотрят вниз и внутрь каверны
+        const hL = sampleCeil(x - eps, z);
+        const hR = sampleCeil(x + eps, z);
+        const hD = sampleCeil(x, z - eps);
+        const hU = sampleCeil(x, z + eps);
+        const nx = hR - hL;
+        const ny = -2 * eps;
+        const nz = hU - hD;
+        const len = Math.hypot(nx, ny, nz) || 1;
+        norm[p3] = nx / len;
+        norm[p3 + 1] = ny / len;
+        norm[p3 + 2] = nz / len;
+
+        if (biomeRef.getCeilingColor) biomeRef.getCeilingColor(x, y, z, _tmpCol);
+        else biomeRef.getTerrainColor(x, y, z, _tmpCol);
+        col[p3] = _tmpCol.r;
+        col[p3 + 1] = _tmpCol.g;
+        col[p3 + 2] = _tmpCol.b;
+      }
+    }
+
+    if (!anyClosed) return null;
+
+    const indices = [];
+    for (let iz = 0; iz < segs; iz++) {
+      for (let ix = 0; ix < segs; ix++) {
+        const a = iz * n + ix;
+        const b = a + 1;
+        const c = a + n;
+        const d = c + 1;
+        if (openMask[a] && openMask[b] && openMask[c] && openMask[d]) continue;
+        indices.push(a, b, c, b, d, c);
+      }
+    }
+    if (!indices.length) return null;
+
+    // Юбки потолка уходят вверх (+4 м в толщу карста), чтобы скрывать переходы LOD
+    let vPtr = gridCount;
+    function addCeilSkirtEdge(getGridIdx, reverse) {
+      const startPtr = vPtr;
+      for (let k = 0; k < n; k++) {
+        const gi = getGridIdx(k);
+        const g3 = gi * 3;
+        const t3 = vPtr * 3;
+        const b3 = (vPtr + 1) * 3;
+
+        pos[t3] = pos[g3]; pos[t3 + 1] = pos[g3 + 1]; pos[t3 + 2] = pos[g3 + 2];
+        pos[b3] = pos[g3]; pos[b3 + 1] = pos[g3 + 1] + 4.0; pos[b3 + 2] = pos[g3 + 2];
+
+        norm[t3] = norm[g3]; norm[t3 + 1] = norm[g3 + 1]; norm[t3 + 2] = norm[g3 + 2];
+        norm[b3] = norm[g3]; norm[b3 + 1] = norm[g3 + 1]; norm[b3 + 2] = norm[g3 + 2];
+
+        col[t3] = col[g3]; col[t3 + 1] = col[g3 + 1]; col[t3 + 2] = col[g3 + 2];
+        col[b3] = col[g3] * 0.85; col[b3 + 1] = col[g3 + 1] * 0.85; col[b3 + 2] = col[g3 + 2] * 0.85;
+        vPtr += 2;
+      }
+      for (let k = 0; k < segs; k++) {
+        if (openMask[getGridIdx(k)] && openMask[getGridIdx(k + 1)]) continue;
+        const a = startPtr + k * 2;
+        const b = a + 1;
+        const c = a + 2;
+        const d = a + 3;
+        if (reverse) indices.push(a, b, c, b, d, c);
+        else indices.push(a, c, b, b, c, d);
+      }
+    }
+
+    addCeilSkirtEdge((k) => k, false);
+    addCeilSkirtEdge((k) => segs * n + k, true);
+    addCeilSkirtEdge((k) => k * n, true);
+    addCeilSkirtEdge((k) => k * n + segs, false);
+
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new T.BufferAttribute(norm, 3));
+    geo.setAttribute('color', new T.BufferAttribute(col, 3));
+    geo.setIndex(indices);
+    geo.computeBoundingSphere();
+    return geo;
+  }
+
   function desiredSegs(dist, q) {
     if (dist < q.terrainNearDist) return q.terrainNearSegs;
     if (dist < q.terrainMidDist) return q.terrainMidSegs;
@@ -137,6 +252,26 @@ window.OC = window.OC || {};
       rec.mesh = new T.Mesh(geo, terrainMat);
       rec.mesh.userData.key = 'floor';
       group.add(rec.mesh);
+    }
+
+    if (ceilingMat && biomeRef.getCeilingHeight) {
+      const cGeo = buildCeilingChunkGeometry(rec.cx, rec.cz, segs);
+      if (cGeo) {
+        if (rec.ceilMesh) {
+          rec.ceilMesh.geometry.dispose();
+          rec.ceilMesh.geometry = cGeo;
+          rec.ceilMesh.visible = rec.mesh.visible;
+        } else {
+          rec.ceilMesh = new T.Mesh(cGeo, ceilingMat);
+          rec.ceilMesh.userData.key = 'floor';
+          rec.ceilMesh.visible = rec.mesh.visible;
+          group.add(rec.ceilMesh);
+        }
+      } else if (rec.ceilMesh) {
+        group.remove(rec.ceilMesh);
+        rec.ceilMesh.geometry.dispose();
+        rec.ceilMesh = null;
+      }
     }
     rec.segs = segs;
   }
@@ -181,6 +316,7 @@ window.OC = window.OC || {};
         scene.remove(group);
       }
       if (terrainMat) { terrainMat.dispose(); terrainMat = null; }
+      if (ceilingMat) { ceilingMat.dispose(); ceilingMat = null; }
       chunks.clear();
       initialized = false;
       group = new T.Group();
@@ -193,6 +329,15 @@ window.OC = window.OC || {};
       });
       OC.enhanceMaterial(terrainMat, { causticStrength: 1.0, isTerrain: true });
 
+      if (typeof biome.getCeilingHeight === 'function') {
+        ceilingMat = new T.MeshStandardMaterial({
+          vertexColors: true,
+          roughness: 0.92,
+          metalness: 0.02
+        });
+        OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true });
+      }
+
       buildHorizonApron();
 
       // Регистрируем дескрипторы всех 16x16 чанков
@@ -204,7 +349,8 @@ window.OC = window.OC || {};
             wx: (cx + 0.5) * chunkSize,
             wz: (cz + 0.5) * chunkSize,
             segs: 0,
-            mesh: null
+            mesh: null,
+            ceilMesh: null
           });
         }
       }
@@ -236,9 +382,11 @@ window.OC = window.OC || {};
         const dist = Math.hypot(rec.wx - camPos.x, rec.wz - camPos.z);
         if (dist > q.terrainFarDist) {
           if (rec.mesh && rec.mesh.visible) rec.mesh.visible = false;
+          if (rec.ceilMesh && rec.ceilMesh.visible) rec.ceilMesh.visible = false;
           return;
         }
         if (rec.mesh && !rec.mesh.visible) rec.mesh.visible = true;
+        if (rec.ceilMesh && !rec.ceilMesh.visible) rec.ceilMesh.visible = true;
         const target = desiredSegs(dist, q);
         if (rec.segs !== target) {
           // Не перестраиваем мелкую разницу слишком далеко без нужды
