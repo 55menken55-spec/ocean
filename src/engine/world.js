@@ -432,6 +432,8 @@ window.OC = window.OC || {};
         uSunI: { value: 1 },
         uSunDir: { value: sunDir.clone() },
         uAboveMix: { value: 0 },
+        uAurora: { value: 0 },
+        uDayW: { value: 1 },
         uTime: OC.uTime
       },
       vertexShader: `
@@ -442,7 +444,7 @@ window.OC = window.OC || {};
         }`,
       fragmentShader: `
         uniform vec3 uTop, uMid, uBot, uAboveTop, uAboveHoriz, uSunCol;
-        uniform float uSunI, uAboveMix, uTime;
+        uniform float uSunI, uAboveMix, uAurora, uDayW, uTime;
         uniform vec3 uSunDir;
         varying vec3 vDir;
         void main(){
@@ -455,11 +457,24 @@ window.OC = window.OC || {};
           uwCol += uTop * st * 0.04 * smoothstep(0.55, 1.0, h);
 
           vec3 skyCol = mix(uAboveHoriz, uAboveTop, smoothstep(0.0, 0.65, max(0.0, d.y)));
-          // Мягкие тропические пассатные облака у горизонта над водой
+          // Мягкие пассатные / полярные облака у горизонта над водой
           float clMask = smoothstep(0.02, 0.14, d.y) * smoothstep(0.55, 0.12, d.y) * uAboveMix;
           float clPatt = 0.5 + 0.5 * sin(ang * 9.0 + uTime * 0.03) * cos(d.y * 26.0 - ang * 3.0);
           float clouds = smoothstep(0.56, 0.88, clPatt) * clMask;
           skyCol = mix(skyCol, mix(uSunCol, vec3(1.0), 0.55), clouds * 0.42);
+
+          // Северное сияние (Aurora Borealis) для арктического биома в сумерках и полярной ночью
+          if (uAurora > 0.01 && d.y > 0.01) {
+            float nightVis = (1.0 - smoothstep(0.25, 0.82, uDayW)) * uAurora;
+            float ribbon1 = sin(ang * 3.2 + sin(d.y * 5.0 + uTime * 0.22) * 1.4 + uTime * 0.12);
+            float ribbon2 = sin(ang * 5.7 - cos(d.y * 7.0 - uTime * 0.18) * 1.1 - uTime * 0.09);
+            float curtain = pow(max(0.0, ribbon1 * 0.62 + ribbon2 * 0.38), 2.2);
+            float altMask = smoothstep(0.05, 0.28, d.y) * smoothstep(0.92, 0.34, d.y);
+            vec3 aurCol = mix(vec3(0.14, 0.96, 0.62), vec3(0.62, 0.32, 0.98), clamp(d.y * 1.5 - 0.18, 0.0, 1.0));
+            skyCol += aurCol * curtain * altMask * nightVis * 0.95;
+            uwCol += aurCol * curtain * altMask * nightVis * 0.22;
+          }
+
           vec3 col = mix(uwCol, skyCol, uAboveMix);
 
           float sunDot = max(dot(d, normalize(uSunDir)), 0.0);
@@ -650,6 +665,7 @@ window.OC = window.OC || {};
     pal.fogDen = opt.fogDensity;
     pal.bioGlow = opt.bioGlow;
     pal.sunAtten = opt.sunAtten;
+    if (opt.aboveTop) pal.aboveTop.copy(opt.aboveTop);
     if (opt.waterColor) pal.water.copy(opt.waterColor);
     if (opt.skyTop) pal.skyTop.copy(opt.skyTop);
     if (opt.skyBot) pal.skyBot.copy(opt.skyBot);
@@ -669,7 +685,8 @@ window.OC = window.OC || {};
     sun.intensity = pal.sunI * (biome && biome.noSurface ? 0.03 : (0.22 + 0.78 * opt.sunAtten));
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
-    sunDir.set(Math.cos(ang) * 0.52, Math.max(0.18, Math.sin(ang) * 0.85 + 0.28), 0.34).normalize();
+    const sunElev = (biome && biome.hasAurora) ? Math.max(0.10, Math.sin(ang) * 0.42 + 0.18) : Math.max(0.18, Math.sin(ang) * 0.85 + 0.28);
+    sunDir.set(Math.cos(ang) * 0.52, sunElev, 0.34).normalize();
     sun.position.copy(sunDir).multiplyScalar(420);
     sunSprite.position.copy(camPos).addScaledVector(sunDir, 900);
     sunSprite.visible = !(biome && biome.noSurface);
@@ -714,6 +731,8 @@ window.OC = window.OC || {};
     skyMat.uniforms.uSunI.value = pal.sunI;
     skyMat.uniforms.uSunDir.value.copy(sunDir);
     skyMat.uniforms.uAboveMix.value = aboveMix;
+    skyMat.uniforms.uAurora.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
+    skyMat.uniforms.uDayW.value = pal.dayW;
     skySphere.position.copy(camPos);
 
     /* каустика и наклон кораллов по течению */

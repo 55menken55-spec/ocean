@@ -548,12 +548,14 @@ window.OC = window.OC || {};
     const BIOME_SHORT = {
       great_barrier_reef: 'Риф ББР',
       kelp_forest: 'Ламинария',
-      hydrothermal_vents: 'Курильщики 2500м'
+      hydrothermal_vents: 'Курильщики 2500м',
+      arctic_sea: 'Арктика'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
       kelp_forest: 'Монтерей · Калифорния',
-      hydrothermal_vents: 'ВТП · Абиссаль 2500 м'
+      hydrothermal_vents: 'ВТП · Абиссаль 2500 м',
+      arctic_sea: 'Баффин · 74° с.ш.'
     };
 
     function renderBiomeUI() {
@@ -847,7 +849,10 @@ window.OC = window.OC || {};
         const zone = biome.getZoneAt(camPos.x, camPos.y, camPos.z);
         const depthOffset = biome.depthOffset || 0;
         const depthM = depthOffset + (depthOffset > 0 ? -camPos.y : Math.max(0, -camPos.y));
-        const tempC = (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065)).toFixed(1);
+        const rawTemp = biome.getTemperatureAt
+          ? biome.getTemperatureAt(camPos.x, depthM, zone)
+          : (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065));
+        const tempC = rawTemp.toFixed(1);
         const pal = OC.getPalette();
         const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
         const curr = OC.Navigation.getCurrent ? OC.Navigation.getCurrent() : null;
@@ -900,7 +905,7 @@ window.OC = window.OC || {};
           }
         }
 
-        OC.sound.update(depthM, zone.id, dayW);
+        OC.sound.update(depthM, zone.id, dayW, biome.id);
         OC.Minimap.update(camPos, OC.Navigation.getYaw());
 
         if (subMode) {
@@ -920,7 +925,13 @@ window.OC = window.OC || {};
             subCurrentEl.textContent = cKnots.toFixed(1) + ' уз';
             subCurrentEl.classList.toggle('warn', cKnots > 1.8);
           }
-          if (subPhaseEl) subPhaseEl.textContent = biome.noSurface ? 'Абиссаль · 2500 м' : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'));
+          if (subPhaseEl) {
+            subPhaseEl.textContent = biome.noSurface
+              ? 'Абиссаль · 2500 м'
+              : (biome.hasAurora
+                ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
+                : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День')));
+          }
           drawEchosounder(camPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }
 

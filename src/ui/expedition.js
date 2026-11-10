@@ -148,6 +148,44 @@ window.OC = window.OC || {};
       landmarkId: 'riftia_oasis',
       goal: 5,
       progress: (ctx) => ctx.discoveredCount
+    },
+
+    // 4. Полярное море / Подо льдом Арктики
+    {
+      id: 'arc_atlas_6',
+      biomeId: 'arctic_sea',
+      title: 'Полярный натуралист',
+      desc: 'Откройте или сфотографируйте 6 объектов Арктики (льдины, айсберг, фауна или бентос).',
+      landmarkId: 'ice_cathedral',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'arc_narwhal_photo',
+      biomeId: 'arctic_sea',
+      title: 'Единорог полярных вод',
+      desc: 'Сфотографируйте на подводную камеру (P) нарвала со спиральным бивнем или белуху.',
+      landmarkId: 'iceberg_alley',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['narwhal', 'beluga']) ? 1 : 0
+    },
+    {
+      id: 'arc_brinicle_photo',
+      biomeId: 'arctic_sea',
+      title: 'Ледяной палец смерти',
+      desc: 'Найдите и сфотографируйте (P) брайникл подо льдом или гигантскую медузу цианею.',
+      landmarkId: 'brinicle_garden',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['brinicle', 'jelly_arctic']) ? 1 : 0
+    },
+    {
+      id: 'arc_trench_shark',
+      biomeId: 'arctic_sea',
+      title: 'Легенда ледяного жёлоба',
+      desc: 'Погрузитесь глубже 55 м в Полярный жёлоб и снимите или отсканируйте сонаром (G) гренландскую акулу или морского ангела.',
+      landmarkId: 'baffin_trench',
+      goal: 1,
+      progress: (ctx) => (ctx.depthM >= 55 && ctx.hasPhotoOrPing(['shark_greenland', 'clione_angel'])) ? 1 : 0
     }
   ];
 

@@ -32,7 +32,7 @@
   .brand h1 span{color:var(--accent)}
   .brand p{margin:5px 0 0;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
   .brand .line{width:54px;height:1px;background:linear-gradient(90deg,var(--accent),transparent);margin-top:10px}
-  .biome-bar{display:flex;gap:6px;margin-top:10px;pointer-events:auto}
+  .biome-bar{display:flex;flex-wrap:wrap;max-width:340px;gap:6px;margin-top:10px;pointer-events:auto}
   .biome-pill{padding:5px 10px;border-radius:999px;border:1px solid var(--glass-brd);
     background:var(--glass);backdrop-filter:blur(12px);color:var(--dim);font-size:10.5px;
     font-weight:500;letter-spacing:.05em;cursor:pointer;transition:.2s;font-family:inherit}
@@ -2805,6 +2805,563 @@ window.OC = window.OC || {};
   });
 })(window.OC);
 
+// === biomes/arctic_sea.js ===
+/* ================= БИОМ: ПОЛЯРНОЕ МОРЕ / ПОДО ЛЬДОМ АРКТИКИ (БАФФИНОВ ЗАЛИВ, 74° N) ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveTop = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  const ZONES = [
+    {
+      id: 'pack_ice',
+      name: 'Кромка пакового припая и полынья',
+      shortName: 'Паковый лёд',
+      color: '#9ce2ff',
+      depthLabel: '0 – 22 м',
+      tempC: -1.5,
+      description: 'Многолетние ледяные поля с резными подводными килями и бирюзовыми разводьями полыней под северным сиянием.'
+    },
+    {
+      id: 'iceberg_alley',
+      name: 'Аллея айсбергов и брайниклов',
+      shortName: 'Аллея айсбергов',
+      color: '#4ebae8',
+      depthLabel: '18 – 48 м',
+      tempC: -1.7,
+      description: 'Величественные айсберги с 25-метровыми подводными килями, ледяные сталактиты-брайниклы и стаи белух.'
+    },
+    {
+      id: 'arctic_shelf',
+      name: 'Моренный шельф и арктическая ламинария',
+      shortName: 'Арктический риф',
+      color: '#2c8fa3',
+      depthLabel: '14 – 42 м',
+      tempC: -1.3,
+      description: 'Ледниковые валуны с розовой кораллиной, сахарной ламинарией, малиновой «морской клубникой» и нарвалами.'
+    },
+    {
+      id: 'polar_trench',
+      name: 'Полярная бездна Баффина',
+      shortName: 'Полярный жёлоб',
+      color: '#113a66',
+      depthLabel: '42 – 142 м',
+      tempC: -1.8,
+      description: 'Ледяной глубоководный жёлоб с гренландскими полярными акулами, гигантскими цианеями и светящимися морскими ангелами.'
+    }
+  ];
+
+  // Полыньи — открытые разводья во льду, пропускающие солнечные лучи и северное сияние
+  const POLYNYAS = [
+    { x: -360, z: 20, r: 95 },
+    { x: -490, z: -260, r: 85 },
+    { x: -240, z: 320, r: 80 }
+  ];
+
+  function shelfOffset(z) {
+    return Math.sin(z * 0.0022) * 110 + Math.cos(z * 0.005 + 0.6) * 42;
+  }
+
+  function isPolynya(x, z) {
+    for (let i = 0; i < POLYNYAS.length; i++) {
+      const p = POLYNYAS[i];
+      if (Math.hypot(x - p.x, z - p.z) < p.r) return true;
+    }
+    const lead = Math.abs(Math.sin(x * 0.0045 + z * 0.0032));
+    return lead < 0.14;
+  }
+
+  function getHeight(x, z) {
+    const sx = x - shelfOffset(z);
+
+    // Мелководный арктический припайный шельф на западе (-1200 .. -240), бухта айсбергов (-240 .. +250) и жёлоб Баффина (> +250)
+    let h = -24.0;
+    const westRise = OC.smoothstep(-260, -880, sx) * 16.5;
+    h += westRise;
+
+    // Свал к глубокому жёлобу Баффина на востоке
+    const trenchDrop = OC.smoothstep(180, 760, sx) * 98.0;
+    h -= trenchDrop;
+
+    // Ледниковые моренные борозды и каменные банки
+    const moraine = (OC.ridged2(x * 0.007, z * 0.007, 3) - 0.5) * 7.2 * OC.smoothstep(650, -550, sx);
+    const rough = OC.fbm2(x * 0.024, z * 0.024, 3) * 3.8;
+    h += moraine + rough;
+
+    // Углублённая ледниковая промоина на Аллее айсбергов (-240 .. +180)
+    const alleyFactor = OC.smoothstep(-320, -140, sx) * OC.smoothstep(280, 120, sx);
+    h -= alleyFactor * 11.0;
+
+    return OC.clamp(h, -142.0, -3.5);
+  }
+
+  function safeSpotY(x, z, desiredY, clearance) {
+    return Math.max(desiredY, getHeight(x, z) + (clearance || 3.5));
+  }
+
+  function getZoneAt(x, y, z) {
+    const sx = x - shelfOffset(z);
+    const fl = getHeight(x, z);
+    if (sx < -245 || fl > -17.5) return ZONES[0]; // pack_ice
+    if (sx > 255 || fl < -48.0) return ZONES[3]; // polar_trench
+    const shelfPatch = OC.fbm2(x * 0.0048 + 9.2, z * 0.0048 - 4.7, 2);
+    if (shelfPatch > 0.05) return ZONES[2]; // arctic_shelf
+    return ZONES[1]; // iceberg_alley
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const n = OC.clamp(OC.fbm2(x * 0.042, z * 0.042, 2) * 0.8 + 0.5, 0, 1);
+    const coralline = OC.smoothstep(0.10, 0.42, OC.fbm2(x * 0.022 + 5.1, z * 0.022 - 3.3, 2));
+
+    _colA.set(0x636c74); // ледниковая галька и гнейс
+    _colB.set(0x414e56); // тёмный базальтово-сланцевый ил
+    _colC.set(0x88546a); // розовая арктическая кораллина Lithothamnion
+
+    if (y > -28.0) {
+      out.copy(_colA).lerp(_colB, n * 0.48);
+      if (coralline > 0.25) out.lerp(_colC, coralline * 0.55);
+    } else if (y > -65.0) {
+      out.set(0x3a4752).lerp(_colA, n * 0.32);
+    } else {
+      out.set(0x1e2834).lerp(_colB, n * 0.45);
+    }
+    return out;
+  }
+
+  function getTemperatureAt(x, depthM, zone) {
+    // Полярная солёная вода держится ниже 0 °C (от -1.3 °C на шельфе до -1.85 °C в жёлобе)
+    const base = zone ? zone.tempC : -1.5;
+    const drop = OC.clamp(depthM / 140.0, 0, 1) * 0.35;
+    return OC.clamp(base - drop, -1.9, -1.1);
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const above = y > 0.25;
+    if (above) {
+      _fogCol.set(0xaecce0).lerp(_colA.set(0x0c1728), 1 - dayW);
+      _waterCol.set(0x1f6d8c);
+      _skyTop.set(0x3b76a6).lerp(_colA.set(0x060f1e), 1 - dayW);
+      _skyBot.set(0xb4d6ea);
+      _aboveTop.set(0x2d6496).lerp(_colA.set(0x050d1c), 1 - dayW);
+      _aboveHoriz.set(0xc8e4f5).lerp(_colA.set(0x0e1c30), 1 - dayW);
+      return {
+        aboveWater: true,
+        fogColor: _fogCol,
+        fogDensity: 0.00055,
+        causticStrength: 0,
+        rayStrength: 0,
+        sunAtten: 1.0,
+        bioGlow: 1 - dayW,
+        waterColor: _waterCol,
+        skyTop: _skyTop,
+        skyBot: _skyBot,
+        aboveTop: _aboveTop,
+        aboveHoriz: _aboveHoriz
+      };
+    }
+
+    const depth = Math.max(0, -y);
+    const inIceShelf = getZoneAt(x, y, z).id === 'pack_ice' && !isPolynya(x, z);
+    // Подо льдом свет голубее и мягче, в полынье и на аллее — прозрачная ледниковая кристальность до 40+ м!
+    const iceShade = inIceShelf ? 0.62 : 1.0;
+    const sunAtten = Math.exp(-depth * 0.025) * iceShade;
+
+    if (depth < 24) {
+      _fogCol.set(0x147094).lerp(_colA.set(0x0b4c72), depth / 24);
+      _waterCol.set(0x7ae2ff);
+    } else if (depth < 60) {
+      _fogCol.set(0x0b4c72).lerp(_colA.set(0x062344), (depth - 24) / 36);
+      _waterCol.set(0x3fa8d4);
+    } else {
+      _fogCol.set(0x062344).lerp(_colA.set(0x020c1c), Math.min(1, (depth - 60) / 70));
+      _waterCol.set(0x1e6694);
+    }
+
+    // В полярную ночь под водой темнее, но остаётся отражённое сияние от неба и льда
+    _fogCol.lerp(_colB.set(0x030b18), (1 - dayW) * 0.72);
+    const fogDensity = (inIceShelf ? 0.0086 : 0.0068) + Math.min(0.011, depth * 0.00010);
+
+    _skyTop.set(0x88e6ff).lerp(_colA.set(0x164468), 1 - dayW);
+    _skyBot.set(0x03182c);
+    _aboveHoriz.set(0xb8dcf0).lerp(_colA.set(0x0c1b2e), 1 - dayW);
+
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity,
+      causticStrength: (inIceShelf ? 0.16 : 0.75) * dayW * Math.exp(-depth * 0.042),
+      rayStrength: (inIceShelf ? 0.14 : 0.68) * dayW * Math.exp(-depth * 0.045),
+      sunAtten,
+      bioGlow: OC.clamp((1 - dayW) * 0.75 + OC.smoothstep(34, 88, depth) * 0.85, 0, 1),
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz
+    };
+  }
+
+  function getCurrentAt(x, y, z, time, out) {
+    out = out || new T.Vector3();
+    if (y > 0.25) return out.set(0, 0, 0);
+    const sx = x - shelfOffset(z);
+    // Течение вдоль Баффинова пролива к югу (+Z) с завихрениями на кромке айсбергов и припая
+    const surge = Math.sin(time * 0.5 + x * 0.03) * 0.18;
+    const stream = OC.smoothstep(-350, 350, sx) * 1.15 + 0.35;
+    const eddyX = Math.sin(z * 0.014 + time * 0.18) * 0.42;
+    const depthFade = OC.smoothstep(-130, -5, y);
+    return out.set((eddyX + surge) * depthFade, 0, stream * depthFade);
+  }
+
+  const _lmRaw = [
+    {
+      id: 'ice_cathedral',
+      name: 'Полынья и Ледяной свод',
+      zoneId: 'pack_ice',
+      x: -360,
+      y: -10.5,
+      z: 20,
+      yaw: 2.35,
+      pitch: 0.06,
+      clearance: 3.8,
+      description: 'Разводье среди пакового льда: лучи полярного солнца пробивают воду, а рядом спускаются ледяные кили.'
+    },
+    {
+      id: 'iceberg_alley',
+      name: 'Аллея айсбергов',
+      zoneId: 'iceberg_alley',
+      x: -40,
+      y: -15.5,
+      z: -80,
+      yaw: 1.85,
+      pitch: -0.04,
+      clearance: 4.5,
+      description: 'Исполинские бирюзовые ледяные кили уходят на 25 м вглубь, а между ними кружат стаи белух.'
+    },
+    {
+      id: 'brinicle_garden',
+      name: 'Сад брайниклов',
+      zoneId: 'pack_ice',
+      x: -185,
+      y: -14.0,
+      z: 210,
+      yaw: 0.75,
+      pitch: -0.08,
+      clearance: 3.8,
+      description: 'Редкое природное явление — «ледяные пальцы смерти», растущие от кромки льда до самого дна.'
+    },
+    {
+      id: 'kelp_moraine',
+      name: 'Моренный риф ламинарии',
+      zoneId: 'arctic_shelf',
+      x: 90,
+      y: -18.5,
+      z: 165,
+      yaw: -1.1,
+      pitch: -0.1,
+      clearance: 4.0,
+      description: 'Каменистые банки с сахарной ламинарией, малиновой «морской клубникой» и нарвалами.'
+    },
+    {
+      id: 'baffin_trench',
+      name: 'Полярная бездна Баффина',
+      zoneId: 'polar_trench',
+      x: 560,
+      y: -64.0,
+      z: -40,
+      yaw: -1.55,
+      pitch: -0.16,
+      clearance: 5.5,
+      description: 'Глубокий ледяной жёлоб с температурой -1.8 °C, где скользят гренландские акулы и светятся морские ангелы.'
+    }
+  ];
+
+  const landmarks = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: Math.min(-3.0, safeSpotY(lm.x, lm.z, lm.y, lm.clearance))
+  }));
+
+  const spawnX = landmarks[0].x;
+  const spawnZ = landmarks[0].z;
+  const spawnY = Math.min(-3.5, safeSpotY(spawnX, spawnZ, -10.5, 4.0));
+
+  function nearLandmark(x, z, minD) {
+    for (let i = 0; i < landmarks.length; i++) {
+      if (Math.hypot(x - landmarks[i].x, z - landmarks[i].z) < minD) return true;
+    }
+    return false;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const out = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+    const midX = x0 + chunkSize * 0.5;
+    const midZ = z0 + chunkSize * 0.5;
+    const sxMid = midX - shelfOffset(midZ);
+
+    // 1. Паковые льдины на поверхности (y = 0) в западной и центральной зонах (кроме полыней!)
+    if (sxMid < 260) {
+      const iceAttempts = Math.round(7 * density);
+      for (let i = 0; i < iceAttempts; i++) {
+        const x = x0 + rng() * chunkSize;
+        const z = z0 + rng() * chunkSize;
+        const sx = x - shelfOffset(z);
+        if (sx > 210 || isPolynya(x, z)) continue;
+        // Оставляем свободный край у спавна и в центре ориентиров
+        if (nearLandmark(x, z, 28)) continue;
+        const fl = getHeight(x, z);
+        if (fl > -7.0) continue; // не сажаем ледяной киль в слишком мелкий грунт
+        const iceProb = sx < -120 ? 0.78 : 0.42;
+        if (rng() > iceProb) continue;
+        out.push({
+          species: 'ice_floe',
+          x,
+          y: 0,
+          z,
+          ry: rng() * 6.283,
+          scale: OC.lerp(0.82, 1.35, rng()),
+          tint: rng() < 0.5 ? 0xf6fbff : 0xe4f4ff
+        });
+      }
+    }
+
+    // 2. Гигантские айсберги (y = 0) преимущественно в Аллее айсбергов и кромке жёлоба
+    if (sxMid > -290 && sxMid < 480) {
+      const bergAttempts = Math.max(1, Math.round(2 * density));
+      for (let i = 0; i < bergAttempts; i++) {
+        if (rng() > 0.52) continue;
+        const x = x0 + 25 + rng() * (chunkSize - 50);
+        const z = z0 + 25 + rng() * (chunkSize - 50);
+        if (isPolynya(x, z) || nearLandmark(x, z, 36)) continue;
+        const fl = getHeight(x, z);
+        if (fl > -22.0) continue; // киль айсберга до 25 м требует глубины
+        out.push({
+          species: 'iceberg',
+          x,
+          y: 0,
+          z,
+          ry: rng() * 6.283,
+          scale: fl < -30 ? OC.lerp(0.9, 1.32, rng()) : OC.lerp(0.65, 0.85, rng()),
+          tint: rng() < 0.5 ? 0xf2f9ff : 0xdaf0ff
+        });
+      }
+    }
+
+    // 3. Арктический бентос: сахарная ламинария, морская клубника, актинии, брайниклы и ежи
+    const attempts = Math.round(24 * density);
+    for (let i = 0; i < attempts; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const h = getHeight(x, z);
+      const zone = getZoneAt(x, h, z);
+      const sx = x - shelfOffset(z);
+
+      const hR = getHeight(x + 3.5, z);
+      const hU = getHeight(x, z + 3.5);
+      const slope = Math.hypot(hR - h, hU - h) / 3.5;
+
+      // Брайниклы («ледяные пальцы смерти») тянутся от кромки льда до самого дна (-13.5 .. -30 м)
+      if ((zone.id === 'pack_ice' || zone.id === 'iceberg_alley') && h < -13.5 && h > -30 && !isPolynya(x, z) && rng() < 0.16) {
+        out.push({
+          species: 'brinicle',
+          x,
+          y: h - 0.1,
+          z,
+          ry: rng() * 6.283,
+          scale: OC.clamp(Math.abs(h + 2.0) / 13.5, 0.6, 1.22),
+          tint: 0xe6f8ff
+        });
+        continue;
+      }
+
+      if (zone.id === 'polar_trench' || h < -52) {
+        if (slope < 0.8 && rng() < 0.32) {
+          out.push({
+            species: rng() < 0.55 ? 'coral_arctic_soft' : 'anemone_arctic',
+            x,
+            y: h - 0.08,
+            z,
+            ry: rng() * 6.283,
+            scale: OC.lerp(0.85, 1.35, rng()),
+            tint: 0xffc6d4
+          });
+        }
+        continue;
+      }
+
+      if (slope > 0.72) continue;
+
+      const r = rng();
+      if (h < -6.8 && h > -36 && r < 0.44) {
+        out.push({
+          species: 'kelp_arctic',
+          x,
+          y: h - 0.12,
+          z,
+          ry: rng() * 6.283,
+          scale: OC.lerp(0.8, 1.45, rng()),
+          tint: rng() < 0.5 ? 0xffffff : 0xe8d9aa
+        });
+      } else if (r < 0.68) {
+        out.push({
+          species: 'coral_arctic_soft',
+          x,
+          y: h - 0.08,
+          z,
+          ry: rng() * 6.283,
+          scale: OC.lerp(0.85, 1.4, rng()),
+          tint: rng() < 0.5 ? 0xffffff : 0xffb8ca
+        });
+      } else if (r < 0.86) {
+        out.push({
+          species: 'anemone_arctic',
+          x,
+          y: h - 0.08,
+          z,
+          ry: rng() * 6.283,
+          scale: OC.lerp(0.8, 1.3, rng()),
+          tint: 0xffd2b8
+        });
+      } else if (sx < 200) {
+        out.push({
+          species: 'urchin_purple',
+          x,
+          y: h - 0.04,
+          z,
+          ry: rng() * 6.283,
+          scale: OC.lerp(0.75, 1.15, rng()),
+          tint: 0x86c89c
+        });
+      }
+    }
+
+    return out;
+  }
+
+  const _tourRaw = [
+    { x: spawnX, y: -10.5, z: spawnZ, lx: spawnX + 35, ly: -4, lz: spawnZ + 30, title: 'Полынья и ледяной припай', duration: 9 },
+    { x: landmarks[1].x, y: -14.5, z: landmarks[1].z, lx: landmarks[1].x + 30, ly: -8, lz: landmarks[1].z - 25, title: 'Аллея айсбергов и белухи', duration: 9 },
+    { x: landmarks[2].x, y: -13.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -15, lz: landmarks[2].z + 15, title: 'Сад брайниклов подо льдом', duration: 9 },
+    { x: landmarks[3].x, y: -18.0, z: landmarks[3].z, lx: landmarks[3].x + 35, ly: -19, lz: landmarks[3].z - 15, title: 'Моренный риф и нарвалы', duration: 9 },
+    { x: landmarks[4].x, y: -62.0, z: landmarks[4].z, lx: landmarks[4].x + 70, ly: -78, lz: landmarks[4].z + 20, title: 'Полярная бездна Баффина', duration: 9 }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, Math.min(-3.0, safeSpotY(leg.x, leg.z, leg.y, 4.0)), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    floor: ['Ледниково-моренный грунт Арктики', 'Залив Баффина', 'Геология', 'Все зоны', '5 – 142 м',
+      'Окатанные древними ледниками гнейсовые валуны и галька, местами покрытые розовой известковой корочкой водорослей Lithothamnion.'],
+    ice_floe: ['Паковый морской лёд', 'Glacies marina', 'Геология', 'Паковый лёд', '0 – 6 м',
+      'Многолетние ледяные поля с заснеженной поверхностью и резными голубыми подводными килями, под которыми укрываются косяки сайки.'],
+    iceberg: ['Гренландский айсберг', 'Moles glacialis', 'Геология', 'Аллея айсбергов', '+16 .. -28 м',
+      'Отколовшийся пресноводный гигант возрастом в тысячи лет: около 85% массы ледяной горы скрыто под водой сапфировым килем.'],
+    brinicle: ['Брайникл («палец смерти»)', 'Stalactites salis', 'Геология', 'Паковый лёд', '2 – 28 м',
+      'Хрупкая ледяная трубка, растущая вниз при стекании сверхсолёного переохлаждённого рассола из молодого морского льда к дну.'],
+    kelp_arctic: ['Сахарная арктическая ламинария', 'Saccharina latissima', 'Флора', 'Арктический риф', '4 – 30 м',
+      'Холодолюбивая бурая водоросль с длинными волнистыми лентами, выживающая при полярной ночи благодаря запасам маннита и ламинарина.'],
+    coral_arctic_soft: ['Морская клубника (коралл)', 'Gersemia rubiformis', 'Кораллы', 'Арктический риф', '10 – 65 м',
+      'Пушистый холодноводный мягкий коралл малинового цвета, фильтрующий полярный планктон в тёмных ледяных водах без солнечных симбионтов.'],
+    anemone_arctic: ['Северная пёстрая актиния', 'Urticina felina', 'Беспозвоночные', 'Арктический риф', '2 – 55 м',
+      'Крупная багрово-оранжевая арктическая актиния, цепляющаяся за валуны в холодных течениях и ловящая донных беспозвоночных.'],
+    urchin_purple: ['Зелёный полярный морской ёж', 'Strongylocentrotus droebachiensis', 'Беспозвоночные', 'Арктический риф', '0 – 45 м',
+      'Холодноводный арктический морской ёж, пасущийся на кораллиновых корках и нижнем ярусе бурых водорослей.'],
+    fish_arctic_cod: ['Сайка (полярная треска)', 'Boreogadus saida', 'Рыбы', 'Паковый лёд', '0 – 85 м',
+      'Ключевой вид пищевой цепи Арктики: плавает прямо в ледовых кавернах, защищаясь от мороза белками-антифризами в крови.'],
+    fish_sculpin: ['Арктический керчак (бычок)', 'Myoxocephalus scorpius', 'Рыбы', 'Арктический риф', '4 – 50 м',
+      'Колючая донная полярная рыба с маскировочным окрасом и широкими грудными плавниками для опоры на холодные валуны.'],
+    fish_lantern: ['Полярный бентозема-фонарик', 'Benthosema glaciale', 'Рыбы', 'Полярный жёлоб', '40 – 142 м',
+      'Мезопелагическая светящаяся рыба холодных вод Баффинова залива, зажигающая ряды голубых фотофоров в глубинной тьме.'],
+    beluga: ['Белуха (полярный кит)', 'Delphinapterus leucas', 'Мегафауна', 'Аллея айсбергов', '0 – 60 м',
+      'Белоснежный безспинноплавниковый кит, прозванный «морской канарейкой» за богатый репертуар свистов, трелей и эхолокации подо льдом.'],
+    narwhal: ['Нарвал («морской единорог»)', 'Monodon monoceros', 'Мегафауна', 'Аллея айсбергов', '2 – 120 м',
+      'Арктический кит, чьи самцы несут 2.5-метровый спиральный чувствительный бивень — видоизменённый левый верхний клык.'],
+    shark_greenland: ['Гренландская полярная акула', 'Somniosus microcephalus', 'Мегафауна', 'Полярный жёлоб', '35 – 142 м',
+      'Долгожительница среди позвоночных (живёт 300–400 лет!): медлительный гигант ледяной бездны, двигающийся плавно ради экономии энергии при -1.8 °C.'],
+    jelly_arctic: ['Волосистая цианея («львиная грива»)', 'Cyanea capillata', 'Беспозвоночные', 'Аллея айсбергов', '1 – 80 м',
+      'Крупнейшая медуза холодных морей с золотисто-рубиновым куполом и десятками нитевидных жгучих щупалец.'],
+    clione_angel: ['Арктический морской ангел', 'Clione limacina', 'Беспозвоночные', 'Полярный жёлоб', '5 – 120 м',
+      'Полупрозрачный крылоногий моллюск с ярко-оранжевым «сердечком», порхающий в ледяной воде подобно сказочной бабочке.']
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [],
+    schools: [
+      { key: 'fish_arctic_cod', n: 75, cx: spawnX + 30, cz: spawnZ - 15, radius: 34, yDepth: -6.5, yAmp: 3, spread: 9, speed: 5.8, scale: 0.56, diel: 'cathemeral', shyness: 0.72,
+        geoOpts: { len: 1.05, height: 0.34, width: 0.16, colA: 0x455c72, colB: 0xd6e6f2, finCol: 0x8ea6ba } },
+      { key: 'fish_arctic_cod', n: 65, cx: landmarks[1].x - 20, cz: landmarks[1].z + 30, radius: 38, yDepth: -11, yAmp: 4, spread: 10, speed: 6.0, scale: 0.58, diel: 'cathemeral', shyness: 0.72,
+        geoOpts: { len: 1.05, height: 0.34, width: 0.16, colA: 0x455c72, colB: 0xd6e6f2, finCol: 0x8ea6ba } },
+      { key: 'fish_sculpin', n: 26, cx: landmarks[3].x, cz: landmarks[3].z, radius: 26, yDepth: -20, yAmp: 2, spread: 8, speed: 3.4, scale: 0.72, diel: 'cathemeral', shyness: 0.4,
+        geoOpts: { len: 1.0, height: 0.44, width: 0.28, colA: 0x4d4338, colB: 0x9c8266, finCol: 0x73624d, stripes: 0.45 } },
+      { key: 'fish_lantern', n: 54, cx: landmarks[4].x, cz: landmarks[4].z, radius: 44, yDepth: -58, yAmp: 12, spread: 12, speed: 6.2, scale: 0.48, diel: 'cathemeral', biolum: true, shyness: 0.5,
+        geoOpts: { len: 0.85, height: 0.32, width: 0.14, colA: 0x163858, colB: 0x5ceeff, finCol: 0x3ad9ee, eyeScale: 1.4 } }
+    ],
+    belugas: [
+      { cx: landmarks[1].x + 25, cz: landmarks[1].z - 15, r: 52, y: -9.5, speed: 4.8, scale: 1.05 },
+      { cx: spawnX + 45, cz: spawnZ + 55, r: 46, y: -8.0, speed: 4.5, scale: 0.92 }
+    ],
+    narwhals: [
+      { cx: landmarks[1].x - 30, cz: landmarks[1].z + 40, r: 58, y: -15.5, speed: 4.7, scale: 1.04 },
+      { cx: landmarks[3].x + 35, cz: landmarks[3].z - 25, r: 62, y: -21.0, speed: 4.9, scale: 1.0 }
+    ],
+    sharks: [
+      { speciesKey: 'shark_greenland', cx: landmarks[4].x, cz: landmarks[4].z, r: 72, y: -64, speed: 2.6 },
+      { speciesKey: 'shark_greenland', cx: 340, cz: 190, r: 64, y: -48, speed: 2.4 }
+    ],
+    arcticJellies: [
+      { cx: landmarks[1].x - 15, cz: landmarks[1].z - 28, y: -12, amp: 2.4, scale: 1.25 },
+      { cx: landmarks[2].x + 20, cz: landmarks[2].z - 15, y: -11, amp: 2.0, scale: 1.15 },
+      { cx: landmarks[4].x - 40, cz: landmarks[4].z + 35, y: -42, amp: 3.2, scale: 1.4 }
+    ],
+    cliones: [
+      { cx: landmarks[0].x + 18, cz: landmarks[0].z - 12, y: -9.5, n: 10 },
+      { cx: landmarks[4].x - 25, cz: landmarks[4].z - 20, y: -52.0, n: 12 }
+    ]
+  };
+
+  OC.Biomes.register({
+    id: 'arctic_sea',
+    name: 'Арктика: Подо льдом',
+    region: 'Залив Баффина · 74° с.ш.',
+    subtitle: 'Полярное море · 2.4 × 2.4 км · 0–142 м',
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    hasAurora: true,
+    minimapTheme: 'arctic',
+    spawn: {
+      pos: [spawnX, spawnY, spawnZ],
+      yaw: 2.35,
+      pitch: 0.04
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getZoneAt,
+    getTerrainColor,
+    getTemperatureAt,
+    getOpticalProfile,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
+  });
+})(window.OC);
+
 // === engine/world.js ===
 /* ================= МИР: РЕНДЕР, СВЕТ, ВОДА, КАУСТИКА, ПРОЖЕКТОР ================= */
 window.OC = window.OC || {};
@@ -3240,6 +3797,8 @@ window.OC = window.OC || {};
         uSunI: { value: 1 },
         uSunDir: { value: sunDir.clone() },
         uAboveMix: { value: 0 },
+        uAurora: { value: 0 },
+        uDayW: { value: 1 },
         uTime: OC.uTime
       },
       vertexShader: `
@@ -3250,7 +3809,7 @@ window.OC = window.OC || {};
         }`,
       fragmentShader: `
         uniform vec3 uTop, uMid, uBot, uAboveTop, uAboveHoriz, uSunCol;
-        uniform float uSunI, uAboveMix, uTime;
+        uniform float uSunI, uAboveMix, uAurora, uDayW, uTime;
         uniform vec3 uSunDir;
         varying vec3 vDir;
         void main(){
@@ -3263,11 +3822,24 @@ window.OC = window.OC || {};
           uwCol += uTop * st * 0.04 * smoothstep(0.55, 1.0, h);
 
           vec3 skyCol = mix(uAboveHoriz, uAboveTop, smoothstep(0.0, 0.65, max(0.0, d.y)));
-          // Мягкие тропические пассатные облака у горизонта над водой
+          // Мягкие пассатные / полярные облака у горизонта над водой
           float clMask = smoothstep(0.02, 0.14, d.y) * smoothstep(0.55, 0.12, d.y) * uAboveMix;
           float clPatt = 0.5 + 0.5 * sin(ang * 9.0 + uTime * 0.03) * cos(d.y * 26.0 - ang * 3.0);
           float clouds = smoothstep(0.56, 0.88, clPatt) * clMask;
           skyCol = mix(skyCol, mix(uSunCol, vec3(1.0), 0.55), clouds * 0.42);
+
+          // Северное сияние (Aurora Borealis) для арктического биома в сумерках и полярной ночью
+          if (uAurora > 0.01 && d.y > 0.01) {
+            float nightVis = (1.0 - smoothstep(0.25, 0.82, uDayW)) * uAurora;
+            float ribbon1 = sin(ang * 3.2 + sin(d.y * 5.0 + uTime * 0.22) * 1.4 + uTime * 0.12);
+            float ribbon2 = sin(ang * 5.7 - cos(d.y * 7.0 - uTime * 0.18) * 1.1 - uTime * 0.09);
+            float curtain = pow(max(0.0, ribbon1 * 0.62 + ribbon2 * 0.38), 2.2);
+            float altMask = smoothstep(0.05, 0.28, d.y) * smoothstep(0.92, 0.34, d.y);
+            vec3 aurCol = mix(vec3(0.14, 0.96, 0.62), vec3(0.62, 0.32, 0.98), clamp(d.y * 1.5 - 0.18, 0.0, 1.0));
+            skyCol += aurCol * curtain * altMask * nightVis * 0.95;
+            uwCol += aurCol * curtain * altMask * nightVis * 0.22;
+          }
+
           vec3 col = mix(uwCol, skyCol, uAboveMix);
 
           float sunDot = max(dot(d, normalize(uSunDir)), 0.0);
@@ -3458,6 +4030,7 @@ window.OC = window.OC || {};
     pal.fogDen = opt.fogDensity;
     pal.bioGlow = opt.bioGlow;
     pal.sunAtten = opt.sunAtten;
+    if (opt.aboveTop) pal.aboveTop.copy(opt.aboveTop);
     if (opt.waterColor) pal.water.copy(opt.waterColor);
     if (opt.skyTop) pal.skyTop.copy(opt.skyTop);
     if (opt.skyBot) pal.skyBot.copy(opt.skyBot);
@@ -3477,7 +4050,8 @@ window.OC = window.OC || {};
     sun.intensity = pal.sunI * (biome && biome.noSurface ? 0.03 : (0.22 + 0.78 * opt.sunAtten));
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
-    sunDir.set(Math.cos(ang) * 0.52, Math.max(0.18, Math.sin(ang) * 0.85 + 0.28), 0.34).normalize();
+    const sunElev = (biome && biome.hasAurora) ? Math.max(0.10, Math.sin(ang) * 0.42 + 0.18) : Math.max(0.18, Math.sin(ang) * 0.85 + 0.28);
+    sunDir.set(Math.cos(ang) * 0.52, sunElev, 0.34).normalize();
     sun.position.copy(sunDir).multiplyScalar(420);
     sunSprite.position.copy(camPos).addScaledVector(sunDir, 900);
     sunSprite.visible = !(biome && biome.noSurface);
@@ -3522,6 +4096,8 @@ window.OC = window.OC || {};
     skyMat.uniforms.uSunI.value = pal.sunI;
     skyMat.uniforms.uSunDir.value.copy(sunDir);
     skyMat.uniforms.uAboveMix.value = aboveMix;
+    skyMat.uniforms.uAurora.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
+    skyMat.uniforms.uDayW.value = pal.dayW;
     skySphere.position.copy(camPos);
 
     /* каустика и наклон кораллов по течению */
@@ -4831,6 +5407,204 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 27. Арктический паковый лёд и подлёдный ледовый киль (ставится на y = 0) ---- */
+  function buildIceFloe(rng) {
+    const list = [];
+    const snowCol = COL(0xf0f7fc);
+    const iceMid = COL(0x88d4f2);
+    const iceDeep = COL(0x2878b4);
+
+    // Верхняя заснеженная паковая плита (+0.15 .. +1.25 м над водой)
+    const r = OC.lerp(7.5, 13.5, rng());
+    const topPlate = new T.CylinderGeometry(r * 0.92, r * 1.04, 1.35, 9, 1);
+    const tp = topPlate.attributes.position;
+    for (let k = 0; k < tp.count; k++) {
+      const vx = tp.getX(k), vy = tp.getY(k), vz = tp.getZ(k);
+      const a = Math.atan2(vz, vx);
+      const j = 1 + 0.22 * Math.sin(a * 3 + 0.8) + 0.14 * Math.cos(a * 5 - 1.2);
+      const ridge = vy > 0 ? (0.45 * Math.sin(vx * 0.35 + vz * 0.28) + 0.35) : 0;
+      tp.setXYZ(k, vx * j, vy + ridge, vz * j);
+    }
+    OC.geoPrep(topPlate);
+    topPlate.computeVertexNormals();
+    OC.paint(topPlate, (x, y, z, c) => c.copy(iceMid).lerp(snowCol, OC.smoothstep(-0.35, 0.45, y)));
+    OC.withSway(topPlate, () => 0);
+    OC.xform(topPlate, { p: [0, 0.12, 0] });
+    list.push(topPlate);
+
+    // Подводный ледовый киль (-0.5 .. -4.8 м под водой)
+    const keelDepth = OC.lerp(2.6, 5.4, rng());
+    const keel = new T.ConeGeometry(r * 0.88, keelDepth, 8);
+    keel.rotateX(Math.PI);
+    const kp = keel.attributes.position;
+    for (let k = 0; k < kp.count; k++) {
+      const vx = kp.getX(k), vy = kp.getY(k), vz = kp.getZ(k);
+      const a = Math.atan2(vz, vx);
+      const w = 1 + 0.20 * Math.sin(a * 4 + vy * 0.9);
+      kp.setXYZ(k, vx * w, vy, vz * w);
+    }
+    OC.geoPrep(keel);
+    keel.computeVertexNormals();
+    OC.paint(keel, (x, y, z, c) => c.copy(iceDeep).lerp(iceMid, OC.smoothstep(-keelDepth * 0.5, 0.2, y)));
+    OC.withSway(keel, () => 0);
+    OC.xform(keel, { p: [0, -keelDepth * 0.5 - 0.35, 0] });
+    list.push(keel);
+
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 28. Арктический айсберг (надводная башня + глубокий сапфировый киль, y = 0) ---- */
+  function buildIceberg(rng) {
+    const list = [];
+    const snowCol = COL(0xf4f9ff);
+    const glacCol = COL(0x7cd6f5);
+    const deepCol = COL(0x1f6ca8);
+
+    const wR = OC.lerp(10.0, 15.5, rng());
+    const topH = OC.lerp(9.5, 16.5, rng());
+    const keelH = OC.lerp(18.0, 27.0, rng());
+
+    // Два гранёных ледяных шпиля над поверхностью
+    for (let s = 0; s < 2; s++) {
+      const h = s === 0 ? topH : topH * OC.lerp(0.55, 0.78, rng());
+      const r = s === 0 ? wR : wR * 0.72;
+      const ox = s === 0 ? 0 : (rng() - 0.5) * wR * 0.9;
+      const oz = s === 0 ? 0 : (rng() - 0.5) * wR * 0.9;
+      const spire = new T.ConeGeometry(r, h, 7, 2);
+      const sp = spire.attributes.position;
+      for (let k = 0; k < sp.count; k++) {
+        const vx = sp.getX(k), vy = sp.getY(k), vz = sp.getZ(k);
+        const a = Math.atan2(vz, vx);
+        const facet = 1 + 0.24 * Math.sin(a * 3 + s * 1.4) + 0.14 * Math.cos(vy * 0.45);
+        sp.setXYZ(k, vx * facet, vy, vz * facet);
+      }
+      OC.geoPrep(spire);
+      spire.computeVertexNormals();
+      OC.paint(spire, (x, y, z, c) => c.copy(glacCol).lerp(snowCol, OC.smoothstep(-h * 0.35, h * 0.28, y)));
+      OC.withSway(spire, () => 0);
+      OC.xform(spire, { p: [ox, h * 0.45 - 0.6, oz] });
+      list.push(spire);
+    }
+
+    // Мощный подводный киль айсберга
+    const keel = new T.ConeGeometry(wR * 1.18, keelH, 8, 3);
+    keel.rotateX(Math.PI);
+    const kp = keel.attributes.position;
+    for (let k = 0; k < kp.count; k++) {
+      const vx = kp.getX(k), vy = kp.getY(k), vz = kp.getZ(k);
+      const a = Math.atan2(vz, vx);
+      const carv = 1 + 0.24 * Math.sin(a * 4 + vy * 0.22);
+      kp.setXYZ(k, vx * carv, vy, vz * carv);
+    }
+    OC.geoPrep(keel);
+    keel.computeVertexNormals();
+    OC.paint(keel, (x, y, z, c) => c.copy(deepCol).lerp(glacCol, OC.smoothstep(-keelH * 0.5, keelH * 0.4, y)));
+    OC.withSway(keel, () => 0);
+    OC.xform(keel, { p: [0, -keelH * 0.5 - 0.2, 0] });
+    list.push(keel);
+
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 29. Брайникл («ледяной палец смерти» под молодым паковым льдом) ---- */
+  function buildBrinicle(rng) {
+    const list = [];
+    const iceTip = COL(0xeaf8ff);
+    const iceCore = COL(0x7be0ff);
+    const brineCol = COL(0x3696cc);
+
+    const h = OC.lerp(7.5, 13.5, rng());
+    const col = new T.CylinderGeometry(0.18, 0.72, h, 8, 4);
+    const cp = col.attributes.position;
+    for (let k = 0; k < cp.count; k++) {
+      const vx = cp.getX(k), vy = cp.getY(k), vz = cp.getZ(k);
+      const a = Math.atan2(vz, vx);
+      const icicle = 1 + 0.28 * Math.sin(a * 5 + vy * 1.2) + 0.16 * Math.cos(vy * 3.1);
+      cp.setXYZ(k, vx * icicle, vy, vz * icicle);
+    }
+    OC.geoPrep(col);
+    col.computeVertexNormals();
+    OC.paint(col, (x, y, z, c) => c.copy(iceCore).lerp(iceTip, OC.smoothstep(-h * 0.4, h * 0.4, y)));
+    OC.withSway(col, () => 0);
+    OC.xform(col, { p: [0, h * 0.5, 0] });
+    list.push(col);
+
+    // Замёрзший соляной шлейф на дне у основания брайникла
+    const base = new T.ConeGeometry(2.1, 0.7, 9);
+    OC.geoPrep(base);
+    OC.paint(base, (x, y, z, c) => c.copy(brineCol).lerp(iceTip, OC.smoothstep(-0.2, 0.35, y)));
+    OC.withSway(base, () => 0);
+    OC.xform(base, { p: [0, 0.3, 0] });
+    list.push(base);
+
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 30. Сахарная арктическая ламинария (Saccharina latissima) ---- */
+  function buildArcticKelp(rng) {
+    const list = [];
+    const cHold = COL(0x3d3320);
+    const cLeafA = COL(0x5b4a20);
+    const cLeafB = COL(0x9a7b2c);
+
+    const hold = new T.ConeGeometry(0.45, 0.4, 6);
+    OC.geoPrep(hold);
+    OC.paint(hold, cHold);
+    OC.withSway(hold, () => 0);
+    hold.translate(0, 0.18, 0);
+    list.push(hold);
+
+    const nFronds = 4 + Math.floor(rng() * 3);
+    for (let i = 0; i < nFronds; i++) {
+      const a = (i / nFronds) * Math.PI * 2 + rng() * 0.5;
+      const len = OC.lerp(3.2, 6.2, rng());
+      const blade = new T.PlaneGeometry(0.68, len, 3, 7);
+      const bp = blade.attributes.position;
+      for (let k = 0; k < bp.count; k++) {
+        const bx = bp.getX(k), by = bp.getY(k) + len * 0.5;
+        const u = OC.clamp(by / len, 0, 1);
+        const w = Math.sin(Math.pow(u, 0.6) * Math.PI);
+        const ruffle = Math.sin(u * 14.0 + i) * 0.14 * Math.abs(bx * 2.2);
+        bp.setXYZ(k, bx * w, by, ruffle + Math.sin(u * 3.1) * 0.25);
+      }
+      OC.geoPrep(blade);
+      blade.computeVertexNormals();
+      OC.paint(blade, (x, y, z, c) => c.copy(cLeafA).lerp(cLeafB, OC.clamp(y / len, 0, 1)));
+      OC.withSway(blade, (x, y, z) => Math.pow(OC.clamp(y / len, 0, 1), 1.25));
+      OC.xform(blade, { r: [0.18, a, 0.1], p: [Math.cos(a) * 0.15, 0.2, Math.sin(a) * 0.15] });
+      list.push(blade);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 31. Арктический мягкий коралл «морская клубника» (Gersemia rubiformis) ---- */
+  function buildArcticSoftCoral(rng) {
+    const list = [];
+    const stalkCol = COL(0xb8465a);
+    const tipCol = COL(0xff4a6e);
+
+    const stem = new T.CylinderGeometry(0.14, 0.26, 0.9, 6);
+    OC.geoPrep(stem);
+    OC.paint(stem, stalkCol);
+    OC.withSway(stem, (x, y, z) => OC.clamp(y + 0.45, 0, 1) * 0.35);
+    OC.xform(stem, { p: [0, 0.45, 0] });
+    list.push(stem);
+
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + rng() * 0.4;
+      const dist = 0.18 + rng() * 0.32;
+      const h = 0.65 + rng() * 0.55;
+      const lobe = new T.SphereGeometry(0.24, 6, 5);
+      lobe.scale(0.95, 1.35, 0.95);
+      OC.geoPrep(lobe);
+      OC.paint(lobe, (x, y, z, c) => c.copy(stalkCol).lerp(tipCol, OC.clamp(y + 0.3, 0, 1)));
+      OC.withSway(lobe, () => 0.65);
+      OC.xform(lobe, { p: [Math.cos(a) * dist, h, Math.sin(a) * dist] });
+      list.push(lobe);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   OC.FloraLibrary = {
     create() {
@@ -4859,6 +5633,15 @@ window.OC = window.OC || {};
       const matFoliage = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.72, metalness: 0.0, side: T.DoubleSide
       }), { causticStrength: 0.0, swayAmp: 0.48 });
+
+      const matIce = OC.enhanceMaterial(new T.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.34,
+        metalness: 0.08,
+        emissive: new T.Color(0x0c3452),
+        emissiveIntensity: 0.38,
+        side: T.DoubleSide
+      }), { causticStrength: 0.52, swayAmp: 0 });
 
       const prototypes = {
         coral_staghorn: {
@@ -4976,6 +5759,30 @@ window.OC = window.OC || {};
         vent_mussels: {
           mat: matRigid, maxInstances: 880, cullDist: 360,
           geos: [buildVentMussels(rng)]
+        },
+        ice_floe: {
+          mat: matIce, maxInstances: 520, cullDist: 920,
+          geos: [buildIceFloe(rng), buildIceFloe(rng), buildIceFloe(rng)]
+        },
+        iceberg: {
+          mat: matIce, maxInstances: 160, cullDist: 1080,
+          geos: [buildIceberg(rng), buildIceberg(rng)]
+        },
+        brinicle: {
+          mat: matIce, maxInstances: 220, cullDist: 440,
+          geos: [buildBrinicle(rng), buildBrinicle(rng)]
+        },
+        kelp_arctic: {
+          mat: matPlant, maxInstances: 1400, cullDist: 460,
+          geos: [buildArcticKelp(rng), buildArcticKelp(rng)]
+        },
+        coral_arctic_soft: {
+          mat: matSoft, maxInstances: 900, cullDist: 360,
+          geos: [buildArcticSoftCoral(rng), buildArcticSoftCoral(rng)]
+        },
+        anemone_arctic: {
+          mat: matSoft, maxInstances: 620, cullDist: 360,
+          geos: [buildAnemone(0.02, 0.96, rng), buildAnemone(0.06, 0.92, rng)]
         }
       };
 
@@ -6233,21 +7040,22 @@ window.OC = window.OC || {};
     };
   }
 
-  /* ---------- Рифовая, китовая и калифорнийская леопардовая акулы ---------- */
+  /* ---------- Рифовая, китовая, леопардовая и гренландская полярная акулы ---------- */
   function makeShark(scene, biome, opts) {
     const isWhale = !!opts.whaleShark;
     const isLeopard = opts.speciesKey === 'shark_leopard';
-    const len = isWhale ? 11.5 : (isLeopard ? 2.4 : 4.2);
+    const isGreenland = opts.speciesKey === 'shark_greenland';
+    const len = isWhale ? 11.5 : (isGreenland ? 5.4 : (isLeopard ? 2.4 : 4.2));
     const group = new T.Group();
 
     const body = new T.SphereGeometry(1, 18, 12);
-    body.scale(len * 0.13, len * 0.14, len * 0.5);
+    body.scale(len * (isGreenland ? 0.15 : 0.13), len * (isGreenland ? 0.16 : 0.14), len * 0.5);
     const bp = body.attributes.position;
     for (let i = 0; i < bp.count; i++) {
       const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
       const t = z / (len * 0.5); // -1 хвост .. +1 нос
-      const taper = t < 0 ? (1 - 0.78 * Math.pow(-t, 1.3)) : (1 - 0.32 * Math.pow(t, 2));
-      const wideHead = isWhale && t > 0.5 ? 1.25 : 1.0;
+      const taper = t < 0 ? (1 - 0.78 * Math.pow(-t, 1.3)) : (1 - (isGreenland ? 0.22 : 0.32) * Math.pow(t, 2));
+      const wideHead = (isWhale || isGreenland) && t > 0.5 ? 1.25 : 1.0;
       bp.setXYZ(i, x * taper * wideHead, y * taper * (isWhale ? 0.88 : 1), z);
     }
     OC.geoPrep(body);
@@ -6261,6 +7069,9 @@ window.OC = window.OC || {};
         if (y < -0.06) { c.set(0xddd2b8); return; }
         const saddle = Math.sin(z * 5.2) * Math.cos(x * 5.5);
         c.set(0x9a8454).lerp(new T.Color(0x2d2416), saddle > 0.38 ? 0.85 : 0);
+      } else if (isGreenland) {
+        const mott = Math.sin(z * 3.1 + x * 4.2) * 0.06;
+        c.set(y > -0.1 ? 0x3b3838 : 0x565252).offsetHSL(0, 0, mott);
       } else {
         c.set(y > -0.05 ? 0x5d6e7a : 0xdde6ea);
       }
@@ -6268,20 +7079,20 @@ window.OC = window.OC || {};
     group.add(new T.Mesh(body, creatureMat));
 
     // Спинной плавник
-    const dorsal = new T.ConeGeometry(len * 0.11, len * 0.24, 4);
+    const dorsal = new T.ConeGeometry(len * (isGreenland ? 0.07 : 0.11), len * (isGreenland ? 0.16 : 0.24), 4);
     dorsal.scale(0.25, 1, 1.1);
     OC.geoPrep(dorsal);
-    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : 0x455661));
+    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : (isGreenland ? 0x343131 : 0x455661)));
     const dorM = new T.Mesh(dorsal, creatureMat);
-    dorM.position.set(0, len * 0.15, len * 0.04);
+    dorM.position.set(0, len * 0.14, isGreenland ? -len * 0.04 : len * 0.04);
     dorM.rotation.x = -0.35;
     group.add(dorM);
 
     // Грудные плавники
-    const pec = new T.ConeGeometry(len * 0.09, len * 0.28, 4);
+    const pec = new T.ConeGeometry(len * 0.09, len * (isGreenland ? 0.20 : 0.28), 4);
     pec.scale(0.22, 1, 1);
     OC.geoPrep(pec);
-    OC.paint(pec, isWhale ? 0x2a4054 : (isLeopard ? 0x857046 : 0x52626d));
+    OC.paint(pec, isWhale ? 0x2a4054 : (isLeopard ? 0x857046 : (isGreenland ? 0x383535 : 0x52626d)));
     for (const s of [-1, 1]) {
       const pm = new T.Mesh(pec, creatureMat);
       pm.position.set(s * len * 0.17, -len * 0.05, len * 0.12);
@@ -6296,14 +7107,14 @@ window.OC = window.OC || {};
     const tailTop = new T.ConeGeometry(len * 0.08, len * 0.34, 4);
     tailTop.scale(0.2, 1, 0.9);
     OC.geoPrep(tailTop);
-    OC.paint(tailTop, isWhale ? 0x2a4054 : (isLeopard ? 0x524229 : 0x28323a));
+    OC.paint(tailTop, isWhale ? 0x2a4054 : (isLeopard ? 0x524229 : (isGreenland ? 0x2e2a2a : 0x28323a)));
     const ttM = new T.Mesh(tailTop, creatureMat);
     ttM.position.set(0, len * 0.08, -len * 0.14);
     ttM.rotation.x = -0.6;
     const tailBot = new T.ConeGeometry(len * 0.06, len * 0.22, 4);
     tailBot.scale(0.2, 1, 0.8);
     OC.geoPrep(tailBot);
-    OC.paint(tailBot, isWhale ? 0x2a4054 : (isLeopard ? 0x7c6840 : 0x455661));
+    OC.paint(tailBot, isWhale ? 0x2a4054 : (isLeopard ? 0x7c6840 : (isGreenland ? 0x3b3737 : 0x455661)));
     const tbM = new T.Mesh(tailBot, creatureMat);
     tbM.position.set(0, -len * 0.05, -len * 0.1);
     tbM.rotation.x = 2.4;
@@ -6352,7 +7163,7 @@ window.OC = window.OC || {};
         b.set(bx, Math.min(-2.5, by), bz);
         group.position.copy(a);
         group.lookAt(b);
-        const wagFreq = isWhale ? 1.5 : 3.2;
+        const wagFreq = isWhale ? 1.5 : (isGreenland ? 1.65 : 3.2);
         tailPivot.rotation.y = Math.sin(time * wagFreq + t) * 0.34;
         group.rotation.y += Math.sin(time * wagFreq + t) * 0.04;
       }
@@ -6813,6 +7624,297 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Белуха (Delphinapterus leucas) ---------- */
+  function makeBeluga(scene, biome, opts) {
+    const len = opts.len || 4.8;
+    const group = new T.Group();
+
+    const body = new T.SphereGeometry(1, 16, 12);
+    body.scale(len * 0.145, len * 0.145, len * 0.5);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = z / (len * 0.5);
+      const taper = t < 0 ? (1 - 0.78 * Math.pow(-t, 1.35)) : (1 - 0.25 * Math.pow(t, 2.2));
+      bp.setXYZ(i, x * taper, y * taper, z);
+    }
+    OC.geoPrep(body);
+    body.computeVertexNormals();
+    OC.paint(body, (x, y, z, c) => c.set(y > -0.1 ? 0xf2f7fa : 0xdde8ef));
+    group.add(new T.Mesh(body, creatureMat));
+
+    // Характерный лобный выступ «мелон»
+    const melon = new T.SphereGeometry(len * 0.088, 10, 8);
+    melon.scale(0.95, 0.92, 1.15);
+    OC.geoPrep(melon);
+    OC.paint(melon, 0xf6fafd);
+    const mMesh = new T.Mesh(melon, creatureMat);
+    mMesh.position.set(0, len * 0.045, len * 0.36);
+    group.add(mMesh);
+
+    const pec = new T.SphereGeometry(1, 8, 6);
+    pec.scale(0.55, 0.08, 0.35);
+    OC.geoPrep(pec);
+    OC.paint(pec, 0xe8f0f5);
+    for (const s of [-1, 1]) {
+      const pm = new T.Mesh(pec, creatureMat);
+      pm.position.set(s * 0.65, -0.22, 0.75);
+      pm.rotation.y = -s * 0.35;
+      pm.rotation.z = -s * 0.22;
+      group.add(pm);
+    }
+
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -len * 0.45);
+    const fluke = new T.ConeGeometry(0.75, 0.85, 4);
+    fluke.scale(1.4, 1, 0.16);
+    fluke.rotateX(Math.PI / 2);
+    OC.geoPrep(fluke);
+    OC.paint(fluke, 0xd8e4ec);
+    const fkM = new T.Mesh(fluke, creatureMat);
+    fkM.position.set(0, 0, -0.42);
+    tailPivot.add(fkM);
+    group.add(tailPivot);
+
+    group.scale.setScalar(opts.scale || 1.0);
+    group.userData.key = 'beluga';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 40;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'beluga',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 640) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 4.8) / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r;
+        const az = opts.cz + Math.sin(ang) * opts.r + Math.sin(ang * 2.0) * 14;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r;
+        const bz = opts.cz + Math.sin(ang + 0.1) * opts.r + Math.sin((ang + 0.1) * 2.0) * 14;
+        const breath = Math.sin(t * 0.28) > 0.78 ? 1.0 : 0.0;
+        const ay = Math.max(OC.lerp(opts.y + Math.sin(t * 0.45) * 3.0, -1.6, breath), biome.getHeight(ax, az) + 2.8);
+        const by = Math.max(OC.lerp(opts.y + Math.sin(t * 0.45 + 0.15) * 3.0, -1.6, breath), biome.getHeight(bx, bz) + 2.8);
+        a.set(ax, Math.min(-1.5, ay), az);
+        b.set(bx, Math.min(-1.5, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        tailPivot.rotation.x = Math.sin(time * 2.4 + t) * 0.36;
+      }
+    };
+  }
+
+  /* ---------- Нарвал (Monodon monoceros) с длинным спиральным бивнем ---------- */
+  function makeNarwhal(scene, biome, opts) {
+    const len = opts.len || 5.0;
+    const group = new T.Group();
+
+    const body = new T.SphereGeometry(1, 16, 12);
+    body.scale(len * 0.135, len * 0.135, len * 0.5);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = z / (len * 0.5);
+      const taper = t < 0 ? (1 - 0.80 * Math.pow(-t, 1.35)) : (1 - 0.28 * Math.pow(t, 2.2));
+      bp.setXYZ(i, x * taper, y * taper, z);
+    }
+    OC.geoPrep(body);
+    body.computeVertexNormals();
+    OC.paint(body, (x, y, z, c) => {
+      if (y < -0.1) { c.set(0xe4edf2); return; }
+      const spot = Math.sin(x * 5.2 + z * 3.1) * Math.cos(z * 4.4);
+      c.set(0x4c5d6b).lerp(new T.Color(0xd2dee6), spot > 0.22 ? 0.72 : 0.15);
+    });
+    group.add(new T.Mesh(body, creatureMat));
+
+    // Знаменитый спиральный бивень-клык нарвала (2.4 м)
+    const tusk = new T.ConeGeometry(0.068, 2.5, 8, 6);
+    tusk.rotateX(Math.PI / 2);
+    const tp = tusk.attributes.position;
+    for (let i = 0; i < tp.count; i++) {
+      const vx = tp.getX(i), vy = tp.getY(i), vz = tp.getZ(i);
+      const ang = vz * 8.0;
+      const rib = 1 + 0.12 * Math.sin(ang + Math.atan2(vy, vx) * 2.0);
+      tp.setXYZ(i, vx * rib, vy * rib, vz);
+    }
+    OC.geoPrep(tusk);
+    tusk.computeVertexNormals();
+    OC.paint(tusk, (x, y, z, c) => c.set(0xdfe2d2).lerp(new T.Color(0xf8f9f0), OC.clamp(z * 0.35 + 0.5, 0, 1)));
+    const tuskM = new T.Mesh(tusk, creatureMat);
+    tuskM.position.set(-0.04, 0.04, len * 0.46 + 1.15);
+    group.add(tuskM);
+
+    const pec = new T.SphereGeometry(1, 8, 6);
+    pec.scale(0.55, 0.08, 0.32);
+    OC.geoPrep(pec);
+    OC.paint(pec, 0x3f4e5c);
+    for (const s of [-1, 1]) {
+      const pm = new T.Mesh(pec, creatureMat);
+      pm.position.set(s * 0.62, -0.2, 0.8);
+      pm.rotation.y = -s * 0.35;
+      pm.rotation.z = -s * 0.2;
+      group.add(pm);
+    }
+
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -len * 0.45);
+    const fluke = new T.ConeGeometry(0.82, 0.9, 4);
+    fluke.scale(1.4, 1, 0.16);
+    fluke.rotateX(Math.PI / 2);
+    OC.geoPrep(fluke);
+    OC.paint(fluke, 0x3b4956);
+    const fkM = new T.Mesh(fluke, creatureMat);
+    fkM.position.set(0, 0, -0.45);
+    tailPivot.add(fkM);
+    group.add(tailPivot);
+
+    group.scale.setScalar(opts.scale || 1.0);
+    group.userData.key = 'narwhal';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 40;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'narwhal',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 680) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 4.6) / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r;
+        const az = opts.cz + Math.sin(ang) * opts.r * 1.3;
+        const bx = opts.cx + Math.cos(ang + 0.09) * opts.r;
+        const bz = opts.cz + Math.sin(ang + 0.09) * opts.r * 1.3;
+        const ay = Math.max(opts.y + Math.sin(t * 0.24) * 7.0, biome.getHeight(ax, az) + 3.5);
+        const by = Math.max(opts.y + Math.sin(t * 0.24 + 0.14) * 7.0, biome.getHeight(bx, bz) + 3.5);
+        a.set(ax, Math.min(-2.5, ay), az);
+        b.set(bx, Math.min(-2.5, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        tailPivot.rotation.x = Math.sin(time * 2.2 + t) * 0.34;
+      }
+    };
+  }
+
+  /* ---------- Волосистая цианея (Cyanea capillata — гигантская арктическая медуза) ---------- */
+  function makeArcticJelly(scene, opts) {
+    const group = new T.Group();
+    const bellGeo = new T.SphereGeometry(1.15, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.6);
+    OC.geoPrep(bellGeo);
+    const bellMat = new T.MeshStandardMaterial({
+      color: 0xc84e24,
+      emissive: new T.Color(0x88240c),
+      emissiveIntensity: 0.45,
+      transparent: true,
+      opacity: 0.78,
+      roughness: 0.28,
+      side: T.DoubleSide
+    });
+    group.add(new T.Mesh(bellGeo, bellMat));
+
+    const tentMat = new T.MeshBasicMaterial({ color: 0xff9a44, transparent: true, opacity: 0.62 });
+    const tents = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const r = 0.35 + (i % 3) * 0.24;
+      const pts = [];
+      for (let s = 0; s <= 5; s++) {
+        const u = s / 5;
+        pts.push(new T.Vector3(Math.cos(a) * r * (1 + u * 0.4), -u * 3.8, Math.sin(a) * r * (1 + u * 0.4)));
+      }
+      const tg = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 8, 0.032, 4, false);
+      const tm = new T.Mesh(tg, tentMat);
+      group.add(tm);
+      tents.push(tm);
+    }
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.position.set(opts.cx, opts.y, opts.cz);
+    group.userData.key = 'jelly_arctic';
+    scene.add(group);
+
+    const ph = Math.random() * 6.28;
+    return {
+      key: 'jelly_arctic',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 460) { group.visible = false; return; }
+        group.visible = true;
+        const pulse = Math.sin(time * 1.45 + ph);
+        group.position.x = opts.cx + Math.sin(time * 0.16 + ph) * 8;
+        group.position.z = opts.cz + Math.cos(time * 0.14 + ph) * 8;
+        group.position.y = opts.y + Math.sin(time * 0.28 + ph) * (opts.amp || 2.8) + pulse * 0.3;
+        group.scale.set(
+          (opts.scale || 1.25) * (1 - pulse * 0.08),
+          (opts.scale || 1.25) * (1 + pulse * 0.11),
+          (opts.scale || 1.25) * (1 - pulse * 0.08)
+        );
+        for (let i = 0; i < tents.length; i++) {
+          tents[i].rotation.z = Math.sin(time * 1.2 + i * 0.5) * 0.09;
+        }
+      }
+    };
+  }
+
+  /* ---------- Морской ангел (Clione limacina) — светящийся арктический крылоногий моллюск ---------- */
+  function makeClione(scene, opts) {
+    const group = new T.Group();
+    const n = opts.n || 10;
+    const bodyMat = new T.MeshBasicMaterial({ color: 0xff8ed4, transparent: true, opacity: 0.72 });
+    const coreMat = new T.MeshBasicMaterial({ color: 0xff5a18 });
+    const wingGeo = new T.SphereGeometry(0.18, 6, 4);
+    wingGeo.scale(1.6, 0.14, 0.8);
+    const bodyGeo = new T.ConeGeometry(0.14, 0.62, 8);
+    bodyGeo.rotateX(Math.PI);
+    const coreGeo = new T.SphereGeometry(0.08, 6, 4);
+
+    const units = [];
+    const rng = OC.mulberry32(Math.abs(Math.round(opts.cx * 17 + opts.cz * 31)) + 9);
+    for (let i = 0; i < n; i++) {
+      const u = new T.Group();
+      u.add(new T.Mesh(bodyGeo, bodyMat));
+      const cm = new T.Mesh(coreGeo, coreMat);
+      cm.position.y = 0.08;
+      u.add(cm);
+      const lw = new T.Mesh(wingGeo, bodyMat);
+      lw.position.set(-0.16, 0.1, 0);
+      const rw = new T.Mesh(wingGeo, bodyMat);
+      rw.position.set(0.16, 0.1, 0);
+      u.add(lw, rw);
+      u.scale.setScalar(OC.lerp(0.85, 1.35, rng()));
+      u.userData.key = 'clione_angel';
+      group.add(u);
+      units.push({ u, lw, rw, ph: rng() * 6.28, ox: (rng() - 0.5) * 14, oy: (rng() - 0.5) * 8, oz: (rng() - 0.5) * 14 });
+    }
+    group.position.set(opts.cx, opts.y, opts.cz);
+    group.userData.key = 'clione_angel';
+    scene.add(group);
+
+    return {
+      key: 'clione_angel',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        for (let i = 0; i < units.length; i++) {
+          const it = units[i];
+          const flap = Math.sin(time * 5.2 + it.ph) * 0.72;
+          it.lw.rotation.z = flap;
+          it.rw.rotation.z = -flap;
+          it.u.position.set(
+            it.ox + Math.sin(time * 0.45 + it.ph) * 2.4,
+            it.oy + Math.cos(time * 0.55 + it.ph) * 1.6,
+            it.oz + Math.cos(time * 0.42 + it.ph) * 2.4
+          );
+          it.u.rotation.y = time * 0.35 + it.ph;
+        }
+      }
+    };
+  }
+
   /* ---------- Шлейфы чёрных курильщиков и термальный свет ---------- */
   function makeVentPlume(scene, biome, tex, opts) {
     const n = opts.n || 180;
@@ -7134,6 +8236,26 @@ window.OC = window.OC || {};
         agents.push(makeDumboOctopus(faunaGroup, biome, db));
       }
 
+      for (const bl of (plan.belugas || [])) {
+        const a = makeBeluga(faunaGroup, biome, bl);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const nw of (plan.narwhals || [])) {
+        const a = makeNarwhal(faunaGroup, biome, nw);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const aj of (plan.arcticJellies || [])) {
+        agents.push(makeArcticJelly(faunaGroup, aj));
+      }
+
+      for (const cl of (plan.cliones || [])) {
+        agents.push(makeClione(faunaGroup, cl));
+      }
+
       let whale = null;
       for (const wh of (plan.whales || [])) {
         const w = makeHumpbackWhale(faunaGroup, biome, wh);
@@ -7348,7 +8470,7 @@ window.OC = window.OC || {};
   const S = {
     ctx: null, master: null, muted: false, started: false,
     timers: [], deepFilter: null, reefGain: null, abyssGain: null,
-    currentZoneId: 'crest', currentDepth: 8, currentDayW: 1.0
+    currentZoneId: 'crest', currentDepth: 8, currentDayW: 1.0, currentBiomeId: 'great_barrier_reef'
   };
 
   function rnd(a, b) { return a + Math.random() * (b - a); }
@@ -7443,9 +8565,10 @@ window.OC = window.OC || {};
     g.linearRampToValueAtTime(S.muted ? 0 : target, now + (time || 0.8));
   };
 
-  S.update = function (depth, zoneId, dayW) {
+  S.update = function (depth, zoneId, dayW, biomeId) {
     S.currentDepth = depth;
     S.currentZoneId = zoneId || 'crest';
+    if (biomeId) S.currentBiomeId = biomeId;
     if (typeof dayW === 'number') S.currentDayW = dayW;
     if (!S.ctx || S.muted) return;
     const now = S.ctx.currentTime;
@@ -7489,17 +8612,42 @@ window.OC = window.OC || {};
     }
   };
 
-  /* Биологический треск рачков-щелкунов на мелководных кораллах (громче в сумерки/ночью) */
+  /* Биологический треск рачков-щелкунов на мелководных кораллах или треск пакового льда в Арктике */
   S.scheduleShrimp = function () {
     if (!S.ctx) return;
     const nightBoost = S.currentDayW < 0.45 ? 0.65 : 1.0;
     const t = setTimeout(() => {
-      if (!S.muted && S.ctx && S.ctx.state === 'running' && S.currentDepth < 24 && S.currentZoneId !== 'dropoff') {
-        S.shrimpSnap();
+      if (!S.muted && S.ctx && S.ctx.state === 'running') {
+        if (S.currentBiomeId === 'arctic_sea') {
+          if (S.currentDepth < 32 && Math.random() < 0.55) S.iceCrack();
+        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents') {
+          S.shrimpSnap();
+        }
       }
       S.scheduleShrimp();
     }, rnd(220, 1050) * nightBoost);
     S.timers.push(t);
+  };
+
+  S.iceCrack = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const bp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(rnd(420, 980), now);
+    osc.frequency.exponentialRampToValueAtTime(rnd(95, 190), now + 0.14);
+    bp.type = 'bandpass';
+    bp.frequency.value = rnd(580, 1100);
+    bp.Q.value = 3.2;
+    g.gain.setValueAtTime(0.024, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    osc.connect(bp); bp.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.85, 0.85); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
+    osc.start(now); osc.stop(now + 0.18);
   };
 
   S.shrimpSnap = function () {
@@ -7589,10 +8737,38 @@ window.OC = window.OC || {};
   S.scheduleWhale = function () {
     if (!S.ctx) return;
     const t = setTimeout(() => {
-      if (!S.muted && S.ctx && S.ctx.state === 'running') S.whale();
+      if (!S.muted && S.ctx && S.ctx.state === 'running') {
+        if (S.currentBiomeId === 'arctic_sea') S.belugaCall();
+        else if (S.currentBiomeId !== 'hydrothermal_vents') S.whale();
+      }
       S.scheduleWhale();
     }, rnd(14000, 32000));
     S.timers.push(t);
+  };
+
+  S.belugaCall = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1450; bp.Q.value = 2.0;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.036, now + 0.14);
+    g.gain.linearRampToValueAtTime(0.022, now + 0.65);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 1.35);
+    [980, 1460].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f, now);
+      o.frequency.exponentialRampToValueAtTime(f * (i === 0 ? 1.48 : 0.82), now + 0.55);
+      o.frequency.exponentialRampToValueAtTime(f * 1.15, now + 1.25);
+      o.connect(bp);
+      o.start(now); o.stop(now + 1.4);
+    });
+    bp.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.75, 0.75); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
   };
 
   S.whale = function () {
@@ -8233,6 +9409,44 @@ window.OC = window.OC || {};
       landmarkId: 'riftia_oasis',
       goal: 5,
       progress: (ctx) => ctx.discoveredCount
+    },
+
+    // 4. Полярное море / Подо льдом Арктики
+    {
+      id: 'arc_atlas_6',
+      biomeId: 'arctic_sea',
+      title: 'Полярный натуралист',
+      desc: 'Откройте или сфотографируйте 6 объектов Арктики (льдины, айсберг, фауна или бентос).',
+      landmarkId: 'ice_cathedral',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'arc_narwhal_photo',
+      biomeId: 'arctic_sea',
+      title: 'Единорог полярных вод',
+      desc: 'Сфотографируйте на подводную камеру (P) нарвала со спиральным бивнем или белуху.',
+      landmarkId: 'iceberg_alley',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['narwhal', 'beluga']) ? 1 : 0
+    },
+    {
+      id: 'arc_brinicle_photo',
+      biomeId: 'arctic_sea',
+      title: 'Ледяной палец смерти',
+      desc: 'Найдите и сфотографируйте (P) брайникл подо льдом или гигантскую медузу цианею.',
+      landmarkId: 'brinicle_garden',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['brinicle', 'jelly_arctic']) ? 1 : 0
+    },
+    {
+      id: 'arc_trench_shark',
+      biomeId: 'arctic_sea',
+      title: 'Легенда ледяного жёлоба',
+      desc: 'Погрузитесь глубже 55 м в Полярный жёлоб и снимите или отсканируйте сонаром (G) гренландскую акулу или морского ангела.',
+      landmarkId: 'baffin_trench',
+      goal: 1,
+      progress: (ctx) => (ctx.depthM >= 55 && ctx.hasPhotoOrPing(['shark_greenland', 'clione_angel'])) ? 1 : 0
     }
   ];
 
@@ -8505,6 +9719,14 @@ window.OC = window.OC || {};
       if (y > -48) return [54, 54, 74];
       if (y > -78) return [26, 30, 50];
       return [10, 14, 28];
+    }
+    if (theme === 'arctic') {
+      if (y > -11) return [218, 240, 252]; // кромка пакового припая
+      if (y > -18) return [134, 206, 236]; // бирюзовые ледяные поля и полыньи
+      if (y > -34) return [52, 138, 186];  // аллея айсбергов
+      if (y > -56) return [24, 78, 134];   // моренный склон
+      if (y > -92) return [13, 44, 96];    // полярный жёлоб
+      return [6, 20, 54];
     }
     if (y > 0.1) return [242, 228, 194]; // суша / островок
     if (y > -3.5) return [88, 212, 206];
@@ -9488,12 +10710,14 @@ window.OC = window.OC || {};
     const BIOME_SHORT = {
       great_barrier_reef: 'Риф ББР',
       kelp_forest: 'Ламинария',
-      hydrothermal_vents: 'Курильщики 2500м'
+      hydrothermal_vents: 'Курильщики 2500м',
+      arctic_sea: 'Арктика'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
       kelp_forest: 'Монтерей · Калифорния',
-      hydrothermal_vents: 'ВТП · Абиссаль 2500 м'
+      hydrothermal_vents: 'ВТП · Абиссаль 2500 м',
+      arctic_sea: 'Баффин · 74° с.ш.'
     };
 
     function renderBiomeUI() {
@@ -9787,7 +11011,10 @@ window.OC = window.OC || {};
         const zone = biome.getZoneAt(camPos.x, camPos.y, camPos.z);
         const depthOffset = biome.depthOffset || 0;
         const depthM = depthOffset + (depthOffset > 0 ? -camPos.y : Math.max(0, -camPos.y));
-        const tempC = (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065)).toFixed(1);
+        const rawTemp = biome.getTemperatureAt
+          ? biome.getTemperatureAt(camPos.x, depthM, zone)
+          : (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065));
+        const tempC = rawTemp.toFixed(1);
         const pal = OC.getPalette();
         const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
         const curr = OC.Navigation.getCurrent ? OC.Navigation.getCurrent() : null;
@@ -9840,7 +11067,7 @@ window.OC = window.OC || {};
           }
         }
 
-        OC.sound.update(depthM, zone.id, dayW);
+        OC.sound.update(depthM, zone.id, dayW, biome.id);
         OC.Minimap.update(camPos, OC.Navigation.getYaw());
 
         if (subMode) {
@@ -9860,7 +11087,13 @@ window.OC = window.OC || {};
             subCurrentEl.textContent = cKnots.toFixed(1) + ' уз';
             subCurrentEl.classList.toggle('warn', cKnots > 1.8);
           }
-          if (subPhaseEl) subPhaseEl.textContent = biome.noSurface ? 'Абиссаль · 2500 м' : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'));
+          if (subPhaseEl) {
+            subPhaseEl.textContent = biome.noSurface
+              ? 'Абиссаль · 2500 м'
+              : (biome.hasAurora
+                ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
+                : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День')));
+          }
           drawEchosounder(camPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }
 

@@ -5,7 +5,7 @@ window.OC = window.OC || {};
   const S = {
     ctx: null, master: null, muted: false, started: false,
     timers: [], deepFilter: null, reefGain: null, abyssGain: null,
-    currentZoneId: 'crest', currentDepth: 8, currentDayW: 1.0
+    currentZoneId: 'crest', currentDepth: 8, currentDayW: 1.0, currentBiomeId: 'great_barrier_reef'
   };
 
   function rnd(a, b) { return a + Math.random() * (b - a); }
@@ -100,9 +100,10 @@ window.OC = window.OC || {};
     g.linearRampToValueAtTime(S.muted ? 0 : target, now + (time || 0.8));
   };
 
-  S.update = function (depth, zoneId, dayW) {
+  S.update = function (depth, zoneId, dayW, biomeId) {
     S.currentDepth = depth;
     S.currentZoneId = zoneId || 'crest';
+    if (biomeId) S.currentBiomeId = biomeId;
     if (typeof dayW === 'number') S.currentDayW = dayW;
     if (!S.ctx || S.muted) return;
     const now = S.ctx.currentTime;
@@ -146,17 +147,42 @@ window.OC = window.OC || {};
     }
   };
 
-  /* Биологический треск рачков-щелкунов на мелководных кораллах (громче в сумерки/ночью) */
+  /* Биологический треск рачков-щелкунов на мелководных кораллах или треск пакового льда в Арктике */
   S.scheduleShrimp = function () {
     if (!S.ctx) return;
     const nightBoost = S.currentDayW < 0.45 ? 0.65 : 1.0;
     const t = setTimeout(() => {
-      if (!S.muted && S.ctx && S.ctx.state === 'running' && S.currentDepth < 24 && S.currentZoneId !== 'dropoff') {
-        S.shrimpSnap();
+      if (!S.muted && S.ctx && S.ctx.state === 'running') {
+        if (S.currentBiomeId === 'arctic_sea') {
+          if (S.currentDepth < 32 && Math.random() < 0.55) S.iceCrack();
+        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents') {
+          S.shrimpSnap();
+        }
       }
       S.scheduleShrimp();
     }, rnd(220, 1050) * nightBoost);
     S.timers.push(t);
+  };
+
+  S.iceCrack = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const bp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(rnd(420, 980), now);
+    osc.frequency.exponentialRampToValueAtTime(rnd(95, 190), now + 0.14);
+    bp.type = 'bandpass';
+    bp.frequency.value = rnd(580, 1100);
+    bp.Q.value = 3.2;
+    g.gain.setValueAtTime(0.024, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    osc.connect(bp); bp.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.85, 0.85); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
+    osc.start(now); osc.stop(now + 0.18);
   };
 
   S.shrimpSnap = function () {
@@ -246,10 +272,38 @@ window.OC = window.OC || {};
   S.scheduleWhale = function () {
     if (!S.ctx) return;
     const t = setTimeout(() => {
-      if (!S.muted && S.ctx && S.ctx.state === 'running') S.whale();
+      if (!S.muted && S.ctx && S.ctx.state === 'running') {
+        if (S.currentBiomeId === 'arctic_sea') S.belugaCall();
+        else if (S.currentBiomeId !== 'hydrothermal_vents') S.whale();
+      }
       S.scheduleWhale();
     }, rnd(14000, 32000));
     S.timers.push(t);
+  };
+
+  S.belugaCall = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1450; bp.Q.value = 2.0;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.036, now + 0.14);
+    g.gain.linearRampToValueAtTime(0.022, now + 0.65);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 1.35);
+    [980, 1460].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f, now);
+      o.frequency.exponentialRampToValueAtTime(f * (i === 0 ? 1.48 : 0.82), now + 0.55);
+      o.frequency.exponentialRampToValueAtTime(f * 1.15, now + 1.25);
+      o.connect(bp);
+      o.start(now); o.stop(now + 1.4);
+    });
+    bp.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.75, 0.75); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
   };
 
   S.whale = function () {

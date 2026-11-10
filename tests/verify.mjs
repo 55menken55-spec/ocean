@@ -12,6 +12,7 @@ const SRC_ORDER = [
   'src/biomes/great_barrier_reef.js',
   'src/biomes/kelp_forest.js',
   'src/biomes/hydrothermal_vents.js',
+  'src/biomes/arctic_sea.js',
   'src/engine/world.js',
   'src/engine/terrain.js',
   'src/engine/flora_library.js',
@@ -333,12 +334,13 @@ assert(subHtml.includes('id="sub-current"'), 'template.html missing #sub-current
 checkMaterialShader({ causticStrength: 0.78, swayAmp: 0.42 }, 'coralSoftCurrent');
 console.log('   Option 2 ocean currents, particle/sway advection, #sub-current HUD & smart megafauna verified.');
 
-// G) Verify Multi-Biome Planetary Platform (Kelp Forest + Abyssal Hydrothermal Vents) & clean switching
+// G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents & Arctic Sea) & clean switching
 const allBiomes = OC.Biomes.list();
-assert(allBiomes.length === 3, `Expected 3 registered ocean biomes, got ${allBiomes.length}`);
+assert(allBiomes.length === 4, `Expected 4 registered ocean biomes, got ${allBiomes.length}`);
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
+assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
-for (const bId of ['kelp_forest', 'hydrothermal_vents']) {
+for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea']) {
   const b = OC.Biomes.setActive(bId);
   assert(b && b.id === bId, `Failed to activate biome ${bId}`);
   assert(b.zones && b.zones.length >= 4, `${bId} needs >= 4 ecological zones`);
@@ -408,6 +410,28 @@ assert(vItems.some((it) => it.species === 'vent_chimney') && vItems.some((it) =>
 const ventUp = ventBiome.getCurrentAt(-10, -14, 15, 1.0, new T.Vector3());
 assert(ventUp.y > 1.2, `Abyssal black smoker updraft expected > 1.2 m/s, got ${ventUp.y.toFixed(2)}`);
 
+// Verify Arctic Sea specifics: polar temperature < -1.0C, aurora, ice_floe/iceberg/brinicle/kelp_arctic & Ultra 5x5 capacity
+const arcticBiome = OC.Biomes.get('arctic_sea');
+assert(arcticBiome && arcticBiome.hasAurora, 'arctic_sea must configure hasAurora');
+assert(arcticBiome.getTemperatureAt(0, 65, arcticBiome.zones[3]) < -1.0, 'arctic_sea polar temperature must be sub-zero');
+assert(typeof OC.sound.belugaCall === 'function' && typeof OC.sound.iceCrack === 'function', 'Arctic sound effects belugaCall & iceCrack required');
+for (const spKey of ['ice_floe', 'iceberg', 'brinicle', 'kelp_arctic', 'coral_arctic_soft', 'anemone_arctic']) {
+  assert(floraProtos[spKey], `FloraLibrary missing Arctic species ${spKey}`);
+  assert(arcticBiome.encyclopedia[spKey], `arctic_sea encyclopedia missing ${spKey}`);
+}
+const arcUltraCounts = {};
+for (let cz = -2; cz <= 2; cz++) {
+  for (let cx = -2; cx <= 2; cx++) {
+    const items = arcticBiome.generateChunkFlora(cx, cz, 150, 1.32, OC.mulberry32(((cx * 73856093) ^ (cz * 19349663)) >>> 0));
+    for (const it of items) arcUltraCounts[it.species] = (arcUltraCounts[it.species] || 0) + 1;
+  }
+}
+for (const [spKey, cnt] of Object.entries(arcUltraCounts)) {
+  assert(cnt <= floraProtos[spKey].maxInstances, `Arctic Ultra 5x5 pool overflow for ${spKey}: ${cnt} > ${floraProtos[spKey].maxInstances}`);
+}
+assert(arcUltraCounts.ice_floe > 10 && arcUltraCounts.kelp_arctic > 15, 'arctic_sea must generate ice_floe and kelp_arctic');
+console.log('   Arctic Sea polar fauna, Aurora Borealis, negative water temp & Ultra 5x5 flora pools verified.');
+
 // Switch back to GBR and verify runtime quality switching
 const gbrBack = OC.Biomes.setActive('great_barrier_reef');
 OC.Terrain.init(scene, gbrBack, spawnVec);
@@ -425,9 +449,9 @@ for (const qId of ['low', 'medium', 'high', 'ultra']) {
 }
 console.log('   Multi-biome hot-switching & runtime quality preset switching (low -> ultra) verified.');
 
-// H) Verify Direction 1: Explorer Gameplay (Camera, 12 Scientific Missions, Minimap Waypoints, Persistence)
+// H) Verify Direction 1 + Arctic Missions (Camera, 16 Scientific Missions, Minimap Waypoints, Persistence)
 assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-assert.equal(OC.Expedition.MISSIONS.length, 12, `Expected 12 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+assert.equal(OC.Expedition.MISSIONS.length, 16, `Expected 16 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
 for (const b of OC.Biomes.list()) {
   const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
   assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
@@ -454,6 +478,10 @@ assert(OC.Expedition.getPhotos().some((p) => p.id === photoWhale.id), 'Recorded 
 const resGbr = OC.Expedition.evaluateMissions(gbrBack, { zoneId: 'dropoff', depthM: 64, currentKnots: 0.4, dayW: 0.1, flashOn: true });
 assert(resGbr.list.find((m) => m.id === 'gbr_whale_photo').done, 'Mission gbr_whale_photo must complete after photographing whale_humpback');
 assert(resGbr.list.find((m) => m.id === 'gbr_night_bio').done, 'Mission gbr_night_bio must complete in deep night with fish_lantern & flashlight');
+const photoNarwhal = OC.Expedition.recordPhoto(stubCanvas, arcticBiome, { hit: true, key: 'narwhal', label: 'Нарвал', latin: 'Monodon monoceros', dist: 12, align: 0.94 }, 15.0, 0.8, false);
+assert(photoNarwhal && photoNarwhal.key === 'narwhal', 'recordPhoto must log Arctic narwhal');
+const resArc = OC.Expedition.evaluateMissions(arcticBiome, { zoneId: 'iceberg_alley', depthM: 15, currentKnots: 0.5, dayW: 0.8, flashOn: false });
+assert(resArc.list.find((m) => m.id === 'arc_narwhal_photo').done, 'Mission arc_narwhal_photo must complete after photographing narwhal');
 OC.Expedition.clearPhotos();
 assert.equal(OC.Expedition.getPhotos().length, 0);
 
@@ -467,5 +495,5 @@ assert(memStorage.has('oc_ocean_expedition_v1'), 'Expedition state must persist 
 OC.Expedition.saveQuality('high');
 assert.equal(OC.Expedition.getSavedQuality(), 'high');
 OC.Expedition.setPhotoMode(false);
-console.log('   Direction 1 Explorer Gameplay (Photo camera, 12 missions, waypoints & localStorage persistence) verified.');
+console.log('   Direction 1 Explorer Gameplay & Arctic Missions (Photo camera, 16 missions, waypoints & localStorage persistence) verified.');
 console.log('ALL VERIFICATION CHECKS PASSED!');
