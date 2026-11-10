@@ -16,6 +16,7 @@ window.OC = window.OC || {};
   const btnAtlas = document.getElementById('btn-atlas');
   const btnGlobe = document.getElementById('btn-globe');
   const btnLab = document.getElementById('btn-lab');
+  const btnRov = document.getElementById('btn-rov');
   const btnCam = document.getElementById('btn-cam');
   const btnCinema = document.getElementById('btn-cinema');
   const btnJournal = document.getElementById('btn-journal');
@@ -121,6 +122,24 @@ window.OC = window.OC || {};
   const labVCurr = document.getElementById('lab-v-curr');
   let lastLabTone = 'ok';
 
+  const rovPanel = document.getElementById('rov-panel');
+  const rovClose = document.getElementById('rov-close');
+  const rovBtnChase = document.getElementById('rov-btn-chase');
+  const rovBtnCurrents = document.getElementById('rov-btn-currents');
+  const rovBtnSample = document.getElementById('rov-btn-sample');
+  const rovBtnCtd = document.getElementById('rov-btn-ctd');
+  const rovTargetLabel = document.getElementById('rov-target-label');
+  const rovFlowLabel = document.getElementById('rov-flow-label');
+  const rovCtdChart = document.getElementById('rov-ctd-chart');
+  const rovCtdThermo = document.getElementById('rov-ctd-thermo');
+  const rovCtdTemps = document.getElementById('rov-ctd-temps');
+  const rovCtdO2 = document.getElementById('rov-ctd-o2');
+  const rovCtdPress = document.getElementById('rov-ctd-press');
+  const rovSampleCount = document.getElementById('rov-sample-count');
+  const rovSamplesEl = document.getElementById('rov-samples');
+  const rovSamplesClear = document.getElementById('rov-samples-clear');
+  const _rovScanOut = { kind: 'water', species: '', label: '', latin: '', dist: 0, colorHex: 0x58e0ff };
+
   let autoCycle = true;
   let hudHidden = false;
   let subMode = false;
@@ -225,6 +244,13 @@ window.OC = window.OC || {};
     return dName + ' ' + String(deg).padStart(3, '0') + '°';
   }
 
+  function isObjVisible(obj) {
+    for (let p = obj; p; p = p.parent) {
+      if (!p.visible) return false;
+    }
+    return true;
+  }
+
   function detectCenterTarget(camera, biome, fauna) {
     if (!camera || !biome) return null;
     camera.getWorldDirection(_fwd);
@@ -234,9 +260,10 @@ window.OC = window.OC || {};
     const hits = raycaster.intersectObjects(OC.getScene().children, true);
     let rayHit = null;
     for (const h of hits) {
-      if (!h.object.visible || h.distance > 48) continue;
+      if (!isObjVisible(h.object) || h.distance > 48) continue;
       let o = h.object;
-      while (o && !o.userData.key) o = o.parent;
+      while (o && !o.userData.key && !o.userData.rovKey) o = o.parent;
+      if (o && o.userData.rovKey) continue;
       const key = o && o.userData.key ? o.userData.key : null;
       if (!key || key === 'bubbles' || key === 'plankton' || key === 'marine_snow') continue;
       const enc = biome.encyclopedia[key];
@@ -319,6 +346,22 @@ window.OC = window.OC || {};
     pickedTime = performance.now();
   }
 
+  function showRovPopup(cx, cy) {
+    if (!popup) return;
+    const cnt = OC.ROV ? OC.ROV.getSamples().length : 0;
+    popup.innerHTML =
+      '<div class="popup-head"><span>Аппарат · Проб: ' + cnt + '</span><span class="popup-new">ROV «Наутилус-IV»</span></div>' +
+      '<div class="popup-title">Исследовательский ROV</div>' +
+      '<div class="popup-latin">Глубоководный аппарат до 4000 м</div>' +
+      '<div class="popup-desc">Оснащён 3-звенным манипулятором (Z), вертикальным CTD-зондом (I), 4K-камерой, двойными прожекторами (F) и трассерами течений.</div>';
+    popup.classList.remove('hidden');
+    const x = Math.min(cx, window.innerWidth - 305);
+    const y = Math.min(cy, window.innerHeight - 210);
+    popup.style.left = Math.max(12, x + 14) + 'px';
+    popup.style.top = Math.max(12, y + 10) + 'px';
+    pickedTime = performance.now();
+  }
+
   function pickAt(cx, cy, biome) {
     const rect = canvas.getBoundingClientRect();
     ndc.x = ((cx - rect.left) / rect.width) * 2 - 1;
@@ -326,9 +369,16 @@ window.OC = window.OC || {};
     raycaster.setFromCamera(ndc, OC.getCamera());
     const hits = raycaster.intersectObjects(OC.getScene().children, true);
     for (const h of hits) {
-      if (!h.object.visible) continue;
+      if (!isObjVisible(h.object)) continue;
       let o = h.object;
-      while (o && !o.userData.key) o = o.parent;
+      while (o && !o.userData.key && !o.userData.rovKey) o = o.parent;
+      if (o && o.userData.rovKey) {
+        if (o.userData.rovKey === 'rov_nautilus') {
+          showRovPopup(cx, cy);
+          return;
+        }
+        continue;
+      }
       const key = o && o.userData.key ? o.userData.key : null;
       if (!key || key === 'bubbles' || key === 'plankton' || key === 'marine_snow') continue;
       showInfo(key, cx, cy, biome);
@@ -437,6 +487,10 @@ window.OC = window.OC || {};
           labPanel.classList.add('closed');
           if (btnLab) btnLab.classList.remove('on');
         }
+        if (isOpen && rovPanel) {
+          rovPanel.classList.add('closed');
+          if (btnRov) btnRov.classList.toggle('on', !!(OC.Navigation.isRovView && OC.Navigation.isRovView()));
+        }
       });
     }
 
@@ -492,6 +546,8 @@ window.OC = window.OC || {};
       if (opening) {
         if (panel) panel.classList.add('closed');
         if (btnPanel) btnPanel.classList.remove('open');
+        if (rovPanel) rovPanel.classList.add('closed');
+        if (btnRov) btnRov.classList.toggle('on', !!(OC.Navigation.isRovView && OC.Navigation.isRovView()));
         syncLabControls();
         updateLabDisplay();
       }
@@ -552,6 +608,132 @@ window.OC = window.OC || {};
     bindLabSlider(labSNutr, 'nutrients', 100);
     bindLabSlider(labSCurr, 'currentMult', 1);
     syncLabControls();
+
+    const syncRovButtons = () => {
+      const chaseOn = !!(OC.Navigation.isRovView && OC.Navigation.isRovView());
+      const currOn = !!(OC.ROV && OC.ROV.isCurrentsVisible && OC.ROV.isCurrentsVisible());
+      const panelOpen = !!(rovPanel && !rovPanel.classList.contains('closed'));
+      if (btnRov) btnRov.classList.toggle('on', panelOpen || chaseOn || currOn);
+      if (rovBtnChase) rovBtnChase.classList.toggle('on', chaseOn);
+      if (rovBtnCurrents) rovBtnCurrents.classList.toggle('on', currOn);
+    };
+
+    const updateRovCtdDisplay = (castOverride) => {
+      if (!OC.ROV) return;
+      const cast = castOverride || OC.ROV.getLastCtdCast();
+      if (!cast) return;
+      if (rovCtdThermo) rovCtdThermo.textContent = cast.thermoclineM > cast.minDepthM + 3 ? (cast.thermoclineM + ' м') : 'Однородно';
+      if (rovCtdTemps) rovCtdTemps.textContent = cast.bottomTemp.toFixed(1) + ' / ' + cast.surfaceTemp.toFixed(1) + ' °C';
+      if (rovCtdO2) rovCtdO2.textContent = cast.minO2.toFixed(1) + ' мг/л';
+      if (rovCtdPress) rovCtdPress.textContent = cast.maxPressureAtm.toFixed(1) + ' атм';
+      if (rovCtdChart && activeBiome) {
+        const craft = OC.Navigation.getPosition();
+        const off = activeBiome.depthOffset || 0;
+        const dNow = off + (off > 0 ? -craft.y : Math.max(0, -craft.y));
+        OC.ROV.drawCtdChart(rovCtdChart, dNow);
+      }
+    };
+
+    const renderRovSamples = () => {
+      if (!OC.ROV || !rovSamplesEl) return;
+      const list = OC.ROV.getSamples();
+      if (rovSampleCount) rovSampleCount.textContent = String(list.length);
+      if (!list.length) {
+        rovSamplesEl.innerHTML = '<div style="font-size:11px;color:var(--dim);padding:6px 0">Наведите аппарат на коралл, курильщик, лёд или дно и нажмите <b>Z</b>, чтобы взять научную пробу.</div>';
+        return;
+      }
+      rovSamplesEl.innerHTML = '';
+      for (const s of list) {
+        const item = document.createElement('div');
+        item.className = 'rov-sample-item';
+        const colCss = '#' + (s.colorHex >>> 0).toString(16).padStart(6, '0');
+        item.innerHTML =
+          '<span class="rov-sample-dot" style="color:' + colCss + ';background:' + colCss + '"></span>' +
+          '<div class="rov-sample-body">' +
+            '<div class="rov-sample-title">' + s.title + '</div>' +
+            '<div class="rov-sample-meta">' + s.category + ' · ' + s.depthM + ' м · ' + s.tempC + ' °C</div>' +
+            '<div class="rov-sample-chem">' + s.chemNote + '</div>' +
+          '</div>';
+        rovSamplesEl.appendChild(item);
+      }
+    };
+
+    const toggleRovPanel = (forceClose) => {
+      if (!rovPanel) return false;
+      const opening = forceClose ? false : rovPanel.classList.contains('closed');
+      rovPanel.classList.toggle('closed', !opening);
+      if (opening) {
+        if (panel) panel.classList.add('closed');
+        if (btnPanel) btnPanel.classList.remove('open');
+        if (labPanel) labPanel.classList.add('closed');
+        if (btnLab) btnLab.classList.remove('on');
+        updateRovCtdDisplay();
+        renderRovSamples();
+      }
+      syncRovButtons();
+      return opening;
+    };
+
+    const toggleRovChase = () => {
+      if (!OC.Navigation.toggleRovView) return;
+      const on = OC.Navigation.toggleRovView();
+      syncRovButtons();
+      toast(on ? 'Вид от 3-го лица: ROV «Наутилус-IV» (Y)' : 'Вид из кабины / от 1-го лица');
+    };
+
+    const triggerSampleGrab = () => {
+      if (!OC.ROV || !activeBiome) return null;
+      const pos = OC.Navigation.getPosition();
+      OC.Navigation.getForward(_fwd);
+      const labSt = OC.EcoLab ? OC.EcoLab.getState() : null;
+      const smp = OC.ROV.grabSample(activeBiome, pos, _fwd, labSt);
+      renderRovSamples();
+      if (smp) {
+        toast('Проба взята: ' + smp.title + ' (' + smp.category + (smp.isNewAtlas ? ' · Атлас!' : '') + ')');
+      }
+      return smp;
+    };
+
+    const triggerCtdCast = () => {
+      if (!OC.ROV || !activeBiome) return null;
+      const pos = OC.Navigation.getPosition();
+      const labSt = OC.EcoLab ? OC.EcoLab.getState() : null;
+      const cast = OC.ROV.runCtdCast(activeBiome, pos, labSt);
+      updateRovCtdDisplay(cast);
+      if (cast) {
+        toast('CTD-зонд: дно ' + cast.maxDepthM + ' м · ' + cast.bottomTemp + ' °C · мин. O₂ ' + cast.minO2 + ' мг/л');
+      }
+      return cast;
+    };
+
+    if (btnRov) {
+      btnRov.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleRovPanel(false);
+      });
+    }
+    if (rovClose) rovClose.addEventListener('click', () => toggleRovPanel(true));
+    if (rovBtnChase) rovBtnChase.addEventListener('click', toggleRovChase);
+    if (rovBtnCurrents) {
+      rovBtnCurrents.addEventListener('click', () => {
+        if (!OC.ROV) return;
+        const on = OC.ROV.toggleCurrents();
+        syncRovButtons();
+        toast(on ? '3D-трассеры океанических течений включены' : '3D-трассеры течений скрыты');
+      });
+    }
+    if (rovBtnSample) rovBtnSample.addEventListener('click', triggerSampleGrab);
+    if (rovBtnCtd) rovBtnCtd.addEventListener('click', triggerCtdCast);
+    if (rovSamplesClear) {
+      rovSamplesClear.addEventListener('click', () => {
+        if (!OC.ROV) return;
+        OC.ROV.clearSamples();
+        renderRovSamples();
+        toast('Отсек проб очищен');
+      });
+    }
+    syncRovButtons();
+    renderRovSamples();
 
     const syncSound = (on) => {
       if (!btnSound) return;
@@ -1079,6 +1261,12 @@ window.OC = window.OC || {};
         if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
       }
       if (e.code === 'KeyL') { toggleLab(false); }
+      if (e.code === 'KeyY') { toggleRovChase(); }
+      if (e.code === 'KeyZ') { triggerSampleGrab(); }
+      if (e.code === 'KeyI') {
+        const opened = toggleRovPanel(false);
+        if (opened) triggerCtdCast();
+      }
       if (e.code === 'ArrowRight' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(1); }
       if (e.code === 'ArrowLeft' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(-1); }
       if (e.code === 'KeyP') {
@@ -1127,6 +1315,7 @@ window.OC = window.OC || {};
         else if (OC.Atlas.isOpen()) OC.Atlas.toggle();
         else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
         else if (labPanel && !labPanel.classList.contains('closed')) toggleLab(true);
+        else if (rovPanel && !rovPanel.classList.contains('closed')) toggleRovPanel(true);
         else if (OC.Expedition && OC.Expedition.isPhotoMode()) syncCamMode(false);
         else if (OC.Navigation.getMode() === 'cinema') OC.Navigation.setMode('swim');
         else if (OC.Navigation.getMode() === 'tour') OC.Navigation.stopTour();
@@ -1138,7 +1327,7 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
   }
 
   function switchBiome(id) {
@@ -1164,6 +1353,7 @@ window.OC = window.OC || {};
     OC.Navigation.setBiome(next);
     OC.Minimap.setBiome(next);
     OC.Atlas.setBiome(next);
+    if (OC.ROV) OC.ROV.resetForBiome(next, sp);
 
     const wasAbyss = prevBiome && prevBiome.noSurface;
     if (next.noSurface && !OC.isFlashlightOn()) {
@@ -1178,6 +1368,8 @@ window.OC = window.OC || {};
       uiHandles.renderZoneChips();
       if (uiHandles.syncWeatherButtons) uiHandles.syncWeatherButtons();
       if (uiHandles.updateLabDisplay) uiHandles.updateLabDisplay();
+      if (uiHandles.updateRovCtdDisplay) uiHandles.updateRovCtdDisplay();
+      if (uiHandles.syncRovButtons) uiHandles.syncRovButtons();
     }
     if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
     toast(next.noSurface
@@ -1213,6 +1405,10 @@ window.OC = window.OC || {};
 
       setBar(0.88);
       activeFauna = OC.FaunaEngine.init(scene, activeBiome);
+      if (OC.ROV) {
+        OC.ROV.init(scene);
+        OC.ROV.resetForBiome(activeBiome, sp);
+      }
 
       OC.Navigation.init(canvas, activeBiome, {
         onPick: (cx, cy) => pickAt(cx, cy, activeBiome),
@@ -1321,12 +1517,23 @@ window.OC = window.OC || {};
 
       OC.Navigation.update(dt, time, camera, reduced);
       const camPos = camera.position;
+      const craftPos = OC.Navigation.getPosition ? OC.Navigation.getPosition() : camPos;
 
       OC.updateWorld(dt, time, camPos, autoCycle);
       OC.Terrain.update(camPos);
       OC.FloraStreamer.update(camPos);
       const camSpeed = OC.Navigation.getSpeed();
       const flashOn = OC.isFlashlightOn();
+      if (OC.ROV) {
+        const photoOn = !!(OC.Expedition && OC.Expedition.isPhotoMode && OC.Expedition.isPhotoMode());
+        const navMode = OC.Navigation.getMode();
+        const showCraft = !!(OC.Navigation.isRovView && OC.Navigation.isRovView() && (navMode === 'swim' || navMode === 'orbit') && !photoOn);
+        OC.ROV.update(dt, time, camera, craftPos, OC.Navigation.getYaw(), OC.Navigation.getPitch(), camSpeed, activeBiome, {
+          showCraft,
+          flashOn,
+          labState: OC.EcoLab ? OC.EcoLab.getState() : null
+        });
+      }
       if (activeFauna) activeFauna.update(dt, time, camPos, camSpeed, flashOn);
       const wState = OC.Weather ? OC.Weather.getState() : { stormMix: 0, droplets: 0 };
       updateLensDroplets(rawDt, camPos, wState, activeBiome);
@@ -1335,11 +1542,11 @@ window.OC = window.OC || {};
       if (hudTimer > 0.14 && activeBiome) {
         hudTimer = 0;
         const biome = activeBiome;
-        const zone = biome.getZoneAt(camPos.x, camPos.y, camPos.z);
+        const zone = biome.getZoneAt(craftPos.x, craftPos.y, craftPos.z);
         const depthOffset = biome.depthOffset || 0;
-        const depthM = depthOffset + (depthOffset > 0 ? -camPos.y : Math.max(0, -camPos.y));
+        const depthM = depthOffset + (depthOffset > 0 ? -craftPos.y : Math.max(0, -craftPos.y));
         const rawTemp = biome.getTemperatureAt
-          ? biome.getTemperatureAt(camPos.x, depthM, zone)
+          ? biome.getTemperatureAt(craftPos.x, depthM, zone)
           : (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065));
         const labState = OC.EcoLab ? OC.EcoLab.getState() : null;
         const adjTemp = labState ? Math.max(-1.9, rawTemp + labState.tempDelta) : rawTemp;
@@ -1350,7 +1557,7 @@ window.OC = window.OC || {};
         const cKnots = curr ? curr.length() * 1.94384 : 0;
 
         if (teleZone) teleZone.textContent = zone.shortName;
-        if (teleDepth) teleDepth.textContent = (!biome.noSurface && camPos.y > 0.1) ? ('+' + camPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
+        if (teleDepth) teleDepth.textContent = (!biome.noSurface && craftPos.y > 0.1) ? ('+' + craftPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
         if (teleTemp) teleTemp.textContent = tempC + ' °C';
         if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
         if (teleWeatherWrap && teleWeatherSep && teleWeather && OC.Weather) {
@@ -1368,8 +1575,8 @@ window.OC = window.OC || {};
         if (OC.Expedition) {
           const wp = OC.Expedition.getWaypoint(biome.id);
           if (wp) {
-            const wpDx = wp.x - camPos.x;
-            const wpDz = wp.z - camPos.z;
+            const wpDx = wp.x - craftPos.x;
+            const wpDz = wp.z - craftPos.z;
             const wpDist = Math.hypot(wpDx, wpDz);
             if (wpDist < 24) {
               OC.Expedition.clearWaypoint(biome.id);
@@ -1407,7 +1614,7 @@ window.OC = window.OC || {};
         }
 
         OC.sound.update(depthM, zone.id, dayW, biome.id, wState.stormMix || 0);
-        OC.Minimap.update(camPos, OC.Navigation.getYaw());
+        OC.Minimap.update(craftPos, OC.Navigation.getYaw());
 
         const ecoEv = OC.faunaInfo ? OC.faunaInfo.activeEvent : null;
         if (ecoEv && (ecoEv !== lastEcoEvent || OC.uTime.value - lastEcoEventAt > 20) && OC.uTime.value > 5) {
@@ -1419,8 +1626,8 @@ window.OC = window.OC || {};
         }
 
         if (subMode) {
-          const flHere = biome.getHeight(camPos.x, camPos.z);
-          const clearance = Math.max(0, camPos.y - flHere);
+          const flHere = biome.getHeight(craftPos.x, craftPos.z);
+          const clearance = Math.max(0, craftPos.y - flHere);
           const atm = (1 + depthM / 10.08).toFixed(2);
           const knots = (camSpeed * 1.94384).toFixed(1);
           const pitchDeg = OC.Navigation.getPitch() * 180 / Math.PI;
@@ -1442,7 +1649,20 @@ window.OC = window.OC || {};
                 ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
                 : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День')));
           }
-          drawEchosounder(camPos, OC.Navigation.getYaw(), biome, activeFauna, time);
+          drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
+        }
+
+        if (OC.ROV && rovPanel && !rovPanel.classList.contains('closed')) {
+          OC.Navigation.getForward(_fwd);
+          OC.ROV.scanTarget(biome, craftPos, _fwd, _rovScanOut);
+          if (rovTargetLabel) {
+            const distPart = _rovScanOut.dist > 0 ? (' (' + _rovScanOut.dist.toFixed(1) + ' м)') : '';
+            rovTargetLabel.textContent = 'Захват: ' + _rovScanOut.label + distPart;
+          }
+          if (rovFlowLabel) {
+            rovFlowLabel.textContent = 'Вектор течения: ' + cKnots.toFixed(2) + ' уз · Глубина ' + depthM.toFixed(1) + ' м';
+          }
+          if (rovCtdChart) OC.ROV.drawCtdChart(rovCtdChart, depthM);
         }
 
         const t = OC.getTimeOfDay();

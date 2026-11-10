@@ -11,6 +11,7 @@ window.OC = window.OC || {};
   const _lookAt = new T.Vector3();
   const _curr = new T.Vector3();
   const _cinemaTarget = new T.Vector3();
+  const _chaseGoal = new T.Vector3();
   const _gpOut = { moveX: 0, moveY: 0, vertZ: 0, boost: false };
 
   const state = {
@@ -22,6 +23,10 @@ window.OC = window.OC || {};
     targetYaw: 2.25,
     targetPitch: -0.14,
     swimSpeed: 18,
+    // Вид от 3-го лица за аппаратом ROV
+    rovView: false,
+    chasePos: new T.Vector3(),
+    chaseInited: false,
     // Орбита
     orbitTarget: new T.Vector3(),
     orbitDist: 42,
@@ -114,22 +119,34 @@ window.OC = window.OC || {};
   function setMode(m) {
     if (state.mode === m) return;
     if (m === 'orbit') {
-      // Ставим центр орбиты впереди камеры на ~36 м
-      _fwd.set(
-        Math.sin(state.yaw) * Math.cos(state.pitch),
-        Math.sin(state.pitch),
-        Math.cos(state.yaw) * Math.cos(state.pitch)
-      ).normalize();
-      state.orbitTarget.copy(state.pos).addScaledVector(_fwd, 34);
-      const fl = biomeRef.getHeight(state.orbitTarget.x, state.orbitTarget.z);
-      state.orbitTarget.y = Math.max(state.orbitTarget.y, fl + 1.5);
-      state.orbitDist = 34;
-      state.orbitTargetDist = 34;
-      // В орбите камера смотрит НА target, поэтому разворачиваем yaw
-      state.yaw = Math.atan2(state.pos.x - state.orbitTarget.x, state.pos.z - state.orbitTarget.z);
-      state.targetYaw = state.yaw;
-      state.pitch = Math.asin(OC.clamp((state.pos.y - state.orbitTarget.y) / 34, -0.85, 0.85));
-      state.targetPitch = state.pitch;
+      if (state.rovView) {
+        state.orbitTarget.copy(state.pos);
+        const fl = biomeRef ? biomeRef.getHeight(state.orbitTarget.x, state.orbitTarget.z) : -10;
+        state.orbitTarget.y = Math.max(state.orbitTarget.y, fl + 1.65);
+        state.orbitDist = 11.5;
+        state.orbitTargetDist = 11.5;
+        state.yaw = state.yaw + Math.PI;
+        state.targetYaw = state.yaw;
+        state.pitch = 0.24;
+        state.targetPitch = 0.24;
+      } else {
+        // Ставим центр орбиты впереди камеры на ~36 м
+        _fwd.set(
+          Math.sin(state.yaw) * Math.cos(state.pitch),
+          Math.sin(state.pitch),
+          Math.cos(state.yaw) * Math.cos(state.pitch)
+        ).normalize();
+        state.orbitTarget.copy(state.pos).addScaledVector(_fwd, 34);
+        const fl = biomeRef.getHeight(state.orbitTarget.x, state.orbitTarget.z);
+        state.orbitTarget.y = Math.max(state.orbitTarget.y, fl + 1.5);
+        state.orbitDist = 34;
+        state.orbitTargetDist = 34;
+        // В орбите камера смотрит НА target, поэтому разворачиваем yaw
+        state.yaw = Math.atan2(state.pos.x - state.orbitTarget.x, state.pos.z - state.orbitTarget.z);
+        state.targetYaw = state.yaw;
+        state.pitch = Math.asin(OC.clamp((state.pos.y - state.orbitTarget.y) / 34, -0.85, 0.85));
+        state.targetPitch = state.pitch;
+      }
     } else if (m === 'cinema') {
       _fwd.set(
         Math.sin(state.yaw) * Math.cos(state.pitch),
@@ -143,16 +160,26 @@ window.OC = window.OC || {};
       state.cinemaYawOffset = 0;
       state.cinemaPitchOffset = 0;
     } else if (state.mode === 'orbit' && m === 'swim') {
-      // При выходе из орбиты сохраняем направление взгляда на target
-      const dx = state.orbitTarget.x - state.pos.x;
-      const dy = state.orbitTarget.y - state.pos.y;
-      const dz = state.orbitTarget.z - state.pos.z;
-      const d = Math.hypot(dx, dy, dz) || 1;
-      state.yaw = Math.atan2(dx, dz);
-      state.targetYaw = state.yaw;
-      state.pitch = Math.asin(OC.clamp(dy / d, -0.9, 0.9));
-      state.targetPitch = state.pitch;
-      state.vel.set(0, 0, 0);
+      if (state.rovView) {
+        state.pos.copy(state.orbitTarget);
+        state.yaw = state.yaw + Math.PI;
+        state.targetYaw = state.yaw;
+        state.pitch = OC.clamp(-state.pitch * 0.5, -0.5, 0.5);
+        state.targetPitch = state.pitch;
+        state.chaseInited = false;
+        state.vel.set(0, 0, 0);
+      } else {
+        // При выходе из орбиты сохраняем направление взгляда на target
+        const dx = state.orbitTarget.x - state.pos.x;
+        const dy = state.orbitTarget.y - state.pos.y;
+        const dz = state.orbitTarget.z - state.pos.z;
+        const d = Math.hypot(dx, dy, dz) || 1;
+        state.yaw = Math.atan2(dx, dz);
+        state.targetYaw = state.yaw;
+        state.pitch = Math.asin(OC.clamp(dy / d, -0.9, 0.9));
+        state.targetPitch = state.pitch;
+        state.vel.set(0, 0, 0);
+      }
     }
 
     const prevMode = state.mode;
@@ -387,6 +414,20 @@ window.OC = window.OC || {};
     },
     getTourState: buildTourState,
     getMode: () => state.mode,
+    isRovView: () => state.rovView,
+    setRovView(on) {
+      state.rovView = !!on;
+      state.chaseInited = false;
+      if (state.rovView && state.mode === 'orbit') {
+        state.orbitTarget.copy(state.pos);
+        state.orbitDist = 11.5;
+        state.orbitTargetDist = 11.5;
+      }
+      return state.rovView;
+    },
+    toggleRovView() {
+      return this.setRovView(!state.rovView);
+    },
     getPosition: () => state.pos,
     getYaw: () => state.yaw,
     getPitch: () => state.pitch,
@@ -417,6 +458,7 @@ window.OC = window.OC || {};
       state.pitch = sp.pitch;
       state.targetPitch = sp.pitch;
       state.glide = null;
+      state.chaseInited = false;
       setMode('swim');
     },
 
@@ -543,14 +585,26 @@ window.OC = window.OC || {};
         clampPosition(state.orbitTarget);
 
         const cp = Math.cos(state.pitch);
-        state.pos.set(
-          state.orbitTarget.x + Math.sin(state.yaw) * cp * state.orbitDist,
-          state.orbitTarget.y + Math.sin(state.pitch) * state.orbitDist,
-          state.orbitTarget.z + Math.cos(state.yaw) * cp * state.orbitDist
-        );
-        clampPosition(state.pos);
-        camera.position.copy(state.pos);
-        camera.lookAt(state.orbitTarget);
+        if (state.rovView) {
+          state.pos.copy(state.orbitTarget);
+          _chaseGoal.set(
+            state.orbitTarget.x + Math.sin(state.yaw) * cp * state.orbitDist,
+            state.orbitTarget.y + Math.sin(state.pitch) * state.orbitDist,
+            state.orbitTarget.z + Math.cos(state.yaw) * cp * state.orbitDist
+          );
+          clampPosition(_chaseGoal);
+          camera.position.copy(_chaseGoal);
+          camera.lookAt(state.orbitTarget);
+        } else {
+          state.pos.set(
+            state.orbitTarget.x + Math.sin(state.yaw) * cp * state.orbitDist,
+            state.orbitTarget.y + Math.sin(state.pitch) * state.orbitDist,
+            state.orbitTarget.z + Math.cos(state.yaw) * cp * state.orbitDist
+          );
+          clampPosition(state.pos);
+          camera.position.copy(state.pos);
+          camera.lookAt(state.orbitTarget);
+        }
         return;
       } else {
         // Свободное плавание (Diver Free-Swim + Геймпад + Виртуальный тач-джойстик)
@@ -601,16 +655,43 @@ window.OC = window.OC || {};
         clampPosition(state.pos);
       }
 
-      const bob = reduced || (!biomeRef.noSurface && state.pos.y > -0.2) ? 0 : Math.sin(time * 0.65) * 0.14;
-      camera.position.set(state.pos.x, state.pos.y + bob, state.pos.z);
-
       _fwd.set(
         Math.sin(state.yaw) * Math.cos(state.pitch),
         Math.sin(state.pitch),
         Math.cos(state.yaw) * Math.cos(state.pitch)
       ).normalize();
-      _lookAt.copy(camera.position).add(_fwd);
-      camera.lookAt(_lookAt);
+
+      const photoOn = !!(OC.Expedition && OC.Expedition.isPhotoMode && OC.Expedition.isPhotoMode());
+      const chaseActive = state.rovView && state.mode === 'swim' && !photoOn;
+      if (chaseActive) {
+        const chaseDist = 8.4;
+        const chaseUp = 2.15;
+        _chaseGoal.set(
+          state.pos.x - _fwd.x * chaseDist,
+          state.pos.y - _fwd.y * chaseDist + chaseUp,
+          state.pos.z - _fwd.z * chaseDist
+        );
+        if (biomeRef) {
+          const flCam = biomeRef.getHeight(_chaseGoal.x, _chaseGoal.z);
+          const maxCamY = (biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+          _chaseGoal.y = OC.clamp(_chaseGoal.y, flCam + 0.85, maxCamY);
+        }
+        if (!state.chaseInited || state.chasePos.distanceToSquared(_chaseGoal) > 2500) {
+          state.chasePos.copy(_chaseGoal);
+          state.chaseInited = true;
+        } else {
+          state.chasePos.lerp(_chaseGoal, Math.min(1, dt * 9.5));
+        }
+        camera.position.copy(state.chasePos);
+        _lookAt.copy(state.pos).addScaledVector(_fwd, 3.2);
+        camera.lookAt(_lookAt);
+      } else {
+        state.chaseInited = false;
+        const bob = reduced || (!biomeRef.noSurface && state.pos.y > -0.2) ? 0 : Math.sin(time * 0.65) * 0.14;
+        camera.position.set(state.pos.x, state.pos.y + bob, state.pos.z);
+        _lookAt.copy(camera.position).add(_fwd);
+        camera.lookAt(_lookAt);
+      }
     }
   };
 })(window.OC);

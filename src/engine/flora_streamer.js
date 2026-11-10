@@ -252,6 +252,45 @@ window.OC = window.OC || {};
       }
     },
 
+    findNearest(pos, maxDist, out) {
+      if (!pos || !biomeRef) return null;
+      const maxD = maxDist || 16;
+      const maxD2 = maxD * maxD;
+      const scx = Math.floor(pos.x / chunkSize);
+      const scz = Math.floor(pos.z / chunkSize);
+      let best = null;
+      let bestD2 = maxD2;
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const cx = scx + dx;
+          const cz = scz + dz;
+          const items = chunkFloraCache.get(chunkKey(cx, cz));
+          if (!items) continue;
+          for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            const ddx = it.x - pos.x;
+            const ddy = it.y - pos.y;
+            const ddz = it.z - pos.z;
+            const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+            if (d2 < bestD2) {
+              bestD2 = d2;
+              best = it;
+            }
+          }
+        }
+      }
+      if (!best) return null;
+      const dst = out || {};
+      dst.species = best.species;
+      dst.x = best.x;
+      dst.y = best.y;
+      dst.z = best.z;
+      dst.scale = best.scale;
+      dst.tint = best.tint;
+      dst.dist = Math.sqrt(bestD2);
+      return dst;
+    },
+
     getStats() {
       return {
         cachedChunks: chunkFloraCache.size,

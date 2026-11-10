@@ -22,6 +22,7 @@ ORDER = [
     'engine/flora_streamer.js',
     'engine/fauna_engine.js',
     'engine/audio.js',
+    'engine/rov.js',
     'ui/navigation.js',
     'ui/expedition.js',
     'ui/minimap.js',

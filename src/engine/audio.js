@@ -715,6 +715,61 @@ window.OC = window.OC || {};
     src.start(now); src.stop(now + dur + 0.04);
   };
 
+  S.rovServo = function (captured) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    // Гидравлический привод манипулятора (приглушённый сервомотор под водой)
+    const o = ctx.createOscillator();
+    const lp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(145, now);
+    o.frequency.linearRampToValueAtTime(290, now + 0.22);
+    o.frequency.linearRampToValueAtTime(175, now + 0.56);
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(520, now);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.028, now + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+    o.connect(lp); lp.connect(g); g.connect(S.master);
+    o.start(now); o.stop(now + 0.65);
+
+    if (captured) {
+      [587.33, 880.0].forEach((freq, i) => {
+        const t = now + 0.42 + i * 0.09;
+        const c = ctx.createOscillator();
+        const cg = ctx.createGain();
+        c.type = 'sine';
+        c.frequency.setValueAtTime(freq, t);
+        cg.gain.setValueAtTime(0.0001, t);
+        cg.gain.linearRampToValueAtTime(0.038, t + 0.015);
+        cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+        c.connect(cg); cg.connect(S.master);
+        c.start(t); c.stop(t + 0.30);
+      });
+    }
+  };
+
+  S.ctdCast = function () {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    [980, 1320, 1760].forEach((freq, i) => {
+      const t = now + i * 0.075;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      o.frequency.exponentialRampToValueAtTime(freq * 1.08, t + 0.14);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.032, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      o.connect(g); g.connect(S.master);
+      o.start(t); o.stop(t + 0.24);
+    });
+  };
+
   S.toggle = function () {
     if (!S.ctx) { const ok = S.ensure(); if (!ok) return false; return true; }
     S.muted = !S.muted;

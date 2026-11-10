@@ -370,6 +370,22 @@
   .lab-shead b{color:var(--accent);font-variant-numeric:tabular-nums}
   input[type=range].lab-range{background:rgba(130,222,255,.22);margin:2px 0 0}
 
+  /* ---------- Панель 3D-ROV, CTD и проб ---------- */
+  .rov-panel{width:338px;max-height:calc(100vh - 180px)}
+  .rov-target-box{padding:8px 10px;border-radius:10px;background:rgba(3,16,30,.72);
+    border:1px solid rgba(130,222,255,.18);font-size:11px;line-height:1.45;margin-bottom:10px}
+  .rov-target-box b{color:var(--ok);display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rov-target-box small{color:var(--dim);font-size:10px}
+  #rov-ctd-chart{display:block;width:100%;height:104px;border-radius:10px;border:1px solid rgba(130,222,255,.18);margin-bottom:6px}
+  .rov-sample-list{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;scrollbar-width:thin}
+  .rov-sample-item{padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(130,222,255,.14);
+    display:flex;gap:8px;align-items:flex-start}
+  .rov-sample-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:4px;box-shadow:0 0 8px currentColor}
+  .rov-sample-body{min-width:0;flex:1}
+  .rov-sample-title{font-size:11.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rov-sample-meta{font-size:10px;color:var(--accent);margin-top:1px}
+  .rov-sample-chem{font-size:10px;color:var(--dim);margin-top:1px}
+
   /* ---------- Загрузка ---------- */
   #loading{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at 50% 60%,#0a2c44,#020c17 75%);
     display:grid;place-items:center;transition:opacity .7s}
@@ -427,6 +443,7 @@
 <div class="topright hud-hideable">
   <button class="icon-btn" id="btn-globe" title="3D-глобус планеты и экспедиции (O)" aria-label="Глобус">&#127760;</button>
   <button class="icon-btn" id="btn-lab" title="Экологическая лаборатория и стресс-тест рифа (L)" aria-label="Лаборатория">&#9879;</button>
+  <button class="icon-btn" id="btn-rov" title="3D-батискаф ROV, пробы и CTD-зонд (I / Y)" aria-label="Аппарат ROV"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="14" height="8" rx="4"/><path d="M18 8.5h2.5v3H18"/><path d="M6 16h11"/><path d="M8 14v2M15 14v2"/><circle cx="13.5" cy="10" r="1.6"/><path d="M4 10H2M2 8v4"/></svg></button>
   <button class="icon-btn" id="btn-cam" title="Подводная фотокамера (P)" aria-label="Фотокамера">&#128247;</button>
   <button class="icon-btn" id="btn-cinema" title="Кинематографический режим и фильтры (N)" aria-label="Кино-режим">&#127916;</button>
   <button class="icon-btn" id="btn-journal" title="Миссии экспедиции и фотожурнал (J)" aria-label="Журнал">&#129517;</button>
@@ -515,6 +532,7 @@
       <kbd>P</kbd> камера (<kbd>Enter</kbd> снять) · <kbd>J</kbd> миссии<br>
       <kbd>N</kbd> кино-режим · <kbd>X</kbd> цветофильтр<br>
       <kbd>O</kbd> 3D-глобус · <kbd>T</kbd> гид-тур · <kbd>L</kbd> эколаб<br>
+      <kbd>Y</kbd> 3D-вид ROV · <kbd>Z</kbd> проба · <kbd>I</kbd> CTD-зонд<br>
       <kbd>V</kbd> орбита · <kbd>U</kbd> погода · <kbd>K</kbd> атлас<br>
       <kbd>M</kbd> звук · <kbd>H</kbd> скрыть HUD · Геймпад ✓
     </div>
@@ -581,6 +599,53 @@
       <button class="btn on" data-ts="1">1×</button>
       <button class="btn" data-ts="5">5× Быстро</button>
       <button class="btn" data-ts="20">20× Таймлапс</button>
+    </div>
+  </div>
+</aside>
+
+<aside class="panel rov-panel closed hud-hideable" id="rov-panel" aria-label="Аппарат ROV Наутилус-IV и океанография">
+  <div class="group">
+    <div class="lab-head">
+      <h2>ROV «Наутилус-IV» · Приборы</h2>
+      <div class="row" style="gap:5px;flex:0 0 auto">
+        <button class="btn" id="rov-close" style="padding:4px 8px;font-size:10.5px" title="Закрыть (I)">&#10005;</button>
+      </div>
+    </div>
+    <div class="row" style="gap:6px;margin-bottom:10px">
+      <button class="btn chip" id="rov-btn-chase" title="Вид от 3-го лица за ROV (Y)">Вид ROV 3-е (Y)</button>
+      <button class="btn chip" id="rov-btn-currents" title="3D-трассеры океанических течений">3D-течения</button>
+      <button class="btn chip" id="rov-btn-sample" title="Захватить пробу манипулятором (Z)">Взять пробу (Z)</button>
+      <button class="btn chip on" id="rov-btn-ctd" title="Сбросить CTD-зонд по вертикали (I)">Зонд CTD (I)</button>
+    </div>
+    <div class="rov-target-box">
+      <b id="rov-target-label">Захват: Толща воды (Нискин)</b>
+      <small id="rov-flow-label">Вектор течения: 0.0 уз</small>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Вертикальный профиль CTD-зонда</h2>
+    <canvas id="rov-ctd-chart" width="298" height="104"></canvas>
+    <div class="lab-legend" style="margin-bottom:8px">
+      <span><i style="background:#ffb574"></i>Температура °C</span>
+      <span><i style="background:#58e0ff"></i>Кислород O₂</span>
+      <span><i style="background:#5be8b0"></i>ROV</span>
+    </div>
+    <div class="lab-metrics" style="margin-bottom:0">
+      <div class="lab-metric"><span>Термоклин</span><b id="rov-ctd-thermo">—</b></div>
+      <div class="lab-metric"><span>Дно / Поверхн.</span><b id="rov-ctd-temps">—</b></div>
+      <div class="lab-metric"><span>Мин. O₂</span><b id="rov-ctd-o2">—</b></div>
+      <div class="lab-metric"><span>Макс. давл.</span><b id="rov-ctd-press">—</b></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="lab-head" style="margin-bottom:8px">
+      <h2>Отсек проб (<span id="rov-sample-count">0</span>)</h2>
+      <button class="btn" id="rov-samples-clear" style="flex:0 0 auto;padding:3px 8px;font-size:10px">Очистить</button>
+    </div>
+    <div class="rov-sample-list" id="rov-samples">
+      <div style="font-size:11px;color:var(--dim);padding:6px 0">Наведите аппарат на коралл, курильщик, лёд или дно и нажмите <b>Z</b>, чтобы взять научную пробу.</div>
     </div>
   </div>
 </aside>

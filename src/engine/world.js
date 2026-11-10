@@ -872,19 +872,32 @@ window.OC = window.OC || {};
     fillB.color.copy(pal.fillB);
     fillB.intensity = pal.fillBI * (opt.fillBMult !== undefined ? opt.fillBMult : (0.3 + 0.7 * opt.sunAtten));
 
-    /* прожектор дайвера и объёмный луч в воде */
+    /* прожектор дайвера / носовой прожектор ROV и объёмный луч в воде */
     const targetFlashI = flashlightOn ? 4.2 : 0.0;
     flashlight.intensity = OC.lerp(flashlight.intensity, targetFlashI, Math.min(1, dt * 10));
-    flashlight.position.copy(camPos);
-    camera.getWorldDirection(camFwd);
-    flashTarget.position.copy(camPos).addScaledVector(camFwd, 32);
+    const rovChase = !!(OC.Navigation && OC.Navigation.isRovView && OC.Navigation.isRovView() && OC.Navigation.getMode() === 'swim' && !(OC.Expedition && OC.Expedition.isPhotoMode()));
+    if (rovChase && OC.Navigation.getPosition && OC.Navigation.getForward) {
+      const craft = OC.Navigation.getPosition();
+      OC.Navigation.getForward(camFwd);
+      flashlight.position.copy(craft).addScaledVector(camFwd, 1.05);
+      flashlight.position.y += 0.20;
+      flashTarget.position.copy(flashlight.position).addScaledVector(camFwd, 32);
+    } else {
+      flashlight.position.copy(camPos);
+      camera.getWorldDirection(camFwd);
+      flashTarget.position.copy(camPos).addScaledVector(camFwd, 32);
+    }
 
     if (flashBeam && flashBeamMat) {
       const beamStrength = (flashlight.intensity / 4.2) * OC.lerp(1.15, 0.42, pal.dayW * opt.sunAtten);
       flashBeam.visible = beamStrength > 0.02 && (biome && biome.noSurface ? true : camPos.y < 1.5);
       if (flashBeam.visible) {
-        camRight.crossVectors(camFwd, camera.up).normalize();
-        flashBeam.position.copy(camPos).addScaledVector(camera.up, -0.55).addScaledVector(camRight, 0.25);
+        if (rovChase) {
+          flashBeam.position.copy(flashlight.position);
+        } else {
+          camRight.crossVectors(camFwd, camera.up).normalize();
+          flashBeam.position.copy(camPos).addScaledVector(camera.up, -0.55).addScaledVector(camRight, 0.25);
+        }
         flashBeam.lookAt(flashTarget.position);
         flashBeamMat.uniforms.uIntensity.value = beamStrength;
         flashBeamMat.uniforms.uNoSurface.value = (biome && biome.noSurface) ? 1.0 : 0.0;
