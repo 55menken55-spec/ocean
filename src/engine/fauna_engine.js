@@ -4272,7 +4272,7 @@ window.OC = window.OC || {};
 
           const isLow = by < 0.85;
           if (isLow && !m.prevLow && emitSplash) {
-            emitSplash(bx, bz, 0.34);
+            emitSplash(_pos.set(bx, 0, bz), 0.34);
           }
           m.prevLow = isLow;
         }
@@ -4429,7 +4429,7 @@ window.OC = window.OC || {};
           }
 
           if (((m.prevY < 0 && _cur.y >= 0) || (m.prevY >= 0 && _cur.y < 0)) && emitSplash) {
-            emitSplash(_cur.x, _cur.z, 0.92);
+            emitSplash(_cur, 0.92);
           }
           m.prevY = _cur.y;
         }
@@ -4553,7 +4553,7 @@ window.OC = window.OC || {};
           m.wingR.rotation.z = wingOpen;
 
           if (((m.prevY < 0 && y >= 0) || (m.prevY >= 0 && y < 0)) && emitSplash) {
-            emitSplash(x, z, 0.28);
+            emitSplash(_cur, 0.28);
           }
           m.prevY = y;
         }
@@ -5960,10 +5960,19 @@ window.OC = window.OC || {};
       const splashSystem = makeSplashSystem(faunaGroup, texHard);
       const lastCamPos = new T.Vector3();
 
-      function emitSplash(worldPos, intensity) {
-        splashSystem.emit(worldPos, intensity);
-        if (intensity >= 0.6 && OC.sound && OC.sound.whaleSplash) {
-          const d = Math.hypot(worldPos.x - lastCamPos.x, worldPos.y - lastCamPos.y, worldPos.z - lastCamPos.z);
+      const _splashTmp = new T.Vector3();
+      function emitSplash(worldPos, intensity, zOpt) {
+        let wp = worldPos;
+        let inten = intensity;
+        if (typeof worldPos === 'number') {
+          _splashTmp.set(worldPos, 0, intensity || 0);
+          wp = _splashTmp;
+          inten = zOpt;
+        }
+        if (!wp || !Number.isFinite(wp.x) || !Number.isFinite(wp.z)) return;
+        splashSystem.emit(wp, inten);
+        if ((inten || 0) >= 0.6 && OC.sound && OC.sound.whaleSplash) {
+          const d = Math.hypot(wp.x - lastCamPos.x, (wp.y || 0) - lastCamPos.y, wp.z - lastCamPos.z);
           if (d < 360) OC.sound.whaleSplash(d);
         }
       }

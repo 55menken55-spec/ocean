@@ -15316,7 +15316,7 @@ window.OC = window.OC || {};
 
           const isLow = by < 0.85;
           if (isLow && !m.prevLow && emitSplash) {
-            emitSplash(bx, bz, 0.34);
+            emitSplash(_pos.set(bx, 0, bz), 0.34);
           }
           m.prevLow = isLow;
         }
@@ -15473,7 +15473,7 @@ window.OC = window.OC || {};
           }
 
           if (((m.prevY < 0 && _cur.y >= 0) || (m.prevY >= 0 && _cur.y < 0)) && emitSplash) {
-            emitSplash(_cur.x, _cur.z, 0.92);
+            emitSplash(_cur, 0.92);
           }
           m.prevY = _cur.y;
         }
@@ -15597,7 +15597,7 @@ window.OC = window.OC || {};
           m.wingR.rotation.z = wingOpen;
 
           if (((m.prevY < 0 && y >= 0) || (m.prevY >= 0 && y < 0)) && emitSplash) {
-            emitSplash(x, z, 0.28);
+            emitSplash(_cur, 0.28);
           }
           m.prevY = y;
         }
@@ -17004,10 +17004,19 @@ window.OC = window.OC || {};
       const splashSystem = makeSplashSystem(faunaGroup, texHard);
       const lastCamPos = new T.Vector3();
 
-      function emitSplash(worldPos, intensity) {
-        splashSystem.emit(worldPos, intensity);
-        if (intensity >= 0.6 && OC.sound && OC.sound.whaleSplash) {
-          const d = Math.hypot(worldPos.x - lastCamPos.x, worldPos.y - lastCamPos.y, worldPos.z - lastCamPos.z);
+      const _splashTmp = new T.Vector3();
+      function emitSplash(worldPos, intensity, zOpt) {
+        let wp = worldPos;
+        let inten = intensity;
+        if (typeof worldPos === 'number') {
+          _splashTmp.set(worldPos, 0, intensity || 0);
+          wp = _splashTmp;
+          inten = zOpt;
+        }
+        if (!wp || !Number.isFinite(wp.x) || !Number.isFinite(wp.z)) return;
+        splashSystem.emit(wp, inten);
+        if ((inten || 0) >= 0.6 && OC.sound && OC.sound.whaleSplash) {
+          const d = Math.hypot(wp.x - lastCamPos.x, (wp.y || 0) - lastCamPos.y, wp.z - lastCamPos.z);
           if (d < 360) OC.sound.whaleSplash(d);
         }
       }
@@ -21875,6 +21884,7 @@ window.OC = window.OC || {};
     zoomFov: 52,
     sonarPingsByBiome: {},
     pingKeysByBiome: {},
+    visitedZonesByBiome: {},
     fullPngCache: {} // id -> full dataURL PNG в оперативной памяти текущей сессии
   };
 
@@ -22089,6 +22099,11 @@ window.OC = window.OC || {};
       const discoveredSet = new Set(discoveredArr);
       const photosInBiome = store.photos.filter((p) => p.biomeId === biomeId);
       const pingKeys = sessionState.pingKeysByBiome[biomeId] || [];
+      if (!sessionState.visitedZonesByBiome[biomeId]) sessionState.visitedZonesByBiome[biomeId] = [];
+      const visitedZones = sessionState.visitedZonesByBiome[biomeId];
+      if (stateCtx && stateCtx.zoneId && !visitedZones.includes(stateCtx.zoneId)) {
+        visitedZones.push(stateCtx.zoneId);
+      }
 
       const evalCtx = Object.assign({
         zoneId: '',
@@ -22098,6 +22113,7 @@ window.OC = window.OC || {};
         flashOn: false,
         discoveredCount: discoveredSet.size,
         sonarPings: sessionState.sonarPingsByBiome[biomeId] || 0,
+        hasZone: (zId) => visitedZones.includes(zId) || evalCtx.zoneId === zId,
         hasDiscovered: (k) => discoveredSet.has(k),
         hasPhoto: (keys) => photosInBiome.some((p) => keys.includes(p.key)),
         hasPhotoOrPing: (keys) => photosInBiome.some((p) => keys.includes(p.key)) || keys.some((k) => pingKeys.includes(k))
@@ -25569,6 +25585,49 @@ window.OC = window.OC || {};
   }
   OC.switchBiome = switchBiome;
 
+  const PERF_WIN = 120;
+  const cpuMsRing = new Float32Array(PERF_WIN);
+  const cpuMsSorted = new Float32Array(PERF_WIN);
+  let perfCursor = 0;
+  let perfCount = 0;
+  let perfFps = 0;
+  let lastRendererRef = null;
+
+  OC.getPerfStats = function () {
+    const n = Math.min(perfCount, PERF_WIN);
+    let sum = 0, max = 0;
+    for (let i = 0; i < n; i++) {
+      const v = cpuMsRing[i];
+      sum += v;
+      if (v > max) max = v;
+      cpuMsSorted[i] = v;
+    }
+    let p95 = 0;
+    if (n > 0) {
+      const slice = cpuMsSorted.subarray(0, n).sort();
+      p95 = slice[Math.min(n - 1, Math.floor(n * 0.95))];
+    }
+    const rInfo = lastRendererRef && lastRendererRef.info ? lastRendererRef.info : null;
+    const tSt = OC.Terrain && OC.Terrain.getStats ? OC.Terrain.getStats() : null;
+    const fSt = OC.FloraStreamer && OC.FloraStreamer.getStats ? OC.FloraStreamer.getStats() : null;
+    return {
+      biomeId: activeBiome ? activeBiome.id : '',
+      fps: perfFps,
+      sampleCount: n,
+      avgCpuMs: n ? Math.round((sum / n) * 100) / 100 : 0,
+      p95CpuMs: Math.round(p95 * 100) / 100,
+      maxCpuMs: Math.round(max * 100) / 100,
+      drawCalls: rInfo && rInfo.render ? rInfo.render.calls : 0,
+      triangles: rInfo && rInfo.render ? rInfo.render.triangles : 0,
+      geometries: rInfo && rInfo.memory ? rInfo.memory.geometries : 0,
+      textures: rInfo && rInfo.memory ? rInfo.memory.textures : 0,
+      chunksVisible: tSt ? tSt.visible : 0,
+      floraInstances: fSt ? fSt.activeInstances : 0,
+      schoolFish: OC.faunaInfo ? OC.faunaInfo.schoolFish : 0
+    };
+  };
+  OC.switchBiome = switchBiome;
+
   function boot() {
     try {
       const savedQ = OC.Expedition && OC.Expedition.getSavedQuality ? OC.Expedition.getSavedQuality() : null;
@@ -25682,6 +25741,7 @@ window.OC = window.OC || {};
   }
 
   function runLoop(renderer, scene, camera) {
+    lastRendererRef = renderer;
     let last = performance.now();
     let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100, wasInHalocline = false, lastHaloToastAt = -100;
 
@@ -25702,6 +25762,7 @@ window.OC = window.OC || {};
 
     function frame(now) {
       requestAnimationFrame(frame);
+      const cpuT0 = performance.now();
       const rawDt = Math.min(0.05, (now - last) / 1000) || 0.016;
       last = now;
       const dt = reduced ? rawDt * 0.5 : rawDt;
@@ -25935,7 +25996,8 @@ window.OC = window.OC || {};
       fpsAcc += rawDt;
       fpsFrames++;
       if (fpsAcc > 0.5) {
-        if (fpsEl) fpsEl.textContent = Math.round(fpsFrames / fpsAcc) + ' FPS';
+        perfFps = Math.round(fpsFrames / fpsAcc);
+        if (fpsEl) fpsEl.textContent = perfFps + ' FPS';
         fpsAcc = 0;
         fpsFrames = 0;
       }
@@ -25952,6 +26014,11 @@ window.OC = window.OC || {};
       }
 
       renderer.render(scene, camera);
+
+      const cpuMs = performance.now() - cpuT0;
+      cpuMsRing[perfCursor] = cpuMs;
+      perfCursor = (perfCursor + 1) % PERF_WIN;
+      if (perfCount < PERF_WIN) perfCount++;
 
       if (pendingPhotoCapture && activeBiome && OC.Expedition) {
         pendingPhotoCapture = false;

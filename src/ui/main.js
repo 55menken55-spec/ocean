@@ -1528,6 +1528,49 @@ window.OC = window.OC || {};
   }
   OC.switchBiome = switchBiome;
 
+  const PERF_WIN = 120;
+  const cpuMsRing = new Float32Array(PERF_WIN);
+  const cpuMsSorted = new Float32Array(PERF_WIN);
+  let perfCursor = 0;
+  let perfCount = 0;
+  let perfFps = 0;
+  let lastRendererRef = null;
+
+  OC.getPerfStats = function () {
+    const n = Math.min(perfCount, PERF_WIN);
+    let sum = 0, max = 0;
+    for (let i = 0; i < n; i++) {
+      const v = cpuMsRing[i];
+      sum += v;
+      if (v > max) max = v;
+      cpuMsSorted[i] = v;
+    }
+    let p95 = 0;
+    if (n > 0) {
+      const slice = cpuMsSorted.subarray(0, n).sort();
+      p95 = slice[Math.min(n - 1, Math.floor(n * 0.95))];
+    }
+    const rInfo = lastRendererRef && lastRendererRef.info ? lastRendererRef.info : null;
+    const tSt = OC.Terrain && OC.Terrain.getStats ? OC.Terrain.getStats() : null;
+    const fSt = OC.FloraStreamer && OC.FloraStreamer.getStats ? OC.FloraStreamer.getStats() : null;
+    return {
+      biomeId: activeBiome ? activeBiome.id : '',
+      fps: perfFps,
+      sampleCount: n,
+      avgCpuMs: n ? Math.round((sum / n) * 100) / 100 : 0,
+      p95CpuMs: Math.round(p95 * 100) / 100,
+      maxCpuMs: Math.round(max * 100) / 100,
+      drawCalls: rInfo && rInfo.render ? rInfo.render.calls : 0,
+      triangles: rInfo && rInfo.render ? rInfo.render.triangles : 0,
+      geometries: rInfo && rInfo.memory ? rInfo.memory.geometries : 0,
+      textures: rInfo && rInfo.memory ? rInfo.memory.textures : 0,
+      chunksVisible: tSt ? tSt.visible : 0,
+      floraInstances: fSt ? fSt.activeInstances : 0,
+      schoolFish: OC.faunaInfo ? OC.faunaInfo.schoolFish : 0
+    };
+  };
+  OC.switchBiome = switchBiome;
+
   function boot() {
     try {
       const savedQ = OC.Expedition && OC.Expedition.getSavedQuality ? OC.Expedition.getSavedQuality() : null;
@@ -1641,6 +1684,7 @@ window.OC = window.OC || {};
   }
 
   function runLoop(renderer, scene, camera) {
+    lastRendererRef = renderer;
     let last = performance.now();
     let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100, wasInHalocline = false, lastHaloToastAt = -100;
 
@@ -1661,6 +1705,7 @@ window.OC = window.OC || {};
 
     function frame(now) {
       requestAnimationFrame(frame);
+      const cpuT0 = performance.now();
       const rawDt = Math.min(0.05, (now - last) / 1000) || 0.016;
       last = now;
       const dt = reduced ? rawDt * 0.5 : rawDt;
@@ -1894,7 +1939,8 @@ window.OC = window.OC || {};
       fpsAcc += rawDt;
       fpsFrames++;
       if (fpsAcc > 0.5) {
-        if (fpsEl) fpsEl.textContent = Math.round(fpsFrames / fpsAcc) + ' FPS';
+        perfFps = Math.round(fpsFrames / fpsAcc);
+        if (fpsEl) fpsEl.textContent = perfFps + ' FPS';
         fpsAcc = 0;
         fpsFrames = 0;
       }
@@ -1911,6 +1957,11 @@ window.OC = window.OC || {};
       }
 
       renderer.render(scene, camera);
+
+      const cpuMs = performance.now() - cpuT0;
+      cpuMsRing[perfCursor] = cpuMs;
+      perfCursor = (perfCursor + 1) % PERF_WIN;
+      if (perfCount < PERF_WIN) perfCount++;
 
       if (pendingPhotoCapture && activeBiome && OC.Expedition) {
         pendingPhotoCapture = false;

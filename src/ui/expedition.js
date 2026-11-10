@@ -394,6 +394,7 @@ window.OC = window.OC || {};
     zoomFov: 52,
     sonarPingsByBiome: {},
     pingKeysByBiome: {},
+    visitedZonesByBiome: {},
     fullPngCache: {} // id -> full dataURL PNG в оперативной памяти текущей сессии
   };
 
@@ -608,6 +609,11 @@ window.OC = window.OC || {};
       const discoveredSet = new Set(discoveredArr);
       const photosInBiome = store.photos.filter((p) => p.biomeId === biomeId);
       const pingKeys = sessionState.pingKeysByBiome[biomeId] || [];
+      if (!sessionState.visitedZonesByBiome[biomeId]) sessionState.visitedZonesByBiome[biomeId] = [];
+      const visitedZones = sessionState.visitedZonesByBiome[biomeId];
+      if (stateCtx && stateCtx.zoneId && !visitedZones.includes(stateCtx.zoneId)) {
+        visitedZones.push(stateCtx.zoneId);
+      }
 
       const evalCtx = Object.assign({
         zoneId: '',
@@ -617,6 +623,7 @@ window.OC = window.OC || {};
         flashOn: false,
         discoveredCount: discoveredSet.size,
         sonarPings: sessionState.sonarPingsByBiome[biomeId] || 0,
+        hasZone: (zId) => visitedZones.includes(zId) || evalCtx.zoneId === zId,
         hasDiscovered: (k) => discoveredSet.has(k),
         hasPhoto: (keys) => photosInBiome.some((p) => keys.includes(p.key)),
         hasPhotoOrPing: (keys) => photosInBiome.some((p) => keys.includes(p.key)) || keys.some((k) => pingKeys.includes(k))
