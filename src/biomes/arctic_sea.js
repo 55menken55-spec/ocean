@@ -440,17 +440,23 @@ window.OC = window.OC || {};
   }
 
   const _tourRaw = [
-    { x: spawnX, y: -10.5, z: spawnZ, lx: spawnX + 35, ly: -4, lz: spawnZ + 30, title: 'Полынья и ледяной припай', duration: 9 },
-    { x: landmarks[1].x, y: -14.5, z: landmarks[1].z, lx: landmarks[1].x + 30, ly: -8, lz: landmarks[1].z - 25, title: 'Аллея айсбергов и белухи', duration: 9 },
-    { x: landmarks[2].x, y: -13.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -15, lz: landmarks[2].z + 15, title: 'Сад брайниклов подо льдом', duration: 9 },
-    { x: landmarks[3].x, y: -18.0, z: landmarks[3].z, lx: landmarks[3].x + 35, ly: -19, lz: landmarks[3].z - 15, title: 'Моренный риф и нарвалы', duration: 9 },
-    { x: landmarks[4].x, y: -62.0, z: landmarks[4].z, lx: landmarks[4].x + 70, ly: -78, lz: landmarks[4].z + 20, title: 'Полярная бездна Баффина', duration: 9 }
+    { x: spawnX, y: -10.5, z: spawnZ, lx: spawnX + 35, ly: -4, lz: spawnZ + 30, title: 'Полынья и ледяной припай', duration: 9,
+      fact: 'В крови полярной трески-сайки содержатся уникальные белки-антифризы, не дающие льду кристаллизоваться внутри сосудов при -1.8 °C.' },
+    { x: landmarks[1].x, y: -14.5, z: landmarks[1].z, lx: landmarks[1].x + 30, ly: -8, lz: landmarks[1].z - 25, title: 'Аллея айсбергов и белухи', duration: 9,
+      fact: 'Около 85% массы гренландского айсберга скрыто под водой; в солнечных полыньях между льдами выпрыгивают белухи — «морские канарейки».' },
+    { x: landmarks[2].x, y: -13.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -15, lz: landmarks[2].z + 15, title: 'Сад брайниклов подо льдом', duration: 9,
+      fact: 'Стекающий из молодого морского льда сверхсолёный рассол при -20 °C мгновенно замораживает воду вокруг струи, рождая ледяной сталактит.' },
+    { x: landmarks[3].x, y: -18.0, z: landmarks[3].z, lx: landmarks[3].x + 35, ly: -19, lz: landmarks[3].z - 15, title: 'Моренный риф и нарвалы', duration: 9,
+      fact: 'Спиральный 2.5-метровый бивень нарвала пронизан десятью миллионами нервных окончаний и чувствует малейшие колебания солёности воды.' },
+    { x: landmarks[4].x, y: -62.0, z: landmarks[4].z, lx: landmarks[4].x + 70, ly: -78, lz: landmarks[4].z + 20, title: 'Полярная бездна Баффина', duration: 9,
+      fact: 'Медлительная гренландская акула — абсолютный рекордсмен среди позвоночных: она растёт по 1 см в год и живёт до 350–400 лет.' }
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
     pos: [leg.x, Math.min(-3.0, safeSpotY(leg.x, leg.z, leg.y, 4.0)), leg.z],
     look: [leg.lx, leg.ly, leg.lz],
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -529,6 +535,11 @@ window.OC = window.OC || {};
     name: 'Арктика: Подо льдом',
     region: 'Залив Баффина · 74° с.ш.',
     subtitle: 'Полярное море · 2.4 × 2.4 км · 0–142 м',
+    globe: {
+      lat: 74.2, lon: -68.5, coordLabel: '74.2° с.ш., 68.5° з.д.',
+      ocean: 'Залив Баффина · Арктика', depthSpan: '0 – 142 м', tempSpan: '-1.8 .. +0.6 °C', color: '#8ad8ff',
+      summary: 'Изумрудное северное сияние над паковыми льдами, гренландские айсберги, брайниклы, белухи, нарвалы и древние полярные акулы.'
+    },
     worldRadius: 1200,
     chunkSize: 150,
     seaLevel: 0,

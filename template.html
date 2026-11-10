@@ -276,6 +276,76 @@
     .touch-nav{display:flex}
   }
 
+  /* ---------- 3D-глобус планеты ---------- */
+  .globe-box{width:min(980px, 100%);max-height:92vh;display:flex;flex-direction:column;border-radius:20px;
+    background:var(--glass-strong);border:1px solid rgba(88,224,255,.32);box-shadow:0 28px 80px rgba(0,0,0,.72);overflow:hidden}
+  .globe-body{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;padding:16px 20px;overflow-y:auto}
+  .globe-stage{position:relative;min-height:380px;border-radius:16px;overflow:hidden;
+    border:1px solid rgba(88,224,255,.26);cursor:grab;user-select:none;
+    background:radial-gradient(circle at 50% 45%,#0b2b48,#020a14 82%)}
+  .globe-stage:active{cursor:grabbing}
+  #globe-3d{display:block;width:100%;height:100%;min-height:380px}
+  .globe-hover-tip{position:absolute;left:12px;top:12px;padding:5px 12px;border-radius:999px;
+    background:rgba(4,18,32,.84);border:1px solid rgba(88,224,255,.45);font-size:11.5px;color:#eafaff;
+    pointer-events:none;backdrop-filter:blur(8px);transition:opacity .15s}
+  .globe-hover-tip.hidden{opacity:0}
+  .globe-hint{position:absolute;left:12px;bottom:10px;font-size:10.5px;color:rgba(195,235,255,.72);
+    pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+  .globe-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .globe-list{display:flex;flex-direction:column;gap:6px}
+  .globe-loc{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:12px;text-align:left;
+    background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.16);color:var(--ink);cursor:pointer;
+    transition:.18s;font-family:inherit}
+  .globe-loc:hover{border-color:rgba(88,224,255,.5);background:rgba(88,224,255,.09)}
+  .globe-loc.on{border-color:var(--accent);background:rgba(88,224,255,.16);box-shadow:0 0 18px rgba(88,224,255,.18)}
+  .globe-loc.cur .globe-loc-meta{color:var(--ok)}
+  .globe-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+  .globe-loc-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+  .globe-loc-txt b{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .globe-loc-txt small{font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .globe-loc-meta{font-size:10.5px;color:var(--accent);font-weight:600;white-space:nowrap}
+  .globe-card{padding:14px;border-radius:14px;background:rgba(4,20,36,.72);border:1px solid rgba(88,224,255,.22);
+    display:flex;flex-direction:column;gap:9px}
+  .globe-card h4{margin:0;font-size:16px;font-weight:600;color:#f2fdff}
+  .globe-ocean{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+  .globe-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 0;
+    border-top:1px dashed rgba(140,225,255,.16);border-bottom:1px dashed rgba(140,225,255,.16)}
+  .globe-metric{display:flex;flex-direction:column;gap:2px}
+  .globe-metric span{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+  .globe-metric b{font-size:11.5px;color:var(--ink)}
+  .globe-summary{font-size:12px;line-height:1.52;color:#c5e1ee}
+  .globe-prog{font-size:11px;color:var(--ok);font-weight:500}
+  .globe-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+  .globe-actions .btn{flex:1 1 46%;padding:9px 12px;font-size:12px;font-weight:600}
+
+  /* ---------- Карточка сюжетного гид-тура ---------- */
+  .guide-card{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:26;
+    width:min(520px, calc(100vw - 480px));min-width:300px;padding:13px 16px;border-radius:18px;
+    background:var(--glass-strong);border:1px solid rgba(88,224,255,.36);backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);box-shadow:0 20px 52px rgba(0,0,0,.55);
+    transition:opacity .3s, transform .3s, bottom .3s}
+  .guide-card.hidden{opacity:0;transform:translate(-50%, 16px);pointer-events:none}
+  body.sub-on .guide-card{bottom:86px}
+  .guide-head{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+  .guide-step{color:var(--accent);font-weight:600}
+  .guide-title{font-size:14.5px;font-weight:600;color:#f2fdff;margin-bottom:5px}
+  .guide-fact{font-size:12px;line-height:1.5;color:#cbe5f2;margin-bottom:9px}
+  .guide-prog{height:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-bottom:10px}
+  .guide-prog > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--ok));
+    transition:width .12s linear}
+  .guide-controls{display:flex;gap:6px;align-items:center}
+  .guide-controls .btn{padding:6px 10px;font-size:11.5px}
+
+  @media (max-width:860px){
+    .globe-body{grid-template-columns:1fr;gap:12px}
+    .globe-stage,#globe-3d{min-height:240px}
+    .globe-metrics{grid-template-columns:1fr 1fr}
+  }
+  @media (max-width:960px){
+    .guide-card{width:calc(100vw - 24px);bottom:66px;min-width:0}
+  }
+
   /* ---------- Загрузка ---------- */
   #loading{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at 50% 60%,#0a2c44,#020c17 75%);
     display:grid;place-items:center;transition:opacity .7s}
@@ -331,6 +401,7 @@
 </div>
 
 <div class="topright hud-hideable">
+  <button class="icon-btn" id="btn-globe" title="3D-глобус планеты и экспедиции (O)" aria-label="Глобус">&#127760;</button>
   <button class="icon-btn" id="btn-cam" title="Подводная фотокамера (P)" aria-label="Фотокамера">&#128247;</button>
   <button class="icon-btn" id="btn-cinema" title="Кинематографический режим и фильтры (N)" aria-label="Кино-режим">&#127916;</button>
   <button class="icon-btn" id="btn-journal" title="Миссии экспедиции и фотожурнал (J)" aria-label="Журнал">&#129517;</button>
@@ -418,6 +489,7 @@
       <kbd>F</kbd> прожектор · <kbd>B</kbd> батискаф · <kbd>G</kbd> сонар<br>
       <kbd>P</kbd> камера (<kbd>Enter</kbd> снять) · <kbd>J</kbd> миссии<br>
       <kbd>N</kbd> кино-режим · <kbd>X</kbd> цветофильтр<br>
+      <kbd>O</kbd> 3D-глобус · <kbd>T</kbd> гид-тур<br>
       <kbd>V</kbd> орбита · <kbd>U</kbd> погода · <kbd>K</kbd> атлас<br>
       <kbd>M</kbd> звук · <kbd>H</kbd> скрыть HUD · Геймпад ✓
     </div>
@@ -509,8 +581,58 @@
 
 <div class="status hud-hideable"><span id="status-region">GBR · Тихий океан</span><span id="fps">— FPS</span></div>
 
+<div class="guide-card hidden hud-hideable" id="guide-card" role="region" aria-label="Сюжетный гид-тур">
+  <div class="guide-head">
+    <span class="guide-step" id="guide-step">Этап 1 / 8</span>
+    <span id="guide-biome">Большой Барьерный риф</span>
+  </div>
+  <div class="guide-title" id="guide-title">—</div>
+  <div class="guide-fact" id="guide-fact">—</div>
+  <div class="guide-prog"><i id="guide-prog-bar"></i></div>
+  <div class="guide-controls">
+    <button class="btn" id="guide-prev" title="Предыдущий этап">&#9664; Назад</button>
+    <button class="btn on" id="guide-pause" title="Пауза / продолжить">&#10074;&#10074; Пауза</button>
+    <button class="btn" id="guide-next" title="Следующий этап">Вперёд &#9654;</button>
+    <button class="btn" id="guide-exit" style="flex:0 0 auto" title="Завершить тур (T / Esc)">Выйти</button>
+  </div>
+</div>
+
 <div class="popup hidden" id="fish-popup"></div>
 <div class="toast" id="toast"></div>
+
+<div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
+  <div class="globe-box">
+    <div class="atlas-header">
+      <div><h3>3D-глобус планеты</h3><small>5 океанических экспедиций · 27 этапов гида</small></div>
+      <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="globe-body">
+      <div class="globe-stage">
+        <canvas id="globe-3d" width="460" height="390"></canvas>
+        <div class="globe-hover-tip hidden" id="globe-hover-tip">—</div>
+        <div class="globe-hint">Вращайте Землю мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть</div>
+      </div>
+      <div class="globe-side">
+        <div class="globe-list" id="globe-list"></div>
+        <div class="globe-card">
+          <div class="globe-ocean" id="globe-b-ocean">—</div>
+          <h4 id="globe-b-name">—</h4>
+          <div class="globe-metrics">
+            <div class="globe-metric"><span>Координаты</span><b id="globe-b-coords">—</b></div>
+            <div class="globe-metric"><span>Глубина</span><b id="globe-b-depth">—</b></div>
+            <div class="globe-metric"><span>Температура</span><b id="globe-b-temp">—</b></div>
+          </div>
+          <div class="globe-summary" id="globe-b-summary">—</div>
+          <div class="globe-prog" id="globe-b-progress">—</div>
+          <div class="globe-actions">
+            <button class="btn" id="globe-go-btn">Перейти в биом</button>
+            <button class="btn on" id="globe-tour-btn">Запустить гид-тур</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="atlas-modal hidden" id="atlas-modal" role="dialog" aria-modal="true" aria-label="Атлас океанического биома">
   <div class="atlas-box">

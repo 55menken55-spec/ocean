@@ -276,6 +276,76 @@
     .touch-nav{display:flex}
   }
 
+  /* ---------- 3D-глобус планеты ---------- */
+  .globe-box{width:min(980px, 100%);max-height:92vh;display:flex;flex-direction:column;border-radius:20px;
+    background:var(--glass-strong);border:1px solid rgba(88,224,255,.32);box-shadow:0 28px 80px rgba(0,0,0,.72);overflow:hidden}
+  .globe-body{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;padding:16px 20px;overflow-y:auto}
+  .globe-stage{position:relative;min-height:380px;border-radius:16px;overflow:hidden;
+    border:1px solid rgba(88,224,255,.26);cursor:grab;user-select:none;
+    background:radial-gradient(circle at 50% 45%,#0b2b48,#020a14 82%)}
+  .globe-stage:active{cursor:grabbing}
+  #globe-3d{display:block;width:100%;height:100%;min-height:380px}
+  .globe-hover-tip{position:absolute;left:12px;top:12px;padding:5px 12px;border-radius:999px;
+    background:rgba(4,18,32,.84);border:1px solid rgba(88,224,255,.45);font-size:11.5px;color:#eafaff;
+    pointer-events:none;backdrop-filter:blur(8px);transition:opacity .15s}
+  .globe-hover-tip.hidden{opacity:0}
+  .globe-hint{position:absolute;left:12px;bottom:10px;font-size:10.5px;color:rgba(195,235,255,.72);
+    pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+  .globe-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .globe-list{display:flex;flex-direction:column;gap:6px}
+  .globe-loc{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:12px;text-align:left;
+    background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.16);color:var(--ink);cursor:pointer;
+    transition:.18s;font-family:inherit}
+  .globe-loc:hover{border-color:rgba(88,224,255,.5);background:rgba(88,224,255,.09)}
+  .globe-loc.on{border-color:var(--accent);background:rgba(88,224,255,.16);box-shadow:0 0 18px rgba(88,224,255,.18)}
+  .globe-loc.cur .globe-loc-meta{color:var(--ok)}
+  .globe-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+  .globe-loc-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+  .globe-loc-txt b{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .globe-loc-txt small{font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .globe-loc-meta{font-size:10.5px;color:var(--accent);font-weight:600;white-space:nowrap}
+  .globe-card{padding:14px;border-radius:14px;background:rgba(4,20,36,.72);border:1px solid rgba(88,224,255,.22);
+    display:flex;flex-direction:column;gap:9px}
+  .globe-card h4{margin:0;font-size:16px;font-weight:600;color:#f2fdff}
+  .globe-ocean{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+  .globe-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 0;
+    border-top:1px dashed rgba(140,225,255,.16);border-bottom:1px dashed rgba(140,225,255,.16)}
+  .globe-metric{display:flex;flex-direction:column;gap:2px}
+  .globe-metric span{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+  .globe-metric b{font-size:11.5px;color:var(--ink)}
+  .globe-summary{font-size:12px;line-height:1.52;color:#c5e1ee}
+  .globe-prog{font-size:11px;color:var(--ok);font-weight:500}
+  .globe-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+  .globe-actions .btn{flex:1 1 46%;padding:9px 12px;font-size:12px;font-weight:600}
+
+  /* ---------- Карточка сюжетного гид-тура ---------- */
+  .guide-card{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:26;
+    width:min(520px, calc(100vw - 480px));min-width:300px;padding:13px 16px;border-radius:18px;
+    background:var(--glass-strong);border:1px solid rgba(88,224,255,.36);backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);box-shadow:0 20px 52px rgba(0,0,0,.55);
+    transition:opacity .3s, transform .3s, bottom .3s}
+  .guide-card.hidden{opacity:0;transform:translate(-50%, 16px);pointer-events:none}
+  body.sub-on .guide-card{bottom:86px}
+  .guide-head{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+  .guide-step{color:var(--accent);font-weight:600}
+  .guide-title{font-size:14.5px;font-weight:600;color:#f2fdff;margin-bottom:5px}
+  .guide-fact{font-size:12px;line-height:1.5;color:#cbe5f2;margin-bottom:9px}
+  .guide-prog{height:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-bottom:10px}
+  .guide-prog > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--ok));
+    transition:width .12s linear}
+  .guide-controls{display:flex;gap:6px;align-items:center}
+  .guide-controls .btn{padding:6px 10px;font-size:11.5px}
+
+  @media (max-width:860px){
+    .globe-body{grid-template-columns:1fr;gap:12px}
+    .globe-stage,#globe-3d{min-height:240px}
+    .globe-metrics{grid-template-columns:1fr 1fr}
+  }
+  @media (max-width:960px){
+    .guide-card{width:calc(100vw - 24px);bottom:66px;min-width:0}
+  }
+
   /* ---------- Загрузка ---------- */
   #loading{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at 50% 60%,#0a2c44,#020c17 75%);
     display:grid;place-items:center;transition:opacity .7s}
@@ -331,6 +401,7 @@
 </div>
 
 <div class="topright hud-hideable">
+  <button class="icon-btn" id="btn-globe" title="3D-глобус планеты и экспедиции (O)" aria-label="Глобус">&#127760;</button>
   <button class="icon-btn" id="btn-cam" title="Подводная фотокамера (P)" aria-label="Фотокамера">&#128247;</button>
   <button class="icon-btn" id="btn-cinema" title="Кинематографический режим и фильтры (N)" aria-label="Кино-режим">&#127916;</button>
   <button class="icon-btn" id="btn-journal" title="Миссии экспедиции и фотожурнал (J)" aria-label="Журнал">&#129517;</button>
@@ -418,6 +489,7 @@
       <kbd>F</kbd> прожектор · <kbd>B</kbd> батискаф · <kbd>G</kbd> сонар<br>
       <kbd>P</kbd> камера (<kbd>Enter</kbd> снять) · <kbd>J</kbd> миссии<br>
       <kbd>N</kbd> кино-режим · <kbd>X</kbd> цветофильтр<br>
+      <kbd>O</kbd> 3D-глобус · <kbd>T</kbd> гид-тур<br>
       <kbd>V</kbd> орбита · <kbd>U</kbd> погода · <kbd>K</kbd> атлас<br>
       <kbd>M</kbd> звук · <kbd>H</kbd> скрыть HUD · Геймпад ✓
     </div>
@@ -509,8 +581,58 @@
 
 <div class="status hud-hideable"><span id="status-region">GBR · Тихий океан</span><span id="fps">— FPS</span></div>
 
+<div class="guide-card hidden hud-hideable" id="guide-card" role="region" aria-label="Сюжетный гид-тур">
+  <div class="guide-head">
+    <span class="guide-step" id="guide-step">Этап 1 / 8</span>
+    <span id="guide-biome">Большой Барьерный риф</span>
+  </div>
+  <div class="guide-title" id="guide-title">—</div>
+  <div class="guide-fact" id="guide-fact">—</div>
+  <div class="guide-prog"><i id="guide-prog-bar"></i></div>
+  <div class="guide-controls">
+    <button class="btn" id="guide-prev" title="Предыдущий этап">&#9664; Назад</button>
+    <button class="btn on" id="guide-pause" title="Пауза / продолжить">&#10074;&#10074; Пауза</button>
+    <button class="btn" id="guide-next" title="Следующий этап">Вперёд &#9654;</button>
+    <button class="btn" id="guide-exit" style="flex:0 0 auto" title="Завершить тур (T / Esc)">Выйти</button>
+  </div>
+</div>
+
 <div class="popup hidden" id="fish-popup"></div>
 <div class="toast" id="toast"></div>
+
+<div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
+  <div class="globe-box">
+    <div class="atlas-header">
+      <div><h3>3D-глобус планеты</h3><small>5 океанических экспедиций · 27 этапов гида</small></div>
+      <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="globe-body">
+      <div class="globe-stage">
+        <canvas id="globe-3d" width="460" height="390"></canvas>
+        <div class="globe-hover-tip hidden" id="globe-hover-tip">—</div>
+        <div class="globe-hint">Вращайте Землю мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть</div>
+      </div>
+      <div class="globe-side">
+        <div class="globe-list" id="globe-list"></div>
+        <div class="globe-card">
+          <div class="globe-ocean" id="globe-b-ocean">—</div>
+          <h4 id="globe-b-name">—</h4>
+          <div class="globe-metrics">
+            <div class="globe-metric"><span>Координаты</span><b id="globe-b-coords">—</b></div>
+            <div class="globe-metric"><span>Глубина</span><b id="globe-b-depth">—</b></div>
+            <div class="globe-metric"><span>Температура</span><b id="globe-b-temp">—</b></div>
+          </div>
+          <div class="globe-summary" id="globe-b-summary">—</div>
+          <div class="globe-prog" id="globe-b-progress">—</div>
+          <div class="globe-actions">
+            <button class="btn" id="globe-go-btn">Перейти в биом</button>
+            <button class="btn on" id="globe-tour-btn">Запустить гид-тур</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="atlas-modal hidden" id="atlas-modal" role="dialog" aria-modal="true" aria-label="Атлас океанического биома">
   <div class="atlas-box">
@@ -1832,20 +1954,29 @@ window.OC = window.OC || {};
 
   /* ---- Сценарий автоматического тура по всему Большому Барьерному рифу ---- */
   const _tourRaw = [
-    { pos: [-775 + shelfOffset(-120), -1.8, -110], look: [-855 + shelfOffset(-120), -1.2, -135], title: 'Мангровые отмели побережья', duration: 9 },
-    { pos: [-535 + shelfOffset(85), -4.5, 95], look: [-585 + shelfOffset(85), -7.5, 70], title: 'Луга морской травы и дюгони', duration: 9 },
-    { pos: [CAY_X + 76, 1.8, CAY_Z + 62], look: [CAY_X, 0.4, CAY_Z], title: 'Песчаный островок и бирюзовая лагуна', duration: 9 },
-    { pos: [(BOMMIES[0] ? BOMMIES[0].x : -140) + 34, -8.5, (BOMMIES[0] ? BOMMIES[0].z : 60) + 26], look: [BOMMIES[0] ? BOMMIES[0].x : -140, -10.5, BOMMIES[0] ? BOMMIES[0].z : 60], title: 'Коралловые бомми лагуны', duration: 9 },
-    { pos: [148 + shelfOffset(20), -5.8, 22], look: [205 + shelfOffset(20), -11.5, -5], title: 'Гребень рифа и желоба прибоя', duration: 9 },
-    { pos: [345 + shelfOffset(245), -18.5, passCenterZ(345 + shelfOffset(245)) + 16], look: [430 + shelfOffset(245), -24.0, passCenterZ(430 + shelfOffset(245))], title: 'Рифовый проход и вихрь барракуд', duration: 9 },
-    { pos: [BLUE_HOLE_X + 26, -18.0, BLUE_HOLE_Z + 22], look: [BLUE_HOLE_X, -54.0, BLUE_HOLE_Z], title: 'Погружение в Голубую дыру (-88 м)', duration: 10 },
-    { pos: [655 + shelfOffset(-60), -34.0, -65], look: [565 + shelfOffset(-60), -46.0, -60], title: 'Отвесная стена в бездну Кораллового моря', duration: 10 }
+    { pos: [-775 + shelfOffset(-120), -1.8, -110], look: [-855 + shelfOffset(-120), -1.2, -135], title: 'Мангровые отмели побережья', duration: 9,
+      fact: 'Арочные корни красных мангров опресняют морскую воду, задерживают ил с берега и укрывают миллионы мальков рифовых рыб.' },
+    { pos: [-535 + shelfOffset(85), -4.5, 95], look: [-585 + shelfOffset(85), -7.5, 70], title: 'Луга морской травы и дюгони', duration: 9,
+      fact: 'Морская трава — единственные цветковые растения океана. Один взрослый дюгонь съедает до 40 кг её сочных побегов за сутки.' },
+    { pos: [CAY_X + 76, 1.8, CAY_Z + 62], look: [CAY_X, 0.4, CAY_Z], title: 'Песчаный островок и бирюзовая лагуна', duration: 9,
+      fact: 'Белоснежный коралловый песок на этом островке в значительной мере переработан рыбами-попугаями, дробящими старый известняк.' },
+    { pos: [(BOMMIES[0] ? BOMMIES[0].x : -140) + 34, -8.5, (BOMMIES[0] ? BOMMIES[0].z : 60) + 26], look: [BOMMIES[0] ? BOMMIES[0].x : -140, -10.5, BOMMIES[0] ? BOMMIES[0].z : 60], title: 'Коралловые бомми лагуны', duration: 9,
+      fact: 'Массивные башни Porites растут всего на 1 см в год — перед вами живые карбонатные соборы возрастом более 600 лет.' },
+    { pos: [148 + shelfOffset(20), -5.8, 22], look: [205 + shelfOffset(20), -11.5, -5], title: 'Гребень рифа и желоба прибоя', duration: 9,
+      fact: 'Глубокие желоба spur-and-groove рассеивают разрушительную энергию тихоокеанского наката, спасая хрупкую лагуну.' },
+    { pos: [345 + shelfOffset(245), -18.5, passCenterZ(345 + shelfOffset(245)) + 16], look: [430 + shelfOffset(245), -24.0, passCenterZ(430 + shelfOffset(245))], title: 'Рифовый проход и вихрь барракуд', duration: 9,
+      fact: 'Стремительные приливы прогоняют через проход миллионы тонн планктона, притягивая барракуд, орляков и манту.' },
+    { pos: [BLUE_HOLE_X + 26, -18.0, BLUE_HOLE_Z + 22], look: [BLUE_HOLE_X, -54.0, BLUE_HOLE_Z], title: 'Погружение в Голубую дыру (-88 м)', duration: 10,
+      fact: 'Этот 88-метровый карстовый провал возник как известняковая пещера во время Ледникового периода, когда океан был на 120 м ниже.' },
+    { pos: [655 + shelfOffset(-60), -34.0, -65], look: [565 + shelfOffset(-60), -46.0, -60], title: 'Отвесная стена в бездну Кораллового моря', duration: 10,
+      fact: 'Внешний барьер обрывается в абиссаль Кораллового моря; зимой вдоль этой стены мигрируют горбатые киты и китовые акулы.' }
   ];
 
   const TOUR_LEGS = _tourRaw.map((leg) => ({
     pos: [leg.pos[0], safeSpotY(leg.pos[0], leg.pos[2], leg.pos[1], 3.2), leg.pos[2]],
     look: leg.look,
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -1976,6 +2107,11 @@ window.OC = window.OC || {};
     name: 'Большой Барьерный риф',
     region: 'Тихий океан · Коралловое море',
     subtitle: 'Реалистичная география шельфа от мангров до бездны · 2.4 × 2.4 км',
+    globe: {
+      lat: -16.8, lon: 146.2, coordLabel: '16.8° ю.ш., 146.2° в.д.',
+      ocean: 'Коралловое море · Австралия', depthSpan: '0 – 168 м', tempSpan: '21 – 29 °C', color: '#45e0d4',
+      summary: 'Крупнейшая живая структура Земли: мангры, песчаный островок, 88-метровая Голубая дыра и миграции горбатых китов.'
+    },
     worldRadius: WORLD_RADIUS,
     chunkSize: CHUNK_SIZE,
     seaLevel: 0,
@@ -2353,17 +2489,23 @@ window.OC = window.OC || {};
   const spawnY = Math.min(-3.5, safeSpotY(spawnX, spawnZ, -11.5, 4.0));
 
   const _tourRaw = [
-    { x: spawnX, y: -11.5, z: spawnZ, lx: spawnX + 35, ly: -8, lz: spawnZ + 22, title: 'Собор гигантской ламинарии', duration: 9 },
-    { x: -620, y: -4.5, z: 120, lx: -700, ly: -1, lz: 145, title: 'Кекуры прибоя и морские львы', duration: 9 },
-    { x: landmarks[2].x, y: -16.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -20, lz: landmarks[2].z + 18, title: 'Гранитные рифы и звёзды Pisaster', duration: 9 },
-    { x: landmarks[3].x, y: -20.5, z: landmarks[3].z, lx: landmarks[3].x + 50, ly: -22, lz: landmarks[3].z - 15, title: 'Кромка каньона и косяки анчоусов', duration: 9 },
-    { x: landmarks[4].x, y: -42.0, z: landmarks[4].z, lx: landmarks[4].x + 90, ly: -58, lz: landmarks[4].z, title: 'Бездна каньона Монтерей', duration: 9 }
+    { x: spawnX, y: -11.5, z: spawnZ, lx: spawnX + 35, ly: -8, lz: spawnZ + 22, title: 'Собор гигантской ламинарии', duration: 9,
+      fact: 'Гигантская бурая водоросль Macrocystis вырастает до 50 см в сутки, удерживаясь вертикально за счёт крошечных поплавков-пневматоцистов.' },
+    { x: -620, y: -4.5, z: 120, lx: -700, ly: -1, lz: 145, title: 'Кекуры прибоя и морские львы', duration: 9,
+      fact: 'Калифорнийские морские львы лавируют среди стеблей ламинарии на скорости до 40 км/ч и игриво выпрыгивают из прибойной волны.' },
+    { x: landmarks[2].x, y: -16.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -20, lz: landmarks[2].z + 18, title: 'Гранитные рифы и звёзды Pisaster', duration: 9,
+      fact: 'Охристые морские звёзды и леопардовые акулы обитают среди гранитных террас, покрытых фиолетовыми ежами и зелёными актиниями.' },
+    { x: landmarks[3].x, y: -20.5, z: landmarks[3].z, lx: landmarks[3].x + 50, ly: -22, lz: landmarks[3].z - 15, title: 'Кромка каньона и косяки анчоусов', duration: 9,
+      fact: 'Подъём ледяной воды из глубин (апвеллинг) насыщает кромку каньона питательными солями и собирает огромные вихри анчоусов.' },
+    { x: landmarks[4].x, y: -42.0, z: landmarks[4].z, lx: landmarks[4].x + 90, ly: -58, lz: landmarks[4].z, title: 'Бездна каньона Монтерей', duration: 9,
+      fact: 'Подводный каньон Монтерей по глубине и масштабу не уступает Большому каньону Колорадо — здесь ночью всплывают светящиеся рыбы-миктофы.' }
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
     pos: [leg.x, Math.min(2.5, safeSpotY(leg.x, leg.z, leg.y, 3.8)), leg.z],
     look: [leg.lx, leg.ly, leg.lz],
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -2444,6 +2586,11 @@ window.OC = window.OC || {};
     name: 'Лес гигантской ламинарии',
     region: 'Залив Монтерей, Калифорния',
     subtitle: 'Тихий океан · 2.4 × 2.4 км · 0–74 м',
+    globe: {
+      lat: 36.8, lon: -121.9, coordLabel: '36.8° с.ш., 121.9° з.д.',
+      ocean: 'Залив Монтерей · Калифорния', depthSpan: '0 – 74 м', tempSpan: '8 – 13 °C', color: '#42d896',
+      summary: 'Изумрудные соборы 20-метровой ламинарии, гранитные кекуры с морскими львами и холодный апвеллинг глубокого каньона.'
+    },
     worldRadius: 1200,
     chunkSize: 150,
     seaLevel: 0,
@@ -2789,16 +2936,21 @@ window.OC = window.OC || {};
   const spawnY = Math.min(6.0, safeSpotY(spawnX, spawnZ, -18.0, 4.5));
 
   const _tourRaw = [
-    { x: spawnX, y: -17.0, z: spawnZ, lx: VENT_FIELDS[0].x, ly: -22.0, lz: VENT_FIELDS[0].z, title: 'Главный чёрный курильщик (2440 м)', duration: 10 },
-    { x: landmarks[1].x, y: -23.0, z: landmarks[1].z, lx: VENT_FIELDS[2].x, ly: -28.0, lz: VENT_FIELDS[2].z, title: 'Хемосинтетический сад гигантских рифтий', duration: 10 },
-    { x: landmarks[2].x, y: -20.0, z: landmarks[2].z, lx: 500, ly: -24.0, lz: -45, title: 'Базальтовые уступы океанического разлома', duration: 9 },
-    { x: landmarks[3].x, y: -62.0, z: landmarks[3].z, lx: -220, ly: -74.0, lz: -110, title: 'Жёлоб бездны и биолюминесценция', duration: 10 }
+    { x: spawnX, y: -17.0, z: spawnZ, lx: VENT_FIELDS[0].x, ly: -22.0, lz: VENT_FIELDS[0].z, title: 'Главный чёрный курильщик (2440 м)', duration: 10,
+      fact: 'Вода температурой до +380 °C не закипает здесь из-за чудовищного давления ~250 атмосфер и выносит облака сульфидов железа.' },
+    { x: landmarks[1].x, y: -23.0, z: landmarks[1].z, lx: VENT_FIELDS[2].x, ly: -28.0, lz: VENT_FIELDS[2].z, title: 'Хемосинтетический сад гигантских рифтий', duration: 10,
+      fact: 'У алых червей Riftia вообще нет рта и желудка: их питают триллионы бактерий-симбионтов, получающих энергию из сероводорода без солнца!' },
+    { x: landmarks[2].x, y: -20.0, z: landmarks[2].z, lx: 500, ly: -24.0, lz: -45, title: 'Базальтовые уступы океанического разлома', duration: 9,
+      fact: 'Подушечные базальтовые лавы формируют молодую земную кору вдоль Восточно-Тихоокеанского поднятия и порождают стеклянные губки.' },
+    { x: landmarks[3].x, y: -62.0, z: landmarks[3].z, lx: -220, ly: -74.0, lz: -110, title: 'Жёлоб бездны и биолюминесценция', duration: 10,
+      fact: 'В вечной темноте 2500 м глубин свет рождается химически: морской чёрт манит добычу светящейся эской, а кальмар выпускает сияние.' }
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
     pos: [leg.x, Math.min(8.0, safeSpotY(leg.x, leg.z, leg.y, 4.2)), leg.z],
     look: [leg.lx, leg.ly, leg.lz],
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -2875,6 +3027,11 @@ window.OC = window.OC || {};
     name: 'Чёрные курильщики бездны',
     region: 'Восточно-Тихоокеанское поднятие',
     subtitle: 'Абиссальный рифт · 2420–2538 м',
+    globe: {
+      lat: 9.8, lon: -104.3, coordLabel: '9.8° с.ш., 104.3° з.д.',
+      ocean: 'Вост.-Тихоокеанское поднятие', depthSpan: '2420 – 2538 м', tempSpan: '1.9 – 380 °C', color: '#ff8a42',
+      summary: 'Хемосинтетический мир на глубине 2.5 км без единого луча солнца: перегретые сульфидные шпили, сады рифтий и морские черти.'
+    },
     worldRadius: 1200,
     chunkSize: 150,
     seaLevel: 0,
@@ -3344,17 +3501,23 @@ window.OC = window.OC || {};
   }
 
   const _tourRaw = [
-    { x: spawnX, y: -10.5, z: spawnZ, lx: spawnX + 35, ly: -4, lz: spawnZ + 30, title: 'Полынья и ледяной припай', duration: 9 },
-    { x: landmarks[1].x, y: -14.5, z: landmarks[1].z, lx: landmarks[1].x + 30, ly: -8, lz: landmarks[1].z - 25, title: 'Аллея айсбергов и белухи', duration: 9 },
-    { x: landmarks[2].x, y: -13.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -15, lz: landmarks[2].z + 15, title: 'Сад брайниклов подо льдом', duration: 9 },
-    { x: landmarks[3].x, y: -18.0, z: landmarks[3].z, lx: landmarks[3].x + 35, ly: -19, lz: landmarks[3].z - 15, title: 'Моренный риф и нарвалы', duration: 9 },
-    { x: landmarks[4].x, y: -62.0, z: landmarks[4].z, lx: landmarks[4].x + 70, ly: -78, lz: landmarks[4].z + 20, title: 'Полярная бездна Баффина', duration: 9 }
+    { x: spawnX, y: -10.5, z: spawnZ, lx: spawnX + 35, ly: -4, lz: spawnZ + 30, title: 'Полынья и ледяной припай', duration: 9,
+      fact: 'В крови полярной трески-сайки содержатся уникальные белки-антифризы, не дающие льду кристаллизоваться внутри сосудов при -1.8 °C.' },
+    { x: landmarks[1].x, y: -14.5, z: landmarks[1].z, lx: landmarks[1].x + 30, ly: -8, lz: landmarks[1].z - 25, title: 'Аллея айсбергов и белухи', duration: 9,
+      fact: 'Около 85% массы гренландского айсберга скрыто под водой; в солнечных полыньях между льдами выпрыгивают белухи — «морские канарейки».' },
+    { x: landmarks[2].x, y: -13.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -15, lz: landmarks[2].z + 15, title: 'Сад брайниклов подо льдом', duration: 9,
+      fact: 'Стекающий из молодого морского льда сверхсолёный рассол при -20 °C мгновенно замораживает воду вокруг струи, рождая ледяной сталактит.' },
+    { x: landmarks[3].x, y: -18.0, z: landmarks[3].z, lx: landmarks[3].x + 35, ly: -19, lz: landmarks[3].z - 15, title: 'Моренный риф и нарвалы', duration: 9,
+      fact: 'Спиральный 2.5-метровый бивень нарвала пронизан десятью миллионами нервных окончаний и чувствует малейшие колебания солёности воды.' },
+    { x: landmarks[4].x, y: -62.0, z: landmarks[4].z, lx: landmarks[4].x + 70, ly: -78, lz: landmarks[4].z + 20, title: 'Полярная бездна Баффина', duration: 9,
+      fact: 'Медлительная гренландская акула — абсолютный рекордсмен среди позвоночных: она растёт по 1 см в год и живёт до 350–400 лет.' }
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
     pos: [leg.x, Math.min(-3.0, safeSpotY(leg.x, leg.z, leg.y, 4.0)), leg.z],
     look: [leg.lx, leg.ly, leg.lz],
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -3433,6 +3596,11 @@ window.OC = window.OC || {};
     name: 'Арктика: Подо льдом',
     region: 'Залив Баффина · 74° с.ш.',
     subtitle: 'Полярное море · 2.4 × 2.4 км · 0–142 м',
+    globe: {
+      lat: 74.2, lon: -68.5, coordLabel: '74.2° с.ш., 68.5° з.д.',
+      ocean: 'Залив Баффина · Арктика', depthSpan: '0 – 142 м', tempSpan: '-1.8 .. +0.6 °C', color: '#8ad8ff',
+      summary: 'Изумрудное северное сияние над паковыми льдами, гренландские айсберги, брайниклы, белухи, нарвалы и древние полярные акулы.'
+    },
     worldRadius: 1200,
     chunkSize: 150,
     seaLevel: 0,
@@ -3884,17 +4052,23 @@ window.OC = window.OC || {};
   const spawnY = Math.min(-3.5, safeSpotY(spawnX, spawnZ, -14.5, 4.0));
 
   const _tourRaw = [
-    { x: spawnX, y: -14.5, z: spawnZ, lx: WRECK_POS.x, ly: -20, lz: WRECK_POS.z, title: 'Затонувший корабль «SS Maru»', duration: 10 },
-    { x: landmarks[1].x, y: -3.2, z: landmarks[1].z, lx: ROCK_ISLANDS[0].x, ly: 2.0, lz: ROCK_ISLANDS[0].z, title: 'Грибовидные острова Палау', duration: 9 },
-    { x: landmarks[2].x, y: -7.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -7.5, lz: landmarks[2].z + 18, title: 'Лагуна золотых медуз', duration: 9 },
-    { x: landmarks[3].x, y: -10.5, z: landmarks[3].z, lx: landmarks[3].x - 30, ly: -13, lz: landmarks[3].z - 25, title: 'Золотистые саргассовы сады', duration: 8 },
-    { x: landmarks[4].x, y: -25.0, z: landmarks[4].z, lx: 495, ly: -38, lz: -20, title: 'Пролив «Синий угол» и акулы-молоты', duration: 10 }
+    { x: spawnX, y: -14.5, z: spawnZ, lx: WRECK_POS.x, ly: -20, lz: WRECK_POS.z, title: 'Затонувший корабль «SS Maru»', duration: 10,
+      fact: 'Стальной 68-метровый корпус стал процветающим искусственным рифом: его мачты и трюм за десятилетия обросли золотыми веерами и губками.' },
+    { x: landmarks[1].x, y: -3.2, z: landmarks[1].z, lx: ROCK_ISLANDS[0].x, ly: 2.0, lz: ROCK_ISLANDS[0].z, title: 'Грибовидные острова Палау', duration: 9,
+      fact: 'Характерная «ножка» у основания известняковых островков выточена приливами и морскими организмами-сверлильщиками за тысячи лет.' },
+    { x: landmarks[2].x, y: -7.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -7.5, lz: landmarks[2].z + 18, title: 'Лагуна золотых медуз', duration: 9,
+      fact: 'Изолированные от хищников золотые медузы Палау утратили жалящие клетки и мигрируют за солнцем, питая своих симбиотических водорослей.' },
+    { x: landmarks[3].x, y: -10.5, z: landmarks[3].z, lx: landmarks[3].x - 30, ly: -13, lz: landmarks[3].z - 25, title: 'Золотистые саргассовы сады', duration: 8,
+      fact: 'Заросли бурого саргасса служат природным инкубатором и убежищем для молодых зелёных черепах и красочных стай луцианов.' },
+    { x: landmarks[4].x, y: -25.0, z: landmarks[4].z, lx: 495, ly: -38, lz: -20, title: 'Пролив «Синий угол» и акулы-молоты', duration: 10,
+      fact: 'Широкая Т-образная голова акулы-молота работает как высокоточный электромагнитный радар, находящий добычу на течении обрыва.' }
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
     pos: [leg.x, Math.min(2.0, safeSpotY(leg.x, leg.z, leg.y, 3.8)), leg.z],
     look: [leg.lx, leg.ly, leg.lz],
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -4029,6 +4203,11 @@ window.OC = window.OC || {};
     name: 'Атолл и Затонувший корабль',
     region: 'Архипелаг Палау, Микронезия',
     subtitle: 'Тихий океан · 2.4 × 2.4 км · 0–96 м',
+    globe: {
+      lat: 7.3, lon: 134.5, coordLabel: '7.3° с.ш., 134.5° в.д.',
+      ocean: 'Архипелаг Палау · Микронезия', depthSpan: '0 – 96 м', tempSpan: '24 – 29 °C', color: '#ffbe44',
+      summary: 'Известняковые грибовидные острова, лагуна нежалящих золотых медуз, 68-метровое судно «SS Maru» и акулы-молоты.'
+    },
     worldRadius: 1200,
     chunkSize: 150,
     seaLevel: 0,
@@ -11398,6 +11577,57 @@ window.OC = window.OC || {};
     src.start(now); src.stop(now + dur + 0.05);
   };
 
+  S.tourChime = function (stepIdx) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const scale = [392.0, 440.0, 493.88, 523.25, 587.33];
+    const base = scale[(stepIdx || 0) % scale.length];
+    [base, base * 1.5].forEach((freq, i) => {
+      const t = now + i * 0.08;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(i === 0 ? 0.036 : 0.024, t + 0.025);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+      o.connect(g); g.connect(S.master);
+      o.start(t); o.stop(t + 0.58);
+    });
+  };
+
+  S.globeWhoosh = function () {
+    if (S.muted) return;
+    if (!S.ctx && !S.ensure()) return;
+    if (S.ctx.state === 'suspended') S.ctx.resume();
+    if (!S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 0.65;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const env = Math.sin((i / len) * Math.PI);
+      d[i] = (Math.random() * 2 - 1) * env;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(220, now);
+    bp.frequency.exponentialRampToValueAtTime(680, now + dur * 0.65);
+    bp.frequency.exponentialRampToValueAtTime(320, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.06, now + 0.18);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(bp); bp.connect(g); g.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.04);
+  };
+
   S.toggle = function () {
     if (!S.ctx) { const ok = S.ensure(); if (!ok) return false; return true; }
     S.muted = !S.muted;
@@ -11441,6 +11671,9 @@ window.OC = window.OC || {};
     // Авто-тур
     tourIdx: 0,
     tourT: 0,
+    tourPaused: false,
+    tourFromPos: new T.Vector3(),
+    tourFromLook: new T.Vector3(),
     // Кино-режим (круизный пролёт)
     cinemaCenter: new T.Vector3(),
     cinemaPhase: 0,
@@ -11464,11 +11697,61 @@ window.OC = window.OC || {};
     onPick: null,
     onModeChange: null,
     onTourToast: null,
+    onTourChange: null,
     onGamepadAction: null
   };
 
   let biomeRef = null;
   let canvasRef = null;
+  const _tourStateOut = { active: false, paused: false, idx: 0, total: 0, progress: 0, leg: null };
+
+  function buildTourState() {
+    const legs = (biomeRef && biomeRef.tourLegs) || [];
+    const total = legs.length;
+    const idx = total ? (state.tourIdx % total) : 0;
+    const leg = total ? legs[idx] : null;
+    const dur = (leg && leg.duration) || 9;
+    _tourStateOut.active = state.mode === 'tour' && total > 0;
+    _tourStateOut.paused = !!state.tourPaused;
+    _tourStateOut.idx = idx;
+    _tourStateOut.total = total;
+    _tourStateOut.progress = total ? OC.clamp(state.tourT / dur, 0, 1) : 0;
+    _tourStateOut.leg = leg;
+    return _tourStateOut;
+  }
+
+  function emitTourChange() {
+    if (state.onTourChange) state.onTourChange(buildTourState());
+  }
+
+  function captureTourOrigin() {
+    state.tourFromPos.copy(state.pos);
+    _fwd.set(
+      Math.sin(state.yaw) * Math.cos(state.pitch),
+      Math.sin(state.pitch),
+      Math.cos(state.yaw) * Math.cos(state.pitch)
+    ).normalize();
+    state.tourFromLook.copy(state.pos).addScaledVector(_fwd, 28);
+  }
+
+  function startTourStep(idx, fromCurrent) {
+    const legs = (biomeRef && biomeRef.tourLegs) || [];
+    if (!legs.length) return;
+    const n = legs.length;
+    const nextIdx = ((idx % n) + n) % n;
+    if (fromCurrent) {
+      captureTourOrigin();
+    } else {
+      const prev = legs[(nextIdx - 1 + n) % n];
+      state.tourFromPos.set(prev.pos[0], prev.pos[1], prev.pos[2]);
+      state.tourFromLook.set(prev.look[0], prev.look[1], prev.look[2]);
+    }
+    state.tourIdx = nextIdx;
+    state.tourT = 0;
+    const leg = legs[nextIdx];
+    if (state.onTourToast && leg) state.onTourToast(leg.title);
+    emitTourChange();
+  }
 
   function setMode(m) {
     if (state.mode === m) return;
@@ -11514,14 +11797,15 @@ window.OC = window.OC || {};
       state.vel.set(0, 0, 0);
     }
 
+    const prevMode = state.mode;
     state.mode = m;
     state.glide = null;
     if (m === 'tour') {
-      state.tourIdx = 0;
-      state.tourT = 0;
-      if (state.onTourToast && biomeRef.tourLegs[0]) {
-        state.onTourToast(biomeRef.tourLegs[0].title);
-      }
+      state.tourPaused = false;
+      startTourStep(0, true);
+    } else if (prevMode === 'tour') {
+      state.tourPaused = false;
+      emitTourChange();
     }
     if (state.onModeChange) state.onModeChange(m);
   }
@@ -11611,6 +11895,7 @@ window.OC = window.OC || {};
       state.onPick = callbacks.onPick || null;
       state.onModeChange = callbacks.onModeChange || null;
       state.onTourToast = callbacks.onTourToast || null;
+      state.onTourChange = callbacks.onTourChange || null;
       state.onGamepadAction = callbacks.onGamepadAction || null;
 
       this.resetToSpawn();
@@ -11711,11 +11996,38 @@ window.OC = window.OC || {};
       biomeRef = biome;
       state.mode = 'swim';
       state.glide = null;
+      state.tourPaused = false;
+      state.tourIdx = 0;
+      state.tourT = 0;
       state.vel.set(0, 0, 0);
       _curr.set(0, 0, 0);
       this.resetToSpawn();
+      emitTourChange();
       if (state.onModeChange) state.onModeChange('swim');
     },
+    stepTour(delta) {
+      const legs = (biomeRef && biomeRef.tourLegs) || [];
+      if (!legs.length) return;
+      if (state.mode !== 'tour') {
+        state.tourPaused = false;
+        state.mode = 'tour';
+        state.glide = null;
+        startTourStep(delta > 0 ? 0 : (legs.length + delta), true);
+        if (state.onModeChange) state.onModeChange('tour');
+        return;
+      }
+      startTourStep(state.tourIdx + (delta || 1), true);
+    },
+    toggleTourPause() {
+      if (state.mode !== 'tour') return false;
+      state.tourPaused = !state.tourPaused;
+      emitTourChange();
+      return state.tourPaused;
+    },
+    stopTour() {
+      if (state.mode === 'tour') setMode('swim');
+    },
+    getTourState: buildTourState,
     getMode: () => state.mode,
     getPosition: () => state.pos,
     getYaw: () => state.yaw,
@@ -11828,19 +12140,18 @@ window.OC = window.OC || {};
         const legs = biomeRef.tourLegs;
         if (legs && legs.length) {
           const cur = legs[state.tourIdx % legs.length];
-          const prev = legs[(state.tourIdx - 1 + legs.length) % legs.length];
-          state.tourT += dt;
+          if (!state.tourPaused) state.tourT += dt;
           const dur = cur.duration || 9;
-          const u = OC.smoothstep(0, dur - 1.2, state.tourT);
+          const u = OC.smoothstep(0, Math.max(1.5, dur - 1.2), state.tourT);
           state.pos.set(
-            OC.lerp(prev.pos[0], cur.pos[0], u),
-            OC.lerp(prev.pos[1], cur.pos[1], u),
-            OC.lerp(prev.pos[2], cur.pos[2], u)
+            OC.lerp(state.tourFromPos.x, cur.pos[0], u),
+            OC.lerp(state.tourFromPos.y, cur.pos[1], u),
+            OC.lerp(state.tourFromPos.z, cur.pos[2], u)
           );
           _lookAt.set(
-            OC.lerp(prev.look[0], cur.look[0], u),
-            OC.lerp(prev.look[1], cur.look[1], u),
-            OC.lerp(prev.look[2], cur.look[2], u)
+            OC.lerp(state.tourFromLook.x, cur.look[0], u),
+            OC.lerp(state.tourFromLook.y, cur.look[1], u),
+            OC.lerp(state.tourFromLook.z, cur.look[2], u)
           );
           const dx = _lookAt.x - state.pos.x;
           const dy = _lookAt.y - state.pos.y;
@@ -11850,11 +12161,14 @@ window.OC = window.OC || {};
           state.targetYaw = state.yaw;
           state.pitch = Math.asin(OC.clamp(dy / d, -0.95, 0.95));
           state.targetPitch = state.pitch;
-          if (state.tourT >= dur) {
+          if (!state.tourPaused && state.tourT >= dur) {
+            state.tourFromPos.set(cur.pos[0], cur.pos[1], cur.pos[2]);
+            state.tourFromLook.set(cur.look[0], cur.look[1], cur.look[2]);
             state.tourT = 0;
             state.tourIdx = (state.tourIdx + 1) % legs.length;
             const nextLeg = legs[state.tourIdx];
             if (state.onTourToast && nextLeg) state.onTourToast(nextLeg.title);
+            emitTourChange();
           }
         }
       } else if (state.mode === 'orbit') {
@@ -12449,6 +12763,21 @@ window.OC = window.OC || {};
         missionsDone: doneTotal,
         missionsTotal: MISSIONS.length,
         photosCount: store.photos.length
+      };
+    },
+
+    getBiomeSummary(biome) {
+      if (!biome) return { discovered: 0, speciesTotal: 0, missionsDone: 0, missionsTotal: 0 };
+      const encKeys = biome.encyclopedia ? Object.keys(biome.encyclopedia) : [];
+      const saved = this.getSavedDiscovered(biome.id);
+      const discCount = saved.length || (biome.defaultDiscovered ? biome.defaultDiscovered.length : 1);
+      const missionsTotal = MISSIONS.filter((m) => m.biomeId === biome.id).length;
+      const doneArr = store.missionsDone[biome.id];
+      return {
+        discovered: Math.min(encKeys.length, discCount),
+        speciesTotal: encKeys.length,
+        missionsDone: Array.isArray(doneArr) ? doneArr.length : 0,
+        missionsTotal
       };
     }
   };
@@ -13193,6 +13522,759 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
+// === ui/globe.js ===
+/* ================= 3D-ГЛОБУС ПЛАНЕТЫ И МАРШРУТЫ ЭКСПЕДИЦИЙ ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const GLOBE_R = 1.42;
+
+  const CONTINENTS = [
+    // Северная Америка
+    [
+      [-168, 65], [-162, 70], [-140, 70], [-126, 71], [-108, 72], [-95, 70], [-82, 67],
+      [-78, 62], [-66, 60], [-56, 52], [-60, 46], [-70, 42], [-76, 35], [-81, 30],
+      [-80, 25], [-83, 29], [-90, 29], [-97, 26], [-96, 19], [-90, 21], [-87, 21],
+      [-84, 15], [-82, 9], [-78, 8], [-85, 11], [-93, 15], [-105, 20], [-110, 24],
+      [-114, 31], [-117, 32], [-122, 37], [-124, 42], [-125, 49], [-134, 57], [-148, 60],
+      [-160, 56], [-166, 60]
+    ],
+    // Баффинова Земля и арктический архипелаг
+    [[-85, 73], [-72, 74], [-63, 68], [-67, 63], [-78, 64], [-86, 69]],
+    // Гренландия
+    [[-60, 76], [-44, 82], [-20, 81], [-19, 71], [-34, 66], [-44, 60], [-53, 66], [-56, 73]],
+    // Южная Америка
+    [
+      [-78, 9], [-72, 12], [-62, 10], [-50, 1], [-35, -6], [-39, -15], [-42, -23],
+      [-49, -28], [-54, -34], [-62, -41], [-66, -48], [-69, -55], [-74, -52],
+      [-74, -42], [-72, -31], [-71, -18], [-81, -5], [-80, 2]
+    ],
+    // Африка
+    [
+      [-17, 15], [-13, 28], [-6, 36], [10, 37], [15, 32], [32, 31], [35, 26],
+      [43, 12], [51, 12], [46, 2], [40, -10], [35, -24], [28, -33], [18, -35],
+      [14, -22], [12, -10], [9, 4], [2, 6], [-8, 5], [-16, 11]
+    ],
+    // Мадагаскар
+    [[49, -12], [50, -19], [46, -25], [44, -22], [46, -15]],
+    // Евразия
+    [
+      [-9, 37], [-9, 43], [-2, 44], [-5, 48], [2, 51], [8, 54], [6, 60], [16, 69],
+      [29, 71], [44, 67], [60, 70], [74, 73], [104, 77], [136, 72], [168, 69], [179, 65],
+      [163, 59], [156, 51], [142, 54], [136, 44], [129, 36], [126, 38], [121, 39],
+      [122, 31], [114, 22], [108, 17], [109, 12], [104, 8], [103, 1], [100, 5],
+      [97, 16], [90, 22], [80, 10], [77, 8], [72, 20], [67, 24], [58, 25],
+      [51, 26], [59, 22], [53, 16], [44, 13], [35, 29], [35, 36], [27, 37],
+      [23, 38], [16, 40], [13, 45], [8, 44], [3, 42], [-5, 36]
+    ],
+    // Великобритания и Ирландия
+    [[-5, 50], [-6, 56], [-2, 59], [1, 53], [1, 51]],
+    // Япония
+    [[130, 32], [136, 35], [141, 38], [145, 44], [140, 42], [135, 36]],
+    // Суматра и Ява
+    [[96, 5], [105, -2], [114, -8], [106, -7], [99, 0]],
+    // Калимантан и Новая Гвинея
+    [[110, 1], [118, 6], [118, -3], [111, -3]],
+    [[132, -2], [141, -3], [150, -10], [142, -9], [135, -5]],
+    // Австралия
+    [
+      [114, -22], [122, -17], [131, -12], [136, -12], [137, -15], [141, -16],
+      [142, -11], [146, -17], [151, -24], [153, -29], [150, -37], [144, -38],
+      [136, -35], [129, -32], [121, -34], [115, -34], [113, -26]
+    ],
+    // Новая Зеландия
+    [[167, -46], [174, -41], [178, -37], [173, -35], [172, -41]],
+    // Антарктида
+    [
+      [-180, -72], [-130, -74], [-80, -72], [-58, -64], [-40, -73], [10, -70],
+      [60, -68], [110, -67], [155, -71], [180, -72], [180, -90], [-180, -90]
+    ]
+  ];
+
+  function lonX(lon, w) {
+    return ((lon + 180) / 360) * w;
+  }
+  function latY(lat, h) {
+    return ((90 - lat) / 180) * h;
+  }
+
+  function tracePoly(ctx, pts, w, h) {
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const x = lonX(pts[i][0], w);
+      const y = latY(pts[i][1], h);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  function createEarthTextures() {
+    const w = 768, h = 384;
+    const cColor = document.createElement('canvas');
+    cColor.width = w; cColor.height = h;
+    const ctx = cColor.getContext('2d');
+
+    const cSpec = document.createElement('canvas');
+    cSpec.width = w; cSpec.height = h;
+    const sctx = cSpec.getContext('2d');
+
+    if (ctx) {
+      // Глубоководный океанический градиент по широтам
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0.0, '#143854');
+      grad.addColorStop(0.18, '#0c2f4d');
+      grad.addColorStop(0.5, '#09436b');
+      grad.addColorStop(0.82, '#0a2d4c');
+      grad.addColorStop(1.0, '#153a56');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Подводные хребты и абиссальные бассейны (лёгкие батиметрические пятна)
+      const trenches = [
+        [-105, 5, 110, 62, 'rgba(30,130,175,0.22)'],
+        [-30, 15, 70, 120, 'rgba(28,125,175,0.18)'],
+        [145, -16, 65, 55, 'rgba(42,200,210,0.28)'],
+        [135, 8, 52, 42, 'rgba(62,210,210,0.26)'],
+        [-68, 73, 55, 28, 'rgba(85,195,235,0.24)'],
+        [-122, 36, 48, 36, 'rgba(35,175,185,0.24)']
+      ];
+      for (let i = 0; i < trenches.length; i++) {
+        const t = trenches[i];
+        const cx = lonX(t[0], w), cy = latY(t[1], h);
+        const rg = ctx.createRadialGradient(cx, cy, 2, cx, cy, t[2]);
+        rg.addColorStop(0, t[4]);
+        rg.addColorStop(1, 'rgba(9,45,76,0)');
+        ctx.fillStyle = rg;
+        ctx.fillRect(cx - t[2], cy - t[3], t[2] * 2, t[3] * 2);
+      }
+
+      // Координатная сетка меридианов и параллелей
+      ctx.strokeStyle = 'rgba(120,215,255,0.11)';
+      ctx.lineWidth = 1;
+      for (let lon = -150; lon <= 150; lon += 30) {
+        const x = lonX(lon, w);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+      for (let lat = -60; lat <= 60; lat += 30) {
+        const y = latY(lat, h);
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(88,224,255,0.26)';
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Шельфовое бирюзовое свечение вокруг материков
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(60,215,225,0.34)';
+      ctx.lineWidth = 8;
+      for (let i = 0; i < CONTINENTS.length - 1; i++) {
+        tracePoly(ctx, CONTINENTS[i], w, h);
+        ctx.stroke();
+      }
+
+      // Континенты
+      const landGrad = ctx.createLinearGradient(0, 0, 0, h);
+      landGrad.addColorStop(0.0, '#cfe6ee');
+      landGrad.addColorStop(0.22, '#3c6b63');
+      landGrad.addColorStop(0.5, '#5b7a58');
+      landGrad.addColorStop(0.75, '#4b6b5c');
+      landGrad.addColorStop(1.0, '#d8eef5');
+
+      ctx.fillStyle = landGrad;
+      ctx.strokeStyle = 'rgba(175,240,255,0.55)';
+      ctx.lineWidth = 1.1;
+      for (let i = 0; i < CONTINENTS.length; i++) {
+        tracePoly(ctx, CONTINENTS[i], w, h);
+        if (i === CONTINENTS.length - 1 || i === 2 || i === 1) {
+          ctx.fillStyle = '#c9e4ef';
+        } else {
+          ctx.fillStyle = landGrad;
+        }
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // Северный паковый лёд
+      const iceGrad = ctx.createLinearGradient(0, 0, 0, h * 0.14);
+      iceGrad.addColorStop(0, 'rgba(220,245,255,0.92)');
+      iceGrad.addColorStop(1, 'rgba(180,228,245,0)');
+      ctx.fillStyle = iceGrad;
+      ctx.fillRect(0, 0, w, h * 0.14);
+    }
+
+    if (sctx) {
+      sctx.fillStyle = '#d4f2ff';
+      sctx.fillRect(0, 0, w, h);
+      sctx.fillStyle = '#18242e';
+      for (let i = 0; i < CONTINENTS.length; i++) {
+        tracePoly(sctx, CONTINENTS[i], w, h);
+        sctx.fill();
+      }
+    }
+
+    const map = new T.CanvasTexture(cColor);
+    map.anisotropy = 4;
+    const specMap = new T.CanvasTexture(cSpec);
+    return { map, specMap };
+  }
+
+  function latLonToVec3(lat, lon, r) {
+    const phi = (90 - lat) * Math.PI / 180;
+    const theta = (lon + 180) * Math.PI / 180;
+    return new T.Vector3(
+      -r * Math.sin(phi) * Math.cos(theta),
+       r * Math.cos(phi),
+       r * Math.sin(phi) * Math.sin(theta)
+    );
+  }
+
+  function createAtmosphereMaterial() {
+    return new T.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new T.Color(0x4be3ff) }
+      },
+      vertexShader: [
+        'varying vec3 vNormal;',
+        'varying vec3 vView;',
+        'void main(){',
+        '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+        '  vNormal = normalize(normalMatrix * normal);',
+        '  vView = normalize(-mv.xyz);',
+        '  gl_Position = projectionMatrix * mv;',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'uniform vec3 uColor;',
+        'varying vec3 vNormal;',
+        'varying vec3 vView;',
+        'void main(){',
+        '  float d = clamp(dot(normalize(vNormal), -normalize(vView)), 0.0, 1.0);',
+        '  float rim = pow(smoothstep(0.0, 0.44, d), 1.55);',
+        '  gl_FragColor = vec4(uColor, rim * 0.78);',
+        '}'
+      ].join('\n'),
+      side: T.BackSide,
+      blending: T.AdditiveBlending,
+      transparent: true,
+      depthWrite: false
+    });
+  }
+
+  let modalEl = null;
+  let canvasEl = null;
+  let listEl = null;
+  let hoverTipEl = null;
+  let titleEl = null;
+  let oceanEl = null;
+  let coordsEl = null;
+  let depthEl = null;
+  let tempEl = null;
+  let progressEl = null;
+  let summaryEl = null;
+  let goBtn = null;
+  let tourBtn = null;
+
+  let renderer = null;
+  let scene = null;
+  let camera = null;
+  let earthGroup = null;
+  let orbitRing = null;
+  let raycaster = null;
+  let rafId = 0;
+  let stageFailed = false;
+  let isOpenState = false;
+
+  const beacons = [];
+  const beaconById = Object.create(null);
+  let selectedId = null;
+  let hoveredId = null;
+
+  let rotY = 0;
+  let rotX = 0.25;
+  let targetRotY = 0;
+  let targetRotX = 0.25;
+  let dragging = false;
+  let downX = 0;
+  let downY = 0;
+  let movedPx = 0;
+  let autoSpinPauseUntil = 0;
+  const ptr = new T.Vector2();
+
+  let callbacks = {
+    getActiveBiomeId: null,
+    onSelectBiome: null,
+    getProgress: null
+  };
+
+  function collectBiomes() {
+    const list = (OC.Biomes && OC.Biomes.list) ? OC.Biomes.list() : [];
+    const out = [];
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i];
+      if (!b || !b.globe) continue;
+      const pos = latLonToVec3(b.globe.lat, b.globe.lon, GLOBE_R + 0.015);
+      out.push({
+        biome: b,
+        id: b.id,
+        lat: b.globe.lat,
+        lon: b.globe.lon,
+        pos,
+        colorHex: b.globe.color || '#58e0ff'
+      });
+    }
+    return out;
+  }
+
+  function ensureStage() {
+    if (renderer || stageFailed || !canvasEl) return !!renderer;
+    try {
+      renderer = new T.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(canvasEl.clientWidth || 420, canvasEl.clientHeight || 380, false);
+
+      scene = new T.Scene();
+      camera = new T.PerspectiveCamera(36, (canvasEl.clientWidth || 420) / (canvasEl.clientHeight || 380), 0.1, 40);
+      camera.position.set(0, 0.18, 4.15);
+      camera.lookAt(0, 0, 0);
+
+      const amb = new T.AmbientLight(0x88b4cc, 0.78);
+      const hemi = new T.HemisphereLight(0x9be2ff, 0x102840, 0.65);
+      const sun = new T.DirectionalLight(0xfff4e0, 1.35);
+      sun.position.set(4.5, 2.8, 5.2);
+      const rim = new T.DirectionalLight(0x40b8ff, 0.42);
+      rim.position.set(-4.0, -2.0, -3.0);
+      scene.add(amb, hemi, sun, rim);
+
+      // Звёзды космоса
+      const starCount = 260;
+      const starPos = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount; i++) {
+        const u = Math.random();
+        const v = Math.random();
+        const th = 2 * Math.PI * u;
+        const ph = Math.acos(2 * v - 1);
+        const r = 10 + Math.random() * 6;
+        starPos[i * 3] = r * Math.sin(ph) * Math.cos(th);
+        starPos[i * 3 + 1] = r * Math.cos(ph);
+        starPos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+      }
+      const starGeo = new T.BufferGeometry();
+      starGeo.setAttribute('position', new T.BufferAttribute(starPos, 3));
+      const starMat = new T.PointsMaterial({ color: 0xcbeeff, size: 0.06, transparent: true, opacity: 0.72 });
+      scene.add(new T.Points(starGeo, starMat));
+
+      earthGroup = new T.Group();
+      scene.add(earthGroup);
+
+      const tex = createEarthTextures();
+      const earthGeo = new T.SphereGeometry(GLOBE_R, 48, 32);
+      const earthMat = new T.MeshPhongMaterial({
+        map: tex.map,
+        specularMap: tex.specMap,
+        specular: new T.Color(0x52c4e8),
+        shininess: 32,
+        emissive: new T.Color(0x06192c),
+        emissiveIntensity: 0.45
+      });
+      earthGroup.add(new T.Mesh(earthGeo, earthMat));
+
+      // Атмосферное гало
+      const atmoGeo = new T.SphereGeometry(GLOBE_R * 1.07, 40, 28);
+      scene.add(new T.Mesh(atmoGeo, createAtmosphereMaterial()));
+
+      // Орбитальное научное кольцо
+      const ringGeo = new T.TorusGeometry(GLOBE_R * 1.21, 0.0045, 8, 96);
+      const ringMat = new T.MeshBasicMaterial({ color: 0x58e0ff, transparent: true, opacity: 0.25 });
+      orbitRing = new T.Mesh(ringGeo, ringMat);
+      orbitRing.rotation.x = Math.PI * 0.42;
+      orbitRing.rotation.y = 0.28;
+      scene.add(orbitRing);
+
+      // Маяки 5 биомов + соединительные дуги маршрутов
+      buildBeaconsOnGlobe();
+
+      raycaster = new T.Raycaster();
+      return true;
+    } catch (err) {
+      stageFailed = true;
+      return false;
+    }
+  }
+
+  function buildBeaconsOnGlobe() {
+    if (!earthGroup) return;
+    const items = beacons.length ? beacons : collectBiomes();
+    const up = new T.Vector3(0, 1, 0);
+
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const col = new T.Color(it.colorHex);
+      const nrm = it.pos.clone().normalize();
+      const g = new T.Group();
+      g.position.copy(it.pos);
+      g.quaternion.setFromUnitVectors(up, nrm);
+
+      const core = new T.Mesh(
+        new T.SphereGeometry(0.042, 16, 12),
+        new T.MeshBasicMaterial({ color: col })
+      );
+      core.position.y = 0.02;
+
+      const spire = new T.Mesh(
+        new T.CylinderGeometry(0.005, 0.015, 0.17, 10),
+        new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.78 })
+      );
+      spire.position.y = 0.095;
+
+      const halo = new T.Mesh(
+        new T.RingGeometry(0.056, 0.088, 28),
+        new T.MeshBasicMaterial({ color: col, side: T.DoubleSide, transparent: true, opacity: 0.85 })
+      );
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.y = 0.012;
+
+      const hit = new T.Mesh(
+        new T.SphereGeometry(0.15, 10, 10),
+        new T.MeshBasicMaterial({ visible: false })
+      );
+      hit.position.y = 0.06;
+      hit.userData.biomeId = it.id;
+
+      g.add(core, spire, halo, hit);
+      earthGroup.add(g);
+
+      it.group = g;
+      it.core = core;
+      it.spire = spire;
+      it.halo = halo;
+      it.hit = hit;
+    }
+
+    // Соединяем 5 точек планеты дугами глобальной экспедиции
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'kelp_forest', 'hydrothermal_vents', 'arctic_sea'];
+    const ordered = [];
+    for (let i = 0; i < orderIds.length; i++) {
+      if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);
+    }
+    if (ordered.length > 1) {
+      const arcMat = new T.MeshBasicMaterial({ color: 0x58e0ff, transparent: true, opacity: 0.34 });
+      for (let i = 0; i < ordered.length; i++) {
+        const a = ordered[i];
+        const b = ordered[(i + 1) % ordered.length];
+        const mid = a.pos.clone().add(b.pos).multiplyScalar(0.5);
+        if (mid.lengthSq() < 0.01) mid.set(0, 1, 0);
+        mid.normalize().multiplyScalar(GLOBE_R * 1.24);
+        const curve = new T.CatmullRomCurve3([a.pos.clone(), mid, b.pos.clone()]);
+        const arc = new T.Mesh(new T.TubeGeometry(curve, 26, 0.006, 6, false), arcMat);
+        earthGroup.add(arc);
+      }
+    }
+  }
+
+  function syncBeaconListData() {
+    if (beacons.length) return;
+    const list = collectBiomes();
+    for (let i = 0; i < list.length; i++) {
+      beacons.push(list[i]);
+      beaconById[list[i].id] = list[i];
+    }
+  }
+
+  function resizeCanvas() {
+    if (!renderer || !canvasEl || !camera) return;
+    const w = canvasEl.clientWidth || 420;
+    const h = canvasEl.clientHeight || 380;
+    if (w < 10 || h < 10) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+  }
+
+  function renderSelectedInfo() {
+    const it = beaconById[selectedId] || beacons[0];
+    if (!it) return;
+    const b = it.biome;
+    const g = b.globe;
+    const activeId = callbacks.getActiveBiomeId ? callbacks.getActiveBiomeId() : null;
+    const prog = callbacks.getProgress ? callbacks.getProgress(b.id) : null;
+
+    if (titleEl) titleEl.textContent = b.name;
+    if (oceanEl) oceanEl.textContent = g.ocean || b.region;
+    if (coordsEl) coordsEl.textContent = g.coordLabel || `${g.lat.toFixed(1)}°, ${g.lon.toFixed(1)}°`;
+    if (depthEl) depthEl.textContent = g.depthSpan || '—';
+    if (tempEl) tempEl.textContent = g.tempSpan || '—';
+    if (summaryEl) summaryEl.textContent = g.summary || b.subtitle;
+
+    if (progressEl) {
+      if (prog) {
+        const legsCount = (b.tourLegs && b.tourLegs.length) || 0;
+        progressEl.textContent = `Атлас: ${prog.discovered}/${prog.speciesTotal} · Миссии: ${prog.missionsDone}/${prog.missionsTotal} · Этапов гида: ${legsCount}`;
+      } else {
+        const legsCount = (b.tourLegs && b.tourLegs.length) || 0;
+        progressEl.textContent = `Этапов гид-тура: ${legsCount}`;
+      }
+    }
+
+    if (goBtn) {
+      goBtn.textContent = b.id === activeId ? 'Вы уже здесь (Закрыть)' : 'Перейти в биом';
+    }
+    if (tourBtn) {
+      tourBtn.textContent = b.id === activeId ? 'Запустить гид-тур здесь' : 'Перейти и начать гид-тур';
+    }
+
+    if (listEl) {
+      listEl.innerHTML = '';
+      for (let i = 0; i < beacons.length; i++) {
+        const item = beacons[i];
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'globe-loc' + (item.id === it.id ? ' on' : '') + (item.id === activeId ? ' cur' : '');
+        const p = callbacks.getProgress ? callbacks.getProgress(item.id) : null;
+        const badge = item.id === activeId ? 'Текущий' : (p ? `${p.discovered}/${p.speciesTotal}` : item.biome.globe.coordLabel);
+        btn.innerHTML = `<span class="globe-dot" style="background:${item.colorHex};box-shadow:0 0 8px ${item.colorHex}"></span>` +
+          `<span class="globe-loc-txt"><b>${item.biome.name}</b><small>${item.biome.globe.ocean}</small></span>` +
+          `<span class="globe-loc-meta">${badge}</span>`;
+        btn.addEventListener('click', () => {
+          focusBiome(item.id, true);
+        });
+        listEl.appendChild(btn);
+      }
+    }
+  }
+
+  function focusBiome(id, pauseAuto) {
+    syncBeaconListData();
+    const it = beaconById[id] || beacons[0];
+    if (!it) return null;
+    selectedId = it.id;
+
+    // Поворачиваем Землю так, чтобы точка (lat, lon) оказалась напротив камеры (+Z)
+    targetRotY = -Math.atan2(it.pos.x, it.pos.z);
+    targetRotX = OC.clamp((it.lat * Math.PI) / 180, -1.25, 1.25);
+    if (pauseAuto) autoSpinPauseUntil = performance.now() + 5500;
+
+    renderSelectedInfo();
+    return it;
+  }
+
+  function pickBeaconAt(clientX, clientY) {
+    if (!raycaster || !camera || !canvasEl) return null;
+    const rect = canvasEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    ptr.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    ptr.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(ptr, camera);
+    const hitsTargets = [];
+    for (let i = 0; i < beacons.length; i++) {
+      if (beacons[i].hit) hitsTargets.push(beacons[i].hit);
+    }
+    const hits = raycaster.intersectObjects(hitsTargets, false);
+    if (hits.length && hits[0].object.userData.biomeId) {
+      return hits[0].object.userData.biomeId;
+    }
+    return null;
+  }
+
+  function tick(now) {
+    if (!isOpenState) return;
+    rafId = requestAnimationFrame(tick);
+
+    const t = now * 0.001;
+    if (!dragging && now > autoSpinPauseUntil) {
+      targetRotY += 0.0018;
+    }
+
+    // Короткий путь по углу Y
+    const dy = ((((targetRotY - rotY) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    rotY += dy * 0.12;
+    rotX += (targetRotX - rotX) * 0.12;
+
+    if (earthGroup) {
+      earthGroup.rotation.y = rotY;
+      earthGroup.rotation.x = rotX;
+    }
+    if (orbitRing) {
+      orbitRing.rotation.z = t * 0.12;
+    }
+
+    // Пульсация маяков: выбранный маяк ярче и крупнее
+    const activeId = callbacks.getActiveBiomeId ? callbacks.getActiveBiomeId() : null;
+    for (let i = 0; i < beacons.length; i++) {
+      const b = beacons[i];
+      if (!b.halo || !b.core || !b.spire) continue;
+      const isSel = b.id === selectedId;
+      const isHov = b.id === hoveredId;
+      const isAct = b.id === activeId;
+      const pulse = 1 + Math.sin(t * 3.4 + i * 1.1) * (isSel ? 0.34 : 0.16);
+      const s = (isSel ? 1.55 : isHov ? 1.35 : isAct ? 1.2 : 1.0) * pulse;
+      b.halo.scale.set(s, s, 1);
+      b.halo.material.opacity = isSel ? 0.95 : isHov ? 0.85 : 0.55;
+      const cs = isSel ? 1.45 : isHov ? 1.25 : 1.0;
+      b.core.scale.set(cs, cs, cs);
+      b.spire.scale.y = isSel ? 1.45 : 1.0;
+    }
+
+    if (renderer && scene && camera) {
+      renderer.render(scene, camera);
+    }
+  }
+
+  function bindEvents() {
+    if (!canvasEl) return;
+
+    canvasEl.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      downX = e.clientX;
+      downY = e.clientY;
+      movedPx = 0;
+      autoSpinPauseUntil = performance.now() + 6000;
+      try { canvasEl.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+    });
+
+    canvasEl.addEventListener('pointermove', (e) => {
+      if (dragging) {
+        const dx = e.clientX - downX;
+        const dy = e.clientY - downY;
+        movedPx += Math.abs(dx) + Math.abs(dy);
+        downX = e.clientX;
+        downY = e.clientY;
+        targetRotY += dx * 0.0085;
+        targetRotX = OC.clamp(targetRotX + dy * 0.007, -1.28, 1.28);
+        autoSpinPauseUntil = performance.now() + 6000;
+        return;
+      }
+      const hitId = pickBeaconAt(e.clientX, e.clientY);
+      hoveredId = hitId;
+      canvasEl.style.cursor = hitId ? 'pointer' : 'grab';
+      if (hoverTipEl) {
+        if (hitId && beaconById[hitId]) {
+          const b = beaconById[hitId].biome;
+          hoverTipEl.textContent = `${b.name} · ${b.globe.coordLabel}`;
+          hoverTipEl.classList.remove('hidden');
+        } else {
+          hoverTipEl.classList.add('hidden');
+        }
+      }
+    });
+
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      if (movedPx < 7) {
+        const hitId = pickBeaconAt(e.clientX, e.clientY);
+        if (hitId) {
+          if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
+          focusBiome(hitId, true);
+        }
+      }
+    };
+    canvasEl.addEventListener('pointerup', endDrag);
+    canvasEl.addEventListener('pointercancel', () => { dragging = false; });
+
+    canvasEl.addEventListener('dblclick', (e) => {
+      const hitId = pickBeaconAt(e.clientX, e.clientY);
+      if (hitId) launchSelected(false);
+    });
+
+    window.addEventListener('resize', () => {
+      if (isOpenState) resizeCanvas();
+    });
+  }
+
+  function launchSelected(withTour) {
+    const id = selectedId || (beacons[0] && beacons[0].id);
+    if (!id) return;
+    if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
+    close();
+    if (callbacks.onSelectBiome) callbacks.onSelectBiome(id, !!withTour);
+  }
+
+  function open() {
+    if (!modalEl) return;
+    syncBeaconListData();
+    isOpenState = true;
+    modalEl.classList.remove('hidden');
+    ensureStage();
+    resizeCanvas();
+    const curId = (callbacks.getActiveBiomeId && callbacks.getActiveBiomeId()) || selectedId || (beacons[0] && beacons[0].id);
+    const it = focusBiome(curId, true);
+    if (it) {
+      rotY = targetRotY - 0.35;
+      rotX = targetRotX;
+    }
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function close() {
+    isOpenState = false;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+    if (modalEl) modalEl.classList.add('hidden');
+  }
+
+  OC.Globe = {
+    init(opts) {
+      callbacks = opts || {};
+      modalEl = document.getElementById('globe-modal');
+      canvasEl = document.getElementById('globe-3d');
+      listEl = document.getElementById('globe-list');
+      hoverTipEl = document.getElementById('globe-hover-tip');
+      titleEl = document.getElementById('globe-b-name');
+      oceanEl = document.getElementById('globe-b-ocean');
+      coordsEl = document.getElementById('globe-b-coords');
+      depthEl = document.getElementById('globe-b-depth');
+      tempEl = document.getElementById('globe-b-temp');
+      progressEl = document.getElementById('globe-b-progress');
+      summaryEl = document.getElementById('globe-b-summary');
+      goBtn = document.getElementById('globe-go-btn');
+      tourBtn = document.getElementById('globe-tour-btn');
+
+      const closeBtn = document.getElementById('globe-close');
+      if (closeBtn) closeBtn.addEventListener('click', close);
+      if (modalEl) {
+        modalEl.addEventListener('click', (e) => {
+          if (e.target === modalEl) close();
+        });
+      }
+      if (goBtn) goBtn.addEventListener('click', () => launchSelected(false));
+      if (tourBtn) tourBtn.addEventListener('click', () => launchSelected(true));
+
+      syncBeaconListData();
+      bindEvents();
+    },
+    open,
+    close,
+    toggle() {
+      if (isOpenState) close();
+      else open();
+      return isOpenState;
+    },
+    isOpen: () => isOpenState,
+    focusBiome(id) { return focusBiome(id, true); },
+    getSelectedId: () => selectedId,
+    getBeacons: () => {
+      syncBeaconListData();
+      return beacons.map((b) => ({
+        id: b.id,
+        name: b.biome.name,
+        lat: b.lat,
+        lon: b.lon,
+        x: b.pos.x,
+        y: b.pos.y,
+        z: b.pos.z,
+        color: b.colorHex
+      }));
+    }
+  };
+})(window.OC);
+
 // === ui/main.js ===
 /* ================= ГЛАВНЫЙ ЦИКЛ, HUD И КООРДИНАЦИЯ МОДУЛЕЙ ================= */
 window.OC = window.OC || {};
@@ -13210,6 +14292,7 @@ window.OC = window.OC || {};
   const btnSound = document.getElementById('btn-sound');
   const btnFlash = document.getElementById('btn-flash');
   const btnAtlas = document.getElementById('btn-atlas');
+  const btnGlobe = document.getElementById('btn-globe');
   const btnCam = document.getElementById('btn-cam');
   const btnCinema = document.getElementById('btn-cinema');
   const btnJournal = document.getElementById('btn-journal');
@@ -13283,6 +14366,17 @@ window.OC = window.OC || {};
   const loadingBar = document.getElementById('loading-bar');
   const toastEl = document.getElementById('toast');
   const popup = document.getElementById('fish-popup');
+
+  const guideCard = document.getElementById('guide-card');
+  const guideStep = document.getElementById('guide-step');
+  const guideBiome = document.getElementById('guide-biome');
+  const guideTitle = document.getElementById('guide-title');
+  const guideFact = document.getElementById('guide-fact');
+  const guideProgBar = document.getElementById('guide-prog-bar');
+  const guidePrev = document.getElementById('guide-prev');
+  const guidePause = document.getElementById('guide-pause');
+  const guideNext = document.getElementById('guide-next');
+  const guideExit = document.getElementById('guide-exit');
 
   let autoCycle = true;
   let hudHidden = false;
@@ -13635,8 +14729,45 @@ window.OC = window.OC || {};
       });
     }
 
+    if (btnGlobe) {
+      btnGlobe.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (OC.Globe) {
+          OC.Globe.toggle();
+          if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
+        }
+      });
+    }
+
+    const syncGuideCard = (st) => {
+      if (!guideCard) return;
+      if (!st || !st.active || !st.leg) {
+        guideCard.classList.add('hidden');
+        return;
+      }
+      guideCard.classList.remove('hidden');
+      if (hero) hero.classList.add('fade');
+      if (guideStep) guideStep.textContent = `Этап ${st.idx + 1} / ${st.total}`;
+      if (guideBiome) guideBiome.textContent = activeBiome ? activeBiome.name : '';
+      if (guideTitle) guideTitle.textContent = st.leg.title || '';
+      if (guideFact) guideFact.textContent = st.leg.fact || '';
+      if (guideProgBar) guideProgBar.style.width = `${(st.progress * 100).toFixed(1)}%`;
+      if (guidePause) {
+        guidePause.classList.toggle('on', !st.paused);
+        guidePause.innerHTML = st.paused ? '&#9654; Продолжить' : '&#10074;&#10074; Пауза';
+      }
+    };
+
+    if (guidePrev) guidePrev.addEventListener('click', () => OC.Navigation.stepTour(-1));
+    if (guidePause) guidePause.addEventListener('click', () => OC.Navigation.toggleTourPause());
+    if (guideNext) guideNext.addEventListener('click', () => OC.Navigation.stepTour(1));
+    if (guideExit) guideExit.addEventListener('click', () => OC.Navigation.stopTour());
+
     const syncSubMode = (on) => {
       subMode = on;
+      if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.toggle('sub-on', on);
+      }
       if (btnSub) {
         btnSub.classList.toggle('on', on);
         btnSub.setAttribute('aria-pressed', on);
@@ -14082,6 +15213,12 @@ window.OC = window.OC || {};
       }
       if (e.code === 'KeyR') { OC.Navigation.resetToSpawn(); toast('Возврат к старту: ' + (activeBiome ? activeBiome.name : 'океан')); }
       if (e.code === 'KeyK') { OC.Atlas.toggle(); }
+      if (e.code === 'KeyO' && OC.Globe) {
+        OC.Globe.toggle();
+        if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
+      }
+      if (e.code === 'ArrowRight' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(1); }
+      if (e.code === 'ArrowLeft' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(-1); }
       if (e.code === 'KeyP') {
         const next = !(OC.Expedition && OC.Expedition.isPhotoMode());
         syncCamMode(next);
@@ -14124,10 +15261,12 @@ window.OC = window.OC || {};
         }
       }
       if (e.code === 'Escape') {
-        if (OC.Atlas.isOpen()) OC.Atlas.toggle();
+        if (OC.Globe && OC.Globe.isOpen()) OC.Globe.close();
+        else if (OC.Atlas.isOpen()) OC.Atlas.toggle();
         else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
         else if (OC.Expedition && OC.Expedition.isPhotoMode()) syncCamMode(false);
         else if (OC.Navigation.getMode() === 'cinema') OC.Navigation.setMode('swim');
+        else if (OC.Navigation.getMode() === 'tour') OC.Navigation.stopTour();
       }
     });
 
@@ -14136,7 +15275,7 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes, syncFlash, syncCamMode, syncSubMode, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
   }
 
   function switchBiome(id) {
@@ -14214,7 +15353,14 @@ window.OC = window.OC || {};
       OC.Navigation.init(canvas, activeBiome, {
         onPick: (cx, cy) => pickAt(cx, cy, activeBiome),
         onModeChange: (m) => { if (uiHandles) uiHandles.syncModes(m); },
-        onTourToast: (title) => toast('Тур: ' + title),
+        onTourToast: (title) => {
+          const st = OC.Navigation.getTourState ? OC.Navigation.getTourState() : null;
+          if (OC.sound && OC.sound.tourChime) OC.sound.tourChime(st ? st.idx : 0);
+          toast('Гид-тур: ' + title);
+        },
+        onTourChange: (st) => {
+          if (uiHandles && uiHandles.syncGuideCard) uiHandles.syncGuideCard(st);
+        },
         onGamepadAction: (action) => {
           if (!uiHandles) return;
           if (action === 'flashlight') {
@@ -14247,8 +15393,23 @@ window.OC = window.OC || {};
         toast('Курс на зону: ' + lm.name);
       });
 
+      if (OC.Globe) {
+        OC.Globe.init({
+          getActiveBiomeId: () => (activeBiome ? activeBiome.id : null),
+          getProgress: (biomeId) => {
+            const b = OC.Biomes.get(biomeId);
+            return (OC.Expedition && OC.Expedition.getBiomeSummary && b) ? OC.Expedition.getBiomeSummary(b) : null;
+          },
+          onSelectBiome: (id, startTour) => {
+            if (!activeBiome || activeBiome.id !== id) switchBiome(id);
+            if (startTour) OC.Navigation.setMode('tour');
+          }
+        });
+      }
+
       uiHandles = bindUI();
       uiHandles.syncModes(OC.Navigation.getMode());
+      uiHandles.syncGuideCard(OC.Navigation.getTourState());
 
       setBar(1.0);
       setTimeout(() => {
@@ -14431,6 +15592,11 @@ window.OC = window.OC || {};
         if (statCorals) statCorals.textContent = fStats.activeInstances;
         if (statFish && OC.faunaInfo) statFish.textContent = OC.faunaInfo.schoolFish;
         if (statBig && OC.faunaInfo) statBig.textContent = OC.faunaInfo.big;
+
+        if (guideProgBar && OC.Navigation.getMode() === 'tour') {
+          const tSt = OC.Navigation.getTourState();
+          if (tSt && tSt.active) guideProgBar.style.width = `${(tSt.progress * 100).toFixed(1)}%`;
+        }
       }
 
       fpsAcc += rawDt;

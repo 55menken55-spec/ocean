@@ -506,6 +506,21 @@ window.OC = window.OC || {};
         missionsTotal: MISSIONS.length,
         photosCount: store.photos.length
       };
+    },
+
+    getBiomeSummary(biome) {
+      if (!biome) return { discovered: 0, speciesTotal: 0, missionsDone: 0, missionsTotal: 0 };
+      const encKeys = biome.encyclopedia ? Object.keys(biome.encyclopedia) : [];
+      const saved = this.getSavedDiscovered(biome.id);
+      const discCount = saved.length || (biome.defaultDiscovered ? biome.defaultDiscovered.length : 1);
+      const missionsTotal = MISSIONS.filter((m) => m.biomeId === biome.id).length;
+      const doneArr = store.missionsDone[biome.id];
+      return {
+        discovered: Math.min(encKeys.length, discCount),
+        speciesTotal: encKeys.length,
+        missionsDone: Array.isArray(doneArr) ? doneArr.length : 0,
+        missionsTotal
+      };
     }
   };
 })(window.OC);

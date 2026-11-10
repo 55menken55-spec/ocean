@@ -25,6 +25,7 @@ ORDER = [
     'ui/expedition.js',
     'ui/minimap.js',
     'ui/atlas.js',
+    'ui/globe.js',
     'ui/main.js',
 ]
 

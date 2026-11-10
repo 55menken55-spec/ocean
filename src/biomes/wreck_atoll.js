@@ -423,17 +423,23 @@ window.OC = window.OC || {};
   const spawnY = Math.min(-3.5, safeSpotY(spawnX, spawnZ, -14.5, 4.0));
 
   const _tourRaw = [
-    { x: spawnX, y: -14.5, z: spawnZ, lx: WRECK_POS.x, ly: -20, lz: WRECK_POS.z, title: 'Затонувший корабль «SS Maru»', duration: 10 },
-    { x: landmarks[1].x, y: -3.2, z: landmarks[1].z, lx: ROCK_ISLANDS[0].x, ly: 2.0, lz: ROCK_ISLANDS[0].z, title: 'Грибовидные острова Палау', duration: 9 },
-    { x: landmarks[2].x, y: -7.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -7.5, lz: landmarks[2].z + 18, title: 'Лагуна золотых медуз', duration: 9 },
-    { x: landmarks[3].x, y: -10.5, z: landmarks[3].z, lx: landmarks[3].x - 30, ly: -13, lz: landmarks[3].z - 25, title: 'Золотистые саргассовы сады', duration: 8 },
-    { x: landmarks[4].x, y: -25.0, z: landmarks[4].z, lx: 495, ly: -38, lz: -20, title: 'Пролив «Синий угол» и акулы-молоты', duration: 10 }
+    { x: spawnX, y: -14.5, z: spawnZ, lx: WRECK_POS.x, ly: -20, lz: WRECK_POS.z, title: 'Затонувший корабль «SS Maru»', duration: 10,
+      fact: 'Стальной 68-метровый корпус стал процветающим искусственным рифом: его мачты и трюм за десятилетия обросли золотыми веерами и губками.' },
+    { x: landmarks[1].x, y: -3.2, z: landmarks[1].z, lx: ROCK_ISLANDS[0].x, ly: 2.0, lz: ROCK_ISLANDS[0].z, title: 'Грибовидные острова Палау', duration: 9,
+      fact: 'Характерная «ножка» у основания известняковых островков выточена приливами и морскими организмами-сверлильщиками за тысячи лет.' },
+    { x: landmarks[2].x, y: -7.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -7.5, lz: landmarks[2].z + 18, title: 'Лагуна золотых медуз', duration: 9,
+      fact: 'Изолированные от хищников золотые медузы Палау утратили жалящие клетки и мигрируют за солнцем, питая своих симбиотических водорослей.' },
+    { x: landmarks[3].x, y: -10.5, z: landmarks[3].z, lx: landmarks[3].x - 30, ly: -13, lz: landmarks[3].z - 25, title: 'Золотистые саргассовы сады', duration: 8,
+      fact: 'Заросли бурого саргасса служат природным инкубатором и убежищем для молодых зелёных черепах и красочных стай луцианов.' },
+    { x: landmarks[4].x, y: -25.0, z: landmarks[4].z, lx: 495, ly: -38, lz: -20, title: 'Пролив «Синий угол» и акулы-молоты', duration: 10,
+      fact: 'Широкая Т-образная голова акулы-молота работает как высокоточный электромагнитный радар, находящий добычу на течении обрыва.' }
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
     pos: [leg.x, Math.min(2.0, safeSpotY(leg.x, leg.z, leg.y, 3.8)), leg.z],
     look: [leg.lx, leg.ly, leg.lz],
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -568,6 +574,11 @@ window.OC = window.OC || {};
     name: 'Атолл и Затонувший корабль',
     region: 'Архипелаг Палау, Микронезия',
     subtitle: 'Тихий океан · 2.4 × 2.4 км · 0–96 м',
+    globe: {
+      lat: 7.3, lon: 134.5, coordLabel: '7.3° с.ш., 134.5° в.д.',
+      ocean: 'Архипелаг Палау · Микронезия', depthSpan: '0 – 96 м', tempSpan: '24 – 29 °C', color: '#ffbe44',
+      summary: 'Известняковые грибовидные острова, лагуна нежалящих золотых медуз, 68-метровое судно «SS Maru» и акулы-молоты.'
+    },
     worldRadius: 1200,
     chunkSize: 150,
     seaLevel: 0,

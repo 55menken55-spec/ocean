@@ -347,17 +347,23 @@ window.OC = window.OC || {};
   const spawnY = Math.min(-3.5, safeSpotY(spawnX, spawnZ, -11.5, 4.0));
 
   const _tourRaw = [
-    { x: spawnX, y: -11.5, z: spawnZ, lx: spawnX + 35, ly: -8, lz: spawnZ + 22, title: 'Собор гигантской ламинарии', duration: 9 },
-    { x: -620, y: -4.5, z: 120, lx: -700, ly: -1, lz: 145, title: 'Кекуры прибоя и морские львы', duration: 9 },
-    { x: landmarks[2].x, y: -16.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -20, lz: landmarks[2].z + 18, title: 'Гранитные рифы и звёзды Pisaster', duration: 9 },
-    { x: landmarks[3].x, y: -20.5, z: landmarks[3].z, lx: landmarks[3].x + 50, ly: -22, lz: landmarks[3].z - 15, title: 'Кромка каньона и косяки анчоусов', duration: 9 },
-    { x: landmarks[4].x, y: -42.0, z: landmarks[4].z, lx: landmarks[4].x + 90, ly: -58, lz: landmarks[4].z, title: 'Бездна каньона Монтерей', duration: 9 }
+    { x: spawnX, y: -11.5, z: spawnZ, lx: spawnX + 35, ly: -8, lz: spawnZ + 22, title: 'Собор гигантской ламинарии', duration: 9,
+      fact: 'Гигантская бурая водоросль Macrocystis вырастает до 50 см в сутки, удерживаясь вертикально за счёт крошечных поплавков-пневматоцистов.' },
+    { x: -620, y: -4.5, z: 120, lx: -700, ly: -1, lz: 145, title: 'Кекуры прибоя и морские львы', duration: 9,
+      fact: 'Калифорнийские морские львы лавируют среди стеблей ламинарии на скорости до 40 км/ч и игриво выпрыгивают из прибойной волны.' },
+    { x: landmarks[2].x, y: -16.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -20, lz: landmarks[2].z + 18, title: 'Гранитные рифы и звёзды Pisaster', duration: 9,
+      fact: 'Охристые морские звёзды и леопардовые акулы обитают среди гранитных террас, покрытых фиолетовыми ежами и зелёными актиниями.' },
+    { x: landmarks[3].x, y: -20.5, z: landmarks[3].z, lx: landmarks[3].x + 50, ly: -22, lz: landmarks[3].z - 15, title: 'Кромка каньона и косяки анчоусов', duration: 9,
+      fact: 'Подъём ледяной воды из глубин (апвеллинг) насыщает кромку каньона питательными солями и собирает огромные вихри анчоусов.' },
+    { x: landmarks[4].x, y: -42.0, z: landmarks[4].z, lx: landmarks[4].x + 90, ly: -58, lz: landmarks[4].z, title: 'Бездна каньона Монтерей', duration: 9,
+      fact: 'Подводный каньон Монтерей по глубине и масштабу не уступает Большому каньону Колорадо — здесь ночью всплывают светящиеся рыбы-миктофы.' }
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
     pos: [leg.x, Math.min(2.5, safeSpotY(leg.x, leg.z, leg.y, 3.8)), leg.z],
     look: [leg.lx, leg.ly, leg.lz],
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -438,6 +444,11 @@ window.OC = window.OC || {};
     name: 'Лес гигантской ламинарии',
     region: 'Залив Монтерей, Калифорния',
     subtitle: 'Тихий океан · 2.4 × 2.4 км · 0–74 м',
+    globe: {
+      lat: 36.8, lon: -121.9, coordLabel: '36.8° с.ш., 121.9° з.д.',
+      ocean: 'Залив Монтерей · Калифорния', depthSpan: '0 – 74 м', tempSpan: '8 – 13 °C', color: '#42d896',
+      summary: 'Изумрудные соборы 20-метровой ламинарии, гранитные кекуры с морскими львами и холодный апвеллинг глубокого каньона.'
+    },
     worldRadius: 1200,
     chunkSize: 150,
     seaLevel: 0,

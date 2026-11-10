@@ -14,6 +14,7 @@ window.OC = window.OC || {};
   const btnSound = document.getElementById('btn-sound');
   const btnFlash = document.getElementById('btn-flash');
   const btnAtlas = document.getElementById('btn-atlas');
+  const btnGlobe = document.getElementById('btn-globe');
   const btnCam = document.getElementById('btn-cam');
   const btnCinema = document.getElementById('btn-cinema');
   const btnJournal = document.getElementById('btn-journal');
@@ -87,6 +88,17 @@ window.OC = window.OC || {};
   const loadingBar = document.getElementById('loading-bar');
   const toastEl = document.getElementById('toast');
   const popup = document.getElementById('fish-popup');
+
+  const guideCard = document.getElementById('guide-card');
+  const guideStep = document.getElementById('guide-step');
+  const guideBiome = document.getElementById('guide-biome');
+  const guideTitle = document.getElementById('guide-title');
+  const guideFact = document.getElementById('guide-fact');
+  const guideProgBar = document.getElementById('guide-prog-bar');
+  const guidePrev = document.getElementById('guide-prev');
+  const guidePause = document.getElementById('guide-pause');
+  const guideNext = document.getElementById('guide-next');
+  const guideExit = document.getElementById('guide-exit');
 
   let autoCycle = true;
   let hudHidden = false;
@@ -439,8 +451,45 @@ window.OC = window.OC || {};
       });
     }
 
+    if (btnGlobe) {
+      btnGlobe.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (OC.Globe) {
+          OC.Globe.toggle();
+          if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
+        }
+      });
+    }
+
+    const syncGuideCard = (st) => {
+      if (!guideCard) return;
+      if (!st || !st.active || !st.leg) {
+        guideCard.classList.add('hidden');
+        return;
+      }
+      guideCard.classList.remove('hidden');
+      if (hero) hero.classList.add('fade');
+      if (guideStep) guideStep.textContent = `Этап ${st.idx + 1} / ${st.total}`;
+      if (guideBiome) guideBiome.textContent = activeBiome ? activeBiome.name : '';
+      if (guideTitle) guideTitle.textContent = st.leg.title || '';
+      if (guideFact) guideFact.textContent = st.leg.fact || '';
+      if (guideProgBar) guideProgBar.style.width = `${(st.progress * 100).toFixed(1)}%`;
+      if (guidePause) {
+        guidePause.classList.toggle('on', !st.paused);
+        guidePause.innerHTML = st.paused ? '&#9654; Продолжить' : '&#10074;&#10074; Пауза';
+      }
+    };
+
+    if (guidePrev) guidePrev.addEventListener('click', () => OC.Navigation.stepTour(-1));
+    if (guidePause) guidePause.addEventListener('click', () => OC.Navigation.toggleTourPause());
+    if (guideNext) guideNext.addEventListener('click', () => OC.Navigation.stepTour(1));
+    if (guideExit) guideExit.addEventListener('click', () => OC.Navigation.stopTour());
+
     const syncSubMode = (on) => {
       subMode = on;
+      if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.toggle('sub-on', on);
+      }
       if (btnSub) {
         btnSub.classList.toggle('on', on);
         btnSub.setAttribute('aria-pressed', on);
@@ -886,6 +935,12 @@ window.OC = window.OC || {};
       }
       if (e.code === 'KeyR') { OC.Navigation.resetToSpawn(); toast('Возврат к старту: ' + (activeBiome ? activeBiome.name : 'океан')); }
       if (e.code === 'KeyK') { OC.Atlas.toggle(); }
+      if (e.code === 'KeyO' && OC.Globe) {
+        OC.Globe.toggle();
+        if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
+      }
+      if (e.code === 'ArrowRight' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(1); }
+      if (e.code === 'ArrowLeft' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(-1); }
       if (e.code === 'KeyP') {
         const next = !(OC.Expedition && OC.Expedition.isPhotoMode());
         syncCamMode(next);
@@ -928,10 +983,12 @@ window.OC = window.OC || {};
         }
       }
       if (e.code === 'Escape') {
-        if (OC.Atlas.isOpen()) OC.Atlas.toggle();
+        if (OC.Globe && OC.Globe.isOpen()) OC.Globe.close();
+        else if (OC.Atlas.isOpen()) OC.Atlas.toggle();
         else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
         else if (OC.Expedition && OC.Expedition.isPhotoMode()) syncCamMode(false);
         else if (OC.Navigation.getMode() === 'cinema') OC.Navigation.setMode('swim');
+        else if (OC.Navigation.getMode() === 'tour') OC.Navigation.stopTour();
       }
     });
 
@@ -940,7 +997,7 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes, syncFlash, syncCamMode, syncSubMode, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
   }
 
   function switchBiome(id) {
@@ -1018,7 +1075,14 @@ window.OC = window.OC || {};
       OC.Navigation.init(canvas, activeBiome, {
         onPick: (cx, cy) => pickAt(cx, cy, activeBiome),
         onModeChange: (m) => { if (uiHandles) uiHandles.syncModes(m); },
-        onTourToast: (title) => toast('Тур: ' + title),
+        onTourToast: (title) => {
+          const st = OC.Navigation.getTourState ? OC.Navigation.getTourState() : null;
+          if (OC.sound && OC.sound.tourChime) OC.sound.tourChime(st ? st.idx : 0);
+          toast('Гид-тур: ' + title);
+        },
+        onTourChange: (st) => {
+          if (uiHandles && uiHandles.syncGuideCard) uiHandles.syncGuideCard(st);
+        },
         onGamepadAction: (action) => {
           if (!uiHandles) return;
           if (action === 'flashlight') {
@@ -1051,8 +1115,23 @@ window.OC = window.OC || {};
         toast('Курс на зону: ' + lm.name);
       });
 
+      if (OC.Globe) {
+        OC.Globe.init({
+          getActiveBiomeId: () => (activeBiome ? activeBiome.id : null),
+          getProgress: (biomeId) => {
+            const b = OC.Biomes.get(biomeId);
+            return (OC.Expedition && OC.Expedition.getBiomeSummary && b) ? OC.Expedition.getBiomeSummary(b) : null;
+          },
+          onSelectBiome: (id, startTour) => {
+            if (!activeBiome || activeBiome.id !== id) switchBiome(id);
+            if (startTour) OC.Navigation.setMode('tour');
+          }
+        });
+      }
+
       uiHandles = bindUI();
       uiHandles.syncModes(OC.Navigation.getMode());
+      uiHandles.syncGuideCard(OC.Navigation.getTourState());
 
       setBar(1.0);
       setTimeout(() => {
@@ -1235,6 +1314,11 @@ window.OC = window.OC || {};
         if (statCorals) statCorals.textContent = fStats.activeInstances;
         if (statFish && OC.faunaInfo) statFish.textContent = OC.faunaInfo.schoolFish;
         if (statBig && OC.faunaInfo) statBig.textContent = OC.faunaInfo.big;
+
+        if (guideProgBar && OC.Navigation.getMode() === 'tour') {
+          const tSt = OC.Navigation.getTourState();
+          if (tSt && tSt.active) guideProgBar.style.width = `${(tSt.progress * 100).toFixed(1)}%`;
+        }
       }
 
       fpsAcc += rawDt;

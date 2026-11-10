@@ -664,6 +664,57 @@ window.OC = window.OC || {};
     src.start(now); src.stop(now + dur + 0.05);
   };
 
+  S.tourChime = function (stepIdx) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const scale = [392.0, 440.0, 493.88, 523.25, 587.33];
+    const base = scale[(stepIdx || 0) % scale.length];
+    [base, base * 1.5].forEach((freq, i) => {
+      const t = now + i * 0.08;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(i === 0 ? 0.036 : 0.024, t + 0.025);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+      o.connect(g); g.connect(S.master);
+      o.start(t); o.stop(t + 0.58);
+    });
+  };
+
+  S.globeWhoosh = function () {
+    if (S.muted) return;
+    if (!S.ctx && !S.ensure()) return;
+    if (S.ctx.state === 'suspended') S.ctx.resume();
+    if (!S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 0.65;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const env = Math.sin((i / len) * Math.PI);
+      d[i] = (Math.random() * 2 - 1) * env;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(220, now);
+    bp.frequency.exponentialRampToValueAtTime(680, now + dur * 0.65);
+    bp.frequency.exponentialRampToValueAtTime(320, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.06, now + 0.18);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(bp); bp.connect(g); g.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.04);
+  };
+
   S.toggle = function () {
     if (!S.ctx) { const ok = S.ensure(); if (!ok) return false; return true; }
     S.muted = !S.muted;

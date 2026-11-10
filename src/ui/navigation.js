@@ -29,6 +29,9 @@ window.OC = window.OC || {};
     // Авто-тур
     tourIdx: 0,
     tourT: 0,
+    tourPaused: false,
+    tourFromPos: new T.Vector3(),
+    tourFromLook: new T.Vector3(),
     // Кино-режим (круизный пролёт)
     cinemaCenter: new T.Vector3(),
     cinemaPhase: 0,
@@ -52,11 +55,61 @@ window.OC = window.OC || {};
     onPick: null,
     onModeChange: null,
     onTourToast: null,
+    onTourChange: null,
     onGamepadAction: null
   };
 
   let biomeRef = null;
   let canvasRef = null;
+  const _tourStateOut = { active: false, paused: false, idx: 0, total: 0, progress: 0, leg: null };
+
+  function buildTourState() {
+    const legs = (biomeRef && biomeRef.tourLegs) || [];
+    const total = legs.length;
+    const idx = total ? (state.tourIdx % total) : 0;
+    const leg = total ? legs[idx] : null;
+    const dur = (leg && leg.duration) || 9;
+    _tourStateOut.active = state.mode === 'tour' && total > 0;
+    _tourStateOut.paused = !!state.tourPaused;
+    _tourStateOut.idx = idx;
+    _tourStateOut.total = total;
+    _tourStateOut.progress = total ? OC.clamp(state.tourT / dur, 0, 1) : 0;
+    _tourStateOut.leg = leg;
+    return _tourStateOut;
+  }
+
+  function emitTourChange() {
+    if (state.onTourChange) state.onTourChange(buildTourState());
+  }
+
+  function captureTourOrigin() {
+    state.tourFromPos.copy(state.pos);
+    _fwd.set(
+      Math.sin(state.yaw) * Math.cos(state.pitch),
+      Math.sin(state.pitch),
+      Math.cos(state.yaw) * Math.cos(state.pitch)
+    ).normalize();
+    state.tourFromLook.copy(state.pos).addScaledVector(_fwd, 28);
+  }
+
+  function startTourStep(idx, fromCurrent) {
+    const legs = (biomeRef && biomeRef.tourLegs) || [];
+    if (!legs.length) return;
+    const n = legs.length;
+    const nextIdx = ((idx % n) + n) % n;
+    if (fromCurrent) {
+      captureTourOrigin();
+    } else {
+      const prev = legs[(nextIdx - 1 + n) % n];
+      state.tourFromPos.set(prev.pos[0], prev.pos[1], prev.pos[2]);
+      state.tourFromLook.set(prev.look[0], prev.look[1], prev.look[2]);
+    }
+    state.tourIdx = nextIdx;
+    state.tourT = 0;
+    const leg = legs[nextIdx];
+    if (state.onTourToast && leg) state.onTourToast(leg.title);
+    emitTourChange();
+  }
 
   function setMode(m) {
     if (state.mode === m) return;
@@ -102,14 +155,15 @@ window.OC = window.OC || {};
       state.vel.set(0, 0, 0);
     }
 
+    const prevMode = state.mode;
     state.mode = m;
     state.glide = null;
     if (m === 'tour') {
-      state.tourIdx = 0;
-      state.tourT = 0;
-      if (state.onTourToast && biomeRef.tourLegs[0]) {
-        state.onTourToast(biomeRef.tourLegs[0].title);
-      }
+      state.tourPaused = false;
+      startTourStep(0, true);
+    } else if (prevMode === 'tour') {
+      state.tourPaused = false;
+      emitTourChange();
     }
     if (state.onModeChange) state.onModeChange(m);
   }
@@ -199,6 +253,7 @@ window.OC = window.OC || {};
       state.onPick = callbacks.onPick || null;
       state.onModeChange = callbacks.onModeChange || null;
       state.onTourToast = callbacks.onTourToast || null;
+      state.onTourChange = callbacks.onTourChange || null;
       state.onGamepadAction = callbacks.onGamepadAction || null;
 
       this.resetToSpawn();
@@ -299,11 +354,38 @@ window.OC = window.OC || {};
       biomeRef = biome;
       state.mode = 'swim';
       state.glide = null;
+      state.tourPaused = false;
+      state.tourIdx = 0;
+      state.tourT = 0;
       state.vel.set(0, 0, 0);
       _curr.set(0, 0, 0);
       this.resetToSpawn();
+      emitTourChange();
       if (state.onModeChange) state.onModeChange('swim');
     },
+    stepTour(delta) {
+      const legs = (biomeRef && biomeRef.tourLegs) || [];
+      if (!legs.length) return;
+      if (state.mode !== 'tour') {
+        state.tourPaused = false;
+        state.mode = 'tour';
+        state.glide = null;
+        startTourStep(delta > 0 ? 0 : (legs.length + delta), true);
+        if (state.onModeChange) state.onModeChange('tour');
+        return;
+      }
+      startTourStep(state.tourIdx + (delta || 1), true);
+    },
+    toggleTourPause() {
+      if (state.mode !== 'tour') return false;
+      state.tourPaused = !state.tourPaused;
+      emitTourChange();
+      return state.tourPaused;
+    },
+    stopTour() {
+      if (state.mode === 'tour') setMode('swim');
+    },
+    getTourState: buildTourState,
     getMode: () => state.mode,
     getPosition: () => state.pos,
     getYaw: () => state.yaw,
@@ -416,19 +498,18 @@ window.OC = window.OC || {};
         const legs = biomeRef.tourLegs;
         if (legs && legs.length) {
           const cur = legs[state.tourIdx % legs.length];
-          const prev = legs[(state.tourIdx - 1 + legs.length) % legs.length];
-          state.tourT += dt;
+          if (!state.tourPaused) state.tourT += dt;
           const dur = cur.duration || 9;
-          const u = OC.smoothstep(0, dur - 1.2, state.tourT);
+          const u = OC.smoothstep(0, Math.max(1.5, dur - 1.2), state.tourT);
           state.pos.set(
-            OC.lerp(prev.pos[0], cur.pos[0], u),
-            OC.lerp(prev.pos[1], cur.pos[1], u),
-            OC.lerp(prev.pos[2], cur.pos[2], u)
+            OC.lerp(state.tourFromPos.x, cur.pos[0], u),
+            OC.lerp(state.tourFromPos.y, cur.pos[1], u),
+            OC.lerp(state.tourFromPos.z, cur.pos[2], u)
           );
           _lookAt.set(
-            OC.lerp(prev.look[0], cur.look[0], u),
-            OC.lerp(prev.look[1], cur.look[1], u),
-            OC.lerp(prev.look[2], cur.look[2], u)
+            OC.lerp(state.tourFromLook.x, cur.look[0], u),
+            OC.lerp(state.tourFromLook.y, cur.look[1], u),
+            OC.lerp(state.tourFromLook.z, cur.look[2], u)
           );
           const dx = _lookAt.x - state.pos.x;
           const dy = _lookAt.y - state.pos.y;
@@ -438,11 +519,14 @@ window.OC = window.OC || {};
           state.targetYaw = state.yaw;
           state.pitch = Math.asin(OC.clamp(dy / d, -0.95, 0.95));
           state.targetPitch = state.pitch;
-          if (state.tourT >= dur) {
+          if (!state.tourPaused && state.tourT >= dur) {
+            state.tourFromPos.set(cur.pos[0], cur.pos[1], cur.pos[2]);
+            state.tourFromLook.set(cur.look[0], cur.look[1], cur.look[2]);
             state.tourT = 0;
             state.tourIdx = (state.tourIdx + 1) % legs.length;
             const nextLeg = legs[state.tourIdx];
             if (state.onTourToast && nextLeg) state.onTourToast(nextLeg.title);
+            emitTourChange();
           }
         }
       } else if (state.mode === 'orbit') {

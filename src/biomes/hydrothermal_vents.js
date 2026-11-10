@@ -319,16 +319,21 @@ window.OC = window.OC || {};
   const spawnY = Math.min(6.0, safeSpotY(spawnX, spawnZ, -18.0, 4.5));
 
   const _tourRaw = [
-    { x: spawnX, y: -17.0, z: spawnZ, lx: VENT_FIELDS[0].x, ly: -22.0, lz: VENT_FIELDS[0].z, title: 'Главный чёрный курильщик (2440 м)', duration: 10 },
-    { x: landmarks[1].x, y: -23.0, z: landmarks[1].z, lx: VENT_FIELDS[2].x, ly: -28.0, lz: VENT_FIELDS[2].z, title: 'Хемосинтетический сад гигантских рифтий', duration: 10 },
-    { x: landmarks[2].x, y: -20.0, z: landmarks[2].z, lx: 500, ly: -24.0, lz: -45, title: 'Базальтовые уступы океанического разлома', duration: 9 },
-    { x: landmarks[3].x, y: -62.0, z: landmarks[3].z, lx: -220, ly: -74.0, lz: -110, title: 'Жёлоб бездны и биолюминесценция', duration: 10 }
+    { x: spawnX, y: -17.0, z: spawnZ, lx: VENT_FIELDS[0].x, ly: -22.0, lz: VENT_FIELDS[0].z, title: 'Главный чёрный курильщик (2440 м)', duration: 10,
+      fact: 'Вода температурой до +380 °C не закипает здесь из-за чудовищного давления ~250 атмосфер и выносит облака сульфидов железа.' },
+    { x: landmarks[1].x, y: -23.0, z: landmarks[1].z, lx: VENT_FIELDS[2].x, ly: -28.0, lz: VENT_FIELDS[2].z, title: 'Хемосинтетический сад гигантских рифтий', duration: 10,
+      fact: 'У алых червей Riftia вообще нет рта и желудка: их питают триллионы бактерий-симбионтов, получающих энергию из сероводорода без солнца!' },
+    { x: landmarks[2].x, y: -20.0, z: landmarks[2].z, lx: 500, ly: -24.0, lz: -45, title: 'Базальтовые уступы океанического разлома', duration: 9,
+      fact: 'Подушечные базальтовые лавы формируют молодую земную кору вдоль Восточно-Тихоокеанского поднятия и порождают стеклянные губки.' },
+    { x: landmarks[3].x, y: -62.0, z: landmarks[3].z, lx: -220, ly: -74.0, lz: -110, title: 'Жёлоб бездны и биолюминесценция', duration: 10,
+      fact: 'В вечной темноте 2500 м глубин свет рождается химически: морской чёрт манит добычу светящейся эской, а кальмар выпускает сияние.' }
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
     pos: [leg.x, Math.min(8.0, safeSpotY(leg.x, leg.z, leg.y, 4.2)), leg.z],
     look: [leg.lx, leg.ly, leg.lz],
     title: leg.title,
+    fact: leg.fact,
     duration: leg.duration
   }));
 
@@ -405,6 +410,11 @@ window.OC = window.OC || {};
     name: 'Чёрные курильщики бездны',
     region: 'Восточно-Тихоокеанское поднятие',
     subtitle: 'Абиссальный рифт · 2420–2538 м',
+    globe: {
+      lat: 9.8, lon: -104.3, coordLabel: '9.8° с.ш., 104.3° з.д.',
+      ocean: 'Вост.-Тихоокеанское поднятие', depthSpan: '2420 – 2538 м', tempSpan: '1.9 – 380 °C', color: '#ff8a42',
+      summary: 'Хемосинтетический мир на глубине 2.5 км без единого луча солнца: перегретые сульфидные шпили, сады рифтий и морские черти.'
+    },
     worldRadius: 1200,
     chunkSize: 150,
     seaLevel: 0,
