@@ -32,7 +32,7 @@
   .brand h1 span{color:var(--accent)}
   .brand p{margin:5px 0 0;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
   .brand .line{width:54px;height:1px;background:linear-gradient(90deg,var(--accent),transparent);margin-top:10px}
-  .biome-bar{display:flex;flex-wrap:wrap;max-width:340px;gap:6px;margin-top:10px;pointer-events:auto}
+  .biome-bar{display:flex;flex-wrap:wrap;max-width:460px;gap:6px;margin-top:10px;pointer-events:auto}
   .biome-pill{padding:5px 10px;border-radius:999px;border:1px solid var(--glass-brd);
     background:var(--glass);backdrop-filter:blur(12px);color:var(--dim);font-size:10.5px;
     font-weight:500;letter-spacing:.05em;cursor:pointer;transition:.2s;font-family:inherit}
@@ -543,6 +543,7 @@
     <div class="atlas-tabs" id="atlas-tabs">
       <button class="btn on" data-cat="Все">Все</button>
       <button class="btn" data-cat="Геология">География</button>
+      <button class="btn" data-cat="Артефакты">Артефакты</button>
       <button class="btn" data-cat="Кораллы">Кораллы</button>
       <button class="btn" data-cat="Флора">Флора</button>
       <button class="btn" data-cat="Беспозвоночные">Беспозвоночные</button>
@@ -3457,6 +3458,600 @@ window.OC = window.OC || {};
   });
 })(window.OC);
 
+// === biomes/wreck_atoll.js ===
+/* ================= БИОМ: АТОЛЛ ПАЛАУ И ЗАТОНУВШИЙ КОРАБЛЬ ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  const ZONES = [
+    {
+      id: 'atoll_islands',
+      name: 'Грибовидные острова атолла',
+      shortName: 'Острова атолла',
+      color: '#5ec9a8',
+      depthLabel: '0 – 8 м',
+      tempC: 28.9,
+      description: 'Известняковые островки Палау с подмытыми водой гротами, кокосовыми пальмами и бирюзовой каймой рифа.'
+    },
+    {
+      id: 'sargassum_lagoon',
+      name: 'Лагуна и саргассовы сады',
+      shortName: 'Лагуна саргасса',
+      color: '#d4a63a',
+      depthLabel: '5 – 19 м',
+      tempC: 28.2,
+      description: 'Укрытая солнечная лагуна с золотыми медузами Палау, садами бурого саргасса и песчаными дюнами.'
+    },
+    {
+      id: 'wreck_reef',
+      name: 'Искусственный риф «SS Maru»',
+      shortName: 'Затонувший корабль',
+      color: '#d8764a',
+      depthLabel: '16 – 30 м',
+      tempC: 27.1,
+      description: '68-метровый остов затонувшего судна, обросший золотыми веерами, хлыстовыми кораллами и бочковидными губками.'
+    },
+    {
+      id: 'blue_corner_wall',
+      name: 'Пролив «Синий угол» и бездна',
+      shortName: 'Синий угол',
+      color: '#1b6ca8',
+      depthLabel: '28 – 96 м',
+      tempC: 24.4,
+      description: 'Легендарный отвесный свал атолла в Тихом океане с сильным течением, стаями каранксов, мантами и акулами-молотами.'
+    }
+  ];
+
+  // Грибовидные известняковые островки (Rock Islands of Palau)
+  const ROCK_ISLANDS = [
+    { x: -340, z: -260, r: 78, h: 6.2 },
+    { x: -480, z: 185, r: 66, h: 5.6 },
+    { x: -135, z: 425, r: 70, h: 5.9 },
+    { x: 220, z: -435, r: 60, h: 5.1 }
+  ];
+
+  const WRECK_POS = { x: 148, z: -42 };
+
+  function wallCurveOffset(z) {
+    return Math.sin(z * 0.0026 + 0.4) * 85 + Math.cos(z * 0.0058) * 34;
+  }
+
+  function getHeight(x, z) {
+    const wx = x - wallCurveOffset(z);
+
+    // Внешний кольцевой барьер атолла разделяет западную лагуну и восточный обрыв «Синий угол»
+    let h = -12.5;
+    if (wx < -520) {
+      // Внешняя западная отмель атолла переходит в коралловую гряду
+      const t = OC.smoothstep(-960, -520, wx);
+      h = OC.lerp(-24.0, -11.5, t);
+    } else if (wx < 85) {
+      // Солнечная лагуна (-10 .. -18 м)
+      const bowl = OC.smoothstep(-520, -150, wx) * OC.smoothstep(95, -80, wx);
+      h = -11.0 - bowl * 5.2;
+    } else if (wx < 295) {
+      // Широкая песчаная банка крушения (-21 .. -26 м) перед кромкой обрыва
+      const t = OC.smoothstep(85, 295, wx);
+      h = OC.lerp(-16.0, -26.5, t);
+    } else if (wx < 560) {
+      // Отвесный свал «Синий угол» (-26.5 м -> -84 м)
+      const t = OC.smoothstep(295, 560, wx);
+      const ledge = Math.sin(t * Math.PI * 4) * 1.4 * Math.sin(t * Math.PI);
+      h = OC.lerp(-26.5, -84.0, t) + ledge;
+    } else {
+      // Глубокая тихоокеанская бездна (-84 .. -96 м)
+      const t = OC.smoothstep(560, 1150, wx);
+      h = OC.lerp(-84.0, -96.0, t);
+    }
+
+    // Органический микрорельеф известняка и песчаные волны
+    const dunes = Math.sin(x * 0.055 + z * 0.032) * 0.48;
+    const mesorelief = OC.fbm2(x * 0.006, z * 0.006, 3) * 3.1 + OC.fbm2(x * 0.025, z * 0.025, 2) * 0.95;
+    h += mesorelief + dunes;
+
+    // Неглубокий коралловый гребень на западной кромке лагуны (-560..-420) и у атолла
+    const rimDist = Math.abs(wx + 470);
+    if (rimDist < 95) {
+      h += OC.smoothstep(95, 18, rimDist) * 5.5;
+    }
+
+    // Ровная посадочная банка под киль 68-метрового судна «SS Maru»
+    const dw = Math.hypot(x - WRECK_POS.x, z - WRECK_POS.z);
+    if (dw < 68) {
+      const flat = OC.smoothstep(68, 28, dw);
+      h = OC.lerp(h, -23.8 + OC.noise2(x * 0.05, z * 0.05) * 0.45, flat);
+    }
+
+    // Грибовидные известняковые островки Палау
+    for (let i = 0; i < ROCK_ISLANDS.length; i++) {
+      const isl = ROCK_ISLANDS[i];
+      const d = Math.hypot(x - isl.x, z - isl.z);
+      if (d < isl.r * 1.9) {
+        const shelf = OC.smoothstep(isl.r * 1.85, isl.r * 0.72, d);
+        h = OC.lerp(h, -3.2, shelf * 0.85);
+        const peak = OC.smoothstep(isl.r * 0.92, isl.r * 0.18, d);
+        const crag = 0.88 + 0.24 * OC.ridged2(x * 0.032 + i, z * 0.032, 2);
+        h = Math.max(h, -3.6 + (isl.h + 3.6) * peak * crag);
+      }
+    }
+
+    return OC.clamp(h, -96.0, 6.4);
+  }
+
+  function safeSpotY(x, z, desiredY, clearance) {
+    return Math.max(desiredY, getHeight(x, z) + (clearance || 3.4));
+  }
+
+  function getZoneAt(x, y, z) {
+    const wx = x - wallCurveOffset(z);
+    const fl = getHeight(x, z);
+    for (let i = 0; i < ROCK_ISLANDS.length; i++) {
+      const isl = ROCK_ISLANDS[i];
+      if (Math.hypot(x - isl.x, z - isl.z) < isl.r * 1.55) return ZONES[0]; // atoll_islands
+    }
+    if (fl > -7.2) return ZONES[0];
+    if (Math.hypot(x - WRECK_POS.x, z - WRECK_POS.z) < 135 || (wx >= 70 && wx < 280)) return ZONES[2]; // wreck_reef
+    if (wx >= 280 || fl < -29.0) return ZONES[3]; // blue_corner_wall
+    return ZONES[1]; // sargassum_lagoon
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const n = OC.clamp(OC.fbm2(x * 0.04, z * 0.04, 2) * 0.75 + 0.5, 0, 1);
+    const dw = Math.hypot(x - WRECK_POS.x, z - WRECK_POS.z);
+
+    if (y > 0.9) {
+      // Тропическая зелень наверху грибовидных известняковых островов
+      _colA.set(0x3a6e38);
+      _colB.set(0x7c8470);
+      out.copy(_colB).lerp(_colA, OC.smoothstep(0.9, 2.8, y));
+    } else if (y > -1.8) {
+      // Светлый коралловый пляж и подмытый известняк
+      out.set(0xebdcb8).lerp(_colA.set(0xbba886), n * 0.35);
+    } else if (dw < 76) {
+      // Песок вокруг крушения с лёгкой ржавой патиной и ракушечником
+      out.set(0xc9b892).lerp(_colA.set(0x8e563a), OC.smoothstep(76, 18, dw) * 0.38);
+    } else if (y > -24.0) {
+      // Тёплый песок лагуны с водорослевыми островками
+      _colA.set(0xdfd0a8);
+      _colB.set(0x8a8e4c);
+      out.copy(_colA).lerp(_colB, OC.smoothstep(0.55, 0.88, n) * 0.45);
+    } else {
+      // Синеватый известняк обрыва «Синий угол»
+      out.set(0x526470).lerp(_colC.set(0x848f82), n * 0.42);
+    }
+    return out;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const above = y > 0.25;
+    if (above) {
+      _fogCol.set(0xc2ebfa).lerp(_colA.set(0x0c1b2e), 1 - dayW);
+      _waterCol.set(0x19a8b8);
+      _skyTop.set(0x3898dc);
+      _skyBot.set(0xbbe8fb);
+      _aboveHoriz.set(0xd2f2ff).lerp(_colA.set(0x15273e), 1 - dayW);
+      return {
+        aboveWater: true,
+        fogColor: _fogCol,
+        fogDensity: 0.0004,
+        causticStrength: 0,
+        rayStrength: 0,
+        sunAtten: 1.0,
+        bioGlow: 0,
+        waterColor: _waterCol,
+        aboveHoriz: _aboveHoriz
+      };
+    }
+
+    const depth = Math.max(0, -y);
+    const wx = x - wallCurveOffset(z);
+    const dropW = OC.smoothstep(180, 440, wx);
+    const lagW = 1 - dropW;
+    const atten = Math.exp(-depth * 0.025);
+
+    // Прозрачная бирюза в лагуне саргасса, королевский сапфир на стене «Синий угол»
+    _colA.set(0x18a69e).lerp(_colB.set(0x0d5898), dropW);
+    _colA.lerp(_colC.set(0x041834), OC.clamp(depth / 85, 0, 0.88));
+    _fogCol.copy(_colA).multiplyScalar(0.16 + 0.84 * dayW);
+
+    _waterCol.set(0x32d4c2).lerp(_colB.set(0x186bb2), dropW);
+    _skyTop.set(0x66e8d4).lerp(_colB.set(0x174878), 1 - dayW);
+    _skyBot.set(0x03182e);
+    _aboveHoriz.set(0xb6eafa).lerp(_colB.set(0x142640), 1 - dayW);
+
+    const fogDensity = OC.lerp(0.0052, 0.0094, OC.clamp(depth / 75, 0, 1)) * OC.lerp(0.95, 1.08, lagW);
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity,
+      causticStrength: OC.clamp(atten * 0.96 * dayW, 0, 1.0),
+      rayStrength: OC.clamp(Math.exp(-depth * 0.036) * 1.08 * dayW, 0, 1.0),
+      sunAtten: atten,
+      bioGlow: OC.clamp((1 - dayW) * 0.9 + OC.smoothstep(38, 82, depth) * 0.55, 0, 1),
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz,
+      fillAColor: _colB.set(0x46dfc8),
+      fillBColor: _colC.set(0xefc074)
+    };
+  }
+
+  /* ---- Приливное течение пролива «Синий угол» (+Z / -Z и турбулентность у остова) ---- */
+  function getCurrentAt(x, y, z, time, out) {
+    if (!out) out = new T.Vector3();
+    out.set(0, 0, 0);
+    if (y > 0.25) return out;
+
+    const wx = x - wallCurveOffset(z);
+    const fl = getHeight(x, z);
+    const clearance = Math.max(0, y - fl);
+    const shelter = OC.smoothstep(0.6, 4.8, clearance);
+
+    // Мощный океанический поток вдоль стены Синего угла
+    const wallJet = OC.smoothstep(230, 420, wx) * (1.55 + 0.35 * Math.sin(time * 0.12));
+    out.z += wallJet;
+    out.x += Math.sin(z * 0.02 + time * 0.3) * 0.22 * OC.smoothstep(240, 400, wx);
+
+    // Мягкий приливный дрейф в лагуне и вихревое обтекание остова судна
+    const dw = Math.hypot(x - WRECK_POS.x, z - WRECK_POS.z);
+    if (dw < 90) {
+      out.z += 0.38;
+      out.y += Math.sin(x * 0.08 + time * 0.4) * 0.14;
+    }
+
+    out.multiplyScalar(shelter);
+    return out;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+    const midX = x0 + chunkSize * 0.5;
+    const midZ = z0 + chunkSize * 0.5;
+    const hMid = getHeight(midX, midZ);
+    if (hMid < -72) return items;
+
+    function add(species, x, z, scale, tint) {
+      const y = getHeight(x, z);
+      items.push({ species, x, y: y - 0.08, z, ry: rng() * 6.283, scale, tint: tint || 0xffffff });
+    }
+
+    // 1. Пальмы и мангры на грибовидных островках Палау
+    for (let i = 0; i < ROCK_ISLANDS.length; i++) {
+      const isl = ROCK_ISLANDS[i];
+      if (isl.x >= x0 - 95 && isl.x <= x0 + chunkSize + 95 && isl.z >= z0 - 95 && isl.z <= z0 + chunkSize + 95) {
+        const pCount = Math.round(6 * density);
+        for (let k = 0; k < pCount; k++) {
+          const a = rng() * 6.283;
+          const r = rng() * isl.r * 0.52;
+          const px = isl.x + Math.cos(a) * r;
+          const pz = isl.z + Math.sin(a) * r;
+          if (px >= x0 && px < x0 + chunkSize && pz >= z0 && pz < z0 + chunkSize && getHeight(px, pz) > 1.2) {
+            add('island_palm', px, pz, OC.lerp(0.85, 1.35, rng()));
+          }
+        }
+      }
+    }
+
+    // 2. Якори крушения рядом с «SS Maru» и на песчаных отмелях (жёстко ограничено, чтобы не переполнить пул 160)
+    const distChunkWreck = Math.hypot(midX - WRECK_POS.x, midZ - WRECK_POS.z);
+    if (distChunkWreck < 240) {
+      const aCount = distChunkWreck < 120 ? 3 : 1;
+      for (let i = 0; i < aCount; i++) {
+        const ax = x0 + (0.2 + 0.6 * rng()) * chunkSize;
+        const az = z0 + (0.2 + 0.6 * rng()) * chunkSize;
+        const ay = getHeight(ax, az);
+        if (ay > -34 && ay < -8) {
+          add('wreck_anchor', ax, az, OC.lerp(0.85, 1.35, rng()));
+        }
+      }
+    }
+
+    // 3. Саргассовы сады в солнечной лагуне + кораллово-губковая зона крушения и стены
+    const floraSlots = Math.round(32 * density);
+    for (let i = 0; i < floraSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const y = getHeight(x, z);
+      const dw = Math.hypot(x - WRECK_POS.x, z - WRECK_POS.z);
+      const wx = x - wallCurveOffset(z);
+
+      if (y > 0.1 && y < 1.8 && rng() < 0.25) {
+        add('mangrove', x, z, OC.lerp(0.7, 1.1, rng()));
+        continue;
+      }
+      if (y < -62 || y > -1.0) continue;
+
+      if (dw < 92) {
+        // Обрастание зоны крушения: золотые веера, хлыстовые кораллы, бочковидные губки
+        const r = rng();
+        if (r < 0.28) add('seafan_gold', x, z, OC.lerp(0.8, 1.4, rng()));
+        else if (r < 0.56) add('coral_whip', x, z, OC.lerp(0.8, 1.35, rng()));
+        else if (r < 0.78) add('sponge_barrel', x, z, OC.lerp(0.75, 1.3, rng()));
+        else add('coral_table', x, z, OC.lerp(0.75, 1.2, rng()));
+      } else if (wx < 120 && y > -19.5) {
+        // Солнечная лагуна и саргассовы луга
+        const patch = OC.fbm2(x * 0.012 + 4.1, z * 0.012 - 2.3, 2);
+        const r = rng();
+        if (patch > -0.15 && r < 0.45) add('sargassum', x, z, OC.lerp(0.78, 1.28, rng()));
+        else if (r < 0.65) add('seagrass', x, z, OC.lerp(0.85, 1.3, rng()));
+        else if (r < 0.80) add('giant_clam', x, z, OC.lerp(0.7, 1.2, rng()));
+        else if (r < 0.91) add('coral_staghorn', x, z, OC.lerp(0.7, 1.25, rng()));
+        else add('coral_brain', x, z, OC.lerp(0.7, 1.15, rng()));
+      } else if (y < -30) {
+        // Глубокий склон «Синего угла»: хлыстовые кораллы, чёрные кораллы, золотые веера, криноидеи
+        const r = rng();
+        if (r < 0.34) add('coral_whip', x, z, OC.lerp(0.85, 1.4, rng()));
+        else if (r < 0.62) add('seafan_gold', x, z, OC.lerp(0.85, 1.35, rng()));
+        else if (r < 0.84) add('coral_black', x, z, OC.lerp(0.75, 1.25, rng()));
+        else add('crinoid', x, z, OC.lerp(0.8, 1.3, rng()));
+      } else {
+        // Кромка рифа между лагуной и обрывом
+        const r = rng();
+        if (r < 0.25) add('coral_table', x, z, OC.lerp(0.8, 1.3, rng()));
+        else if (r < 0.48) add('coral_staghorn', x, z, OC.lerp(0.8, 1.25, rng()));
+        else if (r < 0.68) add('coral_soft', x, z, OC.lerp(0.8, 1.2, rng()));
+        else if (r < 0.84) add('coral_fan', x, z, OC.lerp(0.85, 1.35, rng()));
+        else add('sponge_barrel', x, z, OC.lerp(0.8, 1.25, rng()));
+      }
+    }
+
+    return items;
+  }
+
+  const _lmRaw = [
+    {
+      id: 'sunken_ship',
+      name: 'Затонувший «SS Maru»',
+      zoneId: 'wreck_reef',
+      x: WRECK_POS.x - 42,
+      y: -14.5,
+      z: WRECK_POS.z + 24,
+      yaw: 2.38,
+      pitch: -0.14,
+      clearance: 4.0,
+      description: '68-метровый остов судна «SS Maru» с открытым трюмом, мостиком, мачтами и бронзовым винтом.'
+    },
+    {
+      id: 'rock_islands',
+      name: 'Грибовидные острова',
+      zoneId: 'atoll_islands',
+      x: ROCK_ISLANDS[0].x + 92,
+      y: -3.2,
+      z: ROCK_ISLANDS[0].z + 18,
+      yaw: 1.45,
+      pitch: 0.04,
+      clearance: 3.0,
+      description: 'Живописные известняковые скалы Палау с пальмами, мангровыми отмелями и гротами под водой.'
+    },
+    {
+      id: 'jellyfish_lagoon',
+      name: 'Лагуна золотых медуз',
+      zoneId: 'sargassum_lagoon',
+      x: -210,
+      y: -7.5,
+      z: 95,
+      yaw: 0.75,
+      pitch: -0.05,
+      clearance: 3.5,
+      description: 'Солнечная бухта атолла, где в тёплой воде парят тысячи нежалящих золотых медуз Mastigias papua.'
+    },
+    {
+      id: 'sargassum_gardens',
+      name: 'Саргассовы сады',
+      zoneId: 'sargassum_lagoon',
+      x: -35,
+      y: -10.5,
+      z: 210,
+      yaw: -0.65,
+      pitch: -0.10,
+      clearance: 3.5,
+      description: 'Золотистые поля саргассовых водорослей и коралловых тридакн в сердце микронезийской лагуны.'
+    },
+    {
+      id: 'blue_corner',
+      name: 'Стена «Синий угол»',
+      zoneId: 'blue_corner_wall',
+      x: 410,
+      y: -25.0,
+      z: -20,
+      yaw: -1.48,
+      pitch: -0.18,
+      clearance: 5.0,
+      description: 'Знаменитый отвесный обрыв Палау: станция чистки мант, вихри каранксов и охота акул-молотов.'
+    }
+  ];
+
+  const landmarks = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: Math.min(2.0, safeSpotY(lm.x, lm.z, lm.y, lm.clearance))
+  }));
+
+  const spawnX = landmarks[0].x;
+  const spawnZ = landmarks[0].z;
+  const spawnY = Math.min(-3.5, safeSpotY(spawnX, spawnZ, -14.5, 4.0));
+
+  const _tourRaw = [
+    { x: spawnX, y: -14.5, z: spawnZ, lx: WRECK_POS.x, ly: -20, lz: WRECK_POS.z, title: 'Затонувший корабль «SS Maru»', duration: 10 },
+    { x: landmarks[1].x, y: -3.2, z: landmarks[1].z, lx: ROCK_ISLANDS[0].x, ly: 2.0, lz: ROCK_ISLANDS[0].z, title: 'Грибовидные острова Палау', duration: 9 },
+    { x: landmarks[2].x, y: -7.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -7.5, lz: landmarks[2].z + 18, title: 'Лагуна золотых медуз', duration: 9 },
+    { x: landmarks[3].x, y: -10.5, z: landmarks[3].z, lx: landmarks[3].x - 30, ly: -13, lz: landmarks[3].z - 25, title: 'Золотистые саргассовы сады', duration: 8 },
+    { x: landmarks[4].x, y: -25.0, z: landmarks[4].z, lx: 495, ly: -38, lz: -20, title: 'Пролив «Синий угол» и акулы-молоты', duration: 10 }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, Math.min(2.0, safeSpotY(leg.x, leg.z, leg.y, 3.8)), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    floor: ['Известняковый шельф Палау', 'Архипелаг Палау', 'Геология', 'Все зоны', '0 – 96 м',
+      'Древний коралловый известняк и светлый арагонитовый песок атолла, образующий грибовидные острова, лагуну и крутую стену пролива.'],
+    shipwreck: ['Затонувшее судно «SS Maru»', 'Искусственный риф (68 м)', 'Артефакты', 'Затонувший корабль', '16 – 28 м',
+      'Лежащий с креном 68-метровый стальной корпус судна с открытым грузовым трюмом, капитанским мостиком, мачтами и бронзовым винтом — центр жизни рифа.'],
+    wreck_anchor: ['Кованый адмиралтейский якорь', 'Якорь и цепь крушения', 'Артефакты', 'Затонувший корабль', '12 – 34 м',
+      'Массивный железный якорь с поперечиной-штоком, покрытый ржавчиной, патиной и наростами рифовых кораллов.'],
+    sargassum: ['Саргассовы водоросли', 'Sargassum polycystum', 'Флора', 'Лагуна саргасса', '2 – 20 м',
+      'Золотисто-оливковые бурые водоросли с миниатюрными газовыми пузырьками-ягодками, создающие густые подводные луга в лагуне.'],
+    coral_whip: ['Спиральный хлыстовой коралл', 'Cirrhipathes spiralis', 'Кораллы', 'Затонувший корабль', '15 – 75 м',
+      'Яркие оранжево-золотые неветвящиеся горгонарии, закручивающиеся тугой спиралью на течении вдоль стенок корабля и обрыва.'],
+    seafan_gold: ['Золотой веер крушений', 'Annella mollis', 'Кораллы', 'Затонувший корабль', '14 – 60 м',
+      'Гигантский кружевной горгонариевый веер шафранового оттенка, фильтрующий планктон перпендикулярно потоку воды.'],
+    island_palm: ['Островная кокосовая пальма', 'Cocos nucifera', 'Флора', 'Острова атолла', '+1 – +6 м',
+      'Изогнутые приморские пальмы на известняковых шапках грибовидных островков Микронезии.'],
+    mangrove: ['Береговая ризофора', 'Rhizophora stylosa', 'Флора', 'Острова атолла', '0 – 3 м',
+      'Солеустойчивые мангры по берегам скальных островков Палау, укрывающие молодь луцианов и платаксов.'],
+    coral_staghorn: ['Ветвистая акропора', 'Acropora cervicornis', 'Кораллы', 'Лагуна саргасса', '2 – 22 м',
+      'Хрупкие кусты известкового коралла на коралловой гряде атолла.'],
+    coral_table: ['Столовидный коралл', 'Acropora hyacinthus', 'Кораллы', 'Затонувший корабль', '4 – 28 м',
+      'Широкие ярусные коралловые столики, обжившие палубу и проломленные борта «SS Maru».'],
+    coral_brain: ['Мозговой коралл', 'Platygyra daedalea', 'Кораллы', 'Лагуна саргасса', '3 – 24 м',
+      'Массивные шаровидные колонии с лабиринтовыми бороздками на кромке лагуны.'],
+    coral_soft: ['Мягкий коралл дендронефтия', 'Dendronephthya', 'Кораллы', 'Синий угол', '10 – 45 м',
+      'Пышные розово-пурпурные мягкие кораллы, раскрывающиеся на стремительном течении пролива.'],
+    coral_fan: ['Горгонариевый веер', 'Gorgonia', 'Кораллы', 'Затонувший корабль', '10 – 42 м',
+      'Тонкие сетчатые кораллы, обрастающие поручни и грузовые стрелы затонувшего судна.'],
+    coral_black: ['Чёрный коралл обрыва', 'Antipathes', 'Кораллы', 'Синий угол', '28 – 85 м',
+      'Глубоководный гибкий коралл внешней стенки атолла с золотисто-зелёными полипами.'],
+    sponge_barrel: ['Гигантская бочковидная губка', 'Xestospongia testudinaria', 'Беспозвоночные', 'Затонувший корабль', '12 – 45 м',
+      'Массивные губки-«вулканы» до 1.5 м высотой, поселившиеся на палубе и корме затонувшего корабля.'],
+    giant_clam: ['Гигантская тридакна', 'Tridacna gigas', 'Беспозвоночные', 'Лагуна саргасса', '3 – 20 м',
+      'Самый крупный двустворчатый моллюск планеты с радужной бирюзовой мантией.'],
+    seagrass: ['Тропическая морская трава', 'Enhalus acoroides', 'Флора', 'Лагуна саргасса', '2 – 18 м',
+      'Пышные зелёные ленты в песчаной лагуне, служащие пастбищем для морских черепах.'],
+    crinoid: ['Морская лилия-криноидея', 'Comaster schlegelii', 'Беспозвоночные', 'Синий угол', '12 – 55 м',
+      'Яркие перьевые звёзды, цепляющиеся за горгонарии и борт судна в ожидании планктона.'],
+    fish_batfish: ['Длиннопёрый платакс', 'Platax teira', 'Рыбы', 'Затонувший корабль', '5 – 32 м',
+      'Любопытные серебристо-чёрные рыбы с высокими серповидными плавниками — верные стражи затонувших кораблей.'],
+    fish_snapper: ['Синеполосый луциан', 'Lutjanus kasmira', 'Рыбы', 'Затонувший корабль', '6 – 40 м',
+      'Золотисто-лимонные стайные рыбы с четырьмя яркими голубыми полосами, заполняющие трюмы и тень мостика «SS Maru».'],
+    fish_jack: ['Большеглазый каранкс', 'Caranx sexfasciatus', 'Рыбы', 'Синий угол', '10 – 55 м',
+      'Огромные вращающиеся торнадо из сотен серебристых каранксов над краем течения «Синего угла».'],
+    fish_barracuda: ['Большая барракуда', 'Sphyraena barracuda', 'Рыбы', 'Синий угол', '5 – 55 м',
+      'Стремительный серебристый хищник с мощными челюстями, атакующий косяки луцианов и каранксов.'],
+    fish_lantern: ['Рифовая рыба-фонарик', 'Photoblepharon palpebratum', 'Рыбы', 'Синий угол', '18 – 75 м',
+      'Ночные обитатели гротов и глубокого трюма корабля с подглазным биолюминесцентным органом.'],
+    shark_hammerhead: ['Гигантская акула-молот', 'Sphyrna mokarran', 'Мегафауна', 'Синий угол', '14 – 80 м',
+      'Узнаваемый океанический хищник с широкой Т-образной головой-цефалофойлом и высоким серповидным плавником.'],
+    shark_reef: ['Серая рифовая акула', 'Carcharhinus amblyrhynchos', 'Мегафауна', 'Синий угол', '10 – 65 м',
+      'Быстрый и грациозный патрульный хищник внешнего склона и проливов Палау.'],
+    manta: ['Океаническая манта', 'Mobula birostris', 'Мегафауна', 'Синий угол', '8 – 55 м',
+      'Величественные скаты с размахом крыльев до 5.5 м, приплывающие на станцию чистки у обрыва.'],
+    turtle: ['Зелёная морская черепаха', 'Chelonia mydas', 'Мегафауна', 'Лагуна саргасса', '2 – 35 м',
+      'Морские черепахи, отдыхающие среди губок на палубе корабля и пасущиеся в лагуне саргасса.'],
+    jelly_golden: ['Золотая медуза Палау', 'Mastigias papua', 'Беспозвоночные', 'Лагуна саргасса', '1 – 16 м',
+      'Знаменитая нежалящая янтарная медуза озёр и лагун Палау, питающаяся за счёт фотосинтеза своих водорослей-симбионтов.'],
+    lionfish: ['Индийская крылатка-зебра', 'Pterois volitans', 'Рыбы', 'Затонувший корабль', '6 – 35 м',
+      'Ядовитый ночной охотник с веером полосатых плавников, скрывающийся внутри трюма и арок судна.'],
+    octopus: ['Индо-тихоокеанский осьминог', 'Octopus cyanea', 'Беспозвоночные', 'Затонувший корабль', '5 – 35 м',
+      'Мастер маскировки среди ржавых обломков, якорей и коралловых ниш.'],
+    moray: ['Гигантская мурена', 'Gymnothorax javanicus', 'Рыбы', 'Затонувший корабль', '8 – 42 м',
+      'Крупная мурена, выглядывающая из пробоин в обшивке судна «SS Maru».']
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [
+      { x: 400, y: -26, z: -15, radius: 24, name: 'Станция чистки «Синего угла»' },
+      { x: WRECK_POS.x + 12, y: -19, z: WRECK_POS.z + 10, radius: 18, name: 'Рифовая чистка у кормы «SS Maru»' }
+    ],
+    wrecks: [
+      { x: WRECK_POS.x, z: WRECK_POS.z, len: 68, beam: 11.2, hullH: 6.8, yaw: 0.68, roll: 0.32, pitch: -0.04, yOffset: 2.4 }
+    ],
+    schools: [
+      { key: 'fish_batfish', n: 26, cx: WRECK_POS.x - 8, cz: WRECK_POS.z + 6, radius: 24, yDepth: -14, yAmp: 3.5, spread: 7.5, speed: 4.0, scale: 0.85, diel: 'diurnal', shyness: 0.2, curious: 0.85,
+        geoOpts: { len: 1.0, height: 1.05, width: 0.14, colA: 0xc2cbd4, colB: 0x1b2530, finCol: 0x35424e, stripes: 0.65 } },
+      { key: 'fish_snapper', n: 88, cx: WRECK_POS.x + 12, cz: WRECK_POS.z - 10, radius: 32, yDepth: -18, yAmp: 4, spread: 9, speed: 6.4, scale: 0.54, diel: 'diurnal', shyness: 0.72,
+        geoOpts: { len: 1.15, height: 0.44, width: 0.20, colA: 0xf4c424, colB: 0x3aa8ff, finCol: 0xffd844, stripes: 0.5 } },
+      { key: 'fish_snapper', n: 56, cx: landmarks[3].x, cz: landmarks[3].z, radius: 28, yDepth: -11, yAmp: 3, spread: 8, speed: 6.0, scale: 0.52, diel: 'diurnal', shyness: 0.7,
+        geoOpts: { len: 1.15, height: 0.44, width: 0.20, colA: 0xf4c424, colB: 0x3aa8ff, finCol: 0xffd844, stripes: 0.5 } },
+      { key: 'fish_jack', n: 120, cx: 405, cz: -10, radius: 42, yDepth: -24, yAmp: 7, spread: 12, speed: 9.8, scale: 0.62, diel: 'diurnal', shyness: 0.45, curious: 0.4,
+        geoOpts: { len: 1.25, height: 0.42, width: 0.19, colA: 0x628ea8, colB: 0xeaf4fa, finCol: 0x9bb7c7 } },
+      { key: 'fish_jack', n: 90, cx: 385, cz: 190, radius: 36, yDepth: -28, yAmp: 6, spread: 11, speed: 9.2, scale: 0.60, diel: 'diurnal', shyness: 0.45,
+        geoOpts: { len: 1.25, height: 0.42, width: 0.19, colA: 0x628ea8, colB: 0xeaf4fa, finCol: 0x9bb7c7 } },
+      { key: 'fish_barracuda', n: 24, cx: 345, cz: 45, radius: 48, yDepth: -20, yAmp: 5, spread: 13, speed: 8.8, scale: 0.92, predator: true, diel: 'crepuscular', shyness: 0.15, curious: 0.35,
+        geoOpts: { len: 1.85, height: 0.22, width: 0.14, colA: 0x5c7b8c, colB: 0xdfe9ef, finCol: 0x7b98a6, stripes: 0.45 } },
+      { key: 'fish_lantern', n: 46, cx: WRECK_POS.x + 2, cz: WRECK_POS.z - 2, radius: 20, yDepth: -21, yAmp: 3, spread: 7, speed: 4.8, scale: 0.48, diel: 'nocturnal', biolum: true, shyness: 0.45,
+        geoOpts: { len: 0.85, height: 0.34, width: 0.15, colA: 0x162f48, colB: 0x5df2ff, finCol: 0x3ed9ec, eyeScale: 1.4 } }
+    ],
+    hammerheads: [
+      { cx: 425, cz: -30, r: 74, y: -27, speed: 5.8, len: 4.9 },
+      { cx: 445, cz: 210, r: 82, y: -32, speed: 5.4, len: 4.6 }
+    ],
+    sharks: [
+      { speciesKey: 'shark_reef', cx: WRECK_POS.x + 40, cz: WRECK_POS.z + 30, r: 58, y: -18, speed: 5.6 },
+      { speciesKey: 'shark_reef', cx: 390, cz: -180, r: 66, y: -26, speed: 5.8 }
+    ],
+    mantas: [
+      { cx: 398, cz: -14, r: 62, y: -23, span: 11.5, speed: 4.4 },
+      { cx: 380, cz: 160, r: 70, y: -26, span: 10.2, speed: 4.2 }
+    ],
+    turtles: [
+      { cx: -140, cz: 150, r: 44, y: -9, speed: 2.0, size: 1.05 },
+      { cx: WRECK_POS.x - 18, cz: WRECK_POS.z + 18, r: 34, y: -16, speed: 1.9, size: 1.0 }
+    ],
+    goldenJellies: [
+      { cx: landmarks[2].x - 14, cz: landmarks[2].z + 10, y: -6.5, amp: 1.8, scale: 1.05 },
+      { cx: landmarks[2].x + 12, cz: landmarks[2].z - 16, y: -8.0, amp: 2.1, scale: 0.92 },
+      { cx: landmarks[2].x + 28, cz: landmarks[2].z + 18, y: -7.0, amp: 1.7, scale: 1.12 },
+      { cx: landmarks[2].x - 32, cz: landmarks[2].z - 14, y: -6.0, amp: 1.9, scale: 0.88 },
+      { cx: -165, cz: 55, y: -7.5, amp: 2.0, scale: 1.0 }
+    ],
+    lionfish: [
+      { cx: WRECK_POS.x - 6, cz: WRECK_POS.z - 8, r: 10, y: -20, scale: 1.0 },
+      { cx: WRECK_POS.x + 14, cz: WRECK_POS.z + 6, r: 11, y: -21, scale: 0.95 }
+    ],
+    octopus: [
+      { x: WRECK_POS.x - 24, z: WRECK_POS.z + 14, scale: 1.15 },
+      { x: landmarks[3].x + 14, z: landmarks[3].z - 12, scale: 1.05 }
+    ],
+    moray: [
+      { x: WRECK_POS.x + 8, z: WRECK_POS.z - 14, scale: 1.2 },
+      { x: 320, z: -55, scale: 1.15 }
+    ]
+  };
+
+  OC.Biomes.register({
+    id: 'wreck_atoll',
+    name: 'Атолл и Затонувший корабль',
+    region: 'Архипелаг Палау, Микронезия',
+    subtitle: 'Тихий океан · 2.4 × 2.4 км · 0–96 м',
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    minimapTheme: 'atoll',
+    spawn: {
+      pos: [spawnX, spawnY, spawnZ],
+      yaw: 2.38,
+      pitch: -0.14
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getZoneAt,
+    getTerrainColor,
+    getOpticalProfile,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
+  });
+})(window.OC);
+
 // === engine/weather.js ===
 /* ================= ДИНАМИЧЕСКАЯ СИСТЕМА ПОГОДЫ: ШТИЛЬ, ЗЫБЬ, ШТОРМ, ПУРГА И МОЛНИИ ================= */
 window.OC = window.OC || {};
@@ -5991,6 +6586,198 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 36. Золотистые саргассовы водоросли (Sargassum) ---- */
+  function buildSargassum(rng) {
+    const list = [];
+    const stemCol = COL(0x5d4416);
+    const leafCol = COL(0xb98c24);
+    const tipCol = COL(0xe2b638);
+    const bladderCol = COL(0xdfb842);
+
+    const hold = new T.ConeGeometry(0.45, 0.35, 7);
+    OC.geoPrep(hold);
+    OC.paint(hold, stemCol);
+    OC.withSway(hold, () => 0);
+    OC.xform(hold, { p: [0, 0.16, 0] });
+    list.push(hold);
+
+    const nFronds = 5;
+    for (let f = 0; f < nFronds; f++) {
+      const a = (f / nFronds) * Math.PI * 2 + rng() * 0.6;
+      const h = OC.lerp(2.6, 4.4, rng());
+      const pts = [];
+      for (let k = 0; k <= 5; k++) {
+        const t = k / 5;
+        pts.push(new T.Vector3(Math.cos(a + t * 0.9) * t * 0.75, 0.15 + t * h, Math.sin(a + t * 0.9) * t * 0.75));
+      }
+      const stipe = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 10, 0.036, 4, false);
+      OC.geoPrep(stipe);
+      OC.paint(stipe, stemCol);
+      OC.withSway(stipe, (x, y) => Math.pow(OC.clamp(y / h, 0, 1), 1.3));
+      list.push(stipe);
+
+      for (let li = 1; li <= 5; li++) {
+        const lt = li / 5.5;
+        const lx = Math.cos(a + lt * 0.9) * lt * 0.75;
+        const lz = Math.sin(a + lt * 0.9) * lt * 0.75;
+        const ly = 0.25 + lt * h;
+        const sw = Math.pow(OC.clamp(ly / h, 0, 1), 1.3) + 0.15;
+
+        const leaf = new T.PlaneGeometry(0.32, 0.92, 2, 3);
+        const lp = leaf.attributes.position;
+        for (let k = 0; k < lp.count; k++) {
+          const vx = lp.getX(k), vy = lp.getY(k) + 0.46;
+          const u = OC.clamp(vy / 0.92, 0, 1);
+          lp.setXYZ(k, vx * Math.sin(u * Math.PI) * (1 + 0.22 * Math.sin(u * 14)), Math.sin(u * 7) * 0.06, vy);
+        }
+        OC.geoPrep(leaf);
+        leaf.computeVertexNormals();
+        OC.paint(leaf, (x, y, z, c) => c.copy(leafCol).lerp(tipCol, OC.clamp(z, 0, 1)));
+        OC.withSway(leaf, () => sw);
+        OC.xform(leaf, { r: [0.35, a + li * 1.1, 0], p: [lx, ly, lz] });
+        list.push(leaf);
+
+        const bulb = new T.SphereGeometry(0.085, 5, 4);
+        OC.geoPrep(bulb);
+        OC.paint(bulb, bladderCol);
+        OC.withSway(bulb, () => sw);
+        OC.xform(bulb, { p: [lx + Math.cos(a + li) * 0.14, ly + 0.08, lz + Math.sin(a + li) * 0.14] });
+        list.push(bulb);
+      }
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 37. Кованый адмиралтейский якорь и цепь крушения ---- */
+  function buildWreckAnchor(rng) {
+    const list = [];
+    const ironCol = COL(0x3a2a24);
+    const rustCol = COL(0x8e4222);
+    const patinaCol = COL(0x4b745d);
+
+    function paintRust(g) {
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const w = Math.sin(x * 3.1 + y * 4.4 + z * 2.7) * 0.5 + 0.5;
+        c.copy(ironCol).lerp(rustCol, w * 0.72).lerp(patinaCol, y > 1.3 ? 0.38 : 0.12);
+      });
+      OC.withSway(g, () => 0);
+      return g;
+    }
+
+    // Веретено якоря, слегка наклонённое в грунт
+    const shank = new T.CylinderGeometry(0.11, 0.15, 2.7, 8);
+    OC.xform(paintRust(shank), { r: [0.18, 0, 0.12], p: [0, 1.35, 0] });
+    list.push(shank);
+
+    // Изогнутые рога и лапы
+    const armsCurve = new T.CatmullRomCurve3([
+      new T.Vector3(-0.98, 0.78, 0),
+      new T.Vector3(-0.62, 0.24, 0),
+      new T.Vector3(0, 0.08, 0),
+      new T.Vector3(0.62, 0.24, 0),
+      new T.Vector3(0.98, 0.78, 0)
+    ]);
+    const arms = new T.TubeGeometry(armsCurve, 12, 0.11, 6, false);
+    OC.xform(paintRust(arms), { r: [0.18, 0, 0.12] });
+    list.push(arms);
+
+    for (const s of [-1, 1]) {
+      const fluke = new T.ConeGeometry(0.26, 0.52, 4);
+      fluke.scale(0.35, 1, 1.0);
+      OC.xform(paintRust(fluke), { r: [0, 0, -s * 0.42], p: [s * 0.96, 0.86, 0.14] });
+      list.push(fluke);
+    }
+
+    // Шток (поперечина) и кольцо-рым
+    const stock = new T.CylinderGeometry(0.08, 0.08, 1.65, 6);
+    OC.xform(paintRust(stock), { r: [Math.PI / 2, 0, 0.15], p: [0, 2.28, 0.34] });
+    list.push(stock);
+
+    const ring = new T.TorusGeometry(0.22, 0.05, 6, 10);
+    OC.xform(paintRust(ring), { r: [0.2, 0.4, 0], p: [0.14, 2.74, 0.44] });
+    list.push(ring);
+
+    // Коралловые наросты на якоре
+    for (let i = 0; i < 3; i++) {
+      const enc = new T.SphereGeometry(0.18 + rng() * 0.12, 6, 5);
+      OC.geoPrep(enc);
+      OC.paint(enc, i === 0 ? 0xe07842 : 0x62b888);
+      OC.withSway(enc, () => 0);
+      OC.xform(enc, { p: [(rng() - 0.5) * 0.9, 0.35 + rng() * 1.4, (rng() - 0.5) * 0.35] });
+      list.push(enc);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 38. Спиральный хлыстовой коралл (Cirrhipathes) ---- */
+  function buildWhipCoral(hue, rng) {
+    const list = [];
+    const baseCol = COL().setHSL(hue, 0.85, 0.42);
+    const tipCol = COL().setHSL((hue + 0.08) % 1, 0.95, 0.68);
+    const nWhips = 3;
+    for (let w = 0; w < nWhips; w++) {
+      const ox = (w - 1) * 0.28 + (rng() - 0.5) * 0.14;
+      const oz = (rng() - 0.5) * 0.28;
+      const h = OC.lerp(2.6, 4.4, rng());
+      const pts = [];
+      const turns = 2.6 + rng() * 1.4;
+      const ph = rng() * 6.28;
+      for (let k = 0; k <= 16; k++) {
+        const t = k / 16;
+        const rad = 0.08 + t * 0.36;
+        pts.push(new T.Vector3(
+          ox + Math.cos(t * turns * Math.PI * 2 + ph) * rad,
+          t * h,
+          oz + Math.sin(t * turns * Math.PI * 2 + ph) * rad
+        ));
+      }
+      const whip = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 22, 0.048, 5, false);
+      OC.geoPrep(whip);
+      OC.paint(whip, (x, y, z, c) => c.copy(baseCol).lerp(tipCol, OC.clamp(y / h, 0, 1)));
+      OC.withSway(whip, (x, y) => Math.pow(OC.clamp(y / h, 0, 1), 1.4) * 0.72);
+      list.push(whip);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 39. Золотой веер крушений (Annella mollis) ---- */
+  function buildGoldSeaFan(rng) {
+    const list = [];
+    const cStem = COL(0xb87212);
+    const cFan = COL(0xf4ba2c);
+    const stem = new T.CylinderGeometry(0.08, 0.14, 0.65, 6);
+    OC.geoPrep(stem);
+    OC.paint(stem, cStem);
+    OC.withSway(stem, () => 0);
+    OC.xform(stem, { p: [0, 0.32, 0] });
+    list.push(stem);
+
+    const nRibs = 13;
+    for (let i = 0; i < nRibs; i++) {
+      const u = (i / (nRibs - 1)) * 2 - 1;
+      const ang = u * 1.05;
+      const len = OC.lerp(2.1, 3.0, Math.cos(u * 1.1)) * OC.lerp(0.9, 1.12, rng());
+      const rib = new T.CylinderGeometry(0.025, 0.055, len, 4);
+      OC.geoPrep(rib);
+      rib.translate(0, len * 0.5, 0);
+      OC.paint(rib, (x, y, z, c) => c.copy(cStem).lerp(cFan, OC.clamp(y / 2.8, 0, 1)));
+      OC.withSway(rib, (x, y) => Math.pow(OC.clamp(y / 3.0, 0, 1), 1.2) * 0.45);
+      OC.xform(rib, { r: [(rng() - 0.5) * 0.08, 0, -ang], p: [0, 0.55, 0] });
+      list.push(rib);
+    }
+    for (let ring = 1; ring <= 4; ring++) {
+      const r = ring * 0.58;
+      const arc = new T.TorusGeometry(r, 0.022, 4, 14, Math.PI * 0.78);
+      OC.geoPrep(arc);
+      OC.paint(arc, cFan);
+      OC.withSway(arc, () => Math.pow(ring / 4, 1.2) * 0.42);
+      OC.xform(arc, { r: [0, 0, Math.PI * 0.11], p: [0, 0.55, 0] });
+      list.push(arc);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   let previewCache = null;
 
@@ -6172,6 +6959,22 @@ window.OC = window.OC || {};
         anemone_arctic: {
           mat: matSoft, maxInstances: 620, cullDist: 360,
           geos: [buildAnemone(0.02, 0.96, rng), buildAnemone(0.06, 0.92, rng)]
+        },
+        sargassum: {
+          mat: matPlant, maxInstances: 1500, cullDist: 520,
+          geos: [buildSargassum(rng), buildSargassum(rng)]
+        },
+        wreck_anchor: {
+          mat: matRigid, maxInstances: 160, cullDist: 540,
+          geos: [buildWreckAnchor(rng), buildWreckAnchor(rng)]
+        },
+        coral_whip: {
+          mat: matSoft, maxInstances: 900, cullDist: 460,
+          geos: [buildWhipCoral(0.07, rng), buildWhipCoral(0.13, rng)]
+        },
+        seafan_gold: {
+          mat: matSoft, maxInstances: 700, cullDist: 520,
+          geos: [buildGoldSeaFan(rng), buildGoldSeaFan(rng)]
         }
       };
 
@@ -8541,6 +9344,365 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Затонувшее научно-грузовое судно «SS Maru» (Искусственный риф) ---------- */
+  function makeShipwreck(scene, biome, opts) {
+    const len = opts.len || 66;
+    const beam = opts.beam || 10.6;
+    const hullH = opts.hullH || 6.6;
+    const group = new T.Group();
+    const parts = [];
+
+    function paintSteel(g, rustBias) {
+      OC.geoPrep(g);
+      const rb = rustBias || 0.45;
+      OC.paint(g, (x, y, z, c) => {
+        const rust = Math.sin(x * 0.65 + y * 1.1 + z * 0.32) * Math.cos(z * 0.48 - y * 0.8) * 0.5 + 0.5;
+        const moss = Math.sin(x * 1.3 - z * 0.55) * 0.5 + 0.5;
+        c.set(0x28363c).lerp(new T.Color(0x8c3c1e), OC.clamp(rust * rb + 0.15, 0, 0.85));
+        if (y > 1.0 && moss > 0.55) c.lerp(new T.Color(0x42664a), 0.36);
+      });
+      parts.push(g);
+      return g;
+    }
+
+    // 1. Основной корпус судна с острым форштевнем (нос +Z), поджатой кормой (-Z) и развалом бортов
+    const hullGeo = new T.BoxGeometry(beam, hullH, len, 8, 5, 22);
+    const hp = hullGeo.attributes.position;
+    for (let i = 0; i < hp.count; i++) {
+      let x = hp.getX(i), y = hp.getY(i), z = hp.getZ(i);
+      const u = OC.clamp(z / (len * 0.5), -1, 1); // -1 корма .. +1 нос
+      const v = OC.clamp((y + hullH * 0.5) / hullH, 0, 1); // 0 киль .. 1 палуба
+      let wScale = 1.0;
+      if (u > 0.28) {
+        const bt = OC.clamp((u - 0.28) / 0.72, 0, 1);
+        wScale = Math.max(0.03, Math.pow(Math.max(0, 1 - bt), 1.45));
+      } else if (u < -0.58) {
+        const st = OC.clamp((-u - 0.58) / 0.42, 0, 1);
+        wScale = 1 - 0.58 * st * st;
+      }
+      const flare = 0.62 + 0.38 * Math.pow(v, 0.7);
+      // Седловатость (sheer): нос и корма чуть приподняты, центр палубы немного вогнут
+      const sheer = (u > 0.3 ? Math.pow((u - 0.3) / 0.7, 2) * 1.85 : 0) + (u < -0.5 ? Math.pow((-u - 0.5) / 0.5, 2) * 0.85 : 0);
+      // Углубление открытых грузовых трюмов в мидшипе сверху
+      let deckDip = 0;
+      if (v > 0.85 && u > -0.18 && u < 0.46 && Math.abs(x) < beam * 0.32) {
+        deckDip = -2.2;
+      }
+      x *= wScale * flare;
+      y += sheer * v + deckDip;
+      hp.setXYZ(i, x, y, z);
+    }
+    hullGeo.computeVertexNormals();
+    paintSteel(hullGeo, 0.58);
+
+    // 2. Фальшборт и комингс грузового трюма
+    for (const s of [-1, 1]) {
+      const bulwark = new T.BoxGeometry(0.45, 1.15, len * 0.62, 1, 1, 8);
+      OC.xform(paintSteel(bulwark, 0.65), { p: [s * (beam * 0.47), hullH * 0.5 + 0.45, -len * 0.04] });
+    }
+    const coaming = new T.BoxGeometry(beam * 0.66, 0.9, len * 0.28);
+    OC.xform(paintSteel(coaming, 0.72), { p: [0, hullH * 0.5 + 0.35, len * 0.14] });
+
+    // 3. Кормовая капитанская надстройка (мостик, открытые иллюминаторы, крыша)
+    const bridgeBase = new T.BoxGeometry(beam * 0.72, 3.8, len * 0.22);
+    OC.xform(paintSteel(bridgeBase, 0.38), { p: [0, hullH * 0.5 + 1.85, -len * 0.22] });
+
+    const wheelhouse = new T.BoxGeometry(beam * 0.56, 2.7, len * 0.12);
+    OC.xform(paintSteel(wheelhouse, 0.34), { p: [0, hullH * 0.5 + 4.9, -len * 0.20] });
+
+    const wheelRim = new T.TorusGeometry(0.82, 0.09, 6, 12);
+    OC.xform(paintSteel(wheelRim, 0.25), { p: [0, hullH * 0.5 + 5.1, -len * 0.135] });
+
+    // 4. Проржавевшая дымовая труба
+    const funnel = new T.CylinderGeometry(1.15, 1.38, 6.2, 12);
+    OC.xform(paintSteel(funnel, 0.78), { r: [-0.22, 0, 0.08], p: [0, hullH * 0.5 + 6.4, -len * 0.27] });
+
+    // 5. Носовая и кормовая мачты с реями, грузовыми стрелами и вантами
+    const masts = [
+      { z: len * 0.29, h: 19.5, r: 0.36 },
+      { z: -len * 0.08, h: 16.0, r: 0.30 }
+    ];
+    for (const m of masts) {
+      const pole = new T.CylinderGeometry(m.r * 0.45, m.r, m.h, 8);
+      OC.xform(paintSteel(pole, 0.55), { r: [0.06, 0, 0.05], p: [0, hullH * 0.5 + m.h * 0.5, m.z] });
+      const yard = new T.CylinderGeometry(0.11, 0.14, 9.6, 6);
+      OC.xform(paintSteel(yard, 0.62), { r: [0, 0, Math.PI / 2 + 0.08], p: [0, hullH * 0.5 + m.h * 0.68, m.z] });
+      const derrick = new T.CylinderGeometry(0.12, 0.18, 12.5, 6);
+      OC.xform(paintSteel(derrick, 0.58), { r: [-0.95, 0.24, 0], p: [0.4, hullH * 0.5 + 4.6, m.z - 3.6] });
+      for (const s of [-1, 1]) {
+        const stay = new T.CylinderGeometry(0.04, 0.04, m.h * 0.9, 4);
+        OC.xform(paintSteel(stay, 0.4), { r: [0, 0, s * 0.28], p: [s * 2.4, hullH * 0.5 + m.h * 0.42, m.z] });
+      }
+    }
+
+    // 6. Массивный бронзовый 4-лопастной гребной винт и перо руля на корме
+    const propMat = new T.Color(0x887644);
+    const hub = new T.CylinderGeometry(0.45, 0.52, 1.1, 8);
+    hub.rotateX(Math.PI / 2);
+    OC.geoPrep(hub); OC.paint(hub, propMat);
+    OC.xform(hub, { p: [0, -hullH * 0.28, -len * 0.48] });
+    parts.push(hub);
+    for (let b = 0; b < 4; b++) {
+      const ba = (b / 4) * Math.PI * 2;
+      const blade = new T.SphereGeometry(1, 8, 5);
+      blade.scale(0.55, 1.35, 0.12);
+      OC.geoPrep(blade);
+      OC.paint(blade, (x, y, z, c) => c.copy(propMat).lerp(new T.Color(0x4b745d), 0.32));
+      OC.xform(blade, { r: [0.35, 0, ba], p: [Math.sin(ba) * 1.05, -hullH * 0.28 + Math.cos(ba) * 1.05, -len * 0.48] });
+      parts.push(blade);
+    }
+    const rudder = new T.BoxGeometry(0.32, 3.4, 2.2);
+    OC.xform(paintSteel(rudder, 0.65), { p: [0, -hullH * 0.24, -len * 0.505] });
+
+    // 7. Живые кораллово-губковые наросты прямо на остове корабля
+    const rng = OC.mulberry32(8421);
+    const encColors = [0xe86e44, 0xf2b42e, 0x3eb494, 0xd85a8a];
+    for (let i = 0; i < 18; i++) {
+      const cz = (rng() - 0.5) * len * 0.76;
+      const cx = (rng() < 0.5 ? -1 : 1) * beam * OC.lerp(0.26, 0.46, rng());
+      const cy = hullH * 0.5 + OC.lerp(0.1, 1.4, rng());
+      const r = OC.lerp(0.45, 1.15, rng());
+      const sponge = new T.SphereGeometry(r, 7, 5);
+      sponge.scale(1.1, 0.72, 1.0);
+      OC.geoPrep(sponge);
+      OC.paint(sponge, encColors[i % encColors.length]);
+      OC.xform(sponge, { p: [cx, cy, cz] });
+      parts.push(sponge);
+    }
+
+    const merged = OC.mergeGeometries(parts);
+    const mesh = new T.Mesh(merged, creatureMat);
+    group.add(mesh);
+
+    const floorY = biome && biome.getHeight ? biome.getHeight(opts.x || 0, opts.z || 0) : -24;
+    group.position.set(opts.x || 0, floorY + (opts.yOffset !== undefined ? opts.yOffset : 2.1), opts.z || 0);
+    group.rotation.set(opts.pitch !== undefined ? opts.pitch : -0.05, opts.yaw !== undefined ? opts.yaw : 0.65, opts.roll !== undefined ? opts.roll : 0.34);
+    group.userData.key = 'shipwreck';
+    scene.add(group);
+
+    return {
+      key: 'shipwreck',
+      isWreck: true,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        group.visible = Math.hypot(group.position.x - camPos.x, group.position.z - camPos.z) < 920;
+      }
+    };
+  }
+
+  /* ---------- Гигантская акула-молот (Sphyrna mokarran) ---------- */
+  function makeHammerhead(scene, biome, opts) {
+    const len = opts.len || 4.8;
+    const group = new T.Group();
+
+    const body = new T.SphereGeometry(1, 16, 12);
+    body.scale(len * 0.115, len * 0.135, len * 0.5);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = OC.clamp(z / (len * 0.5), -1, 1);
+      const taper = t < 0 ? (1 - 0.85 * Math.pow(Math.max(0, -t), 1.45)) : (1 - 0.25 * Math.pow(Math.max(0, t), 2.2));
+      bp.setXYZ(i, x * taper, y * taper, z);
+    }
+    OC.geoPrep(body);
+    body.computeVertexNormals();
+    OC.paint(body, (x, y, z, c) => c.set(y > -0.04 ? 0x625a4c : 0xe4e8ea));
+    group.add(new T.Mesh(body, creatureMat));
+
+    // Характерный широкий цефалофойл («молот») с глазами по краям
+    const hammer = new T.SphereGeometry(1, 14, 8);
+    hammer.scale(len * 0.29, 0.13, 0.36);
+    OC.geoPrep(hammer);
+    OC.paint(hammer, (x, y, z, c) => c.set(y > -0.02 ? 0x5c5448 : 0xdde2e4));
+    const hamM = new T.Mesh(hammer, creatureMat);
+    hamM.position.set(0, 0.04, len * 0.45);
+    group.add(hamM);
+
+    const eyeGeo = new T.SphereGeometry(0.065, 6, 5);
+    OC.geoPrep(eyeGeo);
+    OC.paint(eyeGeo, 0x0b0e12);
+    for (const s of [-1, 1]) {
+      const em = new T.Mesh(eyeGeo, creatureMat);
+      em.position.set(s * len * 0.275, 0.04, len * 0.48);
+      group.add(em);
+    }
+
+    // Высокий серповидный спинной плавник Sphyrna mokarran
+    const dorsal = new T.ConeGeometry(0.32, 1.32, 4);
+    dorsal.scale(0.24, 1, 1.15);
+    OC.geoPrep(dorsal);
+    OC.paint(dorsal, 0x544d40);
+    const dM = new T.Mesh(dorsal, creatureMat);
+    dM.position.set(0, len * 0.135 + 0.42, 0.12);
+    dM.rotation.x = -0.32;
+    group.add(dM);
+
+    const pec = new T.ConeGeometry(0.32, 1.15, 4);
+    pec.scale(0.18, 1, 0.68);
+    OC.geoPrep(pec);
+    OC.paint(pec, 0x585042);
+    for (const s of [-1, 1]) {
+      const pm = new T.Mesh(pec, creatureMat);
+      pm.position.set(s * 0.48, -0.22, 0.58);
+      pm.rotation.z = s * 1.18;
+      pm.rotation.x = -0.35;
+      group.add(pm);
+    }
+
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -len * 0.44);
+    const tUp = new T.ConeGeometry(0.34, 1.48, 4);
+    tUp.scale(0.16, 1, 0.9);
+    OC.geoPrep(tUp);
+    OC.paint(tUp, 0x524b3f);
+    const tUpM = new T.Mesh(tUp, creatureMat);
+    tUpM.position.set(0, 0.38, -0.34);
+    tUpM.rotation.x = -0.78;
+    const tDn = new T.ConeGeometry(0.22, 0.72, 4);
+    tDn.scale(0.16, 1, 0.8);
+    OC.geoPrep(tDn);
+    OC.paint(tDn, 0x6c6556);
+    const tDnM = new T.Mesh(tDn, creatureMat);
+    tDnM.position.set(0, -0.22, -0.22);
+    tDnM.rotation.x = -2.35;
+    tailPivot.add(tUpM, tDnM);
+    group.add(tailPivot);
+
+    group.userData.key = 'shark_hammerhead';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 100;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const a = new T.Vector3(), b = new T.Vector3();
+    let lungeTimer = 0;
+    let lungeCooldown = 14 + Math.random() * 12;
+    let lungeTarget = null;
+    let lungeBlend = 0;
+
+    return {
+      key: 'shark_hammerhead',
+      isActivePredator: true,
+      isHunting: () => lungeTimer > 0,
+      getPosition: () => group.position,
+      update(dt, time, camPos, ctx) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 760) { group.visible = false; return; }
+        group.visible = true;
+        const preyCenters = ctx ? ctx.preyCenters : null;
+        t += dt;
+        if (preyCenters && preyCenters.length) {
+          if (lungeTimer > 0) {
+            lungeTimer -= dt;
+            if (lungeTarget && group.position.distanceTo(lungeTarget) < 6.8) {
+              lungeTimer = 0;
+              lungeCooldown = 18 + Math.random() * 10;
+            }
+          } else {
+            lungeCooldown -= dt;
+            if (lungeCooldown <= 0) {
+              let bestD = 145, bestP = null;
+              for (let p = 0; p < preyCenters.length; p++) {
+                const pr = preyCenters[p];
+                if (pr.y > -2.5) continue;
+                const d = Math.hypot(pr.x - group.position.x, pr.z - group.position.z);
+                if (d < bestD) { bestD = d; bestP = pr; }
+              }
+              if (bestP) { lungeTarget = bestP; lungeTimer = 4.6; }
+              lungeCooldown = 16 + Math.random() * 10;
+            }
+          }
+        }
+        lungeBlend += ((lungeTimer > 0 && lungeTarget ? 1 : 0) - lungeBlend) * Math.min(1, dt * 2.5);
+
+        const spd = (opts.speed || 5.4) * (lungeTimer > 0 ? 2.1 : 1.0);
+        ang += (spd / opts.r) * dir * dt;
+        const patCx = lungeBlend > 0.02 && lungeTarget ? OC.lerp(opts.cx, lungeTarget.x, lungeBlend) : opts.cx;
+        const patCz = lungeBlend > 0.02 && lungeTarget ? OC.lerp(opts.cz, lungeTarget.z, lungeBlend) : opts.cz;
+        const patR = OC.lerp(opts.r + Math.sin(t * 0.2) * 14, 6.0, lungeBlend);
+        const ax = patCx + Math.cos(ang) * patR * 0.9;
+        const az = patCz + Math.sin(ang) * patR + Math.sin(ang * 2.0) * 12 * (1 - lungeBlend);
+        const bx = patCx + Math.cos(ang + 0.1 * dir) * patR * 0.9;
+        const bz = patCz + Math.sin(ang + 0.1 * dir) * patR + Math.sin((ang + 0.1 * dir) * 2.0) * 12 * (1 - lungeBlend);
+        const baseY = lungeBlend > 0.02 && lungeTarget ? OC.lerp(opts.y + Math.sin(t * 0.25) * 4, lungeTarget.y, lungeBlend) : (opts.y + Math.sin(t * 0.25) * 4);
+        const ay = Math.max(baseY, biome.getHeight(ax, az) + 4.2);
+        const by = Math.max(baseY, biome.getHeight(bx, bz) + 4.2);
+        a.set(ax, Math.min(-2.5, ay), az);
+        b.set(bx, Math.min(-2.5, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        const wag = lungeTimer > 0 ? 5.6 : 3.4;
+        tailPivot.rotation.y = Math.sin(time * wag + t) * 0.34;
+        // Характерное покачивание головы-молота при сканировании дна
+        group.rotation.y += Math.sin(time * wag + t) * 0.08;
+      }
+    };
+  }
+
+  /* ---------- Золотая медуза Палау (Mastigias papua) ---------- */
+  function makeGoldenJelly(scene, opts) {
+    const group = new T.Group();
+    const bellGeo = new T.SphereGeometry(0.88, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.6);
+    const bellMat = new T.MeshStandardMaterial({
+      color: new T.Color(0xf6b93b),
+      emissive: new T.Color(0xd98018),
+      emissiveIntensity: 0.72,
+      roughness: 0.26,
+      transparent: true,
+      opacity: 0.72,
+      side: T.DoubleSide,
+      depthWrite: false
+    });
+    const bell = new T.Mesh(bellGeo, bellMat);
+    group.add(bell);
+
+    // Характерные светлые пятна и медовые ротовые лопасти без жгучих нитей
+    const spotMat = new T.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0.85 });
+    const spotGeo = new T.SphereGeometry(0.085, 6, 4);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const sm = new T.Mesh(spotGeo, spotMat);
+      sm.position.set(Math.cos(a) * 0.62, 0.42 + (i % 2) * 0.16, Math.sin(a) * 0.62);
+      group.add(sm);
+    }
+
+    const armsMat = new T.MeshStandardMaterial({
+      color: 0xd47a14,
+      emissive: 0x8c4208,
+      emissiveIntensity: 0.5,
+      transparent: true,
+      opacity: 0.86,
+      roughness: 0.45
+    });
+    const armGeo = new T.ConeGeometry(0.16, 1.15, 6);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const am = new T.Mesh(armGeo, armsMat);
+      am.position.set(Math.cos(a) * 0.28, -0.58, Math.sin(a) * 0.28);
+      am.rotation.x = Math.PI;
+      group.add(am);
+    }
+
+    group.scale.setScalar(opts.scale || 0.95);
+    group.position.set(opts.cx, opts.y, opts.cz);
+    group.userData.key = 'jelly_golden';
+    scene.add(group);
+
+    const ph = Math.random() * 6.28;
+    const baseS = opts.scale || 0.95;
+    return {
+      key: 'jelly_golden',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        const pulse = Math.sin(time * 2.1 + ph);
+        group.position.x = opts.cx + Math.sin(time * 0.24 + ph) * 7.5;
+        group.position.z = opts.cz + Math.cos(time * 0.21 + ph) * 7.5;
+        group.position.y = Math.min(-1.0, opts.y + Math.sin(time * 0.42 + ph) * (opts.amp || 2.2) + pulse * 0.24);
+        group.scale.set(baseS * (1 - pulse * 0.08), baseS * (1 + pulse * 0.12), baseS * (1 - pulse * 0.08));
+      }
+    };
+  }
+
   /* ---------- Шлейфы чёрных курильщиков и термальный свет ---------- */
   function makeVentPlume(scene, biome, tex, opts) {
     const n = opts.n || 180;
@@ -9109,6 +10271,24 @@ window.OC = window.OC || {};
         agents.push(makeClione(faunaGroup, cl));
       }
 
+      for (const wr of (plan.wrecks || [])) {
+        const a = makeShipwreck(faunaGroup, biome, wr);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const hm of (plan.hammerheads || [])) {
+        const a = makeHammerhead(faunaGroup, biome, hm);
+        agents.push(a);
+        predatorAgents.push(a);
+        huntingAgents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const gj of (plan.goldenJellies || [])) {
+        agents.push(makeGoldenJelly(faunaGroup, gj));
+      }
+
       let whale = null;
       const whalesList = [];
       for (const wh of (plan.whales || [])) {
@@ -9431,6 +10611,8 @@ window.OC = window.OC || {};
               c.setHex(0x52554c).offsetHSL(0.02, 0.05, Math.cos(x * 0.5) * 0.06);
             } else if (bId === 'arctic_sea') {
               c.setHex(0x4b5c69).lerp(new T.Color(0x88b4cc), OC.clamp((y - avgY) * 0.25 + 0.3, 0, 0.7));
+            } else if (bId === 'wreck_atoll') {
+              c.setHex(0xe5d7b4).lerp(new T.Color(0x8ab894), Math.sin(x * 0.38 + z * 0.42) * 0.35 + 0.35);
             } else {
               c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
             }
@@ -9478,6 +10660,12 @@ window.OC = window.OC || {};
           makeArcticJelly(tmpGroup, { cx: 0, cz: 0, y: 0, scale: 1 });
         } else if (key === 'clione_angel') {
           makeClione(tmpGroup, { cx: 0, cz: 0, y: 0, n: 1, singlePreview: true });
+        } else if (key === 'shipwreck') {
+          makeShipwreck(tmpGroup, dummyBiome, { x: 0, z: 0, yOffset: 0, pitch: 0, yaw: 0, roll: 0 });
+        } else if (key === 'shark_hammerhead') {
+          makeHammerhead(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, len: 4.8 });
+        } else if (key === 'jelly_golden') {
+          makeGoldenJelly(tmpGroup, { cx: 0, cz: 0, y: 0, scale: 1 });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;
@@ -9967,9 +11155,10 @@ window.OC = window.OC || {};
     if (key === 'sea_lion') return 'Подводный клич сивуча';
     if (key === 'dugong') return 'Свист дюгоня';
     if (key === 'ice_floe' || key === 'iceberg' || key === 'brinicle') return 'Треск пакового льда';
+    if (key === 'shipwreck' || key === 'wreck_anchor') return 'Скрип подводного остова';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
-    if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
+    if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
     if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle') return 'Гидродинамический импульс';
     return 'Подводный отклик';
   };
@@ -10088,6 +11277,22 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + 1.15);
         o.connect(lp); lp.connect(g); g.connect(out);
         o.start(now); o.stop(now + 1.2);
+      } else if (key === 'shipwreck' || key === 'wreck_anchor') {
+        // Глубокий металлический скрип и подводный звон старого корпуса судна
+        [108, 162, 248].forEach((f, i) => {
+          const o = ctx.createOscillator();
+          const bp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(f, now + i * 0.08);
+          o.frequency.exponentialRampToValueAtTime(f * 0.72, now + 1.35);
+          bp.type = 'bandpass'; bp.frequency.value = 340; bp.Q.value = 2.8;
+          g.gain.setValueAtTime(0.0001, now + i * 0.08);
+          g.gain.linearRampToValueAtTime(0.11 / (i + 1), now + i * 0.08 + 0.12);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+          o.connect(bp); bp.connect(g); g.connect(out);
+          o.start(now + i * 0.08); o.stop(now + 1.5);
+        });
       } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') {
         const dur = 1.2;
         const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
@@ -10103,7 +11308,7 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
         src.connect(bp); bp.connect(g); g.connect(out);
         src.start(now); src.stop(now + dur + 0.05);
-      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') {
+      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') {
         [660, 990, 1320].forEach((f, i) => {
           const t = now + i * 0.14;
           const o = ctx.createOscillator();
@@ -10925,6 +12130,44 @@ window.OC = window.OC || {};
       landmarkId: 'baffin_trench',
       goal: 1,
       progress: (ctx) => (ctx.depthM >= 55 && ctx.hasPhotoOrPing(['shark_greenland', 'clione_angel'])) ? 1 : 0
+    },
+
+    // 5. Атолл Палау и Затонувший корабль
+    {
+      id: 'wreck_atlas_6',
+      biomeId: 'wreck_atoll',
+      title: 'Археолог и рифолог Палау',
+      desc: 'Изучите или сфотографируйте 6 разных объектов атолла (артефакты крушения, кораллы, саргасс и фауну).',
+      landmarkId: 'sunken_ship',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'wreck_ship_photo',
+      biomeId: 'wreck_atoll',
+      title: 'Тайна «SS Maru»',
+      desc: 'Сфотографируйте на камеру (P) затонувший 68-метровый корабль «SS Maru» или адмиралтейский якорь.',
+      landmarkId: 'sunken_ship',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['shipwreck', 'wreck_anchor']) ? 1 : 0
+    },
+    {
+      id: 'wreck_hammer_photo',
+      biomeId: 'wreck_atoll',
+      title: 'Хищник «Синего угла»',
+      desc: 'Сфотографируйте (P) гигантскую акулу-молота или океаническую манту на течении внешнего обрыва.',
+      landmarkId: 'blue_corner',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['shark_hammerhead', 'manta']) ? 1 : 0
+    },
+    {
+      id: 'wreck_jelly_lagoon',
+      biomeId: 'wreck_atoll',
+      title: 'Танец золотых медуз',
+      desc: 'Откройте в лагуне саргасса и снимите или просканируйте сонаром (G) золотую медузу Палау или платакса.',
+      landmarkId: 'jellyfish_lagoon',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['jelly_golden', 'fish_batfish', 'sargassum']) ? 1 : 0
     }
   ];
 
@@ -11249,6 +12492,15 @@ window.OC = window.OC || {};
       if (y > -92) return [13, 44, 96];    // полярный жёлоб
       return [6, 20, 54];
     }
+    if (theme === 'atoll') {
+      if (y > 1.2) return [72, 148, 86];   // зелёные шапки известняковых островков
+      if (y > 0.05) return [236, 222, 184]; // песчаные пляжи атолла
+      if (y > -10) return [54, 208, 198];  // бирюзовая лагуна золотых медуз
+      if (y > -20) return [36, 166, 168];  // луга саргасса
+      if (y > -30) return [32, 124, 152];  // терраса крушения «SS Maru»
+      if (y > -64) return [18, 78, 136];   // стена «Синий угол»
+      return [8, 32, 76];
+    }
     if (y > 0.1) return [242, 228, 194]; // суша / островок
     if (y > -3.5) return [88, 212, 206];
     if (y > -12) return [36, 172, 194];
@@ -11567,6 +12819,10 @@ window.OC = window.OC || {};
     'Стена внешнего барьера': 'dropoff',
     'Бездна Кораллового моря': 'dropoff',
     'Коралловое море': 'dropoff',
+    'Затонувший корабль': 'sunken_ship',
+    'Острова атолла': 'rock_islands',
+    'Лагуна саргасса': 'jellyfish_lagoon',
+    'Синий угол': 'blue_corner',
     'Все зоны': 'crest'
   };
 
@@ -12633,13 +13889,15 @@ window.OC = window.OC || {};
       great_barrier_reef: 'Риф ББР',
       kelp_forest: 'Ламинария',
       hydrothermal_vents: 'Курильщики 2500м',
-      arctic_sea: 'Арктика'
+      arctic_sea: 'Арктика',
+      wreck_atoll: 'Атолл и Корабль'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
       kelp_forest: 'Монтерей · Калифорния',
       hydrothermal_vents: 'ВТП · Абиссаль 2500 м',
-      arctic_sea: 'Баффин · 74° с.ш.'
+      arctic_sea: 'Баффин · 74° с.ш.',
+      wreck_atoll: 'Палау · Микронезия'
     };
 
     function renderBiomeUI() {

@@ -693,13 +693,15 @@ window.OC = window.OC || {};
       great_barrier_reef: 'Риф ББР',
       kelp_forest: 'Ламинария',
       hydrothermal_vents: 'Курильщики 2500м',
-      arctic_sea: 'Арктика'
+      arctic_sea: 'Арктика',
+      wreck_atoll: 'Атолл и Корабль'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
       kelp_forest: 'Монтерей · Калифорния',
       hydrothermal_vents: 'ВТП · Абиссаль 2500 м',
-      arctic_sea: 'Баффин · 74° с.ш.'
+      arctic_sea: 'Баффин · 74° с.ш.',
+      wreck_atoll: 'Палау · Микронезия'
     };
 
     function renderBiomeUI() {

@@ -13,6 +13,7 @@ const SRC_ORDER = [
   'src/biomes/kelp_forest.js',
   'src/biomes/hydrothermal_vents.js',
   'src/biomes/arctic_sea.js',
+  'src/biomes/wreck_atoll.js',
   'src/engine/weather.js',
   'src/engine/world.js',
   'src/engine/terrain.js',
@@ -43,7 +44,8 @@ for (const domId of [
   'id="sub-hud"', 'id="sonar-box"', 'id="sonar-canvas"', 'id="btn-sub"', 'id="btn-sonar"',
   'id="btn-cam"', 'id="btn-journal"', 'id="cam-hud"', 'id="cam-flash"', 'id="cam-preview"', 'id="journal-modal"', 'id="tele-wp"',
   'id="lens-fx"', 'id="weather-btns"', 'id="tele-weather"',
-  'id="atlas-3d"', 'id="atlas-viewer"', 'id="btn-cinema"', 'id="cinema-bars"', 'id="cinema-hud"', 'id="touch-stick"'
+  'id="atlas-3d"', 'id="atlas-viewer"', 'id="btn-cinema"', 'id="cinema-bars"', 'id="cinema-hud"', 'id="touch-stick"',
+  'data-cat="Артефакты"'
 ]) {
   assert(html.includes(domId), `index.html missing required element ${domId}`);
 }
@@ -337,13 +339,13 @@ assert(subHtml.includes('id="sub-current"'), 'template.html missing #sub-current
 checkMaterialShader({ causticStrength: 0.78, swayAmp: 0.42 }, 'coralSoftCurrent');
 console.log('   Option 2 ocean currents, particle/sway advection, #sub-current HUD & smart megafauna verified.');
 
-// G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents & Arctic Sea) & clean switching
+// G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea & Wreck Atoll) & clean switching
 const allBiomes = OC.Biomes.list();
-assert(allBiomes.length === 4, `Expected 4 registered ocean biomes, got ${allBiomes.length}`);
+assert(allBiomes.length === 5, `Expected 5 registered ocean biomes, got ${allBiomes.length}`);
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
 assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
-for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea']) {
+for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll']) {
   const b = OC.Biomes.setActive(bId);
   assert(b && b.id === bId, `Failed to activate biome ${bId}`);
   assert(b.zones && b.zones.length >= 4, `${bId} needs >= 4 ecological zones`);
@@ -452,9 +454,9 @@ for (const qId of ['low', 'medium', 'high', 'ultra']) {
 }
 console.log('   Multi-biome hot-switching & runtime quality preset switching (low -> ultra) verified.');
 
-// H) Verify Direction 1 + Arctic Missions (Camera, 16 Scientific Missions, Minimap Waypoints, Persistence)
+// H) Verify Direction 1 + Arctic + Wreck Atoll Missions (Camera, 20 Scientific Missions, Minimap Waypoints, Persistence)
 assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-assert.equal(OC.Expedition.MISSIONS.length, 16, `Expected 16 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+assert.equal(OC.Expedition.MISSIONS.length, 20, `Expected 20 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
 for (const b of OC.Biomes.list()) {
   const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
   assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
@@ -554,6 +556,12 @@ for (const b of OC.Biomes.list()) {
   for (const k of Object.keys(b.encyclopedia)) {
     const obj = OC.FaunaEngine.createPreviewMesh(k, b);
     assert(obj, `createPreviewMesh returned null for ${b.id}:${k}`);
+    obj.traverse((ch) => {
+      if (ch.isMesh && ch.geometry) {
+        ch.geometry.computeBoundingSphere();
+        assert(Number.isFinite(ch.geometry.boundingSphere.radius) && ch.geometry.boundingSphere.radius > 0, `NaN/zero boundingSphere in ${b.id}:${k}`);
+      }
+    });
     tmpPreviewBox.setFromObject(obj);
     tmpPreviewBox.getSize(tmpPreviewSize);
     assert(
@@ -672,4 +680,64 @@ OC.FaunaEngine.init(scene, restoreGbr);
 OC.Atlas.setBiome(restoreGbr);
 
 console.log(`   Direction 5 Living Ecosystem AI (whale breach maxY=${maxWhaleY.toFixed(2)} m, splashes=${sawSplash}, sonar ping, predator lunges, cleaning & events=[${[...sawEvents].join(',')}]) verified.`);
+
+// L) Verify 5th Biome: Palau Atoll & Sunken Shipwreck (wreck_atoll, 68m SS Maru, Hammerhead, Golden Jellyfish & 4 new flora prototypes)
+const wreckB = OC.Biomes.setActive('wreck_atoll');
+assert(wreckB && wreckB.id === 'wreck_atoll' && wreckB.minimapTheme === 'atoll', 'wreck_atoll biome must configure atoll theme');
+for (const spKey of ['sargassum', 'wreck_anchor', 'coral_whip', 'seafan_gold']) {
+  assert(floraProtos[spKey], `FloraLibrary missing Direction 6 prototype ${spKey}`);
+  assert(wreckB.encyclopedia[spKey], `wreck_atoll encyclopedia missing ${spKey}`);
+}
+
+const wreckZoneSet = new Set();
+let wMinH = Infinity, wMaxH = -Infinity;
+for (let x = -700; x <= 800; x += 60) {
+  for (let z = -500; z <= 500; z += 80) {
+    const h = wreckB.getHeight(x, z);
+    wMinH = Math.min(wMinH, h);
+    wMaxH = Math.max(wMaxH, h);
+    wreckZoneSet.add(wreckB.getZoneAt(x, h, z).id);
+  }
+}
+assert.equal(wreckZoneSet.size, 4, `Expected all 4 wreck_atoll zones, got ${[...wreckZoneSet].join(', ')}`);
+assert(wMaxH > 2.0 && wMinH < -75, `Expected wreck_atoll relief span (+2.. -75 m), got ${wMinH.toFixed(1)} .. +${wMaxH.toFixed(1)}`);
+
+const wUltraCounts = {};
+for (let cz = -2; cz <= 2; cz++) {
+  for (let cx = -2; cx <= 2; cx++) {
+    const items = wreckB.generateChunkFlora(cx, cz, 150, 1.32, OC.mulberry32(((cx * 9187) ^ (cz * 3571)) >>> 0));
+    for (const it of items) wUltraCounts[it.species] = (wUltraCounts[it.species] || 0) + 1;
+  }
+}
+for (const [spKey, cnt] of Object.entries(wUltraCounts)) {
+  assert(cnt <= floraProtos[spKey].maxInstances, `wreck_atoll Ultra 5x5 overflow for ${spKey}: ${cnt} > ${floraProtos[spKey].maxInstances}`);
+}
+assert(wUltraCounts.sargassum > 8 && wUltraCounts.seafan_gold > 4, 'wreck_atoll must populate sargassum & seafan_gold');
+
+const wreckFauna = OC.FaunaEngine.init(scene, wreckB);
+const shipAgent = wreckFauna.agents.find((a) => a.key === 'shipwreck');
+const hammerAgent = wreckFauna.agents.find((a) => a.key === 'shark_hammerhead');
+const gJellyAgent = wreckFauna.agents.find((a) => a.key === 'jelly_golden');
+assert(shipAgent && hammerAgent && gJellyAgent, 'wreck_atoll must instantiate shipwreck, shark_hammerhead & jelly_golden');
+
+// Camera / Sonar focus & voice check for shipwreck
+const shipAimPos = shipAgent.getPosition().clone().add(new T.Vector3(-18, 4, 0));
+const shipAimDir = shipAgent.getPosition().clone().sub(shipAimPos).normalize();
+const camHitShip = wreckFauna.scanCameraTarget(shipAimPos, shipAimDir, 90);
+assert(camHitShip && camHitShip.hit, 'scanCameraTarget must lock onto wreck_atoll targets near SS Maru');
+assert.equal(OC.sound.getVoiceLabel('shipwreck'), 'Скрип подводного остова');
+
+// Photo mission verification for Palau Atoll
+const photoShip = OC.Expedition.recordPhoto(stubCanvas, wreckB, { hit: true, key: 'shipwreck', label: 'Затонувшее судно «SS Maru»', latin: 'Искусственный риф', dist: 19, align: 0.94 }, 18.0, 0.9, false);
+assert(photoShip && photoShip.key === 'shipwreck');
+const resWreck = OC.Expedition.evaluateMissions(wreckB, { zoneId: 'wreck_reef', depthM: 18, currentKnots: 0.4, dayW: 0.9, flashOn: false });
+assert(resWreck.list.find((m) => m.id === 'wreck_ship_photo').done, 'Mission wreck_ship_photo must complete after photographing shipwreck');
+OC.Expedition.clearPhotos();
+
+// Restore GBR cleanly
+OC.Biomes.setActive('great_barrier_reef');
+OC.FaunaEngine.init(scene, restoreGbr);
+OC.Atlas.setBiome(restoreGbr);
+
+console.log(`   5th Biome "Атолл Палау и Затонувший корабль" (SS Maru 68m, Hammerhead, Golden Jellyfish, 4 new flora prototypes, 20 total missions) verified.`);
 console.log('ALL VERIFICATION CHECKS PASSED!');

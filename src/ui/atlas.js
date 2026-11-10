@@ -74,6 +74,10 @@ window.OC = window.OC || {};
     'Стена внешнего барьера': 'dropoff',
     'Бездна Кораллового моря': 'dropoff',
     'Коралловое море': 'dropoff',
+    'Затонувший корабль': 'sunken_ship',
+    'Острова атолла': 'rock_islands',
+    'Лагуна саргасса': 'jellyfish_lagoon',
+    'Синий угол': 'blue_corner',
     'Все зоны': 'crest'
   };
 

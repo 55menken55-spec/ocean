@@ -1198,6 +1198,198 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 36. Золотистые саргассовы водоросли (Sargassum) ---- */
+  function buildSargassum(rng) {
+    const list = [];
+    const stemCol = COL(0x5d4416);
+    const leafCol = COL(0xb98c24);
+    const tipCol = COL(0xe2b638);
+    const bladderCol = COL(0xdfb842);
+
+    const hold = new T.ConeGeometry(0.45, 0.35, 7);
+    OC.geoPrep(hold);
+    OC.paint(hold, stemCol);
+    OC.withSway(hold, () => 0);
+    OC.xform(hold, { p: [0, 0.16, 0] });
+    list.push(hold);
+
+    const nFronds = 5;
+    for (let f = 0; f < nFronds; f++) {
+      const a = (f / nFronds) * Math.PI * 2 + rng() * 0.6;
+      const h = OC.lerp(2.6, 4.4, rng());
+      const pts = [];
+      for (let k = 0; k <= 5; k++) {
+        const t = k / 5;
+        pts.push(new T.Vector3(Math.cos(a + t * 0.9) * t * 0.75, 0.15 + t * h, Math.sin(a + t * 0.9) * t * 0.75));
+      }
+      const stipe = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 10, 0.036, 4, false);
+      OC.geoPrep(stipe);
+      OC.paint(stipe, stemCol);
+      OC.withSway(stipe, (x, y) => Math.pow(OC.clamp(y / h, 0, 1), 1.3));
+      list.push(stipe);
+
+      for (let li = 1; li <= 5; li++) {
+        const lt = li / 5.5;
+        const lx = Math.cos(a + lt * 0.9) * lt * 0.75;
+        const lz = Math.sin(a + lt * 0.9) * lt * 0.75;
+        const ly = 0.25 + lt * h;
+        const sw = Math.pow(OC.clamp(ly / h, 0, 1), 1.3) + 0.15;
+
+        const leaf = new T.PlaneGeometry(0.32, 0.92, 2, 3);
+        const lp = leaf.attributes.position;
+        for (let k = 0; k < lp.count; k++) {
+          const vx = lp.getX(k), vy = lp.getY(k) + 0.46;
+          const u = OC.clamp(vy / 0.92, 0, 1);
+          lp.setXYZ(k, vx * Math.sin(u * Math.PI) * (1 + 0.22 * Math.sin(u * 14)), Math.sin(u * 7) * 0.06, vy);
+        }
+        OC.geoPrep(leaf);
+        leaf.computeVertexNormals();
+        OC.paint(leaf, (x, y, z, c) => c.copy(leafCol).lerp(tipCol, OC.clamp(z, 0, 1)));
+        OC.withSway(leaf, () => sw);
+        OC.xform(leaf, { r: [0.35, a + li * 1.1, 0], p: [lx, ly, lz] });
+        list.push(leaf);
+
+        const bulb = new T.SphereGeometry(0.085, 5, 4);
+        OC.geoPrep(bulb);
+        OC.paint(bulb, bladderCol);
+        OC.withSway(bulb, () => sw);
+        OC.xform(bulb, { p: [lx + Math.cos(a + li) * 0.14, ly + 0.08, lz + Math.sin(a + li) * 0.14] });
+        list.push(bulb);
+      }
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 37. Кованый адмиралтейский якорь и цепь крушения ---- */
+  function buildWreckAnchor(rng) {
+    const list = [];
+    const ironCol = COL(0x3a2a24);
+    const rustCol = COL(0x8e4222);
+    const patinaCol = COL(0x4b745d);
+
+    function paintRust(g) {
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const w = Math.sin(x * 3.1 + y * 4.4 + z * 2.7) * 0.5 + 0.5;
+        c.copy(ironCol).lerp(rustCol, w * 0.72).lerp(patinaCol, y > 1.3 ? 0.38 : 0.12);
+      });
+      OC.withSway(g, () => 0);
+      return g;
+    }
+
+    // Веретено якоря, слегка наклонённое в грунт
+    const shank = new T.CylinderGeometry(0.11, 0.15, 2.7, 8);
+    OC.xform(paintRust(shank), { r: [0.18, 0, 0.12], p: [0, 1.35, 0] });
+    list.push(shank);
+
+    // Изогнутые рога и лапы
+    const armsCurve = new T.CatmullRomCurve3([
+      new T.Vector3(-0.98, 0.78, 0),
+      new T.Vector3(-0.62, 0.24, 0),
+      new T.Vector3(0, 0.08, 0),
+      new T.Vector3(0.62, 0.24, 0),
+      new T.Vector3(0.98, 0.78, 0)
+    ]);
+    const arms = new T.TubeGeometry(armsCurve, 12, 0.11, 6, false);
+    OC.xform(paintRust(arms), { r: [0.18, 0, 0.12] });
+    list.push(arms);
+
+    for (const s of [-1, 1]) {
+      const fluke = new T.ConeGeometry(0.26, 0.52, 4);
+      fluke.scale(0.35, 1, 1.0);
+      OC.xform(paintRust(fluke), { r: [0, 0, -s * 0.42], p: [s * 0.96, 0.86, 0.14] });
+      list.push(fluke);
+    }
+
+    // Шток (поперечина) и кольцо-рым
+    const stock = new T.CylinderGeometry(0.08, 0.08, 1.65, 6);
+    OC.xform(paintRust(stock), { r: [Math.PI / 2, 0, 0.15], p: [0, 2.28, 0.34] });
+    list.push(stock);
+
+    const ring = new T.TorusGeometry(0.22, 0.05, 6, 10);
+    OC.xform(paintRust(ring), { r: [0.2, 0.4, 0], p: [0.14, 2.74, 0.44] });
+    list.push(ring);
+
+    // Коралловые наросты на якоре
+    for (let i = 0; i < 3; i++) {
+      const enc = new T.SphereGeometry(0.18 + rng() * 0.12, 6, 5);
+      OC.geoPrep(enc);
+      OC.paint(enc, i === 0 ? 0xe07842 : 0x62b888);
+      OC.withSway(enc, () => 0);
+      OC.xform(enc, { p: [(rng() - 0.5) * 0.9, 0.35 + rng() * 1.4, (rng() - 0.5) * 0.35] });
+      list.push(enc);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 38. Спиральный хлыстовой коралл (Cirrhipathes) ---- */
+  function buildWhipCoral(hue, rng) {
+    const list = [];
+    const baseCol = COL().setHSL(hue, 0.85, 0.42);
+    const tipCol = COL().setHSL((hue + 0.08) % 1, 0.95, 0.68);
+    const nWhips = 3;
+    for (let w = 0; w < nWhips; w++) {
+      const ox = (w - 1) * 0.28 + (rng() - 0.5) * 0.14;
+      const oz = (rng() - 0.5) * 0.28;
+      const h = OC.lerp(2.6, 4.4, rng());
+      const pts = [];
+      const turns = 2.6 + rng() * 1.4;
+      const ph = rng() * 6.28;
+      for (let k = 0; k <= 16; k++) {
+        const t = k / 16;
+        const rad = 0.08 + t * 0.36;
+        pts.push(new T.Vector3(
+          ox + Math.cos(t * turns * Math.PI * 2 + ph) * rad,
+          t * h,
+          oz + Math.sin(t * turns * Math.PI * 2 + ph) * rad
+        ));
+      }
+      const whip = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 22, 0.048, 5, false);
+      OC.geoPrep(whip);
+      OC.paint(whip, (x, y, z, c) => c.copy(baseCol).lerp(tipCol, OC.clamp(y / h, 0, 1)));
+      OC.withSway(whip, (x, y) => Math.pow(OC.clamp(y / h, 0, 1), 1.4) * 0.72);
+      list.push(whip);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 39. Золотой веер крушений (Annella mollis) ---- */
+  function buildGoldSeaFan(rng) {
+    const list = [];
+    const cStem = COL(0xb87212);
+    const cFan = COL(0xf4ba2c);
+    const stem = new T.CylinderGeometry(0.08, 0.14, 0.65, 6);
+    OC.geoPrep(stem);
+    OC.paint(stem, cStem);
+    OC.withSway(stem, () => 0);
+    OC.xform(stem, { p: [0, 0.32, 0] });
+    list.push(stem);
+
+    const nRibs = 13;
+    for (let i = 0; i < nRibs; i++) {
+      const u = (i / (nRibs - 1)) * 2 - 1;
+      const ang = u * 1.05;
+      const len = OC.lerp(2.1, 3.0, Math.cos(u * 1.1)) * OC.lerp(0.9, 1.12, rng());
+      const rib = new T.CylinderGeometry(0.025, 0.055, len, 4);
+      OC.geoPrep(rib);
+      rib.translate(0, len * 0.5, 0);
+      OC.paint(rib, (x, y, z, c) => c.copy(cStem).lerp(cFan, OC.clamp(y / 2.8, 0, 1)));
+      OC.withSway(rib, (x, y) => Math.pow(OC.clamp(y / 3.0, 0, 1), 1.2) * 0.45);
+      OC.xform(rib, { r: [(rng() - 0.5) * 0.08, 0, -ang], p: [0, 0.55, 0] });
+      list.push(rib);
+    }
+    for (let ring = 1; ring <= 4; ring++) {
+      const r = ring * 0.58;
+      const arc = new T.TorusGeometry(r, 0.022, 4, 14, Math.PI * 0.78);
+      OC.geoPrep(arc);
+      OC.paint(arc, cFan);
+      OC.withSway(arc, () => Math.pow(ring / 4, 1.2) * 0.42);
+      OC.xform(arc, { r: [0, 0, Math.PI * 0.11], p: [0, 0.55, 0] });
+      list.push(arc);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   let previewCache = null;
 
@@ -1379,6 +1571,22 @@ window.OC = window.OC || {};
         anemone_arctic: {
           mat: matSoft, maxInstances: 620, cullDist: 360,
           geos: [buildAnemone(0.02, 0.96, rng), buildAnemone(0.06, 0.92, rng)]
+        },
+        sargassum: {
+          mat: matPlant, maxInstances: 1500, cullDist: 520,
+          geos: [buildSargassum(rng), buildSargassum(rng)]
+        },
+        wreck_anchor: {
+          mat: matRigid, maxInstances: 160, cullDist: 540,
+          geos: [buildWreckAnchor(rng), buildWreckAnchor(rng)]
+        },
+        coral_whip: {
+          mat: matSoft, maxInstances: 900, cullDist: 460,
+          geos: [buildWhipCoral(0.07, rng), buildWhipCoral(0.13, rng)]
+        },
+        seafan_gold: {
+          mat: matSoft, maxInstances: 700, cullDist: 520,
+          geos: [buildGoldSeaFan(rng), buildGoldSeaFan(rng)]
         }
       };
 

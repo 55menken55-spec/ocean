@@ -421,9 +421,10 @@ window.OC = window.OC || {};
     if (key === 'sea_lion') return 'Подводный клич сивуча';
     if (key === 'dugong') return 'Свист дюгоня';
     if (key === 'ice_floe' || key === 'iceberg' || key === 'brinicle') return 'Треск пакового льда';
+    if (key === 'shipwreck' || key === 'wreck_anchor') return 'Скрип подводного остова';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
-    if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
+    if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
     if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle') return 'Гидродинамический импульс';
     return 'Подводный отклик';
   };
@@ -542,6 +543,22 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + 1.15);
         o.connect(lp); lp.connect(g); g.connect(out);
         o.start(now); o.stop(now + 1.2);
+      } else if (key === 'shipwreck' || key === 'wreck_anchor') {
+        // Глубокий металлический скрип и подводный звон старого корпуса судна
+        [108, 162, 248].forEach((f, i) => {
+          const o = ctx.createOscillator();
+          const bp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(f, now + i * 0.08);
+          o.frequency.exponentialRampToValueAtTime(f * 0.72, now + 1.35);
+          bp.type = 'bandpass'; bp.frequency.value = 340; bp.Q.value = 2.8;
+          g.gain.setValueAtTime(0.0001, now + i * 0.08);
+          g.gain.linearRampToValueAtTime(0.11 / (i + 1), now + i * 0.08 + 0.12);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+          o.connect(bp); bp.connect(g); g.connect(out);
+          o.start(now + i * 0.08); o.stop(now + 1.5);
+        });
       } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') {
         const dur = 1.2;
         const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
@@ -557,7 +574,7 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
         src.connect(bp); bp.connect(g); g.connect(out);
         src.start(now); src.stop(now + dur + 0.05);
-      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') {
+      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') {
         [660, 990, 1320].forEach((f, i) => {
           const t = now + i * 0.14;
           const o = ctx.createOscillator();

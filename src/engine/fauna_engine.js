@@ -2080,6 +2080,365 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Затонувшее научно-грузовое судно «SS Maru» (Искусственный риф) ---------- */
+  function makeShipwreck(scene, biome, opts) {
+    const len = opts.len || 66;
+    const beam = opts.beam || 10.6;
+    const hullH = opts.hullH || 6.6;
+    const group = new T.Group();
+    const parts = [];
+
+    function paintSteel(g, rustBias) {
+      OC.geoPrep(g);
+      const rb = rustBias || 0.45;
+      OC.paint(g, (x, y, z, c) => {
+        const rust = Math.sin(x * 0.65 + y * 1.1 + z * 0.32) * Math.cos(z * 0.48 - y * 0.8) * 0.5 + 0.5;
+        const moss = Math.sin(x * 1.3 - z * 0.55) * 0.5 + 0.5;
+        c.set(0x28363c).lerp(new T.Color(0x8c3c1e), OC.clamp(rust * rb + 0.15, 0, 0.85));
+        if (y > 1.0 && moss > 0.55) c.lerp(new T.Color(0x42664a), 0.36);
+      });
+      parts.push(g);
+      return g;
+    }
+
+    // 1. Основной корпус судна с острым форштевнем (нос +Z), поджатой кормой (-Z) и развалом бортов
+    const hullGeo = new T.BoxGeometry(beam, hullH, len, 8, 5, 22);
+    const hp = hullGeo.attributes.position;
+    for (let i = 0; i < hp.count; i++) {
+      let x = hp.getX(i), y = hp.getY(i), z = hp.getZ(i);
+      const u = OC.clamp(z / (len * 0.5), -1, 1); // -1 корма .. +1 нос
+      const v = OC.clamp((y + hullH * 0.5) / hullH, 0, 1); // 0 киль .. 1 палуба
+      let wScale = 1.0;
+      if (u > 0.28) {
+        const bt = OC.clamp((u - 0.28) / 0.72, 0, 1);
+        wScale = Math.max(0.03, Math.pow(Math.max(0, 1 - bt), 1.45));
+      } else if (u < -0.58) {
+        const st = OC.clamp((-u - 0.58) / 0.42, 0, 1);
+        wScale = 1 - 0.58 * st * st;
+      }
+      const flare = 0.62 + 0.38 * Math.pow(v, 0.7);
+      // Седловатость (sheer): нос и корма чуть приподняты, центр палубы немного вогнут
+      const sheer = (u > 0.3 ? Math.pow((u - 0.3) / 0.7, 2) * 1.85 : 0) + (u < -0.5 ? Math.pow((-u - 0.5) / 0.5, 2) * 0.85 : 0);
+      // Углубление открытых грузовых трюмов в мидшипе сверху
+      let deckDip = 0;
+      if (v > 0.85 && u > -0.18 && u < 0.46 && Math.abs(x) < beam * 0.32) {
+        deckDip = -2.2;
+      }
+      x *= wScale * flare;
+      y += sheer * v + deckDip;
+      hp.setXYZ(i, x, y, z);
+    }
+    hullGeo.computeVertexNormals();
+    paintSteel(hullGeo, 0.58);
+
+    // 2. Фальшборт и комингс грузового трюма
+    for (const s of [-1, 1]) {
+      const bulwark = new T.BoxGeometry(0.45, 1.15, len * 0.62, 1, 1, 8);
+      OC.xform(paintSteel(bulwark, 0.65), { p: [s * (beam * 0.47), hullH * 0.5 + 0.45, -len * 0.04] });
+    }
+    const coaming = new T.BoxGeometry(beam * 0.66, 0.9, len * 0.28);
+    OC.xform(paintSteel(coaming, 0.72), { p: [0, hullH * 0.5 + 0.35, len * 0.14] });
+
+    // 3. Кормовая капитанская надстройка (мостик, открытые иллюминаторы, крыша)
+    const bridgeBase = new T.BoxGeometry(beam * 0.72, 3.8, len * 0.22);
+    OC.xform(paintSteel(bridgeBase, 0.38), { p: [0, hullH * 0.5 + 1.85, -len * 0.22] });
+
+    const wheelhouse = new T.BoxGeometry(beam * 0.56, 2.7, len * 0.12);
+    OC.xform(paintSteel(wheelhouse, 0.34), { p: [0, hullH * 0.5 + 4.9, -len * 0.20] });
+
+    const wheelRim = new T.TorusGeometry(0.82, 0.09, 6, 12);
+    OC.xform(paintSteel(wheelRim, 0.25), { p: [0, hullH * 0.5 + 5.1, -len * 0.135] });
+
+    // 4. Проржавевшая дымовая труба
+    const funnel = new T.CylinderGeometry(1.15, 1.38, 6.2, 12);
+    OC.xform(paintSteel(funnel, 0.78), { r: [-0.22, 0, 0.08], p: [0, hullH * 0.5 + 6.4, -len * 0.27] });
+
+    // 5. Носовая и кормовая мачты с реями, грузовыми стрелами и вантами
+    const masts = [
+      { z: len * 0.29, h: 19.5, r: 0.36 },
+      { z: -len * 0.08, h: 16.0, r: 0.30 }
+    ];
+    for (const m of masts) {
+      const pole = new T.CylinderGeometry(m.r * 0.45, m.r, m.h, 8);
+      OC.xform(paintSteel(pole, 0.55), { r: [0.06, 0, 0.05], p: [0, hullH * 0.5 + m.h * 0.5, m.z] });
+      const yard = new T.CylinderGeometry(0.11, 0.14, 9.6, 6);
+      OC.xform(paintSteel(yard, 0.62), { r: [0, 0, Math.PI / 2 + 0.08], p: [0, hullH * 0.5 + m.h * 0.68, m.z] });
+      const derrick = new T.CylinderGeometry(0.12, 0.18, 12.5, 6);
+      OC.xform(paintSteel(derrick, 0.58), { r: [-0.95, 0.24, 0], p: [0.4, hullH * 0.5 + 4.6, m.z - 3.6] });
+      for (const s of [-1, 1]) {
+        const stay = new T.CylinderGeometry(0.04, 0.04, m.h * 0.9, 4);
+        OC.xform(paintSteel(stay, 0.4), { r: [0, 0, s * 0.28], p: [s * 2.4, hullH * 0.5 + m.h * 0.42, m.z] });
+      }
+    }
+
+    // 6. Массивный бронзовый 4-лопастной гребной винт и перо руля на корме
+    const propMat = new T.Color(0x887644);
+    const hub = new T.CylinderGeometry(0.45, 0.52, 1.1, 8);
+    hub.rotateX(Math.PI / 2);
+    OC.geoPrep(hub); OC.paint(hub, propMat);
+    OC.xform(hub, { p: [0, -hullH * 0.28, -len * 0.48] });
+    parts.push(hub);
+    for (let b = 0; b < 4; b++) {
+      const ba = (b / 4) * Math.PI * 2;
+      const blade = new T.SphereGeometry(1, 8, 5);
+      blade.scale(0.55, 1.35, 0.12);
+      OC.geoPrep(blade);
+      OC.paint(blade, (x, y, z, c) => c.copy(propMat).lerp(new T.Color(0x4b745d), 0.32));
+      OC.xform(blade, { r: [0.35, 0, ba], p: [Math.sin(ba) * 1.05, -hullH * 0.28 + Math.cos(ba) * 1.05, -len * 0.48] });
+      parts.push(blade);
+    }
+    const rudder = new T.BoxGeometry(0.32, 3.4, 2.2);
+    OC.xform(paintSteel(rudder, 0.65), { p: [0, -hullH * 0.24, -len * 0.505] });
+
+    // 7. Живые кораллово-губковые наросты прямо на остове корабля
+    const rng = OC.mulberry32(8421);
+    const encColors = [0xe86e44, 0xf2b42e, 0x3eb494, 0xd85a8a];
+    for (let i = 0; i < 18; i++) {
+      const cz = (rng() - 0.5) * len * 0.76;
+      const cx = (rng() < 0.5 ? -1 : 1) * beam * OC.lerp(0.26, 0.46, rng());
+      const cy = hullH * 0.5 + OC.lerp(0.1, 1.4, rng());
+      const r = OC.lerp(0.45, 1.15, rng());
+      const sponge = new T.SphereGeometry(r, 7, 5);
+      sponge.scale(1.1, 0.72, 1.0);
+      OC.geoPrep(sponge);
+      OC.paint(sponge, encColors[i % encColors.length]);
+      OC.xform(sponge, { p: [cx, cy, cz] });
+      parts.push(sponge);
+    }
+
+    const merged = OC.mergeGeometries(parts);
+    const mesh = new T.Mesh(merged, creatureMat);
+    group.add(mesh);
+
+    const floorY = biome && biome.getHeight ? biome.getHeight(opts.x || 0, opts.z || 0) : -24;
+    group.position.set(opts.x || 0, floorY + (opts.yOffset !== undefined ? opts.yOffset : 2.1), opts.z || 0);
+    group.rotation.set(opts.pitch !== undefined ? opts.pitch : -0.05, opts.yaw !== undefined ? opts.yaw : 0.65, opts.roll !== undefined ? opts.roll : 0.34);
+    group.userData.key = 'shipwreck';
+    scene.add(group);
+
+    return {
+      key: 'shipwreck',
+      isWreck: true,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        group.visible = Math.hypot(group.position.x - camPos.x, group.position.z - camPos.z) < 920;
+      }
+    };
+  }
+
+  /* ---------- Гигантская акула-молот (Sphyrna mokarran) ---------- */
+  function makeHammerhead(scene, biome, opts) {
+    const len = opts.len || 4.8;
+    const group = new T.Group();
+
+    const body = new T.SphereGeometry(1, 16, 12);
+    body.scale(len * 0.115, len * 0.135, len * 0.5);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = OC.clamp(z / (len * 0.5), -1, 1);
+      const taper = t < 0 ? (1 - 0.85 * Math.pow(Math.max(0, -t), 1.45)) : (1 - 0.25 * Math.pow(Math.max(0, t), 2.2));
+      bp.setXYZ(i, x * taper, y * taper, z);
+    }
+    OC.geoPrep(body);
+    body.computeVertexNormals();
+    OC.paint(body, (x, y, z, c) => c.set(y > -0.04 ? 0x625a4c : 0xe4e8ea));
+    group.add(new T.Mesh(body, creatureMat));
+
+    // Характерный широкий цефалофойл («молот») с глазами по краям
+    const hammer = new T.SphereGeometry(1, 14, 8);
+    hammer.scale(len * 0.29, 0.13, 0.36);
+    OC.geoPrep(hammer);
+    OC.paint(hammer, (x, y, z, c) => c.set(y > -0.02 ? 0x5c5448 : 0xdde2e4));
+    const hamM = new T.Mesh(hammer, creatureMat);
+    hamM.position.set(0, 0.04, len * 0.45);
+    group.add(hamM);
+
+    const eyeGeo = new T.SphereGeometry(0.065, 6, 5);
+    OC.geoPrep(eyeGeo);
+    OC.paint(eyeGeo, 0x0b0e12);
+    for (const s of [-1, 1]) {
+      const em = new T.Mesh(eyeGeo, creatureMat);
+      em.position.set(s * len * 0.275, 0.04, len * 0.48);
+      group.add(em);
+    }
+
+    // Высокий серповидный спинной плавник Sphyrna mokarran
+    const dorsal = new T.ConeGeometry(0.32, 1.32, 4);
+    dorsal.scale(0.24, 1, 1.15);
+    OC.geoPrep(dorsal);
+    OC.paint(dorsal, 0x544d40);
+    const dM = new T.Mesh(dorsal, creatureMat);
+    dM.position.set(0, len * 0.135 + 0.42, 0.12);
+    dM.rotation.x = -0.32;
+    group.add(dM);
+
+    const pec = new T.ConeGeometry(0.32, 1.15, 4);
+    pec.scale(0.18, 1, 0.68);
+    OC.geoPrep(pec);
+    OC.paint(pec, 0x585042);
+    for (const s of [-1, 1]) {
+      const pm = new T.Mesh(pec, creatureMat);
+      pm.position.set(s * 0.48, -0.22, 0.58);
+      pm.rotation.z = s * 1.18;
+      pm.rotation.x = -0.35;
+      group.add(pm);
+    }
+
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -len * 0.44);
+    const tUp = new T.ConeGeometry(0.34, 1.48, 4);
+    tUp.scale(0.16, 1, 0.9);
+    OC.geoPrep(tUp);
+    OC.paint(tUp, 0x524b3f);
+    const tUpM = new T.Mesh(tUp, creatureMat);
+    tUpM.position.set(0, 0.38, -0.34);
+    tUpM.rotation.x = -0.78;
+    const tDn = new T.ConeGeometry(0.22, 0.72, 4);
+    tDn.scale(0.16, 1, 0.8);
+    OC.geoPrep(tDn);
+    OC.paint(tDn, 0x6c6556);
+    const tDnM = new T.Mesh(tDn, creatureMat);
+    tDnM.position.set(0, -0.22, -0.22);
+    tDnM.rotation.x = -2.35;
+    tailPivot.add(tUpM, tDnM);
+    group.add(tailPivot);
+
+    group.userData.key = 'shark_hammerhead';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 100;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const a = new T.Vector3(), b = new T.Vector3();
+    let lungeTimer = 0;
+    let lungeCooldown = 14 + Math.random() * 12;
+    let lungeTarget = null;
+    let lungeBlend = 0;
+
+    return {
+      key: 'shark_hammerhead',
+      isActivePredator: true,
+      isHunting: () => lungeTimer > 0,
+      getPosition: () => group.position,
+      update(dt, time, camPos, ctx) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 760) { group.visible = false; return; }
+        group.visible = true;
+        const preyCenters = ctx ? ctx.preyCenters : null;
+        t += dt;
+        if (preyCenters && preyCenters.length) {
+          if (lungeTimer > 0) {
+            lungeTimer -= dt;
+            if (lungeTarget && group.position.distanceTo(lungeTarget) < 6.8) {
+              lungeTimer = 0;
+              lungeCooldown = 18 + Math.random() * 10;
+            }
+          } else {
+            lungeCooldown -= dt;
+            if (lungeCooldown <= 0) {
+              let bestD = 145, bestP = null;
+              for (let p = 0; p < preyCenters.length; p++) {
+                const pr = preyCenters[p];
+                if (pr.y > -2.5) continue;
+                const d = Math.hypot(pr.x - group.position.x, pr.z - group.position.z);
+                if (d < bestD) { bestD = d; bestP = pr; }
+              }
+              if (bestP) { lungeTarget = bestP; lungeTimer = 4.6; }
+              lungeCooldown = 16 + Math.random() * 10;
+            }
+          }
+        }
+        lungeBlend += ((lungeTimer > 0 && lungeTarget ? 1 : 0) - lungeBlend) * Math.min(1, dt * 2.5);
+
+        const spd = (opts.speed || 5.4) * (lungeTimer > 0 ? 2.1 : 1.0);
+        ang += (spd / opts.r) * dir * dt;
+        const patCx = lungeBlend > 0.02 && lungeTarget ? OC.lerp(opts.cx, lungeTarget.x, lungeBlend) : opts.cx;
+        const patCz = lungeBlend > 0.02 && lungeTarget ? OC.lerp(opts.cz, lungeTarget.z, lungeBlend) : opts.cz;
+        const patR = OC.lerp(opts.r + Math.sin(t * 0.2) * 14, 6.0, lungeBlend);
+        const ax = patCx + Math.cos(ang) * patR * 0.9;
+        const az = patCz + Math.sin(ang) * patR + Math.sin(ang * 2.0) * 12 * (1 - lungeBlend);
+        const bx = patCx + Math.cos(ang + 0.1 * dir) * patR * 0.9;
+        const bz = patCz + Math.sin(ang + 0.1 * dir) * patR + Math.sin((ang + 0.1 * dir) * 2.0) * 12 * (1 - lungeBlend);
+        const baseY = lungeBlend > 0.02 && lungeTarget ? OC.lerp(opts.y + Math.sin(t * 0.25) * 4, lungeTarget.y, lungeBlend) : (opts.y + Math.sin(t * 0.25) * 4);
+        const ay = Math.max(baseY, biome.getHeight(ax, az) + 4.2);
+        const by = Math.max(baseY, biome.getHeight(bx, bz) + 4.2);
+        a.set(ax, Math.min(-2.5, ay), az);
+        b.set(bx, Math.min(-2.5, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        const wag = lungeTimer > 0 ? 5.6 : 3.4;
+        tailPivot.rotation.y = Math.sin(time * wag + t) * 0.34;
+        // Характерное покачивание головы-молота при сканировании дна
+        group.rotation.y += Math.sin(time * wag + t) * 0.08;
+      }
+    };
+  }
+
+  /* ---------- Золотая медуза Палау (Mastigias papua) ---------- */
+  function makeGoldenJelly(scene, opts) {
+    const group = new T.Group();
+    const bellGeo = new T.SphereGeometry(0.88, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.6);
+    const bellMat = new T.MeshStandardMaterial({
+      color: new T.Color(0xf6b93b),
+      emissive: new T.Color(0xd98018),
+      emissiveIntensity: 0.72,
+      roughness: 0.26,
+      transparent: true,
+      opacity: 0.72,
+      side: T.DoubleSide,
+      depthWrite: false
+    });
+    const bell = new T.Mesh(bellGeo, bellMat);
+    group.add(bell);
+
+    // Характерные светлые пятна и медовые ротовые лопасти без жгучих нитей
+    const spotMat = new T.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0.85 });
+    const spotGeo = new T.SphereGeometry(0.085, 6, 4);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const sm = new T.Mesh(spotGeo, spotMat);
+      sm.position.set(Math.cos(a) * 0.62, 0.42 + (i % 2) * 0.16, Math.sin(a) * 0.62);
+      group.add(sm);
+    }
+
+    const armsMat = new T.MeshStandardMaterial({
+      color: 0xd47a14,
+      emissive: 0x8c4208,
+      emissiveIntensity: 0.5,
+      transparent: true,
+      opacity: 0.86,
+      roughness: 0.45
+    });
+    const armGeo = new T.ConeGeometry(0.16, 1.15, 6);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const am = new T.Mesh(armGeo, armsMat);
+      am.position.set(Math.cos(a) * 0.28, -0.58, Math.sin(a) * 0.28);
+      am.rotation.x = Math.PI;
+      group.add(am);
+    }
+
+    group.scale.setScalar(opts.scale || 0.95);
+    group.position.set(opts.cx, opts.y, opts.cz);
+    group.userData.key = 'jelly_golden';
+    scene.add(group);
+
+    const ph = Math.random() * 6.28;
+    const baseS = opts.scale || 0.95;
+    return {
+      key: 'jelly_golden',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        const pulse = Math.sin(time * 2.1 + ph);
+        group.position.x = opts.cx + Math.sin(time * 0.24 + ph) * 7.5;
+        group.position.z = opts.cz + Math.cos(time * 0.21 + ph) * 7.5;
+        group.position.y = Math.min(-1.0, opts.y + Math.sin(time * 0.42 + ph) * (opts.amp || 2.2) + pulse * 0.24);
+        group.scale.set(baseS * (1 - pulse * 0.08), baseS * (1 + pulse * 0.12), baseS * (1 - pulse * 0.08));
+      }
+    };
+  }
+
   /* ---------- Шлейфы чёрных курильщиков и термальный свет ---------- */
   function makeVentPlume(scene, biome, tex, opts) {
     const n = opts.n || 180;
@@ -2648,6 +3007,24 @@ window.OC = window.OC || {};
         agents.push(makeClione(faunaGroup, cl));
       }
 
+      for (const wr of (plan.wrecks || [])) {
+        const a = makeShipwreck(faunaGroup, biome, wr);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const hm of (plan.hammerheads || [])) {
+        const a = makeHammerhead(faunaGroup, biome, hm);
+        agents.push(a);
+        predatorAgents.push(a);
+        huntingAgents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const gj of (plan.goldenJellies || [])) {
+        agents.push(makeGoldenJelly(faunaGroup, gj));
+      }
+
       let whale = null;
       const whalesList = [];
       for (const wh of (plan.whales || [])) {
@@ -2970,6 +3347,8 @@ window.OC = window.OC || {};
               c.setHex(0x52554c).offsetHSL(0.02, 0.05, Math.cos(x * 0.5) * 0.06);
             } else if (bId === 'arctic_sea') {
               c.setHex(0x4b5c69).lerp(new T.Color(0x88b4cc), OC.clamp((y - avgY) * 0.25 + 0.3, 0, 0.7));
+            } else if (bId === 'wreck_atoll') {
+              c.setHex(0xe5d7b4).lerp(new T.Color(0x8ab894), Math.sin(x * 0.38 + z * 0.42) * 0.35 + 0.35);
             } else {
               c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
             }
@@ -3017,6 +3396,12 @@ window.OC = window.OC || {};
           makeArcticJelly(tmpGroup, { cx: 0, cz: 0, y: 0, scale: 1 });
         } else if (key === 'clione_angel') {
           makeClione(tmpGroup, { cx: 0, cz: 0, y: 0, n: 1, singlePreview: true });
+        } else if (key === 'shipwreck') {
+          makeShipwreck(tmpGroup, dummyBiome, { x: 0, z: 0, yOffset: 0, pitch: 0, yaw: 0, roll: 0 });
+        } else if (key === 'shark_hammerhead') {
+          makeHammerhead(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, len: 4.8 });
+        } else if (key === 'jelly_golden') {
+          makeGoldenJelly(tmpGroup, { cx: 0, cz: 0, y: 0, scale: 1 });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;

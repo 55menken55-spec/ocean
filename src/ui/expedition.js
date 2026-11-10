@@ -186,6 +186,44 @@ window.OC = window.OC || {};
       landmarkId: 'baffin_trench',
       goal: 1,
       progress: (ctx) => (ctx.depthM >= 55 && ctx.hasPhotoOrPing(['shark_greenland', 'clione_angel'])) ? 1 : 0
+    },
+
+    // 5. Атолл Палау и Затонувший корабль
+    {
+      id: 'wreck_atlas_6',
+      biomeId: 'wreck_atoll',
+      title: 'Археолог и рифолог Палау',
+      desc: 'Изучите или сфотографируйте 6 разных объектов атолла (артефакты крушения, кораллы, саргасс и фауну).',
+      landmarkId: 'sunken_ship',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'wreck_ship_photo',
+      biomeId: 'wreck_atoll',
+      title: 'Тайна «SS Maru»',
+      desc: 'Сфотографируйте на камеру (P) затонувший 68-метровый корабль «SS Maru» или адмиралтейский якорь.',
+      landmarkId: 'sunken_ship',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['shipwreck', 'wreck_anchor']) ? 1 : 0
+    },
+    {
+      id: 'wreck_hammer_photo',
+      biomeId: 'wreck_atoll',
+      title: 'Хищник «Синего угла»',
+      desc: 'Сфотографируйте (P) гигантскую акулу-молота или океаническую манту на течении внешнего обрыва.',
+      landmarkId: 'blue_corner',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['shark_hammerhead', 'manta']) ? 1 : 0
+    },
+    {
+      id: 'wreck_jelly_lagoon',
+      biomeId: 'wreck_atoll',
+      title: 'Танец золотых медуз',
+      desc: 'Откройте в лагуне саргасса и снимите или просканируйте сонаром (G) золотую медузу Палау или платакса.',
+      landmarkId: 'jellyfish_lagoon',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['jelly_golden', 'fish_batfish', 'sargassum']) ? 1 : 0
     }
   ];
 
