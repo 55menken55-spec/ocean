@@ -5,4 +5,7 @@ coverage/
 *.log
 __pycache__/
 *.pyc
+test-results/
+playwright-report/
+
 

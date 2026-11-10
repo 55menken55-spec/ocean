@@ -152,6 +152,12 @@ node tests/e2e_playwright.mjs
 python3 .agents/skills/validate_skills.py
 ```
 
+### Автоматический CI (`.github/workflows/ci.yml`)
+
+При каждом `push` / Pull Request на GitHub запускаются два последовательных джоба:
+1. **`build-and-vm-verify`**: проверка актуальности `index.html` (`python3 build.py` + `git diff --exit-code index.html`), валидация 30 скилов, полный `node tests/verify.mjs` и 900-кадровый E2E-прогон `node tests/verify_e2e.mjs`.
+2. **`browser-webgl-e2e`**: установка временного Playwright + headless Chromium (`ANGLE SwiftShader`), поднятие HTTP-сервера на `:8080`, проверка нечёрной отрисовки WebGL-пикселей, горячих клавиш и публикация таблицы **FPS / p95 CPU / drawCalls** по всем биомам прямо в **GitHub Actions Step Summary**.
+
 ---
 
 ## Agent Skills проекта (`.agents/skills/`)

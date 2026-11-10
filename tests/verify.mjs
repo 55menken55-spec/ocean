@@ -1435,10 +1435,15 @@ assert(OC.faunaInfo.siltTurbidity > 0.25 && OC.faunaInfo.siltCount > 0, `Benthic
 OC.Biomes.setActive('great_barrier_reef');
 console.log(`   Gas Hydrates, Thermocline Schlieren Haze (${OC.faunaInfo.thermoDepthM} m) & Benthic Silt-Out Plumes (${OC.faunaInfo.siltCount} particles, turb=${OC.faunaInfo.siltTurbidity}) verified.`);
 
-// Z) Verify Step 10 (Interactive Onboarding, Quick-Help Modal ?/F1 & Perf Telemetry Export)
+// Z) Verify Step 10 & CI Stage 5 (Interactive Onboarding, Quick-Help Modal ?/F1, Frame Telemetry & GitHub Actions WebGL CI)
 const tplSrc = fs.readFileSync(path.join(ROOT, 'template.html'), 'utf8');
 const mainUiSrc = fs.readFileSync(path.join(ROOT, 'src/ui/main.js'), 'utf8');
+const ciSrc = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8');
+const pwSrc = fs.readFileSync(path.join(ROOT, 'tests', 'e2e_playwright.mjs'), 'utf8');
 assert(tplSrc.includes('id="btn-help"') && tplSrc.includes('id="help-modal"') && tplSrc.includes('id="hero-tour-btn"') && tplSrc.includes('id="hero-help-btn"'), 'template.html must contain interactive onboarding & Quick-Help modal markup');
 assert(mainUiSrc.includes("e.code === 'Slash'") && mainUiSrc.includes('oc_onboard_seen_v1') && mainUiSrc.includes('OC.getPerfStats'), 'src/ui/main.js must wire Slash/F1 help modal, persisted onboarding dismissal & OC.getPerfStats');
-console.log('   Interactive Onboarding Bar, Quick-Help Shortcut Modal (? / F1) & Frame Telemetry verified.');
+assert(!ciSrc.includes('\t'), '.github/workflows/ci.yml must not contain raw tab indentation');
+assert(ciSrc.includes('build-and-vm-verify') && ciSrc.includes('browser-webgl-e2e') && ciSrc.includes('e2e_playwright.mjs') && ciSrc.includes('verify_e2e.mjs'), 'ci.yml must run build check, verify.mjs, verify_e2e.mjs and browser-webgl-e2e');
+assert(pwSrc.includes('swiftshader') && pwSrc.includes('readPixels') && pwSrc.includes('OC_PERF_SUMMARY_MD'), 'e2e_playwright.mjs must verify WebGL SwiftShader pixels & export perf summary');
+console.log('   Interactive Onboarding Bar, Quick-Help (? / F1), Frame Telemetry & GitHub Actions WebGL CI verified.');
 console.log('ALL VERIFICATION CHECKS PASSED!');

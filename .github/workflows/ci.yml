@@ -1,0 +1,96 @@
+name: Ocean Simulator CI & WebGL E2E
+
+on:
+  push:
+    branches:
+      - main
+      - "arena/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ocean-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-vm-verify:
+    name: Build, Skills & Production Bundle VM Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build single-file index.html and verify bundle is up to date
+        run: |
+          python3 build.py
+          git diff --exit-code index.html
+
+      - name: Validate Agent Skills metadata
+        run: python3 .agents/skills/validate_skills.py
+
+      - name: Run full engine & GLSL integration verification
+        run: node tests/verify.mjs
+
+      - name: Run production bundle E2E DOM & WebGL-Spy profiler
+        run: node tests/verify_e2e.mjs
+
+  browser-webgl-e2e:
+    name: Real Headless Chromium (SwiftShader WebGL) E2E
+    needs: build-and-vm-verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright & Chromium with system dependencies
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright WebGL SwiftShader E2E & FPS Profile
+        env:
+          OC_URL: http://127.0.0.1:8080/index.html
+          OC_PERF_SUMMARY_MD: ${{ github.step_summary }}
+        run: |
+          python3 -m http.server 8080 --bind 127.0.0.1 >/tmp/http_server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/index.html >/dev/null; then
+              break
+            fi
+            sleep 0.5
+          done
+          node tests/e2e_playwright.mjs
+
+      - name: Upload failure screenshot on error
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webgl-e2e-failure
+          path: test-results/
+          if-no-files-found: ignore
