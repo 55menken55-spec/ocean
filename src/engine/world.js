@@ -66,6 +66,8 @@ window.OC = window.OC || {};
     uCausticI: { value: 0.9 },
     uCausticCol: { value: new T.Color(0xc2f5ff) },
     uCurrent: { value: new T.Vector2(0, 0) },
+    uSunProj: { value: new T.Vector2(0.45, 0.35) },
+    uWaveAmp: { value: 1.0 },
     uBleach: { value: 0.0 }
   };
   OC.causticUniforms = causticU;
@@ -94,6 +96,8 @@ window.OC = window.OC || {};
       sh.uniforms.uCausticI = causticU.uCausticI;
       sh.uniforms.uCausticCol = causticU.uCausticCol;
       sh.uniforms.uCurrent = causticU.uCurrent;
+      sh.uniforms.uSunProj = causticU.uSunProj;
+      sh.uniforms.uWaveAmp = causticU.uWaveAmp;
       sh.uniforms.uBleach = causticU.uBleach;
       sh.uniforms.uCStrength = { value: cStr };
       sh.uniforms.uSwayAmp = { value: swayAmp };
@@ -160,6 +164,8 @@ window.OC = window.OC || {};
         uniform float uCausticI;
         uniform float uCStrength;
         uniform vec3 uCausticCol;
+        uniform vec2 uSunProj;
+        uniform float uWaveAmp;
         uniform float uBleach;
         uniform float uBleachable;
       `;
@@ -206,12 +212,18 @@ window.OC = window.OC || {};
         fInject += `
           float upMask = clamp(vCNormal.y * 0.85 + 0.15, 0.0, 1.0);
           float underwaterMask = smoothstep(0.35, -0.35, vCWorld.y);
-          float depthFade = exp(-max(0.0, -vCWorld.y) * 0.036);
-          vec2 cuv = vCWorld.xz * 0.022;
-          float c1 = texture2D(uCausticTex, cuv + vec2(uTime * 0.013, uTime * 0.009)).r;
-          float c2 = texture2D(uCausticTex, cuv * 1.62 - vec2(uTime * 0.008, uTime * 0.014)).r;
-          float caus = c1 * c2 * 2.8;
-          gl_FragColor.rgb += uCausticCol * caus * upMask * underwaterMask * depthFade * uCStrength * uCausticI * 0.58;
+          float depthM = max(0.0, -vCWorld.y);
+          float focusCurve = smoothstep(0.15, 2.2, depthM) * exp(-depthM * 0.032) + exp(-depthM * 0.14) * 0.35;
+          vec2 cuv = (vCWorld.xz - uSunProj * depthM * 0.36) * 0.023;
+          vec2 disp = vec2(0.0085, 0.0055) * (0.65 + uWaveAmp * 0.35);
+          vec2 vel1 = vec2(uTime * 0.013, uTime * 0.009);
+          vec2 vel2 = vec2(uTime * 0.008, uTime * 0.014);
+          float cR = texture2D(uCausticTex, cuv + disp + vel1).r * texture2D(uCausticTex, (cuv + disp) * 1.62 - vel2).r;
+          float cG = texture2D(uCausticTex, cuv + vel1).r * texture2D(uCausticTex, cuv * 1.62 - vel2).r;
+          float cB = texture2D(uCausticTex, cuv - disp + vel1).r * texture2D(uCausticTex, (cuv - disp) * 1.62 - vel2).r;
+          vec3 causRGB = pow(max(vec3(0.0), vec3(cR, cG, cB) * 2.95), vec3(1.12));
+          vec3 prismCol = causRGB * mix(vec3(1.0), uCausticCol, 0.55);
+          gl_FragColor.rgb += prismCol * upMask * underwaterMask * focusCurve * uCStrength * uCausticI * (0.52 + uWaveAmp * 0.14);
         `;
       }
       fInject += '\n#include <fog_fragment>';
@@ -294,9 +306,9 @@ window.OC = window.OC || {};
     return tex;
   }
 
-  /* ---------- Текстура мелководья и зоны прибойной пены из батиметрии ---------- */
+  /* ---------- Текстура мелководья, берегового прибоя и кромки пакового льда ---------- */
   function buildBathymetryFoamTex(biome) {
-    const S = 160;
+    const S = 192;
     const data = new Uint8Array(S * S * 4);
     const R = biome ? (biome.worldRadius || 1200) : 1200;
     for (let iz = 0; iz < S; iz++) {
@@ -305,9 +317,9 @@ window.OC = window.OC || {};
         const wx = ((ix / (S - 1)) * 2 - 1) * R;
         const h = biome ? biome.getHeight(wx, wz) : -12;
         const depthNorm = OC.clamp(-h / 45.0, 0, 1);
-        // Пена прибоя над очень мелким гребнем (-3.6 .. +0.25 м) и берегом
-        const crestFoam = OC.smoothstep(-3.9, -1.5, h) * OC.smoothstep(0.55, -0.3, h);
-        const shoreFoam = OC.smoothstep(-0.9, 0.05, h) * OC.smoothstep(0.45, 0.0, h);
+        // Пена прибоя над очень мелким гребнем (-3.9 .. +0.55 м) и кромкой берега/скал/колонн
+        const crestFoam = OC.smoothstep(-3.9, -1.4, h) * OC.smoothstep(0.55, -0.3, h);
+        const shoreFoam = OC.smoothstep(-1.45, 0.06, h) * OC.smoothstep(0.62, 0.02, h);
         const idx = (iz * S + ix) * 4;
         data[idx] = Math.round(depthNorm * 255);
         data[idx + 1] = Math.round(crestFoam * 255);
@@ -315,6 +327,44 @@ window.OC = window.OC || {};
         data[idx + 3] = 255;
       }
     }
+
+    // В Арктике впечатываем контактную ледяную пену вокруг льдин (ice_floe) и айсбергов (iceberg)
+    if (biome && biome.hasAurora && biome.generateChunkFlora) {
+      const cSz = biome.chunkSize || 150;
+      const cellW = (2 * R) / S;
+      for (let cz = -4; cz <= 4; cz++) {
+        for (let cx = -4; cx <= 4; cx++) {
+          const items = biome.generateChunkFlora(cx, cz, cSz, 1.0, OC.mulberry32(((cx * 9187) ^ (cz * 3571)) >>> 0));
+          for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (it.species !== 'ice_floe' && it.species !== 'iceberg') continue;
+            const rad = (it.species === 'iceberg' ? 23.0 : 13.5) * (it.scale || 1.0);
+            const cX = ((it.x / R) * 0.5 + 0.5) * (S - 1);
+            const cZ = ((it.z / R) * 0.5 + 0.5) * (S - 1);
+            const rPx = Math.ceil((rad + 8.0) / cellW);
+            const minX = Math.max(0, Math.floor(cX - rPx));
+            const maxX = Math.min(S - 1, Math.ceil(cX + rPx));
+            const minZ = Math.max(0, Math.floor(cZ - rPx));
+            const maxZ = Math.min(S - 1, Math.ceil(cZ + rPx));
+            for (let pz = minZ; pz <= maxZ; pz++) {
+              const dwz = (pz - cZ) * cellW;
+              for (let px = minX; px <= maxX; px++) {
+                const dwx = (px - cX) * cellW;
+                const d = Math.hypot(dwx, dwz);
+                const ring = OC.smoothstep(rad - 5.5, rad - 1.0, d) * OC.smoothstep(rad + 7.5, rad + 1.5, d);
+                if (ring > 0.02) {
+                  const idx = (pz * S + px) * 4;
+                  const addVal = Math.round(ring * 240);
+                  if (addVal > data[idx + 2]) data[idx + 2] = addVal;
+                  if (addVal * 0.7 > data[idx + 1]) data[idx + 1] = Math.round(addVal * 0.7);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     const tex = new T.DataTexture(data, S, S, T.RGBAFormat);
     tex.magFilter = T.LinearFilter;
     tex.minFilter = T.LinearFilter;
@@ -653,7 +703,8 @@ window.OC = window.OC || {};
         uCamY: { value: -6.0 },
         uWaveAmp: { value: 1.0 },
         uStorm: { value: 0.0 },
-        uLightning: { value: 0.0 }
+        uLightning: { value: 0.0 },
+        uVesselInfo: { value: new T.Vector4(0, 0, 0, 0) }
       },
       vertexShader: `
         varying vec3 vWorld;
@@ -677,23 +728,42 @@ window.OC = window.OC || {};
         uniform sampler2D uTex, uFoamTex;
         uniform float uTime, uDayW, uCamY, uWorldSpan, uStorm, uLightning;
         uniform vec3 uWaterCol, uSkyCol, uSunCol, uSunDir;
+        uniform vec4 uVesselInfo;
         void main(){
           vec2 cuv = vWorld.xz * 0.016;
           float r1 = texture2D(uTex, cuv + vec2(uTime * 0.018, uTime * 0.011)).r;
           float r2 = texture2D(uTex, cuv * 1.65 - vec2(uTime * 0.012, uTime * 0.016)).r;
           float rip = r1 * 0.65 + r2 * 0.45;
 
-          // Выборка глубины и мелководной пены прибоя по координатам карты
+          // Выборка глубины и мелководной пены прибоя/льда по координатам карты
           vec2 mapUv = clamp(vWorld.xz / uWorldSpan + 0.5, 0.002, 0.998);
           vec4 bathy = texture2D(uFoamTex, mapUv);
           float depthT = bathy.r;
           float crestSurf = bathy.g;
           float shoreSurf = bathy.b;
 
+          // Контактная пена судна НИС (корпус + V-волна Кельвина + кильватерная струя)
+          float vesselFoam = 0.0;
+          if (uVesselInfo.w > 0.5) {
+            vec2 dv = vWorld.xz - uVesselInfo.xy;
+            float cv = cos(uVesselInfo.z);
+            float sv = sin(uVesselInfo.z);
+            float fwd = dv.x * sv + dv.y * cv;
+            float side = dv.x * cv - dv.y * sv;
+            float hullR = length(vec2(side / 5.6, fwd / 25.5));
+            float hullRing = smoothstep(1.26, 1.02, hullR) * smoothstep(0.76, 0.96, hullR);
+            float bowBack = max(0.0, 22.0 - fwd);
+            float bowArm = exp(-pow((abs(side) - bowBack * 0.34) * 0.42, 2.0)) * smoothstep(0.0, 3.0, bowBack) * smoothstep(46.0, 14.0, bowBack);
+            float sternWake = exp(-pow(side * 0.36, 2.0)) * smoothstep(-16.0, -24.0, fwd) * smoothstep(-66.0, -28.0, fwd);
+            float wakeRipple = 0.65 + 0.35 * sin(fwd * 0.48 + uTime * 3.8 + r2 * 2.0);
+            vesselFoam = clamp((hullRing * 1.12 + bowArm * 0.56 + sternWake * 0.85) * wakeRipple, 0.0, 1.0);
+          }
+
           float foamNoise = smoothstep(0.32, 0.86, r1 * 0.55 + r2 * 0.62);
           float surge = 0.55 + 0.45 * sin(vWorld.x * 0.18 - uTime * 1.85 + r1 * 3.0);
+          float swash = pow(0.5 + 0.5 * sin(shoreSurf * 16.0 - uTime * 2.6 + r1 * 2.5), 2.0) * shoreSurf;
           float whitecap = smoothstep(0.42, 0.92, vCrest) * uStorm * 0.95;
-          float foam = clamp((crestSurf * 0.72 * surge + shoreSurf * 1.15 + whitecap) * foamNoise, 0.0, 0.95);
+          float foam = clamp((crestSurf * 0.72 * surge + shoreSurf * 0.96 + swash * 0.78 + whitecap + vesselFoam * 0.92) * max(foamNoise, vesselFoam * 0.72), 0.0, 0.96);
 
           vec3 toEye = normalize(cameraPosition - vWorld);
           float dist = length(cameraPosition - vWorld);
@@ -925,9 +995,11 @@ window.OC = window.OC || {};
     skyMat.uniforms.uLightning.value = wState.lightning;
     skySphere.position.copy(camPos);
 
-    /* каустика и наклон кораллов по течению */
+    /* каустика, хроматическая дисперсия и наклон кораллов по течению */
     causticU.uCausticI.value = opt.causticStrength * (1.0 - wState.stormMix * 0.55) * bloomAtten;
     causticU.uCausticCol.value.copy(pal.water);
+    causticU.uSunProj.value.set(sunDir.x / Math.max(0.35, sunDir.y), sunDir.z / Math.max(0.35, sunDir.y));
+    causticU.uWaveAmp.value = wState.waveAmp;
     if (biome && biome.getCurrentAt) {
       biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
       const currMult = lab ? lab.currentMult : 1.0;
@@ -949,6 +1021,9 @@ window.OC = window.OC || {};
       surfaceMat.uniforms.uWaveAmp.value = wState.waveAmp;
       surfaceMat.uniforms.uStorm.value = wState.stormMix;
       surfaceMat.uniforms.uLightning.value = wState.lightning;
+      const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
+      if (vInfo) surfaceMat.uniforms.uVesselInfo.value.set(vInfo.x, vInfo.z, vInfo.yaw || 0, 1.0);
+      else surfaceMat.uniforms.uVesselInfo.value.set(0, 0, 0, 0);
     }
 
     /* объёмные 3D-конусы солнечных лучей, ориентированные по преломлённому солнцу */

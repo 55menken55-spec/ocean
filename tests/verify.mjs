@@ -241,6 +241,9 @@ function checkMaterialShader(opts, label) {
   }
   assert(sh.fragmentShader.includes('#include <fog_fragment>'), `${label} fragment must preserve fog_fragment after caustics`);
   assert(sh.fragmentShader.indexOf('uCausticTex') < sh.fragmentShader.indexOf('#include <fog_fragment>'), `${label} caustics must run before fog`);
+  if ((opts.causticStrength === undefined || opts.causticStrength > 0)) {
+    assert(sh.fragmentShader.includes('uSunProj') && sh.fragmentShader.includes('causRGB'), `${label} missing chromatic sun-projected caustics`);
+  }
 }
 
 checkMaterialShader({ causticStrength: 1.0, isTerrain: true }, 'terrain');
@@ -1406,4 +1409,11 @@ assert(infoNight.nocturnalPredators >= 1, `Midnight must activate nocturnal pred
 OC.setTimeOfDay(prevTod);
 OC.ROV.clearSamples();
 console.log(`   Expedition Sample Museum (${museumAll.length} persisted samples) & Day/Night Ecosystem Cycle (DVM ${infoDay.dvmPhase} -> ${infoNight.dvmPhase}, coralSpawn=${infoNight.coralSpawnIntensity}, noctPred=${infoNight.nocturnalPredators}) verified.`);
+
+// X) Verify Step 7: Enhanced Chromatic Bottom Caustics & Shoreline / Ice / Vessel Contact Foam
+assert(OC.causticUniforms && OC.causticUniforms.uSunProj && OC.causticUniforms.uWaveAmp, 'world.js must expose uSunProj & uWaveAmp in OC.causticUniforms');
+assert(worldSrc.includes('causRGB') && worldSrc.includes('focusCurve'), 'world.js must inject chromatic RGB caustic dispersion & optical focus curve');
+assert(worldSrc.includes('uVesselInfo') && worldSrc.includes('vesselFoam') && worldSrc.includes('bowArm') && worldSrc.includes('sternWake'), 'world.js surface shader must render vessel hull contact foam & Kelvin wake');
+assert(worldSrc.includes("it.species !== 'ice_floe' && it.species !== 'iceberg'") && worldSrc.includes('swash'), 'world.js must bake arctic ice floe/iceberg contact rings & animated shoreline swash foam');
+console.log('   Chromatic Refractive Caustics (RGB dispersion + sun projection) & Contact Foam (shoreline swash, arctic ice rings & R/V Kelvin wake) verified.');
 console.log('ALL VERIFICATION CHECKS PASSED!');
