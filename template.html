@@ -96,9 +96,12 @@
     background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
     box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none}
   #minimap{display:block;width:184px;height:184px;border-radius:10px;cursor:crosshair;border:1px solid rgba(140,225,255,.18)}
-  .map-cap{display:flex;justify-content:space-between;align-items:center;margin-top:6px;
-    font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
-  .map-cap span:last-child{color:var(--accent)}
+  .map-cap{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:6px;
+    font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+  .map-cap b{color:var(--ok);font-weight:600}
+  .map-fog-btn{padding:2px 7px;border-radius:999px;border:1px solid rgba(88,224,255,.32);background:rgba(88,224,255,.12);
+    color:var(--accent);font:inherit;font-size:9px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:.16s}
+  .map-fog-btn.off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:var(--dim)}
 
   /* ---------- Подсказка снизу ---------- */
   .hero{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:20;text-align:center;
@@ -706,13 +709,13 @@
 </div>
 
 <div class="sonar-box hidden hud-hideable" id="sonar-box">
-  <div class="sonar-head"><span>Эхолот 140 м</span><b id="sonar-readout">Сканер · Чисто</b></div>
-  <canvas id="sonar-canvas" width="246" height="102" title="Профиль дна по курсу (G — активный импульс)"></canvas>
+  <div class="sonar-head"><span>Эхолот 165 м · 3D-луч</span><b id="sonar-readout">Сканер · Чисто</b></div>
+  <canvas id="sonar-canvas" width="246" height="102" title="Профиль дна по курсу (G — 3D-мультилуч)"></canvas>
 </div>
 
 <div class="minimap-box hud-hideable">
   <canvas id="minimap" title="Клик — переход · ПКМ или Shift+Клик — поставить/убрать маячок"></canvas>
-  <div class="map-cap"><span>Батиметрия 2.4 км</span><span>ПКМ — маяк</span></div>
+  <div class="map-cap"><span>Карта: <b id="map-cov">0%</b></span><button class="map-fog-btn" id="map-fog-btn" title="Туман войны / Полная карта">Туман</button><span>ПКМ — маяк</span></div>
 </div>
 
 <div class="touch-nav hud-hideable">

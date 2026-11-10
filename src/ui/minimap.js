@@ -9,6 +9,19 @@ window.OC = window.OC || {};
   let biomeRef = null;
   let pingState = null; // { x, z, startMs }
   const SIZE = 184;
+  const FOG_N = 64;
+  const FOG_LEN = FOG_N * FOG_N;
+  const fogByBiome = new Map();
+  let fogGrid = null;
+  let fogEnabled = true;
+  let fogCanvas = null;
+  let fogCtx = null;
+  let fogImg = null;
+  let fogDirty = true;
+  let revealedCells = 0;
+  let lastPassiveX = 99999;
+  let lastPassiveZ = 99999;
+  let lastSaveMs = 0;
 
   function depthToRGB(y) {
     const theme = biomeRef && biomeRef.minimapTheme;
@@ -163,6 +176,177 @@ window.OC = window.OC || {};
     ];
   }
 
+  function ensureFogCanvas() {
+    if (fogCanvas) return;
+    if (typeof document === 'undefined' || !document.createElement) return;
+    fogCanvas = document.createElement('canvas');
+    fogCanvas.width = FOG_N;
+    fogCanvas.height = FOG_N;
+    fogCtx = fogCanvas.getContext ? fogCanvas.getContext('2d') : null;
+    if (fogCtx && fogCtx.createImageData) fogImg = fogCtx.createImageData(FOG_N, FOG_N);
+  }
+
+  function encodeFog(arr) {
+    let s = '';
+    for (let i = 0; i < FOG_LEN; i++) s += String(arr[i] || 0);
+    return s;
+  }
+
+  function decodeFog(str, out) {
+    out.fill(0);
+    let cnt = 0;
+    if (typeof str === 'string' && str.length === FOG_LEN) {
+      for (let i = 0; i < FOG_LEN; i++) {
+        const v = str.charCodeAt(i) - 48;
+        if (v === 1 || v === 2) { out[i] = v; cnt++; }
+      }
+    }
+    return cnt;
+  }
+
+  function persistFog(force) {
+    if (!biomeRef || !fogGrid || !OC.Expedition || !OC.Expedition.setFogGrid) return;
+    const now = Date.now();
+    if (!force && now - lastSaveMs < 2400) return;
+    lastSaveMs = now;
+    OC.Expedition.setFogGrid(biomeRef.id, encodeFog(fogGrid));
+  }
+
+  function loadFogForBiome(biome) {
+    if (!biome) return;
+    let entry = fogByBiome.get(biome.id);
+    if (!entry) {
+      const grid = new Uint8Array(FOG_LEN);
+      let cnt = 0;
+      if (OC.Expedition && OC.Expedition.getFogGrid) {
+        cnt = decodeFog(OC.Expedition.getFogGrid(biome.id), grid);
+      }
+      entry = { grid, cnt };
+      fogByBiome.set(biome.id, entry);
+    }
+    fogGrid = entry.grid;
+    revealedCells = entry.cnt;
+    lastPassiveX = 99999;
+    lastPassiveZ = 99999;
+    fogDirty = true;
+    // Гарантируем открытую стартовую зону вокруг точки погружения
+    if (biome.spawn && biome.spawn.pos) {
+      stampCircle(biome.spawn.pos[0], biome.spawn.pos[2], 150, 1);
+    }
+  }
+
+  function syncEntryCount() {
+    if (!biomeRef || !fogGrid) return;
+    const entry = fogByBiome.get(biomeRef.id);
+    if (entry) entry.cnt = revealedCells;
+  }
+
+  function stampCircle(wx, wz, radius, level) {
+    if (!biomeRef || !fogGrid) return 0;
+    const R = biomeRef.worldRadius || 1200;
+    const cellW = (2 * R) / FOG_N;
+    const cX = ((wx / R) * 0.5 + 0.5) * FOG_N;
+    const cZ = ((wz / R) * 0.5 + 0.5) * FOG_N;
+    const rCells = Math.ceil(radius / cellW);
+    const r2 = (radius / cellW) * (radius / cellW);
+    const minI = Math.max(0, Math.floor(cX - rCells));
+    const maxI = Math.min(FOG_N - 1, Math.ceil(cX + rCells));
+    const minJ = Math.max(0, Math.floor(cZ - rCells));
+    const maxJ = Math.min(FOG_N - 1, Math.ceil(cZ + rCells));
+    let newlyRevealed = 0;
+    let changed = false;
+
+    for (let j = minJ; j <= maxJ; j++) {
+      const dz = (j + 0.5) - cZ;
+      for (let i = minI; i <= maxI; i++) {
+        const dx = (i + 0.5) - cX;
+        if (dx * dx + dz * dz <= r2) {
+          const idx = j * FOG_N + i;
+          if (fogGrid[idx] < level) {
+            if (fogGrid[idx] === 0) { revealedCells++; newlyRevealed++; }
+            fogGrid[idx] = level;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      fogDirty = true;
+      syncEntryCount();
+    }
+    return newlyRevealed;
+  }
+
+  function stampSwath(wx, wz, yaw, radius, halfAngle) {
+    if (!biomeRef || !fogGrid) return 0;
+    const R = biomeRef.worldRadius || 1200;
+    const cellW = (2 * R) / FOG_N;
+    const cX = ((wx / R) * 0.5 + 0.5) * FOG_N;
+    const cZ = ((wz / R) * 0.5 + 0.5) * FOG_N;
+    const rCells = Math.ceil(radius / cellW);
+    const r2 = (radius / cellW) * (radius / cellW);
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    const cosMin = Math.cos(halfAngle || 0.92);
+    const minI = Math.max(0, Math.floor(cX - rCells));
+    const maxI = Math.min(FOG_N - 1, Math.ceil(cX + rCells));
+    const minJ = Math.max(0, Math.floor(cZ - rCells));
+    const maxJ = Math.min(FOG_N - 1, Math.ceil(cZ + rCells));
+    let newlyRevealed = 0;
+    let changed = false;
+
+    for (let j = minJ; j <= maxJ; j++) {
+      const dz = (j + 0.5) - cZ;
+      for (let i = minI; i <= maxI; i++) {
+        const dx = (i + 0.5) - cX;
+        const d2 = dx * dx + dz * dz;
+        if (d2 > r2) continue;
+        // Ближнее ядро 55 м открывается вокруг аппарата, далее — направленный мультилучевой веер
+        const d = Math.sqrt(d2);
+        const insideCone = d < (55 / cellW) || ((dx * fx + dz * fz) / Math.max(0.001, d)) >= cosMin;
+        if (insideCone) {
+          const idx = j * FOG_N + i;
+          if (fogGrid[idx] < 2) {
+            if (fogGrid[idx] === 0) { revealedCells++; newlyRevealed++; }
+            fogGrid[idx] = 2;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      fogDirty = true;
+      syncEntryCount();
+      persistFog(true);
+    }
+    return newlyRevealed;
+  }
+
+  function isCellRevealed(wx, wz) {
+    if (!fogEnabled || !biomeRef || !fogGrid) return true;
+    const R = biomeRef.worldRadius || 1200;
+    const i = OC.clamp(Math.floor(((wx / R) * 0.5 + 0.5) * FOG_N), 0, FOG_N - 1);
+    const j = OC.clamp(Math.floor(((wz / R) * 0.5 + 0.5) * FOG_N), 0, FOG_N - 1);
+    return fogGrid[j * FOG_N + i] > 0;
+  }
+
+  function redrawFogCanvas() {
+    ensureFogCanvas();
+    if (!fogCtx || !fogImg || !fogGrid) return;
+    const d = fogImg.data;
+    for (let i = 0; i < FOG_LEN; i++) {
+      const v = fogGrid[i];
+      const p = i * 4;
+      d[p] = 4;
+      d[p + 1] = 13;
+      d[p + 2] = 26;
+      // 0: плотный туман неисследованного океана, 1: полу-ясная пассивная разведка, 2: кристально чистый скан сонара
+      d[p + 3] = v === 0 ? 226 : (v === 1 ? 26 : 0);
+    }
+    fogCtx.putImageData(fogImg, 0, 0);
+    fogDirty = false;
+  }
+
   OC.Minimap = {
     init(canvasEl, biome, onTeleport, onWaypoint) {
       canvas = canvasEl;
@@ -172,6 +356,7 @@ window.OC = window.OC || {};
       ctx = canvas.getContext('2d');
       biomeRef = biome;
       renderBathymetry();
+      loadFogForBiome(biome);
 
       function toggleWaypointAt(px, py) {
         if (!OC.Expedition || !biomeRef) return;
@@ -222,6 +407,7 @@ window.OC = window.OC || {};
         for (const lm of biomeRef.landmarks) {
           const mp = worldToMap(lm.x, lm.z);
           if (Math.hypot(mp[0] - px, mp[1] - py) < 10) {
+            stampCircle(lm.x, lm.z, 130, 1);
             if (onTeleport) onTeleport(lm.x, lm.y, lm.z, lm.yaw, lm.pitch, lm.name);
             return;
           }
@@ -229,6 +415,7 @@ window.OC = window.OC || {};
         const [wx, wz] = mapToWorld(px, py);
         const fl = biomeRef.getHeight(wx, wz);
         const targetY = Math.min(-3.0, Math.max(fl + 5.5, -28));
+        stampCircle(wx, wz, 130, 1);
         if (onTeleport) onTeleport(wx, targetY, wz, undefined, -0.14, null);
       });
 
@@ -245,16 +432,65 @@ window.OC = window.OC || {};
       pingState = { x, z, startMs: Date.now() };
     },
 
+    revealRadius(x, z, radius) {
+      return stampCircle(x, z, radius || 120, 1);
+    },
+
+    revealSwath(x, z, yaw, radius, halfAngle) {
+      return stampSwath(x, z, yaw, radius || 195, halfAngle || 0.92);
+    },
+
+    getCoverage() {
+      return Math.round((revealedCells / FOG_LEN) * 100);
+    },
+
+    setFogEnabled(on) {
+      fogEnabled = !!on;
+    },
+
+    isFogEnabled() {
+      return fogEnabled;
+    },
+
+    resetFog(biomeId) {
+      if (biomeId) fogByBiome.delete(biomeId);
+      else fogByBiome.clear();
+      if (OC.Expedition && OC.Expedition.clearFogGrid) OC.Expedition.clearFogGrid(biomeId);
+      if (biomeRef) loadFogForBiome(biomeRef);
+    },
+
     setBiome(biome) {
       biomeRef = biome;
       pingState = null;
       if (canvas) renderBathymetry();
+      loadFogForBiome(biome);
     },
 
     update(camPos, yaw) {
       if (!ctx || !bgImage || !biomeRef) return;
+
+      // Пассивное картографирование окружающей области при плавании
+      if (Math.hypot(camPos.x - lastPassiveX, camPos.z - lastPassiveZ) > 14) {
+        lastPassiveX = camPos.x;
+        lastPassiveZ = camPos.z;
+        if (stampCircle(camPos.x, camPos.z, 118, 1) > 0) {
+          persistFog(false);
+        }
+      }
+
       ctx.clearRect(0, 0, SIZE, SIZE);
       ctx.drawImage(bgImage, 0, 0);
+
+      // Слой тумана войны ("Картография экспедиции")
+      if (fogEnabled) {
+        if (fogDirty) redrawFogCanvas();
+        if (fogCanvas) {
+          ctx.save();
+          ctx.imageSmoothingEnabled = true;
+          ctx.drawImage(fogCanvas, 0, 0, SIZE, SIZE);
+          ctx.restore();
+        }
+      }
 
       // Активный импульс сонара на карте
       if (pingState) {
@@ -275,16 +511,25 @@ window.OC = window.OC || {};
         }
       }
 
-      // Ориентиры
+      // Ориентиры (полностью яркие на открытой карте, слабый радиомаячок в тумане)
       for (const lm of biomeRef.landmarks) {
         const [mx, my] = worldToMap(lm.x, lm.z);
-        ctx.fillStyle = lm.id === 'blue_hole' || lm.id === 'canyon_abyss' ? '#38b6ff' : (lm.isHot ? '#ff7d45' : '#ffd17a');
-        ctx.beginPath();
-        ctx.arc(mx, my, 3.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(2,14,28,0.85)';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
+        const rev = isCellRevealed(lm.x, lm.z);
+        if (rev) {
+          ctx.fillStyle = lm.id === 'blue_hole' || lm.id === 'canyon_abyss' ? '#38b6ff' : (lm.isHot ? '#ff7d45' : '#ffd17a');
+          ctx.beginPath();
+          ctx.arc(mx, my, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(2,14,28,0.85)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = 'rgba(255, 209, 122, 0.36)';
+          ctx.lineWidth = 1.1;
+          ctx.beginPath();
+          ctx.arc(mx, my, 2.8, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
 
       // Надводное экспедиционное судно НИС (если есть в биоме)

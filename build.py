@@ -27,6 +27,7 @@ ORDER = [
     'engine/fauna_engine.js',
     'engine/audio.js',
     'engine/rov.js',
+    'engine/sonar.js',
     'ui/navigation.js',
     'ui/expedition.js',
     'ui/minimap.js',

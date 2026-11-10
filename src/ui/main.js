@@ -46,6 +46,8 @@ window.OC = window.OC || {};
   const sonarBox = document.getElementById('sonar-box');
   const sonarCanvas = document.getElementById('sonar-canvas');
   const sonarReadout = document.getElementById('sonar-readout');
+  const mapCovEl = document.getElementById('map-cov');
+  const mapFogBtn = document.getElementById('map-fog-btn');
 
   const teleZone = document.getElementById('tele-zone');
   const teleDepth = document.getElementById('tele-depth');
@@ -862,23 +864,51 @@ window.OC = window.OC || {};
       if (OC.Expedition && activeBiome) OC.Expedition.recordSonarPing(activeBiome.id, res);
       if (activeFauna.notifySonarPing) activeFauna.notifySonarPing(cam.position);
       OC.Minimap.triggerPing(cam.position.x, cam.position.z);
+      const scanRes = (OC.Sonar && activeBiome)
+        ? OC.Sonar.triggerScan(activeBiome, cam.position, OC.Navigation.getYaw(), 165)
+        : null;
+      if (mapCovEl && OC.Minimap.getCoverage) mapCovEl.textContent = OC.Minimap.getCoverage() + '%';
       OC.sound.sonarPing(res.range, res.hit);
       if (sonarReadout) {
         sonarReadout.textContent = res.hit
           ? (res.range.toFixed(0) + ' м · ' + res.label)
-          : '140 м · Чистая вода';
+          : (scanRes ? ('3D-скан ' + scanRes.pointCount + ' тчк') : '165 м · Чистая вода');
       }
       if (btnSonar) {
         btnSonar.classList.add('on');
         setTimeout(() => btnSonar.classList.remove('on'), 650);
       }
-      toast(res.hit ? ('Сонар: ' + res.range.toFixed(0) + ' м — ' + res.label) : 'Сонар: впереди чисто (140 м)');
+      toast(res.hit
+        ? ('Сонар: ' + res.range.toFixed(0) + ' м — ' + res.label)
+        : ('3D-батиметрия: снято ' + (scanRes ? scanRes.pointCount : 1496) + ' точек рельефа'));
     };
 
     if (btnSonar) {
       btnSonar.addEventListener('click', (e) => {
         e.stopPropagation();
         fireSonarPing();
+      });
+    }
+
+    const syncFogButton = () => {
+      const fogOn = !(OC.Minimap && OC.Minimap.isFogEnabled && !OC.Minimap.isFogEnabled());
+      if (mapFogBtn) {
+        mapFogBtn.classList.toggle('off', !fogOn);
+        mapFogBtn.textContent = fogOn ? 'Туман' : 'Вся';
+      }
+      if (mapCovEl && OC.Minimap && OC.Minimap.getCoverage) {
+        mapCovEl.textContent = OC.Minimap.getCoverage() + '%';
+      }
+    };
+    syncFogButton();
+    if (mapFogBtn) {
+      mapFogBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!OC.Minimap || !OC.Minimap.setFogEnabled) return;
+        const next = !OC.Minimap.isFogEnabled();
+        OC.Minimap.setFogEnabled(next);
+        syncFogButton();
+        toast(next ? 'Мини-карта: туман войны включён (G — сонар)' : 'Мини-карта: показана полная батиметрия');
       });
     }
 
@@ -1380,6 +1410,8 @@ window.OC = window.OC || {};
 
     OC.Navigation.setBiome(next);
     OC.Minimap.setBiome(next);
+    if (OC.Sonar) OC.Sonar.clear();
+    if (mapCovEl && OC.Minimap.getCoverage) mapCovEl.textContent = OC.Minimap.getCoverage() + '%';
     OC.Atlas.setBiome(next);
     if (OC.ROV) OC.ROV.resetForBiome(next, sp);
 
@@ -1427,6 +1459,7 @@ window.OC = window.OC || {};
 
       setBar(0.5);
       OC.Terrain.init(scene, activeBiome, sp);
+      if (OC.Sonar) OC.Sonar.init(scene);
 
       setBar(0.72);
       OC.FloraStreamer.init(scene, activeBiome, sp);
@@ -1550,6 +1583,7 @@ window.OC = window.OC || {};
       OC.updateWorld(dt, time, camPos, autoCycle);
       OC.Terrain.update(camPos);
       OC.FloraStreamer.update(camPos);
+      if (OC.Sonar) OC.Sonar.update(dt);
       const camSpeed = OC.Navigation.getSpeed();
       const flashOn = OC.isFlashlightOn();
       if (OC.ROV) {
@@ -1643,6 +1677,7 @@ window.OC = window.OC || {};
 
         OC.sound.update(depthM, zone.id, dayW, biome.id, wState.stormMix || 0);
         OC.Minimap.update(craftPos, OC.Navigation.getYaw());
+        if (mapCovEl && OC.Minimap.getCoverage) mapCovEl.textContent = OC.Minimap.getCoverage() + '%';
 
         const ecoEv = OC.faunaInfo ? OC.faunaInfo.activeEvent : null;
         if (ecoEv && (ecoEv !== lastEcoEvent || OC.uTime.value - lastEcoEventAt > 20) && OC.uTime.value > 5) {

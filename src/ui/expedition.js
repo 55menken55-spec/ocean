@@ -6,7 +6,7 @@ window.OC = window.OC || {};
   const STORAGE_KEY = 'oc_ocean_expedition_v1';
 
   function loadStore() {
-    const empty = { discovered: {}, missionsDone: {}, photos: [], waypoints: {}, quality: null };
+    const empty = { discovered: {}, missionsDone: {}, photos: [], waypoints: {}, fogMaps: {}, quality: null };
     try {
       if (typeof localStorage === 'undefined') return empty;
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -673,6 +673,25 @@ window.OC = window.OC || {};
         missionsDone: Array.isArray(doneArr) ? doneArr.length : 0,
         missionsTotal
       };
+    },
+
+    getFogGrid(biomeId) {
+      if (!biomeId || !store.fogMaps) return '';
+      return store.fogMaps[biomeId] || '';
+    },
+
+    setFogGrid(biomeId, encoded) {
+      if (!biomeId) return;
+      if (!store.fogMaps) store.fogMaps = {};
+      store.fogMaps[biomeId] = encoded || '';
+      saveStore();
+    },
+
+    clearFogGrid(biomeId) {
+      if (!store.fogMaps) return;
+      if (biomeId) delete store.fogMaps[biomeId];
+      else store.fogMaps = {};
+      saveStore();
     }
   };
 })(window.OC);
