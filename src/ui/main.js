@@ -128,6 +128,7 @@ window.OC = window.OC || {};
   const rovBtnCurrents = document.getElementById('rov-btn-currents');
   const rovBtnSample = document.getElementById('rov-btn-sample');
   const rovBtnCtd = document.getElementById('rov-btn-ctd');
+  const rovBtnVessel = document.getElementById('rov-btn-vessel');
   const rovTargetLabel = document.getElementById('rov-target-label');
   const rovFlowLabel = document.getElementById('rov-flow-label');
   const rovCtdChart = document.getElementById('rov-ctd-chart');
@@ -613,9 +614,16 @@ window.OC = window.OC || {};
       const chaseOn = !!(OC.Navigation.isRovView && OC.Navigation.isRovView());
       const currOn = !!(OC.ROV && OC.ROV.isCurrentsVisible && OC.ROV.isCurrentsVisible());
       const panelOpen = !!(rovPanel && !rovPanel.classList.contains('closed'));
+      const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
       if (btnRov) btnRov.classList.toggle('on', panelOpen || chaseOn || currOn);
       if (rovBtnChase) rovBtnChase.classList.toggle('on', chaseOn);
       if (rovBtnCurrents) rovBtnCurrents.classList.toggle('on', currOn);
+      if (rovBtnVessel) {
+        rovBtnVessel.disabled = !vInfo;
+        rovBtnVessel.title = vInfo
+          ? ('Всплыть к судну ' + vInfo.name)
+          : 'Надводное судно недоступно в глубоководной зоне';
+      }
     };
 
     const updateRovCtdDisplay = (castOverride) => {
@@ -724,6 +732,18 @@ window.OC = window.OC || {};
     }
     if (rovBtnSample) rovBtnSample.addEventListener('click', triggerSampleGrab);
     if (rovBtnCtd) rovBtnCtd.addEventListener('click', triggerCtdCast);
+    if (rovBtnVessel) {
+      rovBtnVessel.addEventListener('click', () => {
+        const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
+        if (!vInfo) {
+          toast('В этой глубоководной зоне нет надводного судна');
+          return;
+        }
+        OC.Navigation.flyTo(vInfo.deckPos[0], vInfo.deckPos[1], vInfo.deckPos[2], vInfo.deckYaw, -0.09);
+        if (OC.sound && OC.sound.missionChime) OC.sound.missionChime();
+        toast('Всплытие на поверхность к ' + vInfo.name);
+      });
+    }
     if (rovSamplesClear) {
       rovSamplesClear.addEventListener('click', () => {
         if (!OC.ROV) return;

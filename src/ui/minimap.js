@@ -151,6 +151,16 @@ window.OC = window.OC || {};
           return;
         }
 
+        // Проверяем клик по судну НИС на поверхности
+        const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
+        if (vInfo) {
+          const vp = worldToMap(vInfo.x, vInfo.z);
+          if (Math.hypot(vp[0] - px, vp[1] - py) < 10) {
+            if (onTeleport) onTeleport(vInfo.deckPos[0], vInfo.deckPos[1], vInfo.deckPos[2], vInfo.deckYaw, -0.09, vInfo.name);
+            return;
+          }
+        }
+
         // Проверяем клик по ориентиру (landmark)
         for (const lm of biomeRef.landmarks) {
           const mp = worldToMap(lm.x, lm.z);
@@ -218,6 +228,28 @@ window.OC = window.OC || {};
         ctx.strokeStyle = 'rgba(2,14,28,0.85)';
         ctx.lineWidth = 1.2;
         ctx.stroke();
+      }
+
+      // Надводное экспедиционное судно НИС (если есть в биоме)
+      const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
+      if (vInfo) {
+        const [vx, vz] = worldToMap(vInfo.x, vInfo.z);
+        ctx.save();
+        ctx.translate(vx, vz);
+        ctx.rotate(-vInfo.yaw + Math.PI);
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#ff6b4a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -6.5);
+        ctx.lineTo(3.2, -1.5);
+        ctx.lineTo(3.0, 5.5);
+        ctx.lineTo(-3.0, 5.5);
+        ctx.lineTo(-3.2, -1.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
       }
 
       // Конус обзора и позиция камеры

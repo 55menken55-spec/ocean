@@ -422,6 +422,10 @@ window.OC = window.OC || {};
     if (key === 'dugong') return 'Свист дюгоня';
     if (key === 'ice_floe' || key === 'iceberg' || key === 'brinicle') return 'Треск пакового льда';
     if (key === 'shipwreck' || key === 'wreck_anchor') return 'Скрип подводного остова';
+    if (key === 'research_vessel') return 'Сигнал НИС и гидролокатор';
+    if (key === 'seabird') return 'Крик морских птиц над водой';
+    if (key === 'dolphin') return 'Свисты и эхолокация дельфинов';
+    if (key === 'flying_fish') return 'Всплеск и скольжение крыльев';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
@@ -600,6 +604,95 @@ window.OC = window.OC || {};
           f.type = 'bandpass'; f.frequency.value = 950;
           g.gain.setValueAtTime(0.06, t);
           g.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
+          o.connect(f); f.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.06);
+        }
+      } else if (key === 'research_vessel') {
+        // Глубокий двухтоновый корабельный тифон + пинг бортового гидролокатора
+        [110, 146.8].forEach((f) => {
+          const o = ctx.createOscillator();
+          const lp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(f, now);
+          o.frequency.linearRampToValueAtTime(f * 0.985, now + 1.25);
+          lp.type = 'lowpass'; lp.frequency.value = 380;
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.linearRampToValueAtTime(0.09, now + 0.14);
+          g.gain.linearRampToValueAtTime(0.065, now + 0.95);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+          o.connect(lp); lp.connect(g); g.connect(out);
+          o.start(now); o.stop(now + 1.45);
+        });
+        const ping = ctx.createOscillator();
+        const pg = ctx.createGain();
+        ping.type = 'sine';
+        ping.frequency.setValueAtTime(1480, now + 0.35);
+        pg.gain.setValueAtTime(0.0001, now + 0.35);
+        pg.gain.linearRampToValueAtTime(0.055, now + 0.37);
+        pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.95);
+        ping.connect(pg); pg.connect(out);
+        ping.start(now + 0.35); ping.stop(now + 1.0);
+      } else if (key === 'seabird') {
+        // Чайки/крачки над океаном: три звонких нисходящих крика
+        [0, 0.28, 0.54].forEach((off, i) => {
+          const t = now + off;
+          const o = ctx.createOscillator();
+          const bp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          const f0 = 1850 + i * 240;
+          o.frequency.setValueAtTime(f0 * 0.88, t);
+          o.frequency.linearRampToValueAtTime(f0 * 1.18, t + 0.06);
+          o.frequency.exponentialRampToValueAtTime(f0 * 0.62, t + 0.24);
+          bp.type = 'bandpass'; bp.frequency.value = 2100; bp.Q.value = 2.4;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.085, t + 0.03);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+          o.connect(bp); bp.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.28);
+        });
+      } else if (key === 'dolphin') {
+        // Быстрая очередь эхолокационных щелчков + фирменные восходящие свисты дельфина
+        for (let i = 0; i < 10; i++) {
+          const t = now + i * 0.045;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'square';
+          o.frequency.setValueAtTime(2400 - i * 80, t);
+          o.frequency.exponentialRampToValueAtTime(620, t + 0.018);
+          g.gain.setValueAtTime(0.055, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.024);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.03);
+        }
+        [1420, 1780].forEach((f, idx) => {
+          const t = now + 0.42 + idx * 0.24;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * 1.75, t + 0.14);
+          o.frequency.exponentialRampToValueAtTime(f * 1.25, t + 0.22);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.085, t + 0.03);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.25);
+        });
+      } else if (key === 'flying_fish') {
+        // Стремительный всплеск взлёта и вибрирующий шелест крыльев над водой
+        for (let i = 0; i < 6; i++) {
+          const t = now + i * 0.055;
+          const o = ctx.createOscillator();
+          const f = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(640 + i * 90, t);
+          o.frequency.exponentialRampToValueAtTime(280, t + 0.045);
+          f.type = 'bandpass'; f.frequency.value = 1350; f.Q.value = 1.8;
+          g.gain.setValueAtTime(0.065, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.052);
           o.connect(f); f.connect(g); g.connect(out);
           o.start(t); o.stop(t + 0.06);
         }
