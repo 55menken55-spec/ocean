@@ -95,6 +95,7 @@ window.OC = window.OC || {};
     if (biome.id === 'arctic_sea') return { baseTemp: -1.3, heatTolerance: 1.4, hasCorals: false, isAbyss: false };
     if (biome.id === 'kelp_forest') return { baseTemp: 11.5, heatTolerance: 1.4, hasCorals: false, isAbyss: false };
     if (biome.id === 'hydrothermal_vents') return { baseTemp: 2.8, heatTolerance: 2.2, hasCorals: false, isAbyss: true };
+    if (biome.id === 'mariana_trench') return { baseTemp: 2.1, heatTolerance: 2.4, hasCorals: false, isAbyss: true };
     return { baseTemp: 27.0, heatTolerance: 1.1, hasCorals: true, isAbyss: false };
   }
 

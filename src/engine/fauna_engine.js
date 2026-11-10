@@ -2443,10 +2443,12 @@ window.OC = window.OC || {};
     };
   }
 
-  /* ---------- Шлейфы чёрных курильщиков и термальный свет ---------- */
+  /* ---------- Шлейфы чёрных курильщиков и серпентинитовых сипов ---------- */
   function makeVentPlume(scene, biome, tex, opts) {
     const n = opts.n || 180;
     const hMax = opts.height || 34;
+    const coldSeep = !!opts.coldSeep;
+    const key = opts.key || (coldSeep ? 'serpentinite_vent' : 'vent_chimney');
     const baseY = biome.getHeight(opts.x, opts.z) + (opts.chimneyH || 6.5);
     const geo = new T.BufferGeometry();
     const pos = new Float32Array(n * 3);
@@ -2471,7 +2473,8 @@ window.OC = window.OC || {};
         {
           uTex: { value: tex },
           uTime: OC.uTime,
-          uHMax: { value: hMax }
+          uHMax: { value: hMax },
+          uCold: { value: coldSeep ? 1.0 : 0.0 }
         }
       ]),
       vertexShader: `
@@ -2498,15 +2501,16 @@ window.OC = window.OC || {};
         }`,
       fragmentShader: `
         uniform sampler2D uTex;
+        uniform float uCold;
         varying float vLife, vHeat;
         #include <fog_pars_fragment>
         void main(){
           vec4 tx = texture2D(uTex, gl_PointCoord);
           if (tx.a < 0.03) discard;
-          vec3 soot = vec3(0.11, 0.12, 0.14);
-          vec3 ember = vec3(0.92, 0.36, 0.08);
-          vec3 col = mix(soot, ember, vHeat * 0.72);
-          float alpha = tx.a * (1.0 - smoothstep(0.45, 1.0, vLife)) * smoothstep(0.0, 0.05, vLife) * 0.68;
+          vec3 soot = mix(vec3(0.11, 0.12, 0.14), vec3(0.45, 0.72, 0.82), uCold);
+          vec3 ember = mix(vec3(0.92, 0.36, 0.08), vec3(0.72, 0.95, 1.0), uCold);
+          vec3 col = mix(soot, ember, vHeat * (0.72 - uCold * 0.15));
+          float alpha = tx.a * (1.0 - smoothstep(0.45, 1.0, vLife)) * smoothstep(0.0, 0.05, vLife) * (0.68 - uCold * 0.22);
           gl_FragColor = vec4(col, alpha);
           #include <fog_fragment>
         }`
@@ -2514,24 +2518,323 @@ window.OC = window.OC || {};
 
     const pts = new T.Points(geo, mat);
     pts.position.set(opts.x, baseY, opts.z);
-    pts.userData.key = 'vent_chimney';
+    pts.userData.key = key;
     scene.add(pts);
 
     let light = null;
     if (opts.light) {
-      light = new T.PointLight(0xff5e1a, 2.6, 52, 1.4);
+      light = new T.PointLight(coldSeep ? 0x6ce8ff : 0xff5e1a, coldSeep ? 1.8 : 2.6, 52, 1.4);
       light.position.set(opts.x, baseY + 1.5, opts.z);
       scene.add(light);
     }
 
     return {
-      key: 'vent_chimney',
+      key,
       getPosition: () => pts.position,
       update(dt, time, camPos) {
         const d = Math.hypot(opts.x - camPos.x, opts.z - camPos.z);
         const vis = d < 520;
         pts.visible = vis;
-        if (light) light.intensity = vis ? (2.2 + 0.7 * Math.sin(time * 5.2 + opts.x)) : 0;
+        if (light) light.intensity = vis ? ((coldSeep ? 1.6 : 2.2) + 0.55 * Math.sin(time * 4.4 + opts.x)) : 0;
+      }
+    };
+  }
+
+  /* ---------- Оазис китового падения: 24-метровый скелет синего кита в Марианской впадине ---------- */
+  function makeWhaleFall(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    const parts = [];
+    const len = opts.len || 24;
+    const boneA = 0xddd6c6;
+    const boneB = 0xa89f8e;
+    const matCol = 0xe8d89e;
+    const osedaxCol = 0xd93664;
+
+    function paintBone(g) {
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const n = Math.sin(x * 1.9 + z * 0.7) * 0.5 + 0.5;
+        c.set(boneA).lerp(new T.Color(boneB), n * 0.45);
+      });
+      parts.push(g);
+      return g;
+    }
+
+    // 1. Череп и верхняя челюсть синего кита (спереди +Z)
+    const cranium = new T.SphereGeometry(1.65, 12, 8);
+    cranium.scale(1.15, 0.72, 1.45);
+    OC.xform(paintBone(cranium), { p: [0, 0.95, len * 0.34] });
+
+    for (const s of [-1, 1]) {
+      const jaw = new T.CylinderGeometry(0.16, 0.38, 4.8, 7);
+      jaw.rotateX(Math.PI / 2);
+      OC.xform(paintBone(jaw), { r: [0.06, s * 0.22, 0], p: [s * 0.78, 0.58, len * 0.44] });
+    }
+    const vomer = new T.ConeGeometry(0.45, 4.9, 6);
+    vomer.scale(0.85, 1.0, 0.45);
+    vomer.rotateX(Math.PI / 2);
+    OC.xform(paintBone(vomer), { p: [0, 0.88, len * 0.45] });
+
+    // 2. Позвоночный столб (22 массивных позвонка с остистыми отростками по S-дуге)
+    for (let i = 0; i < 22; i++) {
+      const u = i / 21;
+      const vz = len * 0.28 - u * len * 0.76;
+      const vx = Math.sin(u * 3.1) * 1.35;
+      const vy = 0.52 + (1 - u) * 0.22 + Math.sin(u * Math.PI) * 0.25;
+      const rad = OC.lerp(0.46, 0.16, u * u);
+
+      const centrum = new T.CylinderGeometry(rad, rad * 1.04, 0.52, 8);
+      centrum.rotateX(Math.PI / 2);
+      OC.xform(paintBone(centrum), { r: [0, Math.cos(u * 3.1) * 0.24, 0], p: [vx, vy, vz] });
+
+      const spine = new T.BoxGeometry(0.12, OC.lerp(1.15, 0.26, u), 0.26);
+      OC.xform(paintBone(spine), { r: [-0.22, Math.cos(u * 3.1) * 0.24, 0], p: [vx, vy + rad + 0.36, vz] });
+    }
+
+    // 3. Свод рёберной клетки (14 пар изогнутых рёбер + лопатки)
+    for (let i = 0; i < 14; i++) {
+      const u = i / 13;
+      const vz = len * 0.22 - u * len * 0.36;
+      const vxBase = Math.sin(((len * 0.28 - vz) / (len * 0.76)) * 3.1) * 1.35;
+      const span = 1.65 + Math.sin(u * Math.PI) * 1.15;
+      for (const s of [-1, 1]) {
+        const rib = new T.TorusGeometry(span, 0.105, 5, 10, Math.PI * 0.78);
+        OC.xform(paintBone(rib), {
+          r: [0.18, s * 0.15, s * 0.38 - Math.PI * 0.12],
+          p: [vxBase + s * 0.35, 0.18, vz]
+        });
+      }
+    }
+
+    // 4. Бактериальные сульфидные маты и гроздья костоедов Osedax прямо на костях
+    const rng = OC.mulberry32(9904);
+    for (let i = 0; i < 24; i++) {
+      const pz = OC.lerp(-len * 0.42, len * 0.42, rng());
+      const px = OC.lerp(-2.2, 2.2, rng());
+      const patch = new T.SphereGeometry(OC.lerp(0.26, 0.55, rng()), 6, 4);
+      patch.scale(1.3, 0.42, 1.1);
+      OC.geoPrep(patch);
+      OC.paint(patch, i % 2 === 0 ? osedaxCol : matCol);
+      OC.xform(patch, { p: [px, OC.lerp(0.18, 1.15, rng()), pz] });
+      parts.push(patch);
+    }
+
+    const merged = OC.mergeGeometries(parts);
+    group.add(new T.Mesh(merged, creatureMat));
+
+    // Лёгкое биолюминесцентное свечение бактериальных матов у падения кита в гадальной тьме
+    const matSpot = new T.MeshBasicMaterial({ color: 0xffe49c, transparent: true, opacity: 0.72 });
+    const osMat = new T.MeshBasicMaterial({ color: 0xff4c7c, transparent: true, opacity: 0.85 });
+    for (let i = 0; i < 6; i++) {
+      const m = new T.Mesh(new T.SphereGeometry(0.22, 6, 4), i % 2 === 0 ? osMat : matSpot);
+      m.position.set(Math.sin(i * 1.7) * 1.35, 0.45 + (i % 3) * 0.32, (i - 2.5) * 3.1);
+      group.add(m);
+    }
+
+    let halo = null;
+    if (!opts.preview && biome && biome.getHeight) {
+      const fl = biome.getHeight(opts.x || 0, opts.z || 0);
+      group.position.set(opts.x || 0, fl - 0.12, opts.z || 0);
+      group.rotation.y = opts.yaw || 0.45;
+      halo = new T.PointLight(0xff7aa8, 1.4, 38, 1.5);
+      halo.position.set(opts.x || 0, fl + 3.2, opts.z || 0);
+      scene.add(halo);
+    } else {
+      group.position.set(0, 0, 0);
+    }
+
+    group.userData.key = 'whale_fall';
+    scene.add(group);
+
+    return {
+      key: 'whale_fall',
+      sonarLabel: 'Оазис китового падения (Whale Fall)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (opts.preview) return;
+        const d = Math.hypot(group.position.x - camPos.x, group.position.z - camPos.z);
+        group.visible = d < 620;
+        if (halo) halo.intensity = group.visible ? (1.1 + 0.35 * Math.sin(time * 1.8)) : 0;
+      }
+    };
+  }
+
+  /* ---------- Марианский морской слизень (Pseudoliparis swirei, глубочайшая рыба Земли) ---------- */
+  function makeHadalSnailfish(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    const parts = [];
+
+    // Широкая голова и полупрозрачное жемчужно-розовое тело без чешуи, плавно сужающееся в длинный хвост
+    const body = new T.SphereGeometry(0.26, 12, 8);
+    body.scale(0.95, 0.85, 2.35);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.set(z > 0.15 ? 0xf2c8d8 : 0xe4e8f4));
+    parts.push(body);
+
+    const head = new T.SphereGeometry(0.27, 10, 8);
+    head.scale(1.12, 0.82, 1.0);
+    OC.geoPrep(head); OC.paint(head, 0xf6d4e0);
+    OC.xform(head, { p: [0, -0.02, 0.34] });
+    parts.push(head);
+
+    // Веерообразные полупрозрачные грудные плавники
+    for (const s of [-1, 1]) {
+      const pec = new T.ConeGeometry(0.16, 0.38, 4);
+      pec.scale(0.14, 1.0, 1.25);
+      pec.rotateZ(-s * Math.PI / 2);
+      OC.geoPrep(pec); OC.paint(pec, 0xffeaf2);
+      OC.xform(pec, { r: [0, -s * 0.25, 0], p: [s * 0.25, -0.06, 0.22] });
+      parts.push(pec);
+    }
+
+    // Крошечные тёмные глаза
+    for (const s of [-1, 1]) {
+      const eye = new T.SphereGeometry(0.032, 6, 4);
+      OC.geoPrep(eye); OC.paint(eye, 0x121622);
+      OC.xform(eye, { p: [s * 0.16, 0.08, 0.48] });
+      parts.push(eye);
+    }
+
+    const mainMat = new T.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.28,
+      metalness: 0.04,
+      emissive: new T.Color(0x6e4a62),
+      emissiveIntensity: 0.42,
+      transparent: true,
+      opacity: 0.88,
+      side: T.DoubleSide
+    });
+    group.add(new T.Mesh(OC.mergeGeometries(parts), mainMat));
+
+    // Лентовидный хвост с волнистой спинно-анальной каймой
+    const tailGroup = new T.Group();
+    tailGroup.position.set(0, 0, -0.45);
+    const tailFin = new T.ConeGeometry(0.18, 0.82, 4);
+    tailFin.scale(0.16, 1.0, 1.0);
+    tailFin.rotateX(-Math.PI / 2);
+    OC.geoPrep(tailFin); OC.paint(tailFin, 0xf2dae4);
+    OC.xform(tailFin, { p: [0, 0, -0.38] });
+    tailGroup.add(new T.Mesh(tailFin, mainMat));
+    group.add(tailGroup);
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.userData.key = 'hadal_snailfish';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+    return {
+      key: 'hadal_snailfish',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot((opts.cx || 0) - camPos.x, (opts.cz || 0) - camPos.z) > 460) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 1.6) / (opts.r || 26)) * dt;
+        const ax = (opts.cx || 0) + Math.cos(ang) * (opts.r || 26);
+        const az = (opts.cz || 0) + Math.sin(ang) * (opts.r || 26);
+        const bx = (opts.cx || 0) + Math.cos(ang + 0.12) * (opts.r || 26);
+        const bz = (opts.cz || 0) + Math.sin(ang + 0.12) * (opts.r || 26);
+        const ay = biome.getHeight(ax, az) + 2.4 + Math.sin(time * 0.7 + az) * 0.9;
+        const by = biome.getHeight(bx, bz) + 2.4 + Math.sin(time * 0.7 + bz) * 0.9;
+        _a.set(ax, ay, az); _b.set(bx, by, bz);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        tailGroup.rotation.y = Math.sin(time * 4.6 + ang) * 0.35;
+      }
+    };
+  }
+
+  /* ---------- Глубоководная голотурия «морская свинка» (Scotoplanes globosa) ---------- */
+  function makeSeaPig(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.singlePreview;
+    const count = preview ? 1 : (opts.count || 5);
+    const group = new T.Group();
+    group.userData.key = 'sea_pig';
+
+    const members = [];
+    const rng = OC.mulberry32(Math.abs(Math.round((opts.cx || 9) * 17 + (opts.cz || 5) * 37)) + 412);
+
+    function buildSinglePig() {
+      const pRoot = new T.Group();
+      const parts = [];
+      const body = new T.SphereGeometry(0.24, 10, 8);
+      body.scale(0.88, 0.82, 1.55);
+      OC.geoPrep(body);
+      OC.paint(body, (x, y, z, c) => c.set(y > 0 ? 0xdca0c4 : 0xc482a8));
+      parts.push(body);
+
+      // Парные ножки-трубки по бокам брюха и спинные антенны-папиллы
+      for (let leg = 0; leg < 5; leg++) {
+        const lz = -0.22 + leg * 0.11;
+        for (const s of [-1, 1]) {
+          const tube = new T.CylinderGeometry(0.025, 0.018, 0.15, 5);
+          OC.geoPrep(tube); OC.paint(tube, 0xe4b8d2);
+          OC.xform(tube, { r: [0, 0, s * 0.42], p: [s * 0.19, -0.14, lz] });
+          parts.push(tube);
+        }
+      }
+      for (const s of [-1, 1]) {
+        const ant = new T.ConeGeometry(0.028, 0.24, 5);
+        OC.geoPrep(ant); OC.paint(ant, 0xf2bfd8);
+        OC.xform(ant, { r: [0.18, 0, -s * 0.22], p: [s * 0.09, 0.24, 0.08] });
+        parts.push(ant);
+      }
+
+      const pigMat = new T.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.36,
+        metalness: 0.04,
+        emissive: new T.Color(0x522a44),
+        emissiveIntensity: 0.35
+      });
+      pRoot.add(new T.Mesh(OC.mergeGeometries(parts), pigMat));
+      pRoot.userData.key = 'sea_pig';
+      return pRoot;
+    }
+
+    for (let i = 0; i < count; i++) {
+      const m = buildSinglePig();
+      const sc = preview ? 1.5 : OC.lerp(0.9, 1.25, rng());
+      m.scale.setScalar(sc);
+      group.add(m);
+      const ang = (i / Math.max(1, count)) * Math.PI * 2 + rng() * 0.5;
+      const rr = preview ? 0 : OC.lerp(2.2, opts.r || 12, rng());
+      members.push({
+        root: m,
+        ang,
+        rr,
+        spd: OC.lerp(0.25, 0.45, rng()),
+        phase: rng() * 6.28
+      });
+    }
+
+    scene.add(group);
+    if (preview) {
+      return { key: 'sea_pig', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    return {
+      key: 'sea_pig',
+      getPosition: () => members[0].root.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        for (let i = 0; i < members.length; i++) {
+          const m = members[i];
+          m.ang += (m.spd / Math.max(2.5, m.rr)) * dt;
+          const px = cx + Math.cos(m.ang) * m.rr;
+          const pz = cz + Math.sin(m.ang) * m.rr;
+          const py = biome.getHeight(px, pz) + 0.16;
+          m.root.position.set(px, py, pz);
+          m.root.rotation.y = -m.ang;
+          m.root.position.y += Math.sin(time * 2.2 + m.phase) * 0.015;
+        }
       }
     };
   }
@@ -3825,6 +4128,22 @@ window.OC = window.OC || {};
         agents.push(makeFlyingFishPod(faunaGroup, biome, ff, emitSplash));
       }
 
+      for (const wf of (plan.whaleFalls || [])) {
+        const wfo = makeWhaleFall(faunaGroup, biome, wf);
+        agents.push(wfo);
+        sonarTargets.push(wfo);
+      }
+
+      for (const sf of (plan.snailfishes || [])) {
+        const sfo = makeHadalSnailfish(faunaGroup, biome, sf);
+        agents.push(sfo);
+        sonarTargets.push(sfo);
+      }
+
+      for (const sp of (plan.seaPigs || [])) {
+        agents.push(makeSeaPig(faunaGroup, biome, sp));
+      }
+
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
@@ -4212,6 +4531,12 @@ window.OC = window.OC || {};
           makeDolphinPod(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, singlePreview: true, variant: dVariant });
         } else if (key === 'flying_fish') {
           makeFlyingFishPod(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, singlePreview: true });
+        } else if (key === 'whale_fall') {
+          makeWhaleFall(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'hadal_snailfish') {
+          makeHadalSnailfish(tmpGroup, dummyBiome, { cx: 0, cz: 0, scale: 1.5 });
+        } else if (key === 'sea_pig') {
+          makeSeaPig(tmpGroup, dummyBiome, { cx: 0, cz: 0, singlePreview: true });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;

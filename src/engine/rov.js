@@ -16,10 +16,10 @@ window.OC = window.OC || {};
     'coral_boulder', 'coral_pillar', 'coral_seafan', 'coral_soft', 'coral_whip',
     'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral'
   ]);
-  const VENT_SPECIES = new Set(['smoker_chimney', 'tube_worm', 'vent_mussel']);
+  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume']);
   const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'mangrove', 'island_palm']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm']);
 
   let sceneRef = null;
   let rovGroup = null;
@@ -630,9 +630,19 @@ window.OC = window.OC || {};
         chemNote = `Зооксантеллы ${symPct}% · CaCO₃ ${calcPct}%`;
         colorHex = bleachPct > 55 ? 0xf2f0eb : 0xff8570;
       } else if (VENT_SPECIES.has(sp)) {
-        category = 'Сульфидная проба';
-        chemNote = `H₂S-хемосинтез · ${(waterTemp + (sp === 'smoker_chimney' ? 140 : 12)).toFixed(0)} °C очаг`;
-        colorHex = 0xd68c45;
+        if (sp === 'serpentinite_vent') {
+          category = 'Щелочной сип';
+          chemNote = `Брусит-арагонит pH 9.8 · H₂ + CH₄`;
+          colorHex = 0x70e4ff;
+        } else if (sp === 'osedax_plume') {
+          category = 'Био-оазис глубин';
+          chemNote = `Хемосинтез Osedax · Коллаген костей`;
+          colorHex = 0xe84a76;
+        } else {
+          category = 'Сульфидная проба';
+          chemNote = `H₂S-хемосинтез · ${(waterTemp + (sp === 'smoker_chimney' || sp === 'vent_chimney' ? 140 : 12)).toFixed(0)} °C очаг`;
+          colorHex = 0xd68c45;
+        }
       } else if (ICE_SPECIES.has(sp)) {
         category = 'Крио-керн';
         chemNote = `Рассол 42‰ · ${waterTemp.toFixed(1)} °C`;
@@ -647,13 +657,17 @@ window.OC = window.OC || {};
         colorHex = 0x5be8b0;
       } else {
         category = 'Образец бентоса';
-        chemNote = `${pH.toFixed(2)} pH · ${waterTemp.toFixed(1)} °C`;
+        chemNote = sp === 'hadal_sponge'
+          ? `Биогенный кремний SiO₂ · ~1090 атм`
+          : `${pH.toFixed(2)} pH · ${waterTemp.toFixed(1)} °C`;
       }
     } else if (target.kind === 'floor') {
       category = 'Керн грунта';
-      chemNote = biome.id === 'hydrothermal_vents'
-        ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-        : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`);
+      chemNote = biome.id === 'mariana_trench'
+        ? `Радиоляриевый ил · ${depthM.toFixed(0)} м`
+        : (biome.id === 'hydrothermal_vents'
+          ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
+          : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`));
     }
 
     return {

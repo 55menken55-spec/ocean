@@ -758,7 +758,7 @@
 <div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
   <div class="globe-box">
     <div class="atlas-header">
-      <div><h3>3D-глобус планеты</h3><small>5 океанических экспедиций · 27 этапов гида</small></div>
+      <div><h3>3D-глобус планеты</h3><small>6 океанических экспедиций · 32 этапов гида</small></div>
       <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
     </div>
     <div class="globe-body">
@@ -820,11 +820,13 @@
     <div class="atlas-tabs" id="atlas-tabs">
       <button class="btn on" data-cat="Все">Все</button>
       <button class="btn" data-cat="Геология">География</button>
+      <button class="btn" data-cat="Экспедиция">Экспедиция</button>
       <button class="btn" data-cat="Артефакты">Артефакты</button>
       <button class="btn" data-cat="Кораллы">Кораллы</button>
       <button class="btn" data-cat="Флора">Флора</button>
       <button class="btn" data-cat="Беспозвоночные">Беспозвоночные</button>
       <button class="btn" data-cat="Рыбы">Рыбы</button>
+      <button class="btn" data-cat="Птицы">Птицы</button>
       <button class="btn" data-cat="Мегафауна">Мегафауна</button>
     </div>
     <div class="atlas-grid" id="atlas-grid"></div>
@@ -4461,6 +4463,504 @@ window.OC = window.OC || {};
   });
 })(window.OC);
 
+// === biomes/mariana_trench.js ===
+/* ================= БИОМ: МАРИАНСКАЯ ВПАДИНА И ОАЗИС КИТОВОГО ПАДЕНИЯ (10 920 М) ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  // Сдвиг реальной глубины Бездны Челленджера: -20 м -> 10860 м, -108 м -> 10948 м (~1090 атм)
+  const DEPTH_OFFSET = 10840;
+
+  const WHALE_FALL_POS = { x: -18, z: 24, yaw: 0.56 };
+  const WHALE_FALL_SOUTH = { x: 75, z: -310, yaw: -0.78 };
+
+  const SEEP_FIELDS = [
+    { x: 34, z: -145, r: 58, peakY: -78.0 },
+    { x: -72, z: 225, r: 52, peakY: -80.0 },
+    { x: 115, z: 385, r: 48, peakY: -82.0 }
+  ];
+
+  const ZONES = [
+    {
+      id: 'whale_fall',
+      name: 'Оазис китового падения (Whale Fall)',
+      shortName: 'Китовое падение',
+      color: '#ff6e9c',
+      depthLabel: '10 905 – 10 936 м',
+      tempC: 2.4,
+      description: 'Автономная экосистема на гигантском 24-метровом скелете синего кита: черви-костоеды Osedax, супер-амфиподы и морские свинки.'
+    },
+    {
+      id: 'serpentinite_seeps',
+      name: 'Серпентинитовые сипы Сирена',
+      shortName: 'Сипы Сирена',
+      color: '#62e0ff',
+      depthLabel: '10 900 – 10 932 м',
+      tempC: 3.6,
+      description: 'Холодные щелочные брусит-карбонатные трубы в зоне субдукции, выделяющие струи метана и водорода.'
+    },
+    {
+      id: 'subduction_walls',
+      name: 'Утёсы субдукции Тихоокеанской плиты',
+      shortName: 'Стены жёлоба',
+      color: '#6e7ca8',
+      depthLabel: '10 852 – 10 912 м',
+      tempC: 1.8,
+      description: 'Грандиозные ступенчатые разломы погружения океанической литосферы со стебельчатыми стеклянными губками Caulophacus.'
+    },
+    {
+      id: 'challenger_floor',
+      name: 'Дно Бездны Челленджера',
+      shortName: 'Бездна Челленджера',
+      color: '#2d3b70',
+      depthLabel: '10 918 – 10 948 м',
+      tempC: 2.1,
+      description: 'Глубочайший известный участок Мирового океана (давление ~1090 атм), покрытый диатомовым илом и населённый морскими слизнями.'
+    }
+  ];
+
+  function trenchAxisX(z) {
+    return Math.sin(z * 0.0024) * 95 + Math.cos(z * 0.0055) * 32;
+  }
+
+  function nearestSeepDist(x, z) {
+    let best = 1e9;
+    for (let i = 0; i < SEEP_FIELDS.length; i++) {
+      const d = Math.hypot(x - SEEP_FIELDS[i].x, z - SEEP_FIELDS[i].z);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  function getHeight(x, z) {
+    const rx = x - trenchAxisX(z);
+    const ax = Math.abs(rx);
+
+    // Плоское илистое дно жёлоба (-96 м = 10 936 м), ступенчатые стены субдукции (-96 .. -18 м), внешний край плиты
+    let h = -96.0;
+
+    // Плавный подъём крутых ступенчатых уступов субдукции (210 .. 760 м от оси)
+    const wallSlope = OC.smoothstep(185, 660, ax) * 72.0;
+    const stepTerraces = Math.sin(ax * 0.032) * 3.4 * OC.smoothstep(200, 620, ax) * OC.smoothstep(860, 640, ax);
+    h += wallSlope + stepTerraces;
+
+    // Слабый тектонический вал по внешней бровке
+    const outerSlope = OC.smoothstep(760, 1140, ax) * 14.0;
+    h -= outerSlope;
+
+    // Ребристые разломы, гадальные валуны и мягкая рябь илистого дна
+    const faults = (OC.ridged2(x * 0.009, z * 0.009, 3) - 0.5) * 8.5 * OC.smoothstep(120, 480, ax);
+    const mudWaves = OC.fbm2(x * 0.028, z * 0.028, 3) * 2.6;
+    h += faults + mudWaves;
+
+    // Локальные серпентинитовые грязевые холмы у сипов Сирена
+    for (let i = 0; i < SEEP_FIELDS.length; i++) {
+      const sf = SEEP_FIELDS[i];
+      const d = Math.hypot(x - sf.x, z - sf.z);
+      if (d < sf.r * 1.65) {
+        const m = OC.smoothstep(sf.r * 1.5, 6.0, d);
+        h = OC.lerp(h, sf.peakY + (OC.noise2(x * 0.07, z * 0.07) - 0.5) * 1.8, m * 0.85);
+      }
+    }
+
+    // Ровная иловая площадка под главным скелетом синего кита
+    const wfDist = Math.hypot(x - WHALE_FALL_POS.x, z - WHALE_FALL_POS.z);
+    if (wfDist < 36) {
+      h = OC.lerp(h, -92.5, OC.smoothstep(36, 12, wfDist) * 0.9);
+    }
+
+    return OC.clamp(h, -108.0, -14.0);
+  }
+
+  function safeSpotY(x, z, desiredY, clearance) {
+    return Math.max(desiredY, getHeight(x, z) + (clearance || 4.2));
+  }
+
+  function getZoneAt(x, y, z) {
+    const wfDist = Math.min(
+      Math.hypot(x - WHALE_FALL_POS.x, z - WHALE_FALL_POS.z),
+      Math.hypot(x - WHALE_FALL_SOUTH.x, z - WHALE_FALL_SOUTH.z)
+    );
+    if (wfDist < 68) return ZONES[0]; // whale_fall
+    if (nearestSeepDist(x, z) < 76) return ZONES[1]; // serpentinite_seeps
+    const rx = Math.abs(x - trenchAxisX(z));
+    if (rx > 240) return ZONES[2]; // subduction_walls
+    return ZONES[3]; // challenger_floor
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const wfDist = Math.hypot(x - WHALE_FALL_POS.x, z - WHALE_FALL_POS.z);
+    const sd = nearestSeepDist(x, z);
+    const n = OC.clamp(OC.fbm2(x * 0.048, z * 0.048, 2) * 0.8 + 0.5, 0, 1);
+
+    _colA.set(0x282c36); // глубоководный радиоляриевый/диатомовый ил
+    _colB.set(0x181c24); // тёмные габбро-перидотитовые осыпи
+    _colC.set(0x6d8492); // светлый карбонат-бруситовый налёт у сипов
+
+    out.copy(_colA).lerp(_colB, n * 0.55);
+
+    if (y > -64) {
+      // На уступах субдукции виден тёмно-синеватый серпентинит и базальты
+      out.lerp(_colB.set(0x323b4c), OC.smoothstep(-64, -22, y) * (0.45 + n * 0.35));
+    }
+    if (sd < 72) {
+      out.lerp(_colC, OC.smoothstep(72, 10, sd) * (0.55 + n * 0.35));
+    }
+    if (wfDist < 42) {
+      // Светло-кремовые сернистые бактериальные маты вокруг костей кита
+      out.lerp(_colC.set(0x7c745c), OC.smoothstep(42, 8, wfDist) * 0.52);
+    }
+    return out;
+  }
+
+  function getTemperatureAt(x, depthM, zone) {
+    // Адиабатическое сжатие на глубинах ~10 900 м удерживает воду около +2.1 °C (чуть выше, чем на 4000 м!)
+    let t = zone && zone.id === 'subduction_walls' ? 1.85 : 2.15;
+    if (zone && zone.id === 'serpentinite_seeps') t = 3.4;
+    else if (zone && zone.id === 'whale_fall') t = 2.45;
+    t += Math.max(0, (depthM - 10880) * 0.004);
+    return t;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const wfDist = Math.hypot(x - WHALE_FALL_POS.x, z - WHALE_FALL_POS.z);
+    const sd = nearestSeepDist(x, z);
+    const oasisGlow = OC.smoothstep(70, 12, wfDist);
+    const seepGlow = OC.smoothstep(85, 14, sd);
+
+    _fogCol.set(0x02050c)
+      .lerp(_colA.set(0x0b0612), oasisGlow * 0.55)
+      .lerp(_colB.set(0x04121b), seepGlow * 0.48);
+    _waterCol.set(0x061024).lerp(_colA.set(0x102838), seepGlow * 0.45);
+    _skyTop.set(0x010206);
+    _skyBot.set(0x020610);
+    _aboveHoriz.set(0x040814);
+
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity: OC.lerp(0.0135, 0.0185, Math.max(oasisGlow, seepGlow)),
+      causticStrength: 0,
+      rayStrength: 0,
+      sunAtten: 0.0,
+      bioGlow: 1.0,
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz,
+      fillAColor: _colB.set(0x2e7cb8),
+      fillAMult: 0.48 + seepGlow * 0.42,
+      fillBColor: _colC.set(0xe8568e),
+      fillBMult: 0.18 + oasisGlow * 0.92
+    };
+  }
+
+  function getCurrentAt(x, y, z, time, out) {
+    if (!out) out = new T.Vector3();
+    out.set(0.12 + Math.sin(time * 0.12 + z * 0.008) * 0.08, 0, 0.24);
+
+    // Восходящие холодные шлейфы метана и водорода над серпентинитовыми сипами
+    for (let i = 0; i < SEEP_FIELDS.length; i++) {
+      const sf = SEEP_FIELDS[i];
+      const d = Math.hypot(x - sf.x, z - sf.z);
+      if (d < 42) {
+        const fl = getHeight(x, z);
+        const above = Math.max(0, y - fl);
+        if (above < 40) {
+          const core = OC.smoothstep(42, 6, d) * OC.smoothstep(40, 6, above);
+          out.y += core * 1.85;
+          out.x += Math.sin(time * 0.65 + y * 0.14) * core * 0.42;
+        }
+      }
+    }
+    return out;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+
+    function add(species, x, z, scale, tint) {
+      const y = getHeight(x, z);
+      items.push({ species, x, y: y - 0.08, z, ry: rng() * 6.283, scale, tint: tint || 0xffffff });
+    }
+
+    // 1. Карбонатные серпентинитовые столбы на полях сипов Сирена
+    for (let s = 0; s < SEEP_FIELDS.length; s++) {
+      const sf = SEEP_FIELDS[s];
+      if (sf.x + 65 < x0 || sf.x - 65 > x0 + chunkSize || sf.z + 65 < z0 || sf.z - 65 > z0 + chunkSize) continue;
+      const spires = Math.round(6 * density);
+      for (let i = 0; i < spires; i++) {
+        const a = (i / Math.max(1, spires)) * 6.28 + rng() * 0.5;
+        const r = i === 0 ? rng() * 4 : OC.lerp(6, 30, rng());
+        const px = sf.x + Math.cos(a) * r;
+        const pz = sf.z + Math.sin(a) * r;
+        if (px >= x0 && px < x0 + chunkSize && pz >= z0 && pz < z0 + chunkSize) {
+          add('serpentinite_vent', px, pz, i === 0 ? 1.25 : OC.lerp(0.68, 1.15, rng()));
+        }
+      }
+    }
+
+    // 2. Черви-костоеды Osedax вокруг обоих оазисов китового падения
+    const whaleCenters = [WHALE_FALL_POS, WHALE_FALL_SOUTH];
+    for (let w = 0; w < whaleCenters.length; w++) {
+      const wc = whaleCenters[w];
+      if (wc.x + 55 < x0 || wc.x - 55 > x0 + chunkSize || wc.z + 55 < z0 || wc.z - 55 > z0 + chunkSize) continue;
+      const nOs = Math.round(14 * density);
+      for (let i = 0; i < nOs; i++) {
+        const a = rng() * 6.283;
+        const r = OC.lerp(5, 28, rng());
+        const px = wc.x + Math.cos(a) * r;
+        const pz = wc.z + Math.sin(a) * r;
+        if (px >= x0 && px < x0 + chunkSize && pz >= z0 && pz < z0 + chunkSize) {
+          add('osedax_plume', px, pz, OC.lerp(0.85, 1.45, rng()));
+        }
+      }
+    }
+
+    // 3. Ультраабиссальные стебельчатые губки Caulophacus, чёрные кораллы и стеклянные губки на уступах и в жёлобе
+    const slots = Math.round(24 * density);
+    for (let i = 0; i < slots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const rx = Math.abs(x - trenchAxisX(z));
+      const sd = nearestSeepDist(x, z);
+
+      if (sd < 60 && rng() < 0.5) {
+        add('osedax_plume', x, z, OC.lerp(0.72, 1.25, rng()));
+      } else if (rx > 210) {
+        const r = rng();
+        if (r < 0.48) add('hadal_sponge', x, z, OC.lerp(0.82, 1.45, rng()));
+        else if (r < 0.80) add('coral_black', x, z, OC.lerp(0.75, 1.35, rng()));
+        else add('sponge_tube', x, z, OC.lerp(0.7, 1.2, rng()), 0xc8dff0);
+      } else if (rng() < 0.28) {
+        add('hadal_sponge', x, z, OC.lerp(0.75, 1.25, rng()));
+      }
+    }
+
+    return items;
+  }
+
+  const _lmRaw = [
+    {
+      id: 'challenger_deep',
+      name: 'Бездна Челленджера (-10 920 м)',
+      zoneId: 'challenger_floor',
+      x: WHALE_FALL_POS.x + 12,
+      y: -82.0,
+      z: WHALE_FALL_POS.z + 24,
+      yaw: 2.55,
+      pitch: -0.20,
+      clearance: 5.5,
+      description: 'Дно глубочайшей точки Мирового океана под давлением почти 1100 атмосфер: ровный радиоляриевый ил и первые огни оазиса.'
+    },
+    {
+      id: 'whale_fall_oasis',
+      name: 'Оазис китового падения',
+      zoneId: 'whale_fall',
+      isHot: true,
+      x: WHALE_FALL_POS.x - 16,
+      y: -85.0,
+      z: WHALE_FALL_POS.z - 14,
+      yaw: -0.78,
+      pitch: -0.18,
+      clearance: 5.0,
+      description: '24-метровый скелет синего кита стал оазисом жизни в пустыне гадали: кости расщепляют черви Osedax и рои гигантских амфипод.'
+    },
+    {
+      id: 'sirena_seeps',
+      name: 'Серпентинитовые сипы Сирена',
+      zoneId: 'serpentinite_seeps',
+      isHot: true,
+      x: SEEP_FIELDS[0].x + 26,
+      y: -66.0,
+      z: SEEP_FIELDS[0].z + 28,
+      yaw: 2.38,
+      pitch: -0.18,
+      clearance: 5.0,
+      description: 'Светлые карбонатно-бруситовые шпили в зоне субдукции, питаемые холодным щелочным флюидом с метаном и водородом.'
+    },
+    {
+      id: 'hadal_escarpment',
+      name: 'Стена субдукции Тихоокеанской плиты',
+      zoneId: 'subduction_walls',
+      x: 345,
+      y: -48.0,
+      z: -35,
+      yaw: 1.48,
+      pitch: -0.14,
+      clearance: 5.5,
+      description: 'Крутые тектонические уступы погружающейся океанической плиты, усеянные стебельчатыми стеклянными губками Caulophacus.'
+    },
+    {
+      id: 'trench_rim',
+      name: 'Бровка ультраглубоководного обрыва',
+      zoneId: 'subduction_walls',
+      x: -410,
+      y: -36.0,
+      z: 145,
+      yaw: -1.32,
+      pitch: -0.22,
+      clearance: 5.5,
+      description: 'Кромка спуска в Марианский жёлоб, откуда открывается обзор на 11-километровую глубину и светящиеся корономедузы.'
+    }
+  ];
+
+  const landmarks = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: Math.min(8.0, safeSpotY(lm.x, lm.z, lm.y, lm.clearance))
+  }));
+
+  const spawnX = landmarks[0].x;
+  const spawnZ = landmarks[0].z;
+  const spawnY = Math.min(6.0, safeSpotY(spawnX, spawnZ, -82.0, 5.0));
+
+  const _tourRaw = [
+    { x: spawnX, y: -82.0, z: spawnZ, lx: WHALE_FALL_POS.x, ly: -90.5, lz: WHALE_FALL_POS.z, title: 'Погружение на дно Бездны Челленджера (-10 920 м)', duration: 10,
+      fact: 'На дне Марианской впадины вода сжимается примерно на 5% от своего объёма, а давление в ~1090 атмосфер раздавило бы любой обычный корпус.' },
+    { x: landmarks[1].x, y: -84.0, z: landmarks[1].z, lx: WHALE_FALL_POS.x, ly: -90.5, lz: WHALE_FALL_POS.z, title: 'Оазис китового падения и черви Osedax', duration: 10,
+      fact: 'Погибший синий кит кормит целую экосистему до 50–100 лет: черви Osedax растворяют кости кислотой ради липидов с помощью бактерий-симбионтов.' },
+    { x: landmarks[2].x, y: -66.0, z: landmarks[2].z, lx: SEEP_FIELDS[0].x, ly: -74.0, lz: SEEP_FIELDS[0].z, title: 'Серпентинитовые сипы Сирена', duration: 9,
+      fact: 'В отличие от горячих курильщиков ВТП (+380 °C), серпентинитовые сипы выделяют холодные щелочные воды с водородом и метаном — колыбель хемосинтеза.' },
+    { x: landmarks[3].x, y: -48.0, z: landmarks[3].z, lx: 430, ly: -46.0, lz: -35, title: 'Стены субдукции и губки Caulophacus', duration: 9,
+      fact: 'Здесь Тихоокеанская тектоническая плита возрастом ~170 млн лет уходит в мантию Земли, а на её уступах цветут кремниевые губки на длинных стеблях.' },
+    { x: landmarks[4].x, y: -36.0, z: landmarks[4].z, lx: -240, ly: -74.0, lz: 110, title: 'Край ультраабиссали и морские слизни', duration: 10,
+      fact: 'Марианский морской слизень Pseudoliparis обходится без жёстких костей и плавательного пузыря, выдерживая рекордное давление за счёт осмолита TMAO.' }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, Math.min(8.0, safeSpotY(leg.x, leg.z, leg.y, 4.5)), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    fact: leg.fact,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    floor: ['Гадальный ил Бездны Челленджера', 'Марианский жёлоб', 'Геология', 'Все зоны', '10 848 – 10 948 м',
+      'Тонкий радиоляриево-диатомовый ил и серпентинитовые осыпи глубочайшей тектонической впадины Земли под давлением 1090 атм.'],
+    whale_fall: ['Оазис китового падения (скелет синего кита)', 'Whale Fall (Balaenoptera musculus)', 'Экспедиция', 'Китовое падение', '10 925 м',
+      '24-метровый остов синего кита на дне жёлоба, ставший многолетним хемосинтетическим оазисом для костоедных червей, амфипод и голотурий.'],
+    serpentinite_vent: ['Серпентинитовый карбонатный шпиль', 'Serpentinite / Brucite Chimney', 'Геология', 'Сипы Сирена', '10 900 – 10 932 м',
+      'Светлая пористая труба из брусита и арагонита, образующаяся при взаимодействии мантийных перидотитов с морской водой.'],
+    osedax_plume: ['Костоедный червь Osedax («зомби-червь»)', 'Osedax mucofloris / rubiplumus', 'Беспозвоночные', 'Китовое падение', '10 920 – 10 936 м',
+      'Лишённый рта и кишечника червь с красными перистыми жабрами; «корни» червя растворяют костный коллаген кита с помощью симбионтов.'],
+    hadal_sponge: ['Стебельчатая стеклянная губка Caulophacus', 'Caulophacus / Hexactinellida', 'Беспозвоночные', 'Стены жёлоба', '10 855 – 10 925 м',
+      'Ультраглубоководная кремниевая губка на гибком длинном стебле, поднимающем фильтрующий диск над придонным слоем ила.'],
+    coral_black: ['Ультраабиссальный чёрный коралл', 'Bathypathes / Antipatharia', 'Кораллы', 'Стены жёлоба', '10 852 – 10 910 м',
+      'Тёмно-коричневый роговой скелет медленно растущих глубоководных кораллов на базальтовых уступах зоны субдукции.'],
+    sponge_tube: ['Абиссальная трубчатая губка', 'Hexactinellida', 'Беспозвоночные', 'Стены жёлоба', '10 860 – 10 915 м',
+      'Хрупкие кремниевые трубки, процеживающие мельчайший «морской снег» с верхних горизонтов Тихого океана.'],
+    hadal_snailfish: ['Марианский морской слизень', 'Pseudoliparis swirei', 'Рыбы', 'Бездна Челленджера', '10 885 – 10 945 м',
+      'Самая глубоководная рыба планеты: полупрозрачное тело без чешуи и костных плавников защищено высокой концентрацией белка-осмолита TMAO.'],
+    sea_pig: ['Глубоководная морская свинка', 'Scotoplanes globosa', 'Беспозвоночные', 'Китовое падение', '10 915 – 10 945 м',
+      'Полупрозрачная розовая голотурия с 6 парами «ножек»-амбулакральных трубок, стадами бредущая по илу в поисках органики китового падения.'],
+    amphipod: ['Гигантский гадальный супер-амфипод', 'Alicella gigantea / Hirondellea', 'Беспозвоночные', 'Китовое падение', '10 880 – 10 945 м',
+      'Крупные глубоководные рачки-падальщики (до 28 см!), мгновенно собирающиеся стаями у остатков кита с помощью алюминиевого «геля» панциря.'],
+    fish_angler: ['Ультраабиссальный удильщик', 'Melanocetus / Caulophryne', 'Рыбы', 'Стены жёлоба', '10 870 – 10 938 м',
+      'Засадный хищник вечной гадальной тьмы со светящейся бактериальной приманкой и длинными чувствительными нитями.'],
+    squid_abyssal: ['Глубоководный адский кальмар-вампир', 'Vampyroteuthis infernalis', 'Мегафауна', 'Стены жёлоба', '10 860 – 10 932 м',
+      'Древний реликтовый головоногий, парящий в бескислородном слое глубин за счёт нейтральной плавучести и светящихся фотофоров.'],
+    octopus_dumbo: ['Гримпотевтис (Осьминог Дамбо)', 'Grimpoteuthis', 'Мегафауна', 'Стены жёлоба', '10 860 – 10 925 м',
+      'Мирный плавниковый осьминог ультраглубин, взмахивающий большими ушными плавниками над базальтовыми уступами.'],
+    jelly_deep: ['Гадальная корономедуза Atolla', 'Atolla wyvillei', 'Беспозвоночные', 'Бездна Челленджера', '10 855 – 10 935 м',
+      'Вспыхивает сине-лиловым биолюминесцентным «маяком тревоги» по краю купола при любом прикосновении в кромешной тьме.']
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [],
+    whaleFalls: [
+      { x: WHALE_FALL_POS.x, z: WHALE_FALL_POS.z, yaw: WHALE_FALL_POS.yaw, len: 24 },
+      { x: WHALE_FALL_SOUTH.x, z: WHALE_FALL_SOUTH.z, yaw: WHALE_FALL_SOUTH.yaw, len: 18 }
+    ],
+    snailfishes: [
+      { cx: WHALE_FALL_POS.x + 8, cz: WHALE_FALL_POS.z - 6, r: 24, speed: 1.7, scale: 1.35 },
+      { cx: SEEP_FIELDS[0].x - 10, cz: SEEP_FIELDS[0].z + 12, r: 28, speed: 1.5, scale: 1.2 },
+      { cx: WHALE_FALL_SOUTH.x, cz: WHALE_FALL_SOUTH.z, r: 22, speed: 1.6, scale: 1.25 }
+    ],
+    seaPigs: [
+      { cx: WHALE_FALL_POS.x + 14, cz: WHALE_FALL_POS.z + 10, r: 10, count: 6 },
+      { cx: WHALE_FALL_POS.x - 18, cz: WHALE_FALL_POS.z - 8, r: 12, count: 5 },
+      { cx: WHALE_FALL_SOUTH.x + 12, cz: WHALE_FALL_SOUTH.z + 10, r: 10, count: 5 }
+    ],
+    ventPlumes: [
+      { x: SEEP_FIELDS[0].x, z: SEEP_FIELDS[0].z, chimneyH: 5.5, height: 32, n: 190, light: true, coldSeep: true, key: 'serpentinite_vent' },
+      { x: SEEP_FIELDS[1].x, z: SEEP_FIELDS[1].z, chimneyH: 5.0, height: 28, n: 160, light: true, coldSeep: true, key: 'serpentinite_vent' },
+      { x: SEEP_FIELDS[2].x, z: SEEP_FIELDS[2].z, chimneyH: 5.0, height: 26, n: 140, light: false, coldSeep: true, key: 'serpentinite_vent' }
+    ],
+    schools: [
+      { key: 'amphipod', n: 56, cx: WHALE_FALL_POS.x, cz: WHALE_FALL_POS.z, radius: 14, yDepth: -88, yAmp: 3.5, spread: 8, speed: 5.4, scale: 0.44, diel: 'cathemeral', biolum: true, shyness: 0.15, curious: 0.45,
+        geoOpts: { len: 0.68, height: 0.24, width: 0.22, colA: 0xf4e4d6, colB: 0xffeef8, finCol: 0xffb8cf, eyeScale: 0.4 } },
+      { key: 'amphipod', n: 44, cx: WHALE_FALL_SOUTH.x, cz: WHALE_FALL_SOUTH.z, radius: 13, yDepth: -88, yAmp: 3, spread: 7, speed: 5.2, scale: 0.42, diel: 'cathemeral', biolum: true, shyness: 0.15, curious: 0.45,
+        geoOpts: { len: 0.68, height: 0.24, width: 0.22, colA: 0xf4e4d6, colB: 0xffeef8, finCol: 0xffb8cf, eyeScale: 0.4 } }
+    ],
+    anglers: [
+      { cx: 145, cz: -45, r: 46, y: -74, speed: 1.25, scale: 1.35 },
+      { cx: -165, cz: 95, r: 44, y: -78, speed: 1.3, scale: 1.3 }
+    ],
+    squids: [
+      { cx: 210, cz: 40, r: 62, y: -56, speed: 2.8, scale: 1.2 },
+      { cx: -220, cz: -110, r: 58, y: -60, speed: 2.6, scale: 1.15 }
+    ],
+    dumbos: [
+      { x: 325, z: -20, scale: 1.2 },
+      { x: -375, z: 120, scale: 1.15 }
+    ],
+    jellies: [
+      { x: WHALE_FALL_POS.x + 28, y: -76, z: WHALE_FALL_POS.z - 22, deep: true, size: 1.35 },
+      { x: -195, y: -54, z: 85, deep: true, size: 1.45 },
+      { x: 180, y: -62, z: -95, deep: true, size: 1.3 }
+    ]
+  };
+
+  OC.Biomes.register({
+    id: 'mariana_trench',
+    name: 'Марианская впадина',
+    region: 'Бездна Челленджера · Тихий океан',
+    subtitle: 'Гадальная зона · 10 845–10 948 м · 1090 атм',
+    globe: {
+      lat: 11.37, lon: 142.59, coordLabel: '11.4° с.ш., 142.6° в.д.',
+      ocean: 'Марианский жёлоб · Тихий океан', depthSpan: '10 845 – 10 948 м', tempSpan: '1.8 – 3.6 °C', color: '#7a9cff',
+      summary: 'Глубочайшая бездна Земли (~10.9 км): 24-метровый скелет китового падения с червями Osedax, серпентинитовые сипы и морские слизни.'
+    },
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    depthOffset: DEPTH_OFFSET,
+    noSurface: true,
+    maxCamY: 12.0,
+    minimapTheme: 'hadal',
+    spawn: {
+      pos: [spawnX, spawnY, spawnZ],
+      yaw: 2.55,
+      pitch: -0.20
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getZoneAt,
+    getTerrainColor,
+    getTemperatureAt,
+    getOpticalProfile,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
+  });
+})(window.OC);
+
 // === engine/weather.js ===
 /* ================= ДИНАМИЧЕСКАЯ СИСТЕМА ПОГОДЫ: ШТИЛЬ, ЗЫБЬ, ШТОРМ, ПУРГА И МОЛНИИ ================= */
 window.OC = window.OC || {};
@@ -4689,6 +5189,7 @@ window.OC = window.OC || {};
     if (biome.id === 'arctic_sea') return { baseTemp: -1.3, heatTolerance: 1.4, hasCorals: false, isAbyss: false };
     if (biome.id === 'kelp_forest') return { baseTemp: 11.5, heatTolerance: 1.4, hasCorals: false, isAbyss: false };
     if (biome.id === 'hydrothermal_vents') return { baseTemp: 2.8, heatTolerance: 2.2, hasCorals: false, isAbyss: true };
+    if (biome.id === 'mariana_trench') return { baseTemp: 2.1, heatTolerance: 2.4, hasCorals: false, isAbyss: true };
     return { baseTemp: 27.0, heatTolerance: 1.1, hasCorals: true, isAbyss: false };
   }
 
@@ -7537,6 +8038,106 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 37. Черви-костоеды Osedax («зомби-черви» китового падения) ---- */
+  function buildOsedaxPlume(rng) {
+    const list = [];
+    const n = 9;
+    const cStem = COL(0xe8ded2);
+    const cPlume = COL(0xe23864);
+    const cTip = COL(0xff84a8);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283 + OC.lerp(-0.2, 0.2, rng());
+      const dist = OC.lerp(0.06, 0.34, rng());
+      const h = OC.lerp(0.32, 0.68, rng());
+      const tilt = OC.lerp(0.18, 0.45, rng());
+      const tube = OC.geoPrep(new T.CylinderGeometry(0.022, 0.032, h, 5));
+      OC.paint(tube, cStem);
+      OC.xform(tube, {
+        r: [Math.sin(a) * tilt, 0, Math.cos(a) * tilt],
+        p: [Math.cos(a) * dist, h * 0.45, Math.sin(a) * dist]
+      });
+      OC.withSway(tube, (x, y) => Math.max(0, y) * 0.4);
+      list.push(tube);
+
+      // Перистый малиновый плюмаж на вершине
+      const plume = OC.geoPrep(new T.ConeGeometry(0.085, 0.24, 6));
+      OC.paint(plume, (px, py, pz, col) => col.copy(py > 0.04 ? cTip : cPlume));
+      OC.xform(plume, {
+        r: [Math.PI + Math.sin(a) * tilt, 0, Math.cos(a) * tilt],
+        p: [Math.cos(a) * (dist + tilt * 0.16), h + 0.06, Math.sin(a) * (dist + tilt * 0.16)]
+      });
+      OC.withSway(plume, (x, y) => Math.max(0, y) * 0.72);
+      list.push(plume);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 38. Ультраабиссальная стебельчатая стеклянная губка Caulophacus ---- */
+  function buildHadalSponge(rng) {
+    const list = [];
+    const h = OC.lerp(1.4, 2.2, rng());
+    const bendX = OC.lerp(-0.22, 0.22, rng());
+    const bendZ = OC.lerp(-0.22, 0.22, rng());
+    const cStalk = COL(0xb9cfd8);
+    const cCup = COL(0xe2f0f5);
+    const cRim = COL(0x88b4cc);
+
+    const stalk = OC.geoPrep(new T.CylinderGeometry(0.038, 0.065, h, 7, 5));
+    const sp = stalk.attributes.position;
+    for (let i = 0; i < sp.count; i++) {
+      const y = sp.getY(i);
+      const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+      sp.setX(i, sp.getX(i) + bendX * u * u);
+      sp.setZ(i, sp.getZ(i) + bendZ * u * u);
+    }
+    stalk.computeVertexNormals();
+    OC.paint(stalk, (x, y, z, col) => col.copy(cStalk));
+    OC.xform(stalk, { p: [0, h * 0.5, 0] });
+    OC.withSway(stalk, (x, y) => Math.max(0, y) * 0.32);
+    list.push(stalk);
+
+    // Ажурный вогнутый диск-фильтратор на конце стебля
+    const cap = OC.geoPrep(new T.ConeGeometry(OC.lerp(0.38, 0.56, rng()), 0.28, 12, 1, true));
+    cap.rotateX(Math.PI);
+    OC.paint(cap, (x, y, z, col) => col.copy(y > 0.02 ? cRim : cCup));
+    OC.xform(cap, { r: [bendZ * 0.85, 0, -bendX * 0.85], p: [bendX, h + 0.08, bendZ] });
+    OC.withSway(cap, (x, y) => Math.max(0, y) * 0.36);
+    list.push(cap);
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 39. Серпентинитовый карбонатный столб (холодные щелочные сипы Сирена) ---- */
+  function buildSerpentiniteVent(rng) {
+    const list = [];
+    const cBase = COL(0x4b5c64);
+    const cBody = COL(0xb8c8cc);
+    const cCrest = COL(0xe4eeef);
+    const spires = 3 + (rng() > 0.45 ? 1 : 0);
+    for (let i = 0; i < spires; i++) {
+      const h = i === 0 ? OC.lerp(4.4, 7.2, rng()) : OC.lerp(2.2, 4.0, rng());
+      const rBot = i === 0 ? OC.lerp(0.9, 1.35, rng()) : OC.lerp(0.45, 0.78, rng());
+      const rTop = rBot * 0.34;
+      const ox = i === 0 ? 0 : Math.cos(i * 2.2) * OC.lerp(0.7, 1.35, rng());
+      const oz = i === 0 ? 0 : Math.sin(i * 2.2) * OC.lerp(0.7, 1.35, rng());
+      const g = OC.geoPrep(new T.CylinderGeometry(rTop, rBot, h, 9, 5));
+      const p = g.attributes.position;
+      for (let v = 0; v < p.count; v++) {
+        const vx = p.getX(v), vy = p.getY(v), vz = p.getZ(v);
+        const shelf = 1.0 + 0.24 * Math.sin(vy * 3.1 + i) + 0.14 * Math.cos(vx * 3.4 - vz * 2.8);
+        p.setXYZ(v, vx * shelf, vy, vz * shelf);
+      }
+      g.computeVertexNormals();
+      OC.paint(g, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBase).lerp(cBody, OC.smoothstep(0.1, 0.6, u)).lerp(cCrest, OC.smoothstep(0.7, 1.0, u));
+      });
+      OC.xform(g, { p: [ox, h * 0.46, oz] });
+      OC.withSway(g, () => 0);
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   let previewCache = null;
 
@@ -7742,6 +8343,18 @@ window.OC = window.OC || {};
         seafan_gold: {
           mat: matCoralSoft, maxInstances: 700, cullDist: 520,
           geos: [buildGoldSeaFan(rng), buildGoldSeaFan(rng)]
+        },
+        osedax_plume: {
+          mat: matSoft, maxInstances: 960, cullDist: 420,
+          geos: [buildOsedaxPlume(rng), buildOsedaxPlume(rng)]
+        },
+        hadal_sponge: {
+          mat: matSoft, maxInstances: 780, cullDist: 440,
+          geos: [buildHadalSponge(rng), buildHadalSponge(rng)]
+        },
+        serpentinite_vent: {
+          mat: matChimney, maxInstances: 320, cullDist: 620,
+          geos: [buildSerpentiniteVent(rng), buildSerpentiniteVent(rng)]
         }
       };
 
@@ -10513,10 +11126,12 @@ window.OC = window.OC || {};
     };
   }
 
-  /* ---------- Шлейфы чёрных курильщиков и термальный свет ---------- */
+  /* ---------- Шлейфы чёрных курильщиков и серпентинитовых сипов ---------- */
   function makeVentPlume(scene, biome, tex, opts) {
     const n = opts.n || 180;
     const hMax = opts.height || 34;
+    const coldSeep = !!opts.coldSeep;
+    const key = opts.key || (coldSeep ? 'serpentinite_vent' : 'vent_chimney');
     const baseY = biome.getHeight(opts.x, opts.z) + (opts.chimneyH || 6.5);
     const geo = new T.BufferGeometry();
     const pos = new Float32Array(n * 3);
@@ -10541,7 +11156,8 @@ window.OC = window.OC || {};
         {
           uTex: { value: tex },
           uTime: OC.uTime,
-          uHMax: { value: hMax }
+          uHMax: { value: hMax },
+          uCold: { value: coldSeep ? 1.0 : 0.0 }
         }
       ]),
       vertexShader: `
@@ -10568,15 +11184,16 @@ window.OC = window.OC || {};
         }`,
       fragmentShader: `
         uniform sampler2D uTex;
+        uniform float uCold;
         varying float vLife, vHeat;
         #include <fog_pars_fragment>
         void main(){
           vec4 tx = texture2D(uTex, gl_PointCoord);
           if (tx.a < 0.03) discard;
-          vec3 soot = vec3(0.11, 0.12, 0.14);
-          vec3 ember = vec3(0.92, 0.36, 0.08);
-          vec3 col = mix(soot, ember, vHeat * 0.72);
-          float alpha = tx.a * (1.0 - smoothstep(0.45, 1.0, vLife)) * smoothstep(0.0, 0.05, vLife) * 0.68;
+          vec3 soot = mix(vec3(0.11, 0.12, 0.14), vec3(0.45, 0.72, 0.82), uCold);
+          vec3 ember = mix(vec3(0.92, 0.36, 0.08), vec3(0.72, 0.95, 1.0), uCold);
+          vec3 col = mix(soot, ember, vHeat * (0.72 - uCold * 0.15));
+          float alpha = tx.a * (1.0 - smoothstep(0.45, 1.0, vLife)) * smoothstep(0.0, 0.05, vLife) * (0.68 - uCold * 0.22);
           gl_FragColor = vec4(col, alpha);
           #include <fog_fragment>
         }`
@@ -10584,24 +11201,323 @@ window.OC = window.OC || {};
 
     const pts = new T.Points(geo, mat);
     pts.position.set(opts.x, baseY, opts.z);
-    pts.userData.key = 'vent_chimney';
+    pts.userData.key = key;
     scene.add(pts);
 
     let light = null;
     if (opts.light) {
-      light = new T.PointLight(0xff5e1a, 2.6, 52, 1.4);
+      light = new T.PointLight(coldSeep ? 0x6ce8ff : 0xff5e1a, coldSeep ? 1.8 : 2.6, 52, 1.4);
       light.position.set(opts.x, baseY + 1.5, opts.z);
       scene.add(light);
     }
 
     return {
-      key: 'vent_chimney',
+      key,
       getPosition: () => pts.position,
       update(dt, time, camPos) {
         const d = Math.hypot(opts.x - camPos.x, opts.z - camPos.z);
         const vis = d < 520;
         pts.visible = vis;
-        if (light) light.intensity = vis ? (2.2 + 0.7 * Math.sin(time * 5.2 + opts.x)) : 0;
+        if (light) light.intensity = vis ? ((coldSeep ? 1.6 : 2.2) + 0.55 * Math.sin(time * 4.4 + opts.x)) : 0;
+      }
+    };
+  }
+
+  /* ---------- Оазис китового падения: 24-метровый скелет синего кита в Марианской впадине ---------- */
+  function makeWhaleFall(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    const parts = [];
+    const len = opts.len || 24;
+    const boneA = 0xddd6c6;
+    const boneB = 0xa89f8e;
+    const matCol = 0xe8d89e;
+    const osedaxCol = 0xd93664;
+
+    function paintBone(g) {
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const n = Math.sin(x * 1.9 + z * 0.7) * 0.5 + 0.5;
+        c.set(boneA).lerp(new T.Color(boneB), n * 0.45);
+      });
+      parts.push(g);
+      return g;
+    }
+
+    // 1. Череп и верхняя челюсть синего кита (спереди +Z)
+    const cranium = new T.SphereGeometry(1.65, 12, 8);
+    cranium.scale(1.15, 0.72, 1.45);
+    OC.xform(paintBone(cranium), { p: [0, 0.95, len * 0.34] });
+
+    for (const s of [-1, 1]) {
+      const jaw = new T.CylinderGeometry(0.16, 0.38, 4.8, 7);
+      jaw.rotateX(Math.PI / 2);
+      OC.xform(paintBone(jaw), { r: [0.06, s * 0.22, 0], p: [s * 0.78, 0.58, len * 0.44] });
+    }
+    const vomer = new T.ConeGeometry(0.45, 4.9, 6);
+    vomer.scale(0.85, 1.0, 0.45);
+    vomer.rotateX(Math.PI / 2);
+    OC.xform(paintBone(vomer), { p: [0, 0.88, len * 0.45] });
+
+    // 2. Позвоночный столб (22 массивных позвонка с остистыми отростками по S-дуге)
+    for (let i = 0; i < 22; i++) {
+      const u = i / 21;
+      const vz = len * 0.28 - u * len * 0.76;
+      const vx = Math.sin(u * 3.1) * 1.35;
+      const vy = 0.52 + (1 - u) * 0.22 + Math.sin(u * Math.PI) * 0.25;
+      const rad = OC.lerp(0.46, 0.16, u * u);
+
+      const centrum = new T.CylinderGeometry(rad, rad * 1.04, 0.52, 8);
+      centrum.rotateX(Math.PI / 2);
+      OC.xform(paintBone(centrum), { r: [0, Math.cos(u * 3.1) * 0.24, 0], p: [vx, vy, vz] });
+
+      const spine = new T.BoxGeometry(0.12, OC.lerp(1.15, 0.26, u), 0.26);
+      OC.xform(paintBone(spine), { r: [-0.22, Math.cos(u * 3.1) * 0.24, 0], p: [vx, vy + rad + 0.36, vz] });
+    }
+
+    // 3. Свод рёберной клетки (14 пар изогнутых рёбер + лопатки)
+    for (let i = 0; i < 14; i++) {
+      const u = i / 13;
+      const vz = len * 0.22 - u * len * 0.36;
+      const vxBase = Math.sin(((len * 0.28 - vz) / (len * 0.76)) * 3.1) * 1.35;
+      const span = 1.65 + Math.sin(u * Math.PI) * 1.15;
+      for (const s of [-1, 1]) {
+        const rib = new T.TorusGeometry(span, 0.105, 5, 10, Math.PI * 0.78);
+        OC.xform(paintBone(rib), {
+          r: [0.18, s * 0.15, s * 0.38 - Math.PI * 0.12],
+          p: [vxBase + s * 0.35, 0.18, vz]
+        });
+      }
+    }
+
+    // 4. Бактериальные сульфидные маты и гроздья костоедов Osedax прямо на костях
+    const rng = OC.mulberry32(9904);
+    for (let i = 0; i < 24; i++) {
+      const pz = OC.lerp(-len * 0.42, len * 0.42, rng());
+      const px = OC.lerp(-2.2, 2.2, rng());
+      const patch = new T.SphereGeometry(OC.lerp(0.26, 0.55, rng()), 6, 4);
+      patch.scale(1.3, 0.42, 1.1);
+      OC.geoPrep(patch);
+      OC.paint(patch, i % 2 === 0 ? osedaxCol : matCol);
+      OC.xform(patch, { p: [px, OC.lerp(0.18, 1.15, rng()), pz] });
+      parts.push(patch);
+    }
+
+    const merged = OC.mergeGeometries(parts);
+    group.add(new T.Mesh(merged, creatureMat));
+
+    // Лёгкое биолюминесцентное свечение бактериальных матов у падения кита в гадальной тьме
+    const matSpot = new T.MeshBasicMaterial({ color: 0xffe49c, transparent: true, opacity: 0.72 });
+    const osMat = new T.MeshBasicMaterial({ color: 0xff4c7c, transparent: true, opacity: 0.85 });
+    for (let i = 0; i < 6; i++) {
+      const m = new T.Mesh(new T.SphereGeometry(0.22, 6, 4), i % 2 === 0 ? osMat : matSpot);
+      m.position.set(Math.sin(i * 1.7) * 1.35, 0.45 + (i % 3) * 0.32, (i - 2.5) * 3.1);
+      group.add(m);
+    }
+
+    let halo = null;
+    if (!opts.preview && biome && biome.getHeight) {
+      const fl = biome.getHeight(opts.x || 0, opts.z || 0);
+      group.position.set(opts.x || 0, fl - 0.12, opts.z || 0);
+      group.rotation.y = opts.yaw || 0.45;
+      halo = new T.PointLight(0xff7aa8, 1.4, 38, 1.5);
+      halo.position.set(opts.x || 0, fl + 3.2, opts.z || 0);
+      scene.add(halo);
+    } else {
+      group.position.set(0, 0, 0);
+    }
+
+    group.userData.key = 'whale_fall';
+    scene.add(group);
+
+    return {
+      key: 'whale_fall',
+      sonarLabel: 'Оазис китового падения (Whale Fall)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (opts.preview) return;
+        const d = Math.hypot(group.position.x - camPos.x, group.position.z - camPos.z);
+        group.visible = d < 620;
+        if (halo) halo.intensity = group.visible ? (1.1 + 0.35 * Math.sin(time * 1.8)) : 0;
+      }
+    };
+  }
+
+  /* ---------- Марианский морской слизень (Pseudoliparis swirei, глубочайшая рыба Земли) ---------- */
+  function makeHadalSnailfish(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    const parts = [];
+
+    // Широкая голова и полупрозрачное жемчужно-розовое тело без чешуи, плавно сужающееся в длинный хвост
+    const body = new T.SphereGeometry(0.26, 12, 8);
+    body.scale(0.95, 0.85, 2.35);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.set(z > 0.15 ? 0xf2c8d8 : 0xe4e8f4));
+    parts.push(body);
+
+    const head = new T.SphereGeometry(0.27, 10, 8);
+    head.scale(1.12, 0.82, 1.0);
+    OC.geoPrep(head); OC.paint(head, 0xf6d4e0);
+    OC.xform(head, { p: [0, -0.02, 0.34] });
+    parts.push(head);
+
+    // Веерообразные полупрозрачные грудные плавники
+    for (const s of [-1, 1]) {
+      const pec = new T.ConeGeometry(0.16, 0.38, 4);
+      pec.scale(0.14, 1.0, 1.25);
+      pec.rotateZ(-s * Math.PI / 2);
+      OC.geoPrep(pec); OC.paint(pec, 0xffeaf2);
+      OC.xform(pec, { r: [0, -s * 0.25, 0], p: [s * 0.25, -0.06, 0.22] });
+      parts.push(pec);
+    }
+
+    // Крошечные тёмные глаза
+    for (const s of [-1, 1]) {
+      const eye = new T.SphereGeometry(0.032, 6, 4);
+      OC.geoPrep(eye); OC.paint(eye, 0x121622);
+      OC.xform(eye, { p: [s * 0.16, 0.08, 0.48] });
+      parts.push(eye);
+    }
+
+    const mainMat = new T.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.28,
+      metalness: 0.04,
+      emissive: new T.Color(0x6e4a62),
+      emissiveIntensity: 0.42,
+      transparent: true,
+      opacity: 0.88,
+      side: T.DoubleSide
+    });
+    group.add(new T.Mesh(OC.mergeGeometries(parts), mainMat));
+
+    // Лентовидный хвост с волнистой спинно-анальной каймой
+    const tailGroup = new T.Group();
+    tailGroup.position.set(0, 0, -0.45);
+    const tailFin = new T.ConeGeometry(0.18, 0.82, 4);
+    tailFin.scale(0.16, 1.0, 1.0);
+    tailFin.rotateX(-Math.PI / 2);
+    OC.geoPrep(tailFin); OC.paint(tailFin, 0xf2dae4);
+    OC.xform(tailFin, { p: [0, 0, -0.38] });
+    tailGroup.add(new T.Mesh(tailFin, mainMat));
+    group.add(tailGroup);
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.userData.key = 'hadal_snailfish';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+    return {
+      key: 'hadal_snailfish',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot((opts.cx || 0) - camPos.x, (opts.cz || 0) - camPos.z) > 460) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 1.6) / (opts.r || 26)) * dt;
+        const ax = (opts.cx || 0) + Math.cos(ang) * (opts.r || 26);
+        const az = (opts.cz || 0) + Math.sin(ang) * (opts.r || 26);
+        const bx = (opts.cx || 0) + Math.cos(ang + 0.12) * (opts.r || 26);
+        const bz = (opts.cz || 0) + Math.sin(ang + 0.12) * (opts.r || 26);
+        const ay = biome.getHeight(ax, az) + 2.4 + Math.sin(time * 0.7 + az) * 0.9;
+        const by = biome.getHeight(bx, bz) + 2.4 + Math.sin(time * 0.7 + bz) * 0.9;
+        _a.set(ax, ay, az); _b.set(bx, by, bz);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        tailGroup.rotation.y = Math.sin(time * 4.6 + ang) * 0.35;
+      }
+    };
+  }
+
+  /* ---------- Глубоководная голотурия «морская свинка» (Scotoplanes globosa) ---------- */
+  function makeSeaPig(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.singlePreview;
+    const count = preview ? 1 : (opts.count || 5);
+    const group = new T.Group();
+    group.userData.key = 'sea_pig';
+
+    const members = [];
+    const rng = OC.mulberry32(Math.abs(Math.round((opts.cx || 9) * 17 + (opts.cz || 5) * 37)) + 412);
+
+    function buildSinglePig() {
+      const pRoot = new T.Group();
+      const parts = [];
+      const body = new T.SphereGeometry(0.24, 10, 8);
+      body.scale(0.88, 0.82, 1.55);
+      OC.geoPrep(body);
+      OC.paint(body, (x, y, z, c) => c.set(y > 0 ? 0xdca0c4 : 0xc482a8));
+      parts.push(body);
+
+      // Парные ножки-трубки по бокам брюха и спинные антенны-папиллы
+      for (let leg = 0; leg < 5; leg++) {
+        const lz = -0.22 + leg * 0.11;
+        for (const s of [-1, 1]) {
+          const tube = new T.CylinderGeometry(0.025, 0.018, 0.15, 5);
+          OC.geoPrep(tube); OC.paint(tube, 0xe4b8d2);
+          OC.xform(tube, { r: [0, 0, s * 0.42], p: [s * 0.19, -0.14, lz] });
+          parts.push(tube);
+        }
+      }
+      for (const s of [-1, 1]) {
+        const ant = new T.ConeGeometry(0.028, 0.24, 5);
+        OC.geoPrep(ant); OC.paint(ant, 0xf2bfd8);
+        OC.xform(ant, { r: [0.18, 0, -s * 0.22], p: [s * 0.09, 0.24, 0.08] });
+        parts.push(ant);
+      }
+
+      const pigMat = new T.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.36,
+        metalness: 0.04,
+        emissive: new T.Color(0x522a44),
+        emissiveIntensity: 0.35
+      });
+      pRoot.add(new T.Mesh(OC.mergeGeometries(parts), pigMat));
+      pRoot.userData.key = 'sea_pig';
+      return pRoot;
+    }
+
+    for (let i = 0; i < count; i++) {
+      const m = buildSinglePig();
+      const sc = preview ? 1.5 : OC.lerp(0.9, 1.25, rng());
+      m.scale.setScalar(sc);
+      group.add(m);
+      const ang = (i / Math.max(1, count)) * Math.PI * 2 + rng() * 0.5;
+      const rr = preview ? 0 : OC.lerp(2.2, opts.r || 12, rng());
+      members.push({
+        root: m,
+        ang,
+        rr,
+        spd: OC.lerp(0.25, 0.45, rng()),
+        phase: rng() * 6.28
+      });
+    }
+
+    scene.add(group);
+    if (preview) {
+      return { key: 'sea_pig', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    return {
+      key: 'sea_pig',
+      getPosition: () => members[0].root.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        for (let i = 0; i < members.length; i++) {
+          const m = members[i];
+          m.ang += (m.spd / Math.max(2.5, m.rr)) * dt;
+          const px = cx + Math.cos(m.ang) * m.rr;
+          const pz = cz + Math.sin(m.ang) * m.rr;
+          const py = biome.getHeight(px, pz) + 0.16;
+          m.root.position.set(px, py, pz);
+          m.root.rotation.y = -m.ang;
+          m.root.position.y += Math.sin(time * 2.2 + m.phase) * 0.015;
+        }
       }
     };
   }
@@ -11895,6 +12811,22 @@ window.OC = window.OC || {};
         agents.push(makeFlyingFishPod(faunaGroup, biome, ff, emitSplash));
       }
 
+      for (const wf of (plan.whaleFalls || [])) {
+        const wfo = makeWhaleFall(faunaGroup, biome, wf);
+        agents.push(wfo);
+        sonarTargets.push(wfo);
+      }
+
+      for (const sf of (plan.snailfishes || [])) {
+        const sfo = makeHadalSnailfish(faunaGroup, biome, sf);
+        agents.push(sfo);
+        sonarTargets.push(sfo);
+      }
+
+      for (const sp of (plan.seaPigs || [])) {
+        agents.push(makeSeaPig(faunaGroup, biome, sp));
+      }
+
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
@@ -12282,6 +13214,12 @@ window.OC = window.OC || {};
           makeDolphinPod(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, singlePreview: true, variant: dVariant });
         } else if (key === 'flying_fish') {
           makeFlyingFishPod(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, singlePreview: true });
+        } else if (key === 'whale_fall') {
+          makeWhaleFall(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'hadal_snailfish') {
+          makeHadalSnailfish(tmpGroup, dummyBiome, { cx: 0, cz: 0, scale: 1.5 });
+        } else if (key === 'sea_pig') {
+          makeSeaPig(tmpGroup, dummyBiome, { cx: 0, cz: 0, singlePreview: true });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;
@@ -12507,7 +13445,7 @@ window.OC = window.OC || {};
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') {
           if (S.currentDepth < 32 && Math.random() < 0.55) S.iceCrack();
-        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents') {
+        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench') {
           S.shrimpSnap();
         }
       }
@@ -12626,7 +13564,7 @@ window.OC = window.OC || {};
     const t = setTimeout(() => {
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') S.belugaCall();
-        else if (S.currentBiomeId !== 'hydrothermal_vents') S.whale();
+        else if (S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench') S.whale();
       }
       S.scheduleWhale();
     }, rnd(14000, 32000));
@@ -12776,6 +13714,9 @@ window.OC = window.OC || {};
     if (key === 'seabird') return 'Крик морских птиц над водой';
     if (key === 'dolphin') return 'Свисты и эхолокация дельфинов';
     if (key === 'flying_fish') return 'Всплеск и скольжение крыльев';
+    if (key === 'whale_fall') return 'Резонанс гадали и шорох оазиса';
+    if (key === 'serpentinite_vent' || key === 'osedax_plume') return 'Пульс метанового сипа и гадали';
+    if (key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge') return 'Биоакустика Бездны Челленджера';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
@@ -12913,6 +13854,33 @@ window.OC = window.OC || {};
           o.connect(bp); bp.connect(g); g.connect(out);
           o.start(now + i * 0.08); o.stop(now + 1.5);
         });
+      } else if (key === 'whale_fall' || key === 'serpentinite_vent' || key === 'osedax_plume') {
+        // Глубокий гадальный бас + мягкие стеклянные обертоны оазиса 11 км глубины
+        const o = ctx.createOscillator();
+        const lp = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(64, now);
+        o.frequency.linearRampToValueAtTime(48, now + 1.4);
+        lp.type = 'lowpass'; lp.frequency.value = 180;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(0.11, now + 0.18);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+        o.connect(lp); lp.connect(g); g.connect(out);
+        o.start(now); o.stop(now + 1.55);
+        [420, 680].forEach((f, i) => {
+          const t = now + 0.12 + i * 0.18;
+          const bo = ctx.createOscillator();
+          const bg = ctx.createGain();
+          bo.type = 'sine';
+          bo.frequency.setValueAtTime(f, t);
+          bo.frequency.exponentialRampToValueAtTime(f * 1.15, t + 0.45);
+          bg.gain.setValueAtTime(0.0001, t);
+          bg.gain.linearRampToValueAtTime(0.04, t + 0.06);
+          bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+          bo.connect(bg); bg.connect(out);
+          bo.start(t); bo.stop(t + 0.58);
+        });
       } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') {
         const dur = 1.2;
         const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
@@ -12928,7 +13896,7 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
         src.connect(bp); bp.connect(g); g.connect(out);
         src.start(now); src.stop(now + dur + 0.05);
-      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') {
+      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo' || key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge') {
         [660, 990, 1320].forEach((f, i) => {
           const t = now + i * 0.14;
           const o = ctx.createOscillator();
@@ -13243,10 +14211,10 @@ window.OC = window.OC || {};
     'coral_boulder', 'coral_pillar', 'coral_seafan', 'coral_soft', 'coral_whip',
     'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral'
   ]);
-  const VENT_SPECIES = new Set(['smoker_chimney', 'tube_worm', 'vent_mussel']);
+  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume']);
   const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'mangrove', 'island_palm']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm']);
 
   let sceneRef = null;
   let rovGroup = null;
@@ -13857,9 +14825,19 @@ window.OC = window.OC || {};
         chemNote = `Зооксантеллы ${symPct}% · CaCO₃ ${calcPct}%`;
         colorHex = bleachPct > 55 ? 0xf2f0eb : 0xff8570;
       } else if (VENT_SPECIES.has(sp)) {
-        category = 'Сульфидная проба';
-        chemNote = `H₂S-хемосинтез · ${(waterTemp + (sp === 'smoker_chimney' ? 140 : 12)).toFixed(0)} °C очаг`;
-        colorHex = 0xd68c45;
+        if (sp === 'serpentinite_vent') {
+          category = 'Щелочной сип';
+          chemNote = `Брусит-арагонит pH 9.8 · H₂ + CH₄`;
+          colorHex = 0x70e4ff;
+        } else if (sp === 'osedax_plume') {
+          category = 'Био-оазис глубин';
+          chemNote = `Хемосинтез Osedax · Коллаген костей`;
+          colorHex = 0xe84a76;
+        } else {
+          category = 'Сульфидная проба';
+          chemNote = `H₂S-хемосинтез · ${(waterTemp + (sp === 'smoker_chimney' || sp === 'vent_chimney' ? 140 : 12)).toFixed(0)} °C очаг`;
+          colorHex = 0xd68c45;
+        }
       } else if (ICE_SPECIES.has(sp)) {
         category = 'Крио-керн';
         chemNote = `Рассол 42‰ · ${waterTemp.toFixed(1)} °C`;
@@ -13874,13 +14852,17 @@ window.OC = window.OC || {};
         colorHex = 0x5be8b0;
       } else {
         category = 'Образец бентоса';
-        chemNote = `${pH.toFixed(2)} pH · ${waterTemp.toFixed(1)} °C`;
+        chemNote = sp === 'hadal_sponge'
+          ? `Биогенный кремний SiO₂ · ~1090 атм`
+          : `${pH.toFixed(2)} pH · ${waterTemp.toFixed(1)} °C`;
       }
     } else if (target.kind === 'floor') {
       category = 'Керн грунта';
-      chemNote = biome.id === 'hydrothermal_vents'
-        ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-        : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`);
+      chemNote = biome.id === 'mariana_trench'
+        ? `Радиоляриевый ил · ${depthM.toFixed(0)} м`
+        : (biome.id === 'hydrothermal_vents'
+          ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
+          : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`));
     }
 
     return {
@@ -15168,6 +16150,44 @@ window.OC = window.OC || {};
       landmarkId: 'jellyfish_lagoon',
       goal: 1,
       progress: (ctx) => ctx.hasPhotoOrPing(['jelly_golden', 'fish_batfish', 'sargassum']) ? 1 : 0
+    },
+
+    // 6. Марианская впадина и Оазис китового падения (10 920 м)
+    {
+      id: 'mt_atlas_6',
+      biomeId: 'mariana_trench',
+      title: 'Пионер Бездны Челленджера',
+      desc: 'Откройте 6 видов, губок или геологических объектов в Марианском жёлобе (10 920 м).',
+      landmarkId: 'challenger_deep',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'mt_whale_fall',
+      biomeId: 'mariana_trench',
+      title: 'Хроника китового падения',
+      desc: 'Сфотографируйте на камеру (P) скелет синего кита или червей-костоедов Osedax в оазисе дна.',
+      landmarkId: 'whale_fall_oasis',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['whale_fall', 'osedax_plume']) ? 1 : 0
+    },
+    {
+      id: 'mt_serpentinite_seep',
+      biomeId: 'mariana_trench',
+      title: 'Щелочные сипы Сирена',
+      desc: 'Доплывите до серпентинитовых сипов Сирена и снимите или просканируйте сонаром (G) карбонатный шпиль.',
+      landmarkId: 'sirena_seeps',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('serpentinite_seeps') && ctx.hasPhotoOrPing(['serpentinite_vent', 'hadal_sponge']) ? 1 : 0
+    },
+    {
+      id: 'mt_challenger_snailfish',
+      biomeId: 'mariana_trench',
+      title: 'Глубочайшая рыба Земли',
+      desc: 'Погрузитесь на 10 915+ м в Бездне Челленджера и зафиксируйте (P/G) морского слизня Pseudoliparis или морскую свинку.',
+      landmarkId: 'hadal_escarpment',
+      goal: 1,
+      progress: (ctx) => (ctx.depthM >= 10915 && ctx.hasPhotoOrPing(['hadal_snailfish', 'sea_pig', 'amphipod'])) ? 1 : 0
     }
   ];
 
@@ -15498,6 +16518,13 @@ window.OC = window.OC || {};
       if (y > -48) return [54, 54, 74];
       if (y > -78) return [26, 30, 50];
       return [10, 14, 28];
+    }
+    if (theme === 'hadal') {
+      if (y > -32) return [82, 92, 128];   // бровка зоны субдукции
+      if (y > -62) return [50, 62, 102];   // ступенчатые уступы плиты
+      if (y > -82) return [36, 76, 108];   // серпентинитовые сипы Сирена
+      if (y > -95) return [24, 34, 68];    // равнина и оазис китового падения
+      return [12, 16, 40];                 // глубочайшая ось Бездны Челленджера
     }
     if (theme === 'arctic') {
       if (y > -11) return [218, 240, 252]; // кромка пакового припая
@@ -16612,7 +17639,7 @@ window.OC = window.OC || {};
       orbitRing.rotation.y = 0.28;
       scene.add(orbitRing);
 
-      // Маяки 5 биомов + соединительные дуги маршрутов
+      // Маяки 6 биомов + соединительные дуги маршрутов
       buildBeaconsOnGlobe();
 
       raycaster = new T.Raycaster();
@@ -16672,8 +17699,8 @@ window.OC = window.OC || {};
       it.hit = hit;
     }
 
-    // Соединяем 5 точек планеты дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'kelp_forest', 'hydrothermal_vents', 'arctic_sea'];
+    // Соединяем 6 точек планеты дугами глобальной экспедиции
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'hydrothermal_vents', 'arctic_sea'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);
@@ -18080,14 +19107,16 @@ window.OC = window.OC || {};
       kelp_forest: 'Ламинария',
       hydrothermal_vents: 'Курильщики 2500м',
       arctic_sea: 'Арктика',
-      wreck_atoll: 'Атолл и Корабль'
+      wreck_atoll: 'Атолл и Корабль',
+      mariana_trench: 'Марианская 10920м'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
       kelp_forest: 'Монтерей · Калифорния',
       hydrothermal_vents: 'ВТП · Абиссаль 2500 м',
       arctic_sea: 'Баффин · 74° с.ш.',
-      wreck_atoll: 'Палау · Микронезия'
+      wreck_atoll: 'Палау · Микронезия',
+      mariana_trench: 'Челленджер · 10 920 м'
     };
 
     function renderBiomeUI() {
@@ -18389,7 +19418,7 @@ window.OC = window.OC || {};
     }
     if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
     toast(next.noSurface
-      ? (next.name + ' · Глубина 2440 м, прожектор включён (F)')
+      ? (next.name + ' · Глубина ' + (next.depthOffset ? Math.round(next.depthOffset + 18) : 2440) + '+ м, прожектор включён (F)')
       : (next.name + ' · ' + next.region));
   }
   OC.switchBiome = switchBiome;

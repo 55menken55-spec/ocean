@@ -1390,6 +1390,106 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 37. Черви-костоеды Osedax («зомби-черви» китового падения) ---- */
+  function buildOsedaxPlume(rng) {
+    const list = [];
+    const n = 9;
+    const cStem = COL(0xe8ded2);
+    const cPlume = COL(0xe23864);
+    const cTip = COL(0xff84a8);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283 + OC.lerp(-0.2, 0.2, rng());
+      const dist = OC.lerp(0.06, 0.34, rng());
+      const h = OC.lerp(0.32, 0.68, rng());
+      const tilt = OC.lerp(0.18, 0.45, rng());
+      const tube = OC.geoPrep(new T.CylinderGeometry(0.022, 0.032, h, 5));
+      OC.paint(tube, cStem);
+      OC.xform(tube, {
+        r: [Math.sin(a) * tilt, 0, Math.cos(a) * tilt],
+        p: [Math.cos(a) * dist, h * 0.45, Math.sin(a) * dist]
+      });
+      OC.withSway(tube, (x, y) => Math.max(0, y) * 0.4);
+      list.push(tube);
+
+      // Перистый малиновый плюмаж на вершине
+      const plume = OC.geoPrep(new T.ConeGeometry(0.085, 0.24, 6));
+      OC.paint(plume, (px, py, pz, col) => col.copy(py > 0.04 ? cTip : cPlume));
+      OC.xform(plume, {
+        r: [Math.PI + Math.sin(a) * tilt, 0, Math.cos(a) * tilt],
+        p: [Math.cos(a) * (dist + tilt * 0.16), h + 0.06, Math.sin(a) * (dist + tilt * 0.16)]
+      });
+      OC.withSway(plume, (x, y) => Math.max(0, y) * 0.72);
+      list.push(plume);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 38. Ультраабиссальная стебельчатая стеклянная губка Caulophacus ---- */
+  function buildHadalSponge(rng) {
+    const list = [];
+    const h = OC.lerp(1.4, 2.2, rng());
+    const bendX = OC.lerp(-0.22, 0.22, rng());
+    const bendZ = OC.lerp(-0.22, 0.22, rng());
+    const cStalk = COL(0xb9cfd8);
+    const cCup = COL(0xe2f0f5);
+    const cRim = COL(0x88b4cc);
+
+    const stalk = OC.geoPrep(new T.CylinderGeometry(0.038, 0.065, h, 7, 5));
+    const sp = stalk.attributes.position;
+    for (let i = 0; i < sp.count; i++) {
+      const y = sp.getY(i);
+      const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+      sp.setX(i, sp.getX(i) + bendX * u * u);
+      sp.setZ(i, sp.getZ(i) + bendZ * u * u);
+    }
+    stalk.computeVertexNormals();
+    OC.paint(stalk, (x, y, z, col) => col.copy(cStalk));
+    OC.xform(stalk, { p: [0, h * 0.5, 0] });
+    OC.withSway(stalk, (x, y) => Math.max(0, y) * 0.32);
+    list.push(stalk);
+
+    // Ажурный вогнутый диск-фильтратор на конце стебля
+    const cap = OC.geoPrep(new T.ConeGeometry(OC.lerp(0.38, 0.56, rng()), 0.28, 12, 1, true));
+    cap.rotateX(Math.PI);
+    OC.paint(cap, (x, y, z, col) => col.copy(y > 0.02 ? cRim : cCup));
+    OC.xform(cap, { r: [bendZ * 0.85, 0, -bendX * 0.85], p: [bendX, h + 0.08, bendZ] });
+    OC.withSway(cap, (x, y) => Math.max(0, y) * 0.36);
+    list.push(cap);
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 39. Серпентинитовый карбонатный столб (холодные щелочные сипы Сирена) ---- */
+  function buildSerpentiniteVent(rng) {
+    const list = [];
+    const cBase = COL(0x4b5c64);
+    const cBody = COL(0xb8c8cc);
+    const cCrest = COL(0xe4eeef);
+    const spires = 3 + (rng() > 0.45 ? 1 : 0);
+    for (let i = 0; i < spires; i++) {
+      const h = i === 0 ? OC.lerp(4.4, 7.2, rng()) : OC.lerp(2.2, 4.0, rng());
+      const rBot = i === 0 ? OC.lerp(0.9, 1.35, rng()) : OC.lerp(0.45, 0.78, rng());
+      const rTop = rBot * 0.34;
+      const ox = i === 0 ? 0 : Math.cos(i * 2.2) * OC.lerp(0.7, 1.35, rng());
+      const oz = i === 0 ? 0 : Math.sin(i * 2.2) * OC.lerp(0.7, 1.35, rng());
+      const g = OC.geoPrep(new T.CylinderGeometry(rTop, rBot, h, 9, 5));
+      const p = g.attributes.position;
+      for (let v = 0; v < p.count; v++) {
+        const vx = p.getX(v), vy = p.getY(v), vz = p.getZ(v);
+        const shelf = 1.0 + 0.24 * Math.sin(vy * 3.1 + i) + 0.14 * Math.cos(vx * 3.4 - vz * 2.8);
+        p.setXYZ(v, vx * shelf, vy, vz * shelf);
+      }
+      g.computeVertexNormals();
+      OC.paint(g, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBase).lerp(cBody, OC.smoothstep(0.1, 0.6, u)).lerp(cCrest, OC.smoothstep(0.7, 1.0, u));
+      });
+      OC.xform(g, { p: [ox, h * 0.46, oz] });
+      OC.withSway(g, () => 0);
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   let previewCache = null;
 
@@ -1595,6 +1695,18 @@ window.OC = window.OC || {};
         seafan_gold: {
           mat: matCoralSoft, maxInstances: 700, cullDist: 520,
           geos: [buildGoldSeaFan(rng), buildGoldSeaFan(rng)]
+        },
+        osedax_plume: {
+          mat: matSoft, maxInstances: 960, cullDist: 420,
+          geos: [buildOsedaxPlume(rng), buildOsedaxPlume(rng)]
+        },
+        hadal_sponge: {
+          mat: matSoft, maxInstances: 780, cullDist: 440,
+          geos: [buildHadalSponge(rng), buildHadalSponge(rng)]
+        },
+        serpentinite_vent: {
+          mat: matChimney, maxInstances: 320, cullDist: 620,
+          geos: [buildSerpentiniteVent(rng), buildSerpentiniteVent(rng)]
         }
       };
 

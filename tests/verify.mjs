@@ -14,6 +14,7 @@ const SRC_ORDER = [
   'src/biomes/hydrothermal_vents.js',
   'src/biomes/arctic_sea.js',
   'src/biomes/wreck_atoll.js',
+  'src/biomes/mariana_trench.js',
   'src/engine/weather.js',
   'src/engine/eco_lab.js',
   'src/engine/world.js',
@@ -352,13 +353,13 @@ assert(subHtml.includes('id="sub-current"'), 'template.html missing #sub-current
 checkMaterialShader({ causticStrength: 0.78, swayAmp: 0.42 }, 'coralSoftCurrent');
 console.log('   Option 2 ocean currents, particle/sway advection, #sub-current HUD & smart megafauna verified.');
 
-// G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea & Wreck Atoll) & clean switching
+// G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea, Wreck Atoll & Mariana Trench) & clean switching
 const allBiomes = OC.Biomes.list();
-assert(allBiomes.length === 5, `Expected 5 registered ocean biomes, got ${allBiomes.length}`);
+assert(allBiomes.length === 6, `Expected 6 registered ocean biomes, got ${allBiomes.length}`);
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
 assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
-for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll']) {
+for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll', 'mariana_trench']) {
   const b = OC.Biomes.setActive(bId);
   assert(b && b.id === bId, `Failed to activate biome ${bId}`);
   assert(b.zones && b.zones.length >= 4, `${bId} needs >= 4 ecological zones`);
@@ -467,9 +468,9 @@ for (const qId of ['low', 'medium', 'high', 'ultra']) {
 }
 console.log('   Multi-biome hot-switching & runtime quality preset switching (low -> ultra) verified.');
 
-// H) Verify Direction 1 + Arctic + Wreck Atoll Missions (Camera, 20 Scientific Missions, Minimap Waypoints, Persistence)
+// H) Verify Direction 1 + Arctic + Wreck Atoll + Mariana Trench Missions (Camera, 24 Scientific Missions, Minimap Waypoints, Persistence)
 assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-assert.equal(OC.Expedition.MISSIONS.length, 20, `Expected 20 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+assert.equal(OC.Expedition.MISSIONS.length, 24, `Expected 24 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
 for (const b of OC.Biomes.list()) {
   const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
   assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
@@ -769,7 +770,7 @@ OC.Globe.init({
 });
 
 const beacons = OC.Globe.getBeacons();
-assert.equal(beacons.length, 5, '3D Globe must expose 5 expedition beacons');
+assert.equal(beacons.length, 6, '3D Globe must expose 6 expedition beacons');
 let totalTourStages = 0;
 for (const b of OC.Biomes.list()) {
   assert(b.globe && Number.isFinite(b.globe.lat) && Number.isFinite(b.globe.lon), `Biome ${b.id} missing globe coordinates`);
@@ -783,7 +784,7 @@ for (const b of OC.Biomes.list()) {
   const sum = OC.Expedition.getBiomeSummary(b);
   assert(sum.speciesTotal === Object.keys(b.encyclopedia).length && sum.missionsTotal === 4, `getBiomeSummary mismatch for ${b.id}`);
 }
-assert(totalTourStages === 27, `Expected 27 total guided tour stages across 5 biomes, got ${totalTourStages}`);
+assert(totalTourStages === 32, `Expected 32 total guided tour stages across 6 biomes, got ${totalTourStages}`);
 
 for (const bc of beacons) {
   const rad = Math.hypot(bc.x, bc.y, bc.z);
@@ -1016,4 +1017,43 @@ for (const k of ['research_vessel', 'seabird', 'dolphin', 'flying_fish']) {
 }
 OC.Biomes.setActive('great_barrier_reef');
 console.log('   Direction 10 Surface World & Expedition Mother-Ship (R/V vessels, seabirds, dolphins, flying fish, surface jump & voices) verified.');
+
+// Q) Verify 6th Biome: Mariana Trench & Whale Fall Oasis (mariana_trench, 10,920 m / ~1085+ atm, Osedax, Hadal Sponge, Serpentinite Seeps, Snailfish, Sea Pig)
+const mtBiome = OC.Biomes.setActive('mariana_trench');
+assert(mtBiome && mtBiome.noSurface && mtBiome.depthOffset === 10840 && mtBiome.minimapTheme === 'hadal', 'mariana_trench must configure noSurface, 10840 depthOffset & hadal theme');
+for (const spKey of ['osedax_plume', 'hadal_sponge', 'serpentinite_vent']) {
+  assert(floraProtos[spKey], `FloraLibrary missing hadal species ${spKey}`);
+  assert(mtBiome.encyclopedia[spKey], `mariana_trench encyclopedia missing ${spKey}`);
+}
+for (const fKey of ['whale_fall', 'hadal_snailfish', 'sea_pig', 'amphipod']) {
+  assert(mtBiome.encyclopedia[fKey], `mariana_trench encyclopedia missing fauna ${fKey}`);
+}
+
+const mtSp = new T.Vector3(mtBiome.spawn.pos[0], mtBiome.spawn.pos[1], mtBiome.spawn.pos[2]);
+OC.Terrain.init(scene, mtBiome, mtSp);
+OC.FloraStreamer.init(scene, mtBiome, mtSp);
+const mtFauna = OC.FaunaEngine.init(scene, mtBiome);
+assert.equal(mtFauna.getVesselInfo(), null, 'mariana_trench must not spawn a surface vessel');
+const wfAgent = mtFauna.agents.find((a) => a.key === 'whale_fall');
+const sfAgent = mtFauna.agents.find((a) => a.key === 'hadal_snailfish');
+const spAgent = mtFauna.agents.find((a) => a.key === 'sea_pig');
+assert(wfAgent && sfAgent && spAgent, 'mariana_trench must instantiate whale_fall, hadal_snailfish & sea_pig');
+
+const mtUltraCounts = {};
+for (let cx = -2; cx <= 2; cx++) {
+  for (let cz = -2; cz <= 2; cz++) {
+    const items = mtBiome.generateChunkFlora(cx, cz, mtBiome.chunkSize, 1.5, OC.mulberry32(cx * 31 + cz * 97 + 19));
+    for (const it of items) mtUltraCounts[it.species] = (mtUltraCounts[it.species] || 0) + 1;
+  }
+}
+for (const [spKey, cnt] of Object.entries(mtUltraCounts)) {
+  assert(cnt <= floraProtos[spKey].maxInstances, `mariana_trench Ultra 5x5 overflow for ${spKey}: ${cnt} > ${floraProtos[spKey].maxInstances}`);
+}
+assert(mtUltraCounts.osedax_plume >= 10 && mtUltraCounts.hadal_sponge >= 10 && mtUltraCounts.serpentinite_vent >= 3, 'mariana_trench must populate osedax_plume, hadal_sponge & serpentinite_vent');
+
+const ctdMt = OC.ROV.runCtdCast(mtBiome, mtSp, OC.EcoLab.getState());
+assert(ctdMt && ctdMt.maxDepthM > 10915 && ctdMt.maxPressureAtm > 1080, `Mariana Trench CTD cast must reflect hadal >1080 atm pressure (got ${ctdMt && ctdMt.maxPressureAtm})`);
+
+OC.Biomes.setActive('great_barrier_reef');
+console.log(`   6th Biome "Марианская впадина" (10,920 м / ${ctdMt.maxPressureAtm} атм, Whale Fall, Osedax, Caulophacus, Serpentinite Seeps, Snailfish & Sea Pig) verified.`);
 console.log('ALL VERIFICATION CHECKS PASSED!');

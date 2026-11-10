@@ -14,6 +14,7 @@ ORDER = [
     'biomes/hydrothermal_vents.js',
     'biomes/arctic_sea.js',
     'biomes/wreck_atoll.js',
+    'biomes/mariana_trench.js',
     'engine/weather.js',
     'engine/eco_lab.js',
     'engine/world.js',

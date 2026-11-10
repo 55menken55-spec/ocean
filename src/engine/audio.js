@@ -157,7 +157,7 @@ window.OC = window.OC || {};
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') {
           if (S.currentDepth < 32 && Math.random() < 0.55) S.iceCrack();
-        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents') {
+        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench') {
           S.shrimpSnap();
         }
       }
@@ -276,7 +276,7 @@ window.OC = window.OC || {};
     const t = setTimeout(() => {
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') S.belugaCall();
-        else if (S.currentBiomeId !== 'hydrothermal_vents') S.whale();
+        else if (S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench') S.whale();
       }
       S.scheduleWhale();
     }, rnd(14000, 32000));
@@ -426,6 +426,9 @@ window.OC = window.OC || {};
     if (key === 'seabird') return 'Крик морских птиц над водой';
     if (key === 'dolphin') return 'Свисты и эхолокация дельфинов';
     if (key === 'flying_fish') return 'Всплеск и скольжение крыльев';
+    if (key === 'whale_fall') return 'Резонанс гадали и шорох оазиса';
+    if (key === 'serpentinite_vent' || key === 'osedax_plume') return 'Пульс метанового сипа и гадали';
+    if (key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge') return 'Биоакустика Бездны Челленджера';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
@@ -563,6 +566,33 @@ window.OC = window.OC || {};
           o.connect(bp); bp.connect(g); g.connect(out);
           o.start(now + i * 0.08); o.stop(now + 1.5);
         });
+      } else if (key === 'whale_fall' || key === 'serpentinite_vent' || key === 'osedax_plume') {
+        // Глубокий гадальный бас + мягкие стеклянные обертоны оазиса 11 км глубины
+        const o = ctx.createOscillator();
+        const lp = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(64, now);
+        o.frequency.linearRampToValueAtTime(48, now + 1.4);
+        lp.type = 'lowpass'; lp.frequency.value = 180;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(0.11, now + 0.18);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+        o.connect(lp); lp.connect(g); g.connect(out);
+        o.start(now); o.stop(now + 1.55);
+        [420, 680].forEach((f, i) => {
+          const t = now + 0.12 + i * 0.18;
+          const bo = ctx.createOscillator();
+          const bg = ctx.createGain();
+          bo.type = 'sine';
+          bo.frequency.setValueAtTime(f, t);
+          bo.frequency.exponentialRampToValueAtTime(f * 1.15, t + 0.45);
+          bg.gain.setValueAtTime(0.0001, t);
+          bg.gain.linearRampToValueAtTime(0.04, t + 0.06);
+          bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+          bo.connect(bg); bg.connect(out);
+          bo.start(t); bo.stop(t + 0.58);
+        });
       } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') {
         const dur = 1.2;
         const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
@@ -578,7 +608,7 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
         src.connect(bp); bp.connect(g); g.connect(out);
         src.start(now); src.stop(now + dur + 0.05);
-      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') {
+      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo' || key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge') {
         [660, 990, 1320].forEach((f, i) => {
           const t = now + i * 0.14;
           const o = ctx.createOscillator();

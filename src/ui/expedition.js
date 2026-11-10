@@ -224,6 +224,44 @@ window.OC = window.OC || {};
       landmarkId: 'jellyfish_lagoon',
       goal: 1,
       progress: (ctx) => ctx.hasPhotoOrPing(['jelly_golden', 'fish_batfish', 'sargassum']) ? 1 : 0
+    },
+
+    // 6. Марианская впадина и Оазис китового падения (10 920 м)
+    {
+      id: 'mt_atlas_6',
+      biomeId: 'mariana_trench',
+      title: 'Пионер Бездны Челленджера',
+      desc: 'Откройте 6 видов, губок или геологических объектов в Марианском жёлобе (10 920 м).',
+      landmarkId: 'challenger_deep',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'mt_whale_fall',
+      biomeId: 'mariana_trench',
+      title: 'Хроника китового падения',
+      desc: 'Сфотографируйте на камеру (P) скелет синего кита или червей-костоедов Osedax в оазисе дна.',
+      landmarkId: 'whale_fall_oasis',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['whale_fall', 'osedax_plume']) ? 1 : 0
+    },
+    {
+      id: 'mt_serpentinite_seep',
+      biomeId: 'mariana_trench',
+      title: 'Щелочные сипы Сирена',
+      desc: 'Доплывите до серпентинитовых сипов Сирена и снимите или просканируйте сонаром (G) карбонатный шпиль.',
+      landmarkId: 'sirena_seeps',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('serpentinite_seeps') && ctx.hasPhotoOrPing(['serpentinite_vent', 'hadal_sponge']) ? 1 : 0
+    },
+    {
+      id: 'mt_challenger_snailfish',
+      biomeId: 'mariana_trench',
+      title: 'Глубочайшая рыба Земли',
+      desc: 'Погрузитесь на 10 915+ м в Бездне Челленджера и зафиксируйте (P/G) морского слизня Pseudoliparis или морскую свинку.',
+      landmarkId: 'hadal_escarpment',
+      goal: 1,
+      progress: (ctx) => (ctx.depthM >= 10915 && ctx.hasPhotoOrPing(['hadal_snailfish', 'sea_pig', 'amphipod'])) ? 1 : 0
     }
   ];
 

@@ -1084,14 +1084,16 @@ window.OC = window.OC || {};
       kelp_forest: 'Ламинария',
       hydrothermal_vents: 'Курильщики 2500м',
       arctic_sea: 'Арктика',
-      wreck_atoll: 'Атолл и Корабль'
+      wreck_atoll: 'Атолл и Корабль',
+      mariana_trench: 'Марианская 10920м'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
       kelp_forest: 'Монтерей · Калифорния',
       hydrothermal_vents: 'ВТП · Абиссаль 2500 м',
       arctic_sea: 'Баффин · 74° с.ш.',
-      wreck_atoll: 'Палау · Микронезия'
+      wreck_atoll: 'Палау · Микронезия',
+      mariana_trench: 'Челленджер · 10 920 м'
     };
 
     function renderBiomeUI() {
@@ -1393,7 +1395,7 @@ window.OC = window.OC || {};
     }
     if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
     toast(next.noSurface
-      ? (next.name + ' · Глубина 2440 м, прожектор включён (F)')
+      ? (next.name + ' · Глубина ' + (next.depthOffset ? Math.round(next.depthOffset + 18) : 2440) + '+ м, прожектор включён (F)')
       : (next.name + ' · ' + next.region));
   }
   OC.switchBiome = switchBiome;
