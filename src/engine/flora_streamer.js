@@ -18,6 +18,7 @@ window.OC = window.OC || {};
   let lastDensity = -1;
   let dirtyRebuild = false;
   let totalVisibleInstances = 0;
+  let qualityHookBound = false;
 
   const _pos = new T.Vector3();
   const _quat = new T.Quaternion();
@@ -110,6 +111,7 @@ window.OC = window.OC || {};
     for (let i = 0; i < pools.length; i++) {
       const p = pools[i];
       p.mesh.count = p.count;
+      p.mesh.visible = p.count > 0;
       p.mesh.instanceMatrix.needsUpdate = true;
       if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
     }
@@ -126,10 +128,25 @@ window.OC = window.OC || {};
       chunkSize = biome.chunkSize || 150;
       chunkHalfCount = Math.round(biome.worldRadius / chunkSize);
 
-      if (group) scene.remove(group);
+      if (group) {
+        const disposedGeos = new Set();
+        const disposedMats = new Set();
+        group.traverse((o) => {
+          if (o.geometry && !disposedGeos.has(o.geometry)) {
+            o.geometry.dispose();
+            disposedGeos.add(o.geometry);
+          }
+          if (o.material && !disposedMats.has(o.material)) {
+            o.material.dispose();
+            disposedMats.add(o.material);
+          }
+        });
+        scene.remove(group);
+      }
       pools.length = 0;
       poolLookup.clear();
       chunkFloraCache.clear();
+      dirtyRebuild = false;
 
       group = new T.Group();
       scene.add(group);
@@ -180,13 +197,16 @@ window.OC = window.OC || {};
 
       rebuildActiveInstances(spawnPos);
 
-      OC.Quality.onChange((preset) => {
-        if (Math.abs(preset.floraDensity - lastDensity) > 0.05) {
-          chunkFloraCache.clear();
-          lastDensity = preset.floraDensity;
-        }
-        dirtyRebuild = true;
-      });
+      if (!qualityHookBound) {
+        qualityHookBound = true;
+        OC.Quality.onChange((preset) => {
+          if (Math.abs(preset.floraDensity - lastDensity) > 0.05) {
+            chunkFloraCache.clear();
+            lastDensity = preset.floraDensity;
+          }
+          dirtyRebuild = true;
+        });
+      }
     },
 
     update(camPos) {

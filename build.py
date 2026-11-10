@@ -10,6 +10,8 @@ ORDER = [
     'core/quality.js',
     'core/biome_registry.js',
     'biomes/great_barrier_reef.js',
+    'biomes/kelp_forest.js',
+    'biomes/hydrothermal_vents.js',
     'engine/world.js',
     'engine/terrain.js',
     'engine/flora_library.js',

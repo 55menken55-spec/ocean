@@ -32,6 +32,13 @@
   .brand h1 span{color:var(--accent)}
   .brand p{margin:5px 0 0;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
   .brand .line{width:54px;height:1px;background:linear-gradient(90deg,var(--accent),transparent);margin-top:10px}
+  .biome-bar{display:flex;gap:6px;margin-top:10px;pointer-events:auto}
+  .biome-pill{padding:5px 10px;border-radius:999px;border:1px solid var(--glass-brd);
+    background:var(--glass);backdrop-filter:blur(12px);color:var(--dim);font-size:10.5px;
+    font-weight:500;letter-spacing:.05em;cursor:pointer;transition:.2s;font-family:inherit}
+  .biome-pill:hover{border-color:rgba(88,224,255,.55);color:var(--ink)}
+  .biome-pill.on{background:rgba(88,224,255,.22);border-color:rgba(88,224,255,.72);color:#f4feff;
+    box-shadow:0 0 14px rgba(88,224,255,.22)}
 
   /* ---------- Телеметрия погружения (центр сверху) ---------- */
   .telemetry{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:22;
@@ -224,9 +231,10 @@
 <div class="vignette"></div>
 
 <header class="brand hud-hideable">
-  <h1>Большой <span>Барьерный риф</span></h1>
-  <p>Шельф Кораллового моря · 2.4 × 2.4 км</p>
+  <h1 id="brand-title">Большой <span>Барьерный риф</span></h1>
+  <p id="brand-sub">Шельф Кораллового моря · 2.4 × 2.4 км</p>
   <div class="line"></div>
+  <div class="biome-bar" id="biome-bar" aria-label="Выбор океанического биома"></div>
 </header>
 
 <div class="telemetry hud-hideable">
@@ -250,6 +258,11 @@
 
 <aside class="panel hud-hideable" id="panel">
   <div class="group">
+    <h2>Океаны планеты (Биомы)</h2>
+    <div class="row" id="biome-btns"></div>
+  </div>
+
+  <div class="group">
     <h2>Навигация</h2>
     <div class="row">
       <button class="btn on" id="btn-mode-swim">Плавание</button>
@@ -262,7 +275,7 @@
   </div>
 
   <div class="group">
-    <h2>Зоны Большого Барьерного рифа</h2>
+    <h2 id="zone-group-title">Зоны экспедиции</h2>
     <div class="row" id="zone-chips"></div>
   </div>
 
@@ -352,15 +365,15 @@
   </div>
 </div>
 
-<div class="status hud-hideable"><span>GBR · Тихий океан</span><span id="fps">— FPS</span></div>
+<div class="status hud-hideable"><span id="status-region">GBR · Тихий океан</span><span id="fps">— FPS</span></div>
 
 <div class="popup hidden" id="fish-popup"></div>
 <div class="toast" id="toast"></div>
 
-<div class="atlas-modal hidden" id="atlas-modal" role="dialog" aria-modal="true" aria-label="Атлас Большого Барьерного рифа">
+<div class="atlas-modal hidden" id="atlas-modal" role="dialog" aria-modal="true" aria-label="Атлас океанического биома">
   <div class="atlas-box">
     <div class="atlas-header">
-      <div><h3>Атлас Большого Барьерного рифа</h3><small id="atlas-count">1 / 42</small></div>
+      <div><h3 id="atlas-title">Атлас Большого Барьерного рифа</h3><small id="atlas-count">1 / 42</small></div>
       <button class="btn" id="atlas-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
     </div>
     <div class="atlas-tabs" id="atlas-tabs">
@@ -1810,6 +1823,904 @@ window.OC = window.OC || {};
   });
 })(window.OC);
 
+// === biomes/kelp_forest.js ===
+/* ================= БИОМ: ЛЕС ГИГАНТСКОЙ ЛАМИНАРИИ (МОНТЕРЕЙ, КАЛИФОРНИЯ) ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  const ZONES = [
+    {
+      id: 'rocky_shore',
+      name: 'Прибойные скалы и кекуры',
+      shortName: 'Скалы прибоя',
+      color: '#5fa4a0',
+      depthLabel: '0 – 9 м',
+      tempC: 12.8,
+      description: 'Волнорезная гранитная гряда с кекурами, укрытыми охристыми звёздами Pisaster и зелёными актиниями.'
+    },
+    {
+      id: 'kelp_cathedral',
+      name: 'Собор гигантской ламинарии',
+      shortName: 'Лес ламинарии',
+      color: '#2c9b78',
+      depthLabel: '9 – 22 м',
+      tempC: 11.6,
+      description: 'Двадцатиметровые башни макроцистиса Macrocystis pyrifera с воздушными пузырями и золотыми лучами света.'
+    },
+    {
+      id: 'granite_reef',
+      name: 'Гранитные рифы и уступы',
+      shortName: 'Гранитный риф',
+      color: '#2a7c8c',
+      depthLabel: '14 – 32 м',
+      tempC: 10.6,
+      description: 'Террасы трещиноватого гранита с фиолетовыми ежами, красными рыбами-гарибальди и леопардовыми акулами.'
+    },
+    {
+      id: 'monterey_canyon',
+      name: 'Склон каньона Монтерей',
+      shortName: 'Каньон Монтерей',
+      color: '#124a6e',
+      depthLabel: '30 – 74 м',
+      tempC: 8.2,
+      description: 'Крутой подводный каньон с холодным калифорнийским апвеллингом, вихрями анчоусов и глубокими сумерками.'
+    }
+  ];
+
+  // Гранитные кекуры и скальные выходы вдоль берега (-X)
+  const SEA_STACKS = [
+    { x: -740, z: -210, r: 58, h: 6.2 },
+    { x: -710, z: 145, r: 66, h: 5.8 },
+    { x: -780, z: 430, r: 72, h: 6.8 },
+    { x: -640, z: -460, r: 52, h: 4.5 }
+  ];
+
+  function shelfOffset(z) {
+    return Math.sin(z * 0.0024) * 95 + Math.cos(z * 0.0055 + 0.8) * 38;
+  }
+
+  function getHeight(x, z) {
+    const sx = x - shelfOffset(z);
+
+    // Базовый профиль от западного скалистого берега (-1200) к восточному подводному каньону (+1200)
+    let h = -16.0;
+    const shoreRise = OC.smoothstep(-480, -920, sx) * 14.5;
+    h += shoreRise;
+
+    // Гранитные ступени-террасы под лесом ламинарии (-520 .. +180)
+    const terraceWave = Math.sin(sx * 0.016 + OC.noise2(x * 0.006, z * 0.006) * 2.2) * 2.2;
+    h += terraceWave * OC.smoothstep(240, 40, sx) * OC.smoothstep(-850, -520, sx);
+
+    // Спуск к подводному каньону Монтерей на востоке (sx > +170)
+    const canyonDrop = OC.smoothstep(160, 740, sx) * 52.0;
+    h -= canyonDrop;
+
+    // Изрезанная канавка подводного притока каньона в центральной части (z ~ -120..+140, x > 140)
+    const gulchDist = Math.abs(z - Math.sin(x * 0.004) * 110);
+    const gulch = Math.exp(-(gulchDist * gulchDist) / (155 * 155)) * OC.smoothstep(40, 380, sx);
+    h -= gulch * 14.0;
+
+    // Трещиноватый гранит (гряды и валуны)
+    const graniteRidges = (OC.ridged2(x * 0.009, z * 0.009, 3) - 0.5) * 4.8 * OC.smoothstep(650, -450, sx);
+    const fineRock = OC.fbm2(x * 0.028, z * 0.028, 3) * 2.6;
+    h += graniteRidges + fineRock;
+
+    // Прибойные гранитные кекуры у западного берега
+    for (let i = 0; i < SEA_STACKS.length; i++) {
+      const st = SEA_STACKS[i];
+      const d = Math.hypot(x - st.x, z - st.z);
+      if (d < st.r * 1.8) {
+        const w = OC.smoothstep(st.r * 1.45, st.r * 0.25, d);
+        const crag = 0.8 + 0.35 * OC.ridged2(x * 0.035, z * 0.035, 2);
+        h = Math.max(h, -3.5 + (st.h + 3.5) * w * crag);
+      }
+    }
+
+    return OC.clamp(h, -76.0, 6.8);
+  }
+
+  function safeSpotY(x, z, desiredY, clearance) {
+    return Math.max(desiredY, getHeight(x, z) + (clearance || 3.2));
+  }
+
+  function getZoneAt(x, y, z) {
+    const sx = x - shelfOffset(z);
+    const fl = getHeight(x, z);
+    if (sx < -490 || fl > -7.0) return ZONES[0]; // rocky_shore
+    if (sx > 210 || fl < -29.0) return ZONES[3]; // monterey_canyon
+    // Чередование плотных коридоров ламинарии и открытых гранитных рифов
+    const clearing = OC.fbm2(x * 0.005 + 14.2, z * 0.005 - 6.8, 2);
+    if (clearing > 0.22 || fl < -22.5) return ZONES[2]; // granite_reef
+    return ZONES[1]; // kelp_cathedral
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const n = OC.clamp(OC.fbm2(x * 0.045, z * 0.045, 2) * 0.8 + 0.5, 0, 1);
+    const algaePatch = OC.smoothstep(-0.12, 0.30, OC.fbm2(x * 0.018 + 3.1, z * 0.018 - 1.9, 2));
+
+    _colA.set(0x6c6e6a); // сухой прибрежный гранит
+    _colB.set(0x3a483c); // обросший водорослями и кораллинами гранит
+    _colC.set(0x888472); // крупный ракушечный песок в промоинах
+
+    if (y > -1.0) {
+      out.copy(_colA).lerp(_colC, 0.25 + n * 0.25);
+      if (y < 0.8) out.multiplyScalar(0.76); // мокрый пояс прилива
+    } else if (y > -26.0) {
+      out.copy(_colC).lerp(_colB, 0.45 + algaePatch * 0.48);
+      // Розовые корковые кораллиновые водоросли (Lithothamnion) на валунах
+      if (n > 0.68) out.lerp(_colA.set(0x7c485e), 0.36);
+    } else {
+      out.set(0x28353d).lerp(_colC.set(0x465258), n * 0.45);
+    }
+    return out;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const above = y > 0.25;
+    if (above) {
+      _fogCol.set(0x9fb8c2).lerp(_colA.set(0x101c28), 1 - dayW);
+      _waterCol.set(0x1c7a74);
+      _skyTop.set(0x4a82a4);
+      _skyBot.set(0x98b9c8);
+      _aboveHoriz.set(0xb2cad4).lerp(_colA.set(0x152538), 1 - dayW);
+      return {
+        aboveWater: true,
+        fogColor: _fogCol,
+        fogDensity: 0.00055,
+        causticStrength: 0,
+        rayStrength: 0,
+        sunAtten: 1.0,
+        bioGlow: 0,
+        waterColor: _waterCol,
+        aboveHoriz: _aboveHoriz
+      };
+    }
+
+    const depth = Math.max(0, -y);
+    const sx = x - shelfOffset(z);
+    const canyonW = OC.smoothstep(120, 520, sx);
+    const atten = Math.exp(-depth * 0.036);
+
+    // Изумрудно-оливковая вода Калифорнийского залива днем и глубокая индиго в каньоне
+    _colA.set(0x146e66).lerp(_colB.set(0x0c3d58), canyonW * 0.72);
+    _colA.lerp(_colC.set(0x051822), OC.clamp(depth / 64, 0, 0.88));
+    _fogCol.copy(_colA).multiplyScalar(0.18 + 0.82 * dayW);
+
+    _waterCol.set(0x228e80).lerp(_colB.set(0x124d66), canyonW * 0.65);
+    _skyTop.set(0x4cb89f).lerp(_colB.set(0x123850), 1 - dayW);
+    _skyBot.set(0x031820);
+    _aboveHoriz.set(0x9ec4ce).lerp(_colB.set(0x142436), 1 - dayW);
+
+    const fogDensity = OC.lerp(0.0095, 0.0145, OC.clamp(depth / 55, 0, 1));
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity,
+      causticStrength: OC.clamp(atten * 0.85 * dayW, 0, 1.0),
+      rayStrength: OC.clamp(Math.exp(-depth * 0.048) * 1.1 * dayW, 0, 1.0),
+      sunAtten: atten,
+      bioGlow: OC.clamp((1 - dayW) * 0.82 + OC.smoothstep(28, 60, depth) * 0.68, 0, 1),
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz,
+      fillAColor: _colB.set(0x2eb89e),
+      fillBColor: _colC.set(0x649688)
+    };
+  }
+
+  /* ---- Холодное Калифорнийское течение (+Z) и накат прибоя ---- */
+  function getCurrentAt(x, y, z, time, out) {
+    if (!out) out = new T.Vector3();
+    out.set(0, 0, 0);
+    if (y > 0.25) return out;
+
+    const sx = x - shelfOffset(z);
+    const fl = getHeight(x, z);
+    const clearance = Math.max(0, y - fl);
+    const bottomShelter = OC.smoothstep(0.6, 5.0, clearance);
+
+    // Калифорнийское течение на юг (+Z) вдоль кромки каньона
+    const canyonJet = OC.smoothstep(80, 360, sx) * 1.45;
+    out.z += canyonJet;
+
+    // Волновой прибойный накат у скалистого берега (-X)
+    if (sx < -360 && y > -11.0) {
+      const surge = Math.sin(time * 0.95 + z * 0.03) * 1.1 * OC.smoothstep(-340, -680, sx);
+      out.x += surge;
+    }
+
+    // Приглушение течения внутри плотного леса ламинарии (уменьшение гидродинамики кронами)
+    const kelpCanopy = OC.smoothstep(180, -40, sx) * OC.smoothstep(-540, -280, sx);
+    const canopyBrake = OC.lerp(1.0, 0.42, kelpCanopy);
+    out.multiplyScalar(bottomShelter * canopyBrake);
+    return out;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+    const midX = x0 + chunkSize * 0.5;
+    const midZ = z0 + chunkSize * 0.5;
+    const hMid = getHeight(midX, midZ);
+    if (hMid < -62) return items;
+
+    function add(species, x, z, scale, tint) {
+      const y = getHeight(x, z);
+      items.push({ species, x, y: y - 0.08, z, ry: rng() * 6.283, scale, tint: tint || 0xffffff });
+    }
+
+    // 1. Башни гигантской ламинарии (Macrocystis pyrifera) — образуют солнечный подводный собор
+    const kelpSlots = Math.round(22 * density);
+    for (let i = 0; i < kelpSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const y = getHeight(x, z);
+      if (y > -26.0 && y < -5.0) {
+        const sx = x - shelfOffset(z);
+        const grove = OC.fbm2(x * 0.008 + 7.4, z * 0.008 - 3.2, 2);
+        // Оставляем выразительные светлые просеки между колоннадами ламинарии
+        if (sx > -560 && sx < 220 && grove > -0.14) {
+          const reach = OC.clamp((-y - 1.2) / 16.5, 0.52, 1.32);
+          add('kelp_giant', x, z, reach * OC.lerp(0.88, 1.18, rng()), rng() < 0.3 ? 0xe8d9a8 : 0xffffff);
+        }
+      }
+    }
+
+    // 2. Нижний ярус бурой ламинарии, фиолетовых ежей, охристых звёзд и зелёных актиний
+    const reefSlots = Math.round(28 * density);
+    for (let i = 0; i < reefSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const y = getHeight(x, z);
+      if (y > -32 && y < -0.5) {
+        const r = rng();
+        if (r < 0.24 && y < -3.0) add('kelp', x, z, OC.lerp(0.65, 1.15, rng()));
+        else if (r < 0.56) add('urchin_purple', x, z, OC.lerp(0.55, 1.05, rng()));
+        else if (r < 0.76) add('starfish_ochre', x, z, OC.lerp(0.55, 0.95, rng()));
+        else if (r < 0.92) add('anemone_giant_green', x, z, OC.lerp(0.75, 1.3, rng()));
+        else add('sponge_tube', x, z, OC.lerp(0.65, 1.1, rng()), 0xe8c97a);
+      } else if (y >= -0.5 && y < 1.2 && rng() < 0.35) {
+        // Приливно-отливные звёзды и ежи на мокрых гранитных скалах
+        add(rng() < 0.55 ? 'starfish_ochre' : 'urchin_purple', x, z, OC.lerp(0.5, 0.85, rng()));
+      }
+    }
+
+    return items;
+  }
+
+  const _lmRaw = [
+    {
+      id: 'kelp_heart',
+      name: 'Собор ламинарии',
+      zoneId: 'kelp_cathedral',
+      x: -220 + shelfOffset(30),
+      y: -11.5,
+      z: 30,
+      yaw: 2.1,
+      pitch: -0.06,
+      clearance: 3.5,
+      description: 'Центр подводного леса Macrocystis pyrifera: двадцатиметровые стебли уходят к солнцу сквозь изумрудную толщу.'
+    },
+    {
+      id: 'sea_stacks',
+      name: 'Кекуры прибоя',
+      zoneId: 'rocky_shore',
+      x: -635,
+      y: -4.2,
+      z: 140,
+      yaw: 1.55,
+      pitch: -0.08,
+      clearance: 3.0,
+      description: 'Гранитные скалы тихоокеанского прибоя с морскими львами, охристыми звёздами и зелёными актиниями.'
+    },
+    {
+      id: 'urchin_terrace',
+      name: 'Гранитный риф',
+      zoneId: 'granite_reef',
+      x: -45 + shelfOffset(-180),
+      y: -17.0,
+      z: -180,
+      yaw: -0.95,
+      pitch: -0.14,
+      clearance: 3.5,
+      description: 'Гранитные уступы с коврами фиолетовых ежей, ярко-оранжевыми гарибальди и леопардовыми акулами.'
+    },
+    {
+      id: 'baitball_edge',
+      name: 'Вихрь анчоусов',
+      zoneId: 'monterey_canyon',
+      x: 240 + shelfOffset(80),
+      y: -21.0,
+      z: 80,
+      yaw: -1.4,
+      pitch: -0.12,
+      clearance: 4.5,
+      description: 'Серебристые вихри северных анчоусов на границе холодного течения и подводного обрыва.'
+    },
+    {
+      id: 'canyon_abyss',
+      name: 'Каньон Монтерей',
+      zoneId: 'monterey_canyon',
+      x: 470 + shelfOffset(-60),
+      y: -44.0,
+      z: -60,
+      yaw: -1.55,
+      pitch: -0.22,
+      clearance: 5.5,
+      description: 'Отвесный склон глубокого каньона Монтерей, уходящего в ледяной тихоокеанский сумрак.'
+    }
+  ];
+
+  const landmarks = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: Math.min(2.0, safeSpotY(lm.x, lm.z, lm.y, lm.clearance))
+  }));
+
+  const spawnX = landmarks[0].x;
+  const spawnZ = landmarks[0].z;
+  const spawnY = Math.min(-3.5, safeSpotY(spawnX, spawnZ, -11.5, 4.0));
+
+  const _tourRaw = [
+    { x: spawnX, y: -11.5, z: spawnZ, lx: spawnX + 35, ly: -8, lz: spawnZ + 22, title: 'Собор гигантской ламинарии', duration: 9 },
+    { x: -620, y: -4.5, z: 120, lx: -700, ly: -1, lz: 145, title: 'Кекуры прибоя и морские львы', duration: 9 },
+    { x: landmarks[2].x, y: -16.5, z: landmarks[2].z, lx: landmarks[2].x + 25, ly: -20, lz: landmarks[2].z + 18, title: 'Гранитные рифы и звёзды Pisaster', duration: 9 },
+    { x: landmarks[3].x, y: -20.5, z: landmarks[3].z, lx: landmarks[3].x + 50, ly: -22, lz: landmarks[3].z - 15, title: 'Кромка каньона и косяки анчоусов', duration: 9 },
+    { x: landmarks[4].x, y: -42.0, z: landmarks[4].z, lx: landmarks[4].x + 90, ly: -58, lz: landmarks[4].z, title: 'Бездна каньона Монтерей', duration: 9 }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, Math.min(2.5, safeSpotY(leg.x, leg.z, leg.y, 3.8)), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    floor: ['Гранитный шельф Монтерей', 'Залив Монтерей', 'Геология', 'Все зоны', '0 – 74 м',
+      'Кристаллический гранитный фундамент калифорнийского берега, покрытый известковыми кораллиновыми водорослями и уходящий в глубокий подводный каньон.'],
+    kelp_giant: ['Гигантская ламинария', 'Macrocystis pyrifera', 'Флора', 'Лес ламинарии', '6 – 26 м',
+      'Крупнейшая бурая водоросль Земли, вырастающая до 45 м в длину со скоростью до 50 см в сутки благодаря газовым пузырям-пневматоцистам.'],
+    kelp: ['Бурая ламинария и нериоцистис', 'Nereocystis / Laminaria', 'Флора', 'Лес ламинарии', '4 – 24 м',
+      'Нижний ярус бурых водорослей, смягчающий энергию тихоокеанских волн и дающий укрытие малькам морских окуней.'],
+    urchin_purple: ['Фиолетовый морской ёж', 'Strongylocentrotus purpuratus', 'Беспозвоночные', 'Гранитный риф', '0 – 32 м',
+      'Колючий фиолетовый иглокожий травоядный, выгрызающий углубления в граните и регулирующий плотность лесов ламинарии.'],
+    starfish_ochre: ['Охристая морская звезда', 'Pisaster ochraceus', 'Беспозвоночные', 'Скалы прибоя', '0 – 28 м',
+      'Знаковый «ключевой» вид литорали и гранитных рифов Калифорнии, крепко удерживающийся на скалах под ударами прибоя.'],
+    anemone_giant_green: ['Гигантская зелёная актиния', 'Anthopleura xanthogrammica', 'Беспозвоночные', 'Скалы прибоя', '0 – 25 м',
+      'Крупная изумрудная актиния холодных вод, чей цвет обусловлен симбиозом с одноклеточными зоохлореллами и зооксантеллами.'],
+    sponge_tube: ['Калифорнийская трубчатая губка', 'Polymastia / Aplysina', 'Беспозвоночные', 'Гранитный риф', '10 – 40 м',
+      'Холодноводные кремниевые губки-фильтраторы, образующие яркие жёлто-золотистые колонии на отвесных уступах.'],
+    fish_garibaldi: ['Гарибальди', 'Hypsypops rubicundus', 'Рыбы', 'Гранитный риф', '3 – 28 м',
+      'Огненно-оранжевая территориальная рыба-девушка и официальная морская рыба штата Калифорния.'],
+    fish_rockfish: ['Окунь-ёрш ламинариевый', 'Sebastes atrovirens', 'Рыбы', 'Лес ламинарии', '4 – 35 м',
+      'Пятнистый буро-оливковый морской окунь, зависающий вертикально среди стеблей макроцистиса в ожидании добычи.'],
+    fish_anchovy: ['Северный анчоус', 'Engraulis mordax', 'Рыбы', 'Каньон Монтерей', '5 – 48 м',
+      'Серебристые пелагические стаи, скручивающиеся в плотные защитные торнадо над кромкой холодного апвеллинга.'],
+    fish_lantern: ['Калифорнийский миктоф (фонарик)', 'Stenobrachius leucopsarus', 'Рыбы', 'Каньон Монтерей', '25 – 74 м',
+      'Глубоководные светящиеся анчоусы каньона Монтерей, совершающие суточные вертикальные миграции к поверхности ночью.'],
+    sea_lion: ['Калифорнийский морской лев', 'Zalophus californianus', 'Мегафауна', 'Скалы прибоя', '1 – 45 м',
+      'Быстрые и игривые ушастые тюлени, виртуозно маневрирующие среди зарослей ламинарии на скорости до 40 км/ч.'],
+    shark_leopard: ['Калифорнийская леопардовая акула', 'Triakis semifasciata', 'Мегафауна', 'Гранитный риф', '4 – 36 м',
+      'Безопасная для дайверов изящная донная акула с характерными тёмными сёдлами и пятнами по золотисто-бронзовой спине.'],
+    shark_reef: ['Тихоокеанская суповая / синяя акула', 'Galeorhinus / Prionace', 'Мегафауна', 'Каньон Монтерей', '18 – 70 м',
+      'Стремительный пелагический хищник кромки каньона, идущий вдоль полосы холодного подъёма глубинных вод.'],
+    octopus: ['Гигантский тихоокеанский осьминог', 'Enteroctopus dofleini', 'Беспозвоночные', 'Гранитный риф', '12 – 60 м',
+      'Крупнейший осьминог планеты с размахом щупалец до 4–5 м и удивительным интеллектом, охотящийся среди расщелин.'],
+    jelly: ['Тихоокеанская морская крапива', 'Chrysaora fuscescens', 'Беспозвоночные', 'Каньон Монтерей', '2 – 45 м',
+      'Полупрозрачная золотисто-янтарная медуза с длинными спиральными ротовыми лопастями, парящая в течениях каньона.']
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [],
+    schools: [
+      { key: 'fish_garibaldi', n: 28, cx: landmarks[2].x, cz: landmarks[2].z, radius: 26, yDepth: -14, yAmp: 3, spread: 8, speed: 4.5, scale: 0.62, diel: 'diurnal', shyness: 0.45, curious: 0.25,
+        geoOpts: { len: 0.95, height: 0.56, width: 0.22, colA: 0xff5a12, colB: 0xff8a24, finCol: 0xff6b1a } },
+      { key: 'fish_rockfish', n: 36, cx: spawnX + 35, cz: spawnZ - 25, radius: 34, yDepth: -12, yAmp: 4.5, spread: 10, speed: 4.8, scale: 0.68, diel: 'diurnal', shyness: 0.55,
+        geoOpts: { len: 1.15, height: 0.48, width: 0.22, colA: 0x5c5b34, colB: 0x9b8e58, finCol: 0x454428, stripes: 0.35 } },
+      { key: 'fish_rockfish', n: 32, cx: -320, cz: -120, radius: 32, yDepth: -10, yAmp: 4, spread: 9, speed: 5.0, scale: 0.65, diel: 'diurnal', shyness: 0.55,
+        geoOpts: { len: 1.15, height: 0.48, width: 0.22, colA: 0x705638, colB: 0xb28f60, finCol: 0x55402a, stripes: 0.4 } },
+      { key: 'fish_anchovy', n: 105, cx: landmarks[3].x, cz: landmarks[3].z, radius: 38, yDepth: -19, yAmp: 6, spread: 12, speed: 9.8, scale: 0.42, diel: 'diurnal', shyness: 0.95,
+        geoOpts: { len: 1.0, height: 0.24, width: 0.10, colA: 0x5f889e, colB: 0xeaf4fa, finCol: 0xb8d4e3 } },
+      { key: 'fish_anchovy', n: 85, cx: -140, cz: 210, radius: 34, yDepth: -11, yAmp: 4, spread: 10, speed: 9.2, scale: 0.40, diel: 'diurnal', shyness: 0.95,
+        geoOpts: { len: 1.0, height: 0.24, width: 0.10, colA: 0x5f889e, colB: 0xeaf4fa, finCol: 0xb8d4e3 } },
+      { key: 'fish_lantern', n: 48, cx: landmarks[4].x, cz: landmarks[4].z, radius: 42, yDepth: -38, yAmp: 9, spread: 12, speed: 6.4, scale: 0.48, diel: 'nocturnal', biolum: true, shyness: 0.5,
+        geoOpts: { len: 0.85, height: 0.34, width: 0.15, colA: 0x163858, colB: 0x5cf5ff, finCol: 0x3ad9ee, eyeScale: 1.4 } }
+    ],
+    seaLions: [
+      { cx: spawnX + 20, cz: spawnZ + 10, r: 44, y: -9.5, speed: 6.2, scale: 1.05 },
+      { cx: -610, cz: 120, r: 42, y: -5.0, speed: 6.8, scale: 0.95 },
+      { cx: -260, cz: -190, r: 48, y: -11.0, speed: 5.8, scale: 1.0 }
+    ],
+    sharks: [
+      { speciesKey: 'shark_leopard', cx: landmarks[2].x + 15, cz: landmarks[2].z + 25, r: 46, y: -18, speed: 4.0 },
+      { speciesKey: 'shark_leopard', cx: -140, cz: 140, r: 42, y: -14, speed: 4.2 },
+      { cx: landmarks[4].x + 20, cz: landmarks[4].z, r: 78, y: -36, speed: 6.0 }
+    ],
+    octopus: [
+      { x: landmarks[2].x - 18, z: landmarks[2].z + 12, scale: 1.25 },
+      { x: -340, z: 65, scale: 1.1 }
+    ],
+    jellies: [
+      { cx: landmarks[3].x - 10, cz: landmarks[3].z + 20, y: -14, amp: 2.2, spd: 0.3, scale: 1.2 },
+      { cx: landmarks[4].x - 20, cz: landmarks[4].z - 35, y: -28, amp: 2.6, spd: 0.28, scale: 1.35 },
+      { cx: spawnX - 18, cz: spawnZ + 32, y: -9, amp: 1.8, spd: 0.32, scale: 1.0 }
+    ]
+  };
+
+  OC.Biomes.register({
+    id: 'kelp_forest',
+    name: 'Лес гигантской ламинарии',
+    region: 'Залив Монтерей, Калифорния',
+    subtitle: 'Тихий океан · 2.4 × 2.4 км · 0–74 м',
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    minimapTheme: 'kelp',
+    spawn: {
+      pos: [spawnX, spawnY, spawnZ],
+      yaw: 2.1,
+      pitch: -0.06
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getZoneAt,
+    getTerrainColor,
+    getOpticalProfile,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
+  });
+})(window.OC);
+
+// === biomes/hydrothermal_vents.js ===
+/* ================= БИОМ: АБИССАЛЬНЫЕ ЧЁРНЫЕ КУРИЛЬЩИКИ (ВОСТОЧНО-ТИХООКЕАНСКОЕ ПОДНЯТИЕ) ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  const DEPTH_OFFSET = 2420; // Сдвиг реальной глубины: -18 м -> 2438 м, -118 м -> 2538 м
+
+  const ZONES = [
+    {
+      id: 'smoker_field',
+      name: 'Долина чёрных курильщиков',
+      shortName: 'Курильщики',
+      color: '#ff7d42',
+      depthLabel: '2440 – 2475 м',
+      tempC: 14.2,
+      description: 'Активная рифтовая ось со столбами сульфидного дыма до +350 °C, перегревающими придонную воду.'
+    },
+    {
+      id: 'riftia_garden',
+      name: 'Сады гигантских рифтий',
+      shortName: 'Сады рифтий',
+      color: '#d94854',
+      depthLabel: '2450 – 2495 м',
+      tempC: 5.4,
+      description: 'Хемосинтетический оазис алых трубчатых червей Riftia pachyptila и золотистых мидий Bathymodiolus без солнечного света.'
+    },
+    {
+      id: 'fault_walls',
+      name: 'Базальтовые уступы разлома',
+      shortName: 'Разлом базальта',
+      color: '#4f5d7a',
+      depthLabel: '2434 – 2485 м',
+      tempC: 2.3,
+      description: 'Отвесные тектонические стены подушечных лав, ограничивающие осевой грабен океанического хребта.'
+    },
+    {
+      id: 'abyssal_plain',
+      name: 'Абиссальный жёлоб бездны',
+      shortName: 'Абиссаль',
+      color: '#182442',
+      depthLabel: '2490 – 2538 м',
+      tempC: 1.8,
+      description: 'Вечный мрак батипелагиали (250 атм), где охотятся удильщики с биолюминесцентной приманкой и кальмары.'
+    }
+  ];
+
+  // Пять активных гидротермальных полей вдоль осевого разлома
+  const VENT_FIELDS = [
+    { x: -10, z: 15, r: 62, peakY: -26.0 },
+    { x: 42, z: -210, r: 58, peakY: -31.0 },
+    { x: -55, z: 245, r: 66, peakY: -28.0 },
+    { x: 25, z: -480, r: 55, peakY: -35.0 },
+    { x: -30, z: 510, r: 60, peakY: -33.0 }
+  ];
+
+  function riftAxisX(z) {
+    return Math.sin(z * 0.0028) * 70 + Math.cos(z * 0.0062) * 26;
+  }
+
+  function nearestVentDist(x, z) {
+    let best = 1e9;
+    for (let i = 0; i < VENT_FIELDS.length; i++) {
+      const d = Math.hypot(x - VENT_FIELDS[i].x, z - VENT_FIELDS[i].z);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  function getHeight(x, z) {
+    const rx = x - riftAxisX(z);
+    const ax = Math.abs(rx);
+
+    // Осевой вулканический хребет (|rx| < 180) + глубокие грабеновые рвы по бокам + базальтовые уступы сброса
+    let h = -58.0;
+
+    // Неовулканический вал по оси разлома
+    const axisRidge = Math.exp(-(ax * ax) / (155 * 155)) * 18.0;
+    h += axisRidge;
+
+    // Глубокие рвы (axial troughs) по обе стороны от вала (ax ~ 220..360)
+    const troughDist = Math.abs(ax - 280);
+    const trough = Math.exp(-(troughDist * troughDist) / (130 * 130)) * 34.0;
+    h -= trough;
+
+    // Ступенчатые сбросовые стены разлома (ax ~ 380..720)
+    const wallRise = OC.smoothstep(340, 560, ax) * OC.smoothstep(940, 680, ax) * 44.0;
+    h += wallRise;
+
+    // Внешняя абиссальная равнина за уступами (ax > 760)
+    const outerDrop = OC.smoothstep(680, 1080, ax) * 46.0;
+    h -= outerDrop;
+
+    // Подушечные лавы (pillow basalt) и тектонические уступы
+    const basaltCrags = (OC.ridged2(x * 0.011, z * 0.011, 3) - 0.5) * 9.5;
+    const pillow = OC.fbm2(x * 0.036, z * 0.036, 3) * 4.2;
+    h += basaltCrags + pillow;
+
+    // Сульфидные холмы вокруг активных курильщиков
+    for (let i = 0; i < VENT_FIELDS.length; i++) {
+      const vf = VENT_FIELDS[i];
+      const d = Math.hypot(x - vf.x, z - vf.z);
+      if (d < vf.r * 1.9) {
+        const mound = OC.smoothstep(vf.r * 1.6, 8.0, d);
+        h = OC.lerp(h, vf.peakY + (OC.noise2(x * 0.08, z * 0.08) - 0.5) * 2.5, mound * 0.88);
+      }
+    }
+
+    return OC.clamp(h, -118.0, -12.0);
+  }
+
+  function safeSpotY(x, z, desiredY, clearance) {
+    return Math.max(desiredY, getHeight(x, z) + (clearance || 4.0));
+  }
+
+  function getZoneAt(x, y, z) {
+    const vd = nearestVentDist(x, z);
+    if (vd < 54) return ZONES[0]; // smoker_field
+    if (vd < 115) return ZONES[1]; // riftia_garden
+    const rx = Math.abs(x - riftAxisX(z));
+    const fl = getHeight(x, z);
+    if (rx > 340 && rx < 820 && fl > -52) return ZONES[2]; // fault_walls
+    return ZONES[3]; // abyssal_plain
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const vd = nearestVentDist(x, z);
+    const n = OC.clamp(OC.fbm2(x * 0.055, z * 0.055, 2) * 0.8 + 0.5, 0, 1);
+
+    _colA.set(0x161922); // чёрный океанический базальт
+    _colB.set(0x3a2a24); // железистые сульфидные отложения
+    _colC.set(0x7c441c); // ржаво-медная корка у жерл
+
+    out.copy(_colA).lerp(_colB, n * 0.45);
+
+    if (vd < 95) {
+      const halo = OC.smoothstep(95, 14, vd);
+      out.lerp(_colC, halo * (0.45 + n * 0.45));
+      // Тонкие раскалённые магматические трещины на дне у центральных курильщиков
+      const crack = OC.ridged2(x * 0.085, z * 0.085, 2);
+      if (vd < 42 && crack > 0.78) {
+        const glow = OC.smoothstep(0.78, 0.96, crack) * OC.smoothstep(42, 8, vd);
+        out.lerp(_colC.set(0xd94e14), glow * 0.85);
+      }
+    } else if (y < -76) {
+      // Светловатый пелагический ил в глубоких жёлобах
+      out.lerp(_colB.set(0x232a36), OC.smoothstep(-76, -108, y) * 0.65);
+    }
+    return out;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const vd = nearestVentDist(x, z);
+    const ventWarm = OC.smoothstep(130, 18, vd);
+
+    // В абиссали (2500 м) вечная ночь: солнечный свет = 0, биолюминесценция = 1
+    _fogCol.set(0x03070e).lerp(_colA.set(0x140907), ventWarm * 0.65);
+    _waterCol.set(0x0a1c2e).lerp(_colA.set(0x3a2216), ventWarm * 0.45);
+    _skyTop.set(0x010307);
+    _skyBot.set(0x03070f);
+    _aboveHoriz.set(0x050a14);
+
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity: OC.lerp(0.0145, 0.0225, ventWarm),
+      causticStrength: 0,
+      rayStrength: 0,
+      sunAtten: 0.0,
+      bioGlow: 1.0,
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz,
+      fillAColor: _colB.set(0x186688),
+      fillAMult: 0.42,
+      fillBColor: _colC.set(0xff6b26),
+      fillBMult: 0.25 + ventWarm * 1.45
+    };
+  }
+
+  /* ---- Восходящие термальные плюмы над курильщиками (+Y) и придонный дрейф ---- */
+  function getCurrentAt(x, y, z, time, out) {
+    if (!out) out = new T.Vector3();
+    out.set(0.18 + Math.sin(time * 0.14 + z * 0.01) * 0.1, 0, 0.22);
+
+    // Мощная конвекционная восходящая струя прямо над активными чёрными курильщиками
+    for (let i = 0; i < VENT_FIELDS.length; i++) {
+      const vf = VENT_FIELDS[i];
+      const d = Math.hypot(x - vf.x, z - vf.z);
+      if (d < 46) {
+        const fl = getHeight(x, z);
+        const above = Math.max(0, y - fl);
+        if (above < 48) {
+          const core = OC.smoothstep(46, 6, d) * OC.smoothstep(48, 8, above);
+          out.y += core * 2.65;
+          out.x += Math.sin(time * 0.8 + y * 0.15) * core * 0.65;
+          out.z += Math.cos(time * 0.7 + y * 0.15) * core * 0.65;
+        }
+      }
+    }
+    return out;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+
+    function add(species, x, z, scale, tint) {
+      const y = getHeight(x, z);
+      items.push({ species, x, y: y - 0.1, z, ry: rng() * 6.283, scale, tint: tint || 0xffffff });
+    }
+
+    // 1. Сульфидные башни «чёрных курильщиков» на гидротермальных полях
+    for (let v = 0; v < VENT_FIELDS.length; v++) {
+      const vf = VENT_FIELDS[v];
+      if (vf.x + 70 < x0 || vf.x - 70 > x0 + chunkSize || vf.z + 70 < z0 || vf.z - 70 > z0 + chunkSize) continue;
+      const spires = Math.round(7 * density);
+      for (let i = 0; i < spires; i++) {
+        const a = (i / Math.max(1, spires)) * 6.28 + rng() * 0.5;
+        const r = i === 0 ? rng() * 5 : OC.lerp(7, 34, rng());
+        const px = vf.x + Math.cos(a) * r;
+        const pz = vf.z + Math.sin(a) * r;
+        if (px >= x0 && px < x0 + chunkSize && pz >= z0 && pz < z0 + chunkSize) {
+          add('vent_chimney', px, pz, i === 0 ? 1.25 : OC.lerp(0.65, 1.15, rng()));
+        }
+      }
+    }
+
+    // 2. Сады гигантских рифтий, мидий Bathymodiolus, чёрных кораллов и стеклянных губок
+    const slots = Math.round(28 * density);
+    for (let i = 0; i < slots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const vd = nearestVentDist(x, z);
+      const y = getHeight(x, z);
+
+      if (vd < 96) {
+        if (rng() < 0.58) add('riftia_worms', x, z, OC.lerp(0.75, 1.38, rng()));
+        else add('vent_mussels', x, z, OC.lerp(0.8, 1.45, rng()));
+      } else if (y > -64 && rng() < 0.42) {
+        if (rng() < 0.62) add('coral_black', x, z, OC.lerp(0.75, 1.35, rng()));
+        else add('sponge_tube', x, z, OC.lerp(0.65, 1.15, rng()), 0xc8d8e6);
+      }
+    }
+
+    return items;
+  }
+
+  const _lmRaw = [
+    {
+      id: 'central_smoker',
+      name: 'Чёрный курильщик',
+      zoneId: 'smoker_field',
+      isHot: true,
+      x: VENT_FIELDS[0].x + 28,
+      y: -18.0,
+      z: VENT_FIELDS[0].z + 32,
+      yaw: 2.35,
+      pitch: -0.18,
+      clearance: 4.5,
+      description: 'Центральный гидротермальный шпиль, извергающий облака перегретых сульфидов железа на глубине 2440 метров.'
+    },
+    {
+      id: 'riftia_oasis',
+      name: 'Сад рифтий',
+      zoneId: 'riftia_garden',
+      isHot: true,
+      x: VENT_FIELDS[2].x + 42,
+      y: -25.0,
+      z: VENT_FIELDS[2].z - 36,
+      yaw: -0.85,
+      pitch: -0.18,
+      clearance: 4.5,
+      description: 'Хемосинтетический оазис алых трубчатых червей Riftia pachyptila, процветающих без единого фотона солнца.'
+    },
+    {
+      id: 'east_fault',
+      name: 'Базальтовый разлом',
+      zoneId: 'fault_walls',
+      x: 420,
+      y: -22.0,
+      z: -45,
+      yaw: 1.5,
+      pitch: -0.14,
+      clearance: 5.0,
+      description: 'Крутая стена подушечных базальтовых лав, окаймляющая ось срединно-океанического рифта.'
+    },
+    {
+      id: 'deep_trench',
+      name: 'Жёлоб бездны',
+      zoneId: 'abyssal_plain',
+      x: -255,
+      y: -66.0,
+      z: -140,
+      yaw: -1.2,
+      pitch: -0.16,
+      clearance: 5.5,
+      description: 'Холодная тьма глубинного рва (2500+ м): охотничьи угодья удильщиков и глубоководных кальмаров.'
+    }
+  ];
+
+  const landmarks = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: Math.min(8.0, safeSpotY(lm.x, lm.z, lm.y, lm.clearance))
+  }));
+
+  const spawnX = landmarks[0].x;
+  const spawnZ = landmarks[0].z;
+  const spawnY = Math.min(6.0, safeSpotY(spawnX, spawnZ, -18.0, 4.5));
+
+  const _tourRaw = [
+    { x: spawnX, y: -17.0, z: spawnZ, lx: VENT_FIELDS[0].x, ly: -22.0, lz: VENT_FIELDS[0].z, title: 'Главный чёрный курильщик (2440 м)', duration: 10 },
+    { x: landmarks[1].x, y: -23.0, z: landmarks[1].z, lx: VENT_FIELDS[2].x, ly: -28.0, lz: VENT_FIELDS[2].z, title: 'Хемосинтетический сад гигантских рифтий', duration: 10 },
+    { x: landmarks[2].x, y: -20.0, z: landmarks[2].z, lx: 500, ly: -24.0, lz: -45, title: 'Базальтовые уступы океанического разлома', duration: 9 },
+    { x: landmarks[3].x, y: -62.0, z: landmarks[3].z, lx: -220, ly: -74.0, lz: -110, title: 'Жёлоб бездны и биолюминесценция', duration: 10 }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, Math.min(8.0, safeSpotY(leg.x, leg.z, leg.y, 4.2)), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    floor: ['Срединно-океанический базальтовый рифт', 'Восточно-Тихоокеанское поднятие', 'Геология', 'Все зоны', '2432 – 2538 м',
+      'Остывшие подушечные лавы молодой океанической коры, рассечённые тектоническими сбросами и сульфидными холмами курильщиков.'],
+    vent_chimney: ['Сульфидный «чёрный курильщик»', 'Hydrothermal Vent Chimney', 'Геология', 'Курильщики', '2440 – 2475 м',
+      'Природная труба из сульфидов железа, меди и цинка, выбрасывающая минерализованный флюид температурой +300…+380 °C.'],
+    riftia_worms: ['Гигантская рифтия', 'Riftia pachyptila', 'Беспозвоночные', 'Сады рифтий', '2450 – 2490 м',
+      'Бескишечные трубчатые черви до 2.4 м длиной, живущие за счёт симбиотических бактерий, окисляющих сероводород без солнца.'],
+    vent_mussels: ['Термальные мидии батимодиолусы', 'Bathymodiolus thermophilus', 'Беспозвоночные', 'Сады рифтий', '2450 – 2495 м',
+      'Плотные колонии золотистых моллюсков, чьи жабры населены метанокисляющими и сероокисляющими бактериями.'],
+    coral_black: ['Абиссальный антипатарий', 'Bathypathes patula', 'Кораллы', 'Разлом базальта', '2434 – 2490 м',
+      'Медленнорастущие глубоководные кораллы с прочным хитиновым скелетом на базальтовых стенах разлома.'],
+    sponge_tube: ['Абиссальная стеклянная губка', 'Hexactinellida', 'Беспозвоночные', 'Разлом базальта', '2440 – 2520 м',
+      'Изящные кремниевые губки-шестилучевики со скелетом из чистого биогенного кварца, живущие тысячелетиями.'],
+    vent_shrimp: ['Слепая гидротермальная креветка', 'Rimicaris exoculata', 'Беспозвоночные', 'Курильщики', '2440 – 2480 м',
+      'Тысячные рои бледных креветок с термочувствительным спинным «глазом» для ориентации у инфракрасного свечения жерл.'],
+    fish_lantern: ['Абиссальный долгохвост / фонарик', 'Coryphaenoides / Myctophidae', 'Рыбы', 'Абиссаль', '2460 – 2535 м',
+      'Экономичные глубоководные рыбы со световыми фотофорами, патрулирующие границы термальных шлейфов.'],
+    fish_angler: ['Глубоководный морской чёрт', 'Melanocetus johnsonii', 'Рыбы', 'Абиссаль', '2465 – 2535 м',
+      'Хищник-засадчик вечной тьмы, приманивающий добычу светящейся бактериальной эской на подвижном иллиции.'],
+    squid_abyssal: ['Глубоководный кальмар-вампир', 'Vampyroteuthis / Histioteuthis', 'Мегафауна', 'Абиссаль', '2450 – 2525 м',
+      'Багровый обитатель глубин с рядами голубых фотофоров, экономично парящий за счёт желатинозной мантии.'],
+    octopus_dumbo: ['Осьминог Дамбо (Гримпотевтис)', 'Grimpoteuthis bathynectes', 'Мегафауна', 'Разлом базальта', '2440 – 2530 м',
+      'Миниатюрный глубоководный осьминог, грациозно взмахивающий парными плавниками-«ушками» над лавовыми подушками.'],
+    jelly: ['Абиссальная светящаяся медуза', 'Atolla wyvillei', 'Беспозвоночные', 'Абиссаль', '2435 – 2530 м',
+      'Глубоководная корономедуза с тревожным кольцом голубой биолюминесценции для отпугивания хищников.']
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [],
+    ventPlumes: [
+      { x: VENT_FIELDS[0].x, z: VENT_FIELDS[0].z, chimneyH: 6.5, height: 36, n: 220, light: true },
+      { x: VENT_FIELDS[1].x, z: VENT_FIELDS[1].z, chimneyH: 6.0, height: 34, n: 180, light: true },
+      { x: VENT_FIELDS[2].x, z: VENT_FIELDS[2].z, chimneyH: 6.5, height: 36, n: 200, light: true },
+      { x: VENT_FIELDS[3].x, z: VENT_FIELDS[3].z, chimneyH: 5.5, height: 30, n: 150, light: false },
+      { x: VENT_FIELDS[4].x, z: VENT_FIELDS[4].z, chimneyH: 5.5, height: 32, n: 150, light: false }
+    ],
+    schools: [
+      { key: 'vent_shrimp', n: 65, cx: VENT_FIELDS[0].x, cz: VENT_FIELDS[0].z, radius: 14, yDepth: -20, yAmp: 4, spread: 7, speed: 4.8, scale: 0.44, diel: 'cathemeral', biolum: false, shyness: 0.25, curious: 0.35,
+        geoOpts: { len: 0.72, height: 0.24, width: 0.20, colA: 0xe8d9ce, colB: 0xfff5ec, finCol: 0xffcfb0, eyeScale: 0.3 } },
+      { key: 'vent_shrimp', n: 55, cx: VENT_FIELDS[2].x, cz: VENT_FIELDS[2].z, radius: 15, yDepth: -22, yAmp: 4, spread: 7, speed: 4.6, scale: 0.44, diel: 'cathemeral', biolum: false, shyness: 0.25,
+        geoOpts: { len: 0.72, height: 0.24, width: 0.20, colA: 0xe8d9ce, colB: 0xfff5ec, finCol: 0xffcfb0, eyeScale: 0.3 } },
+      { key: 'fish_lantern', n: 32, cx: -180, cz: -120, radius: 48, yDepth: -54, yAmp: 8, spread: 14, speed: 5.2, scale: 0.56, diel: 'nocturnal', biolum: true, shyness: 0.4,
+        geoOpts: { len: 1.05, height: 0.36, width: 0.16, colA: 0x162840, colB: 0x58e8ff, finCol: 0x36c4e8, eyeScale: 1.45 } },
+      { key: 'fish_lantern', n: 28, cx: 160, cz: 190, radius: 46, yDepth: -48, yAmp: 7, spread: 13, speed: 5.0, scale: 0.54, diel: 'nocturnal', biolum: true, shyness: 0.4,
+        geoOpts: { len: 1.05, height: 0.36, width: 0.16, colA: 0x162840, colB: 0x58e8ff, finCol: 0x36c4e8, eyeScale: 1.45 } }
+    ],
+    anglers: [
+      { cx: -215, cz: -135, r: 42, y: -56, speed: 1.3, scale: 1.35 },
+      { cx: 145, cz: 90, r: 38, y: -48, speed: 1.2, scale: 1.25 },
+      { cx: 65, cz: -280, r: 44, y: -42, speed: 1.4, scale: 1.3 }
+    ],
+    squids: [
+      { cx: -190, cz: -160, r: 58, y: -46, speed: 3.1, scale: 1.15 },
+      { cx: 130, cz: 210, r: 62, y: -44, speed: 2.8, scale: 1.05 },
+      { cx: 15, cz: -40, r: 68, y: -14, speed: 2.6, scale: 1.1 }
+    ],
+    dumbos: [
+      { x: 380, z: -30, scale: 1.15 },
+      { x: -340, z: 140, scale: 1.05 },
+      { x: 75, z: -180, scale: 1.2 }
+    ],
+    jellies: [
+      { cx: -20, cz: 60, y: -12, amp: 2.5, spd: 0.25, scale: 1.3 },
+      { cx: -220, cz: -100, y: -45, amp: 3.0, spd: 0.22, scale: 1.4 },
+      { cx: 210, cz: -80, y: -34, amp: 2.8, spd: 0.24, scale: 1.35 }
+    ]
+  };
+
+  OC.Biomes.register({
+    id: 'hydrothermal_vents',
+    name: 'Чёрные курильщики бездны',
+    region: 'Восточно-Тихоокеанское поднятие',
+    subtitle: 'Абиссальный рифт · 2420–2538 м',
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    depthOffset: DEPTH_OFFSET,
+    noSurface: true,
+    maxCamY: 12.0,
+    minimapTheme: 'abyss',
+    spawn: {
+      pos: [spawnX, spawnY, spawnZ],
+      yaw: 2.35,
+      pitch: -0.18
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getZoneAt,
+    getTerrainColor,
+    getOpticalProfile,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
+  });
+})(window.OC);
+
 // === engine/world.js ===
 /* ================= МИР: РЕНДЕР, СВЕТ, ВОДА, КАУСТИКА, ПРОЖЕКТОР ================= */
 window.OC = window.OC || {};
@@ -2194,7 +3105,8 @@ window.OC = window.OC || {};
       uniforms: {
         uIntensity: { value: 0.0 },
         uColor: { value: new T.Color(0xcdf4ff) },
-        uTime: OC.uTime
+        uTime: OC.uTime,
+        uNoSurface: { value: 0.0 }
       },
       vertexShader: `
         varying vec3 vWorldP;
@@ -2211,7 +3123,7 @@ window.OC = window.OC || {};
         varying vec3 vWorldP;
         varying vec3 vNormW;
         varying float vDist;
-        uniform float uIntensity, uTime;
+        uniform float uIntensity, uTime, uNoSurface;
         uniform vec3 uColor;
         void main(){
           if (uIntensity < 0.01) discard;
@@ -2219,7 +3131,7 @@ window.OC = window.OC || {};
           float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.75);
           float axial = smoothstep(1.2, 8.5, vDist) * smoothstep(68.0, 10.0, vDist);
           float dust = 0.86 + 0.14 * sin(vWorldP.x * 0.45 + uTime * 0.9) * cos(vWorldP.z * 0.42 - uTime * 0.7);
-          float belowW = smoothstep(0.1, -0.4, vWorldP.y);
+          float belowW = max(uNoSurface, smoothstep(0.1, -0.4, vWorldP.y));
           float a = rim * axial * dust * belowW * uIntensity * 0.145;
           if (a < 0.002) discard;
           gl_FragColor = vec4(uColor, a);
@@ -2431,6 +3343,14 @@ window.OC = window.OC || {};
   OC.getScene = () => scene;
   OC.getCamera = () => camera;
   OC.getRenderer = () => renderer;
+  OC.refreshWorldForBiome = function (biome) {
+    if (!surfaceMat || !biome) return;
+    if (surfaceMat.uniforms.uFoamTex.value) surfaceMat.uniforms.uFoamTex.value.dispose();
+    surfaceMat.uniforms.uFoamTex.value = buildBathymetryFoamTex(biome);
+    surfaceMat.uniforms.uWorldSpan.value = (biome.worldRadius || 1200) * 2.0;
+    if (surfacePlane) surfacePlane.visible = !biome.noSurface;
+    if (sunSprite) sunSprite.visible = !biome.noSurface;
+  };
 
   /* ---------- Обновление мира на каждом кадре ---------- */
   OC.updateWorld = function (dt, time, camPos, autoCycle) {
@@ -2454,6 +3374,12 @@ window.OC = window.OC || {};
     pal.fogDen = opt.fogDensity;
     pal.bioGlow = opt.bioGlow;
     pal.sunAtten = opt.sunAtten;
+    if (opt.waterColor) pal.water.copy(opt.waterColor);
+    if (opt.skyTop) pal.skyTop.copy(opt.skyTop);
+    if (opt.skyBot) pal.skyBot.copy(opt.skyBot);
+    if (opt.aboveHoriz) pal.aboveHoriz.copy(opt.aboveHoriz);
+    if (opt.fillAColor) pal.fillA.copy(opt.fillAColor);
+    if (opt.fillBColor) pal.fillB.copy(opt.fillBColor);
 
     scene.fog.color.copy(opt.fogColor);
     scene.fog.density = opt.fogDensity;
@@ -2461,24 +3387,25 @@ window.OC = window.OC || {};
 
     hemi.color.copy(pal.hemiSky);
     hemi.groundColor.copy(pal.hemiGround);
-    hemi.intensity = pal.hemiI * (0.35 + 0.65 * opt.sunAtten);
+    hemi.intensity = pal.hemiI * (biome && biome.noSurface ? 0.14 : (0.35 + 0.65 * opt.sunAtten));
 
     sun.color.copy(pal.sunCol);
-    sun.intensity = pal.sunI * (0.22 + 0.78 * opt.sunAtten);
+    sun.intensity = pal.sunI * (biome && biome.noSurface ? 0.03 : (0.22 + 0.78 * opt.sunAtten));
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
     sunDir.set(Math.cos(ang) * 0.52, Math.max(0.18, Math.sin(ang) * 0.85 + 0.28), 0.34).normalize();
     sun.position.copy(sunDir).multiplyScalar(420);
     sunSprite.position.copy(camPos).addScaledVector(sunDir, 900);
+    sunSprite.visible = !(biome && biome.noSurface);
     sunSprite.material.opacity = (0.35 + 0.55 * pal.dayW) * (opt.aboveWater ? 0.9 : opt.sunAtten);
     sunSprite.material.color.copy(pal.sunCol);
 
     fillA.position.set(camPos.x - 65, camPos.y + 18, camPos.z + 50);
     fillB.position.set(camPos.x + 70, camPos.y + 24, camPos.z - 55);
     fillA.color.copy(pal.fillA);
-    fillA.intensity = pal.fillAI * (0.3 + 0.7 * opt.sunAtten);
+    fillA.intensity = pal.fillAI * (opt.fillAMult !== undefined ? opt.fillAMult : (0.3 + 0.7 * opt.sunAtten));
     fillB.color.copy(pal.fillB);
-    fillB.intensity = pal.fillBI * (0.3 + 0.7 * opt.sunAtten);
+    fillB.intensity = pal.fillBI * (opt.fillBMult !== undefined ? opt.fillBMult : (0.3 + 0.7 * opt.sunAtten));
 
     /* прожектор дайвера и объёмный луч в воде */
     const targetFlashI = flashlightOn ? 4.2 : 0.0;
@@ -2489,18 +3416,19 @@ window.OC = window.OC || {};
 
     if (flashBeam && flashBeamMat) {
       const beamStrength = (flashlight.intensity / 4.2) * OC.lerp(1.15, 0.42, pal.dayW * opt.sunAtten);
-      flashBeam.visible = beamStrength > 0.02 && camPos.y < 1.5;
+      flashBeam.visible = beamStrength > 0.02 && (biome && biome.noSurface ? true : camPos.y < 1.5);
       if (flashBeam.visible) {
         camRight.crossVectors(camFwd, camera.up).normalize();
         flashBeam.position.copy(camPos).addScaledVector(camera.up, -0.55).addScaledVector(camRight, 0.25);
         flashBeam.lookAt(flashTarget.position);
         flashBeamMat.uniforms.uIntensity.value = beamStrength;
+        flashBeamMat.uniforms.uNoSurface.value = (biome && biome.noSurface) ? 1.0 : 0.0;
         flashBeamMat.uniforms.uColor.value.copy(pal.water).lerp(_beamTint, 0.68);
       }
     }
 
     /* купол неба */
-    const aboveMix = OC.smoothstep(-0.3, 0.5, camPos.y);
+    const aboveMix = (biome && biome.noSurface) ? 0.0 : OC.smoothstep(-0.3, 0.5, camPos.y);
     skyMat.uniforms.uTop.value.copy(pal.skyTop);
     skyMat.uniforms.uMid.value.copy(opt.fogColor);
     skyMat.uniforms.uBot.value.copy(pal.skyBot);
@@ -2521,18 +3449,21 @@ window.OC = window.OC || {};
     }
 
     /* поверхность воды привязана к сетке вокруг камеры, чтобы волны не «плыли» */
-    const snap = 44;
-    surfacePlane.position.x = Math.round(camPos.x / snap) * snap;
-    surfacePlane.position.z = Math.round(camPos.z / snap) * snap;
-    surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
-    surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
-    surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);
-    surfaceMat.uniforms.uSunDir.value.copy(sunDir);
-    surfaceMat.uniforms.uDayW.value = pal.dayW;
-    surfaceMat.uniforms.uCamY.value = camPos.y;
+    surfacePlane.visible = !(biome && biome.noSurface);
+    if (surfacePlane.visible) {
+      const snap = 44;
+      surfacePlane.position.x = Math.round(camPos.x / snap) * snap;
+      surfacePlane.position.z = Math.round(camPos.z / snap) * snap;
+      surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
+      surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
+      surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);
+      surfaceMat.uniforms.uSunDir.value.copy(sunDir);
+      surfaceMat.uniforms.uDayW.value = pal.dayW;
+      surfaceMat.uniforms.uCamY.value = camPos.y;
+    }
 
     /* солнечные лучи в верхних слоях */
-    raysGroup.visible = camPos.y < 0.2 && opt.rayStrength > 0.02;
+    raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && opt.rayStrength > 0.02;
     if (raysGroup.visible) {
       raysGroup.position.x = Math.round(camPos.x / 60) * 60;
       raysGroup.position.z = Math.round(camPos.z / 60) * 60;
@@ -2721,8 +3652,15 @@ window.OC = window.OC || {};
       chunkSize = biome.chunkSize || 150;
       chunkRadiusCount = Math.round(biome.worldRadius / chunkSize);
 
-      if (group) scene.remove(group);
+      if (group) {
+        group.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+        });
+        scene.remove(group);
+      }
+      if (terrainMat) { terrainMat.dispose(); terrainMat = null; }
       chunks.clear();
+      initialized = false;
       group = new T.Group();
       scene.add(group);
 
@@ -3602,6 +4540,213 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 22. Гигантская калифорнийская ламинария (Macrocystis pyrifera) ---- */
+  function buildGiantKelp(hueShift, rng) {
+    const list = [];
+    const cHold = COL(0x5a4c28);
+    const cStipe = COL().setHSL(0.11 + hueShift, 0.56, 0.34);
+    const cBlade = COL().setHSL(0.12 + hueShift, 0.72, 0.44);
+    const cBladder = COL().setHSL(0.14 + hueShift, 0.78, 0.52);
+
+    // Конический ризоид-прикрепитель к гранитному дну
+    const hold = new T.ConeGeometry(0.85, 0.75, 7);
+    OC.geoPrep(hold);
+    OC.paint(hold, cHold);
+    OC.withSway(hold, () => 0);
+    hold.translate(0, 0.35, 0);
+    list.push(hold);
+
+    const tall = OC.lerp(13.5, 19.5, rng());
+    for (let sIdx = 0; sIdx < 3; sIdx++) {
+      const ph = (sIdx / 3) * Math.PI * 2 + rng();
+      const swayX = OC.lerp(0.55, 1.35, rng());
+      const pts = [];
+      for (let k = 0; k <= 7; k++) {
+        const t = k / 7;
+        const rad = 0.28 + Math.sin(t * Math.PI * 2.5 + ph) * 0.52 * t;
+        pts.push(new T.Vector3(Math.cos(ph + t * 2.2) * rad * swayX, 0.3 + t * tall, Math.sin(ph + t * 2.2) * rad * swayX));
+      }
+      const stipe = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 14, 0.065, 5, false);
+      OC.geoPrep(stipe);
+      OC.paint(stipe, cStipe);
+      OC.withSway(stipe, (x, y, z) => Math.pow(OC.clamp(y / tall, 0, 1), 1.35));
+      list.push(stipe);
+
+      // Поплавки-пневматоцисты и длинные гофрированные пластины вдоль стебля
+      const leafSteps = 7;
+      for (let li = 1; li <= leafSteps; li++) {
+        const lt = li / (leafSteps + 0.5);
+        const ly = 0.8 + lt * (tall - 1.2);
+        const ang = ph + lt * 4.5 + li * 1.1;
+        const lx = Math.cos(ph + lt * 2.2) * (0.28 + Math.sin(lt * Math.PI * 2.5 + ph) * 0.52 * lt) * swayX;
+        const lz = Math.sin(ph + lt * 2.2) * (0.28 + Math.sin(lt * Math.PI * 2.5 + ph) * 0.52 * lt) * swayX;
+        const sw = Math.pow(OC.clamp(ly / tall, 0, 1), 1.35);
+
+        const bulb = new T.SphereGeometry(0.11, 5, 4);
+        OC.geoPrep(bulb);
+        OC.paint(bulb, cBladder);
+        OC.withSway(bulb, () => sw);
+        OC.xform(bulb, { p: [lx + Math.cos(ang) * 0.14, ly, lz + Math.sin(ang) * 0.14] });
+        list.push(bulb);
+
+        const blLen = OC.lerp(1.4, 2.5, rng()) * (0.7 + 0.45 * lt);
+        const blade = new T.PlaneGeometry(0.46, blLen, 2, 4);
+        const bp = blade.attributes.position;
+        for (let k = 0; k < bp.count; k++) {
+          const bx = bp.getX(k), by = bp.getY(k) + blLen * 0.5;
+          const u = OC.clamp(by / blLen, 0, 1);
+          const w = Math.sin(Math.pow(u, 0.65) * Math.PI);
+          bp.setXYZ(k, bx * w, -u * 0.35 + Math.sin(u * 6.0) * 0.08, by);
+        }
+        OC.geoPrep(blade);
+        blade.computeVertexNormals();
+        OC.paint(blade, (x, y, z, c) => c.copy(cStipe).lerp(cBlade, OC.clamp(z / blLen, 0, 1)));
+        OC.withSway(blade, () => sw + 0.18);
+        OC.xform(blade, { r: [0.22, ang, 0], p: [lx, ly, lz] });
+        list.push(blade);
+      }
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 23. Фиолетовый морской ёж и охристая звезда Монтерея ---- */
+  function buildPurpleUrchin() {
+    const list = [];
+    const body = new T.SphereGeometry(0.42, 8, 6);
+    body.scale(1, 0.72, 1);
+    OC.geoPrep(body);
+    OC.paint(body, 0x4b1d6b);
+    OC.withSway(body, () => 0);
+    list.push(body);
+    for (let i = 0; i < 28; i++) {
+      const dir = OC.fibDir(i, 28);
+      const len = 0.42 + (i % 3) * 0.12;
+      const sp = new T.ConeGeometry(0.036, len, 4);
+      OC.geoPrep(sp);
+      sp.translate(0, len * 0.5, 0);
+      const q = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 1, 0), dir);
+      sp.applyMatrix4(new T.Matrix4().makeRotationFromQuaternion(q));
+      sp.translate(dir.x * 0.32, dir.y * 0.24, dir.z * 0.32);
+      OC.paint(sp, 0x7b33a8);
+      OC.withSway(sp, () => 0);
+      list.push(sp);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 24. Гидротермальная сульфидная труба («чёрный курильщик») ---- */
+  function buildVentChimney(rng) {
+    const list = [];
+    const ironDark = COL(0x1e2024);
+    const ironPyrite = COL(0x524634);
+    const rust = COL(0x8e421c);
+    const ember = COL(0xd96822);
+
+    const h = OC.lerp(5.2, 9.6, rng());
+    const segs = 5;
+    for (let i = 0; i < segs; i++) {
+      const t = i / segs;
+      const secH = h / segs * 1.25;
+      const rBot = OC.lerp(1.55, 0.52, t) * OC.lerp(0.85, 1.18, rng());
+      const rTop = rBot * 0.84;
+      const cyl = new T.CylinderGeometry(rTop, rBot, secH, 9, 2, true);
+      const p = cyl.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const vx = p.getX(k), vy = p.getY(k), vz = p.getZ(k);
+        const a = Math.atan2(vz, vx);
+        const fluting = 1 + 0.22 * Math.sin(a * 5 + i * 1.4) + 0.12 * Math.cos(vy * 2.5 + a * 3);
+        p.setXYZ(k, vx * fluting, vy, vz * fluting);
+      }
+      OC.geoPrep(cyl);
+      cyl.computeVertexNormals();
+      OC.paint(cyl, (x, y, z, c) => {
+        const band = Math.sin((y + t * h) * 2.4 + Math.atan2(z, x)) * 0.5 + 0.5;
+        c.copy(ironDark).lerp(ironPyrite, band * 0.65).lerp(rust, OC.smoothstep(0.45, 0.95, t) * 0.45);
+      });
+      OC.withSway(cyl, () => 0);
+      OC.xform(cyl, { p: [(rng() - 0.5) * 0.22 * (1 - t), t * h + secH * 0.45, (rng() - 0.5) * 0.22 * (1 - t)] });
+      list.push(cyl);
+
+      // Минеральный фланец (козырёк) на стыке этажей
+      if (i > 0 && i < segs - 1) {
+        const flange = new T.ConeGeometry(rBot * 1.38, 0.42, 8);
+        OC.geoPrep(flange);
+        OC.paint(flange, (x, y, z, c) => c.copy(ironPyrite).lerp(rust, 0.4));
+        OC.withSway(flange, () => 0);
+        OC.xform(flange, { p: [0, t * h, 0] });
+        list.push(flange);
+      }
+    }
+
+    // Жерло курильщика сверху (тёплый сернисто-пиритовый ободок)
+    const rim = new T.TorusGeometry(0.48, 0.16, 5, 9);
+    OC.geoPrep(rim);
+    OC.paint(rim, ember);
+    OC.withSway(rim, () => 0);
+    OC.xform(rim, { r: [Math.PI / 2, 0, 0], p: [0, h, 0] });
+    list.push(rim);
+
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 25. Гигантские трубчатые черви рифтии (Riftia pachyptila) ---- */
+  function buildRiftiaWorms(rng) {
+    const list = [];
+    const tubeA = COL(0xd9d5c8);
+    const tubeB = COL(0xa39f92);
+    const plumeA = COL(0xc91a2c);
+    const plumeB = COL(0xff4f45);
+
+    const n = 9 + Math.floor(rng() * 5);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + (rng() - 0.5) * 0.35;
+      const dist = i === 0 ? 0 : OC.lerp(0.25, 0.95, rng());
+      const h = OC.lerp(1.4, 2.85, rng());
+      const lean = OC.lerp(0.1, 0.42, rng());
+      const pts = [
+        new T.Vector3(Math.cos(a) * dist * 0.4, 0, Math.sin(a) * dist * 0.4),
+        new T.Vector3(Math.cos(a) * (dist + lean * 0.4), h * 0.55, Math.sin(a) * (dist + lean * 0.4)),
+        new T.Vector3(Math.cos(a) * (dist + lean), h, Math.sin(a) * (dist + lean))
+      ];
+      const tube = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 8, 0.085, 6, false);
+      OC.geoPrep(tube);
+      OC.paint(tube, (x, y, z, c) => {
+        const ring = Math.sin(y * 9.0) * 0.5 + 0.5;
+        c.copy(tubeB).lerp(tubeA, ring * 0.75);
+      });
+      OC.withSway(tube, (x, y, z) => OC.clamp(y / h, 0, 1) * 0.55);
+      list.push(tube);
+
+      const plume = new T.ConeGeometry(0.145, 0.44, 6);
+      OC.geoPrep(plume);
+      OC.paint(plume, (x, y, z, c) => c.copy(plumeA).lerp(plumeB, OC.clamp(y + 0.25, 0, 1)));
+      OC.withSway(plume, () => 0.75);
+      OC.xform(plume, { r: [Math.sin(a) * 0.2, 0, -Math.cos(a) * 0.2], p: [pts[2].x, pts[2].y + 0.16, pts[2].z] });
+      list.push(plume);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 26. Колония глубоководных мидий Bathymodiolus ---- */
+  function buildVentMussels(rng) {
+    const list = [];
+    const shellA = COL(0x7c5522);
+    const shellB = COL(0xc48b3b);
+    const count = 10 + Math.floor(rng() * 6);
+    for (let i = 0; i < count; i++) {
+      const a = rng() * Math.PI * 2;
+      const d = Math.sqrt(rng()) * 1.15;
+      const sh = new T.SphereGeometry(0.24, 6, 5);
+      sh.scale(1.65, 0.65, 0.92);
+      OC.geoPrep(sh);
+      OC.paint(sh, (x, y, z, c) => c.copy(shellA).lerp(shellB, OC.clamp(y + 0.25, 0, 1)));
+      OC.withSway(sh, () => 0);
+      OC.xform(sh, { r: [(rng() - 0.5) * 0.4, a, 0.25], p: [Math.cos(a) * d, 0.12 + rng() * 0.16, Math.sin(a) * d] });
+      list.push(sh);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   OC.FloraLibrary = {
     create() {
@@ -3610,6 +4755,10 @@ window.OC = window.OC || {};
       const matRigid = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.85, metalness: 0.02, side: T.DoubleSide
       }), { causticStrength: 0.92, swayAmp: 0 });
+
+      const matChimney = OC.enhanceMaterial(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.72, metalness: 0.28, side: T.DoubleSide
+      }), { causticStrength: 0.0, swayAmp: 0 });
 
       const matClam = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.42, metalness: 0.12, side: T.DoubleSide
@@ -3715,6 +4864,34 @@ window.OC = window.OC || {};
         shell_triton: {
           mat: matClam, maxInstances: 440, cullDist: 280,
           geos: [buildTritonShell()]
+        },
+        kelp_giant: {
+          mat: matPlant, maxInstances: 1100, cullDist: 640,
+          geos: [buildGiantKelp(0.0, rng), buildGiantKelp(0.03, rng)]
+        },
+        urchin_purple: {
+          mat: matRigid, maxInstances: 800, cullDist: 300,
+          geos: [buildPurpleUrchin()]
+        },
+        starfish_ochre: {
+          mat: matRigid, maxInstances: 520, cullDist: 300,
+          geos: [buildStarfish(5, 0.07, false), buildStarfish(5, 0.82, false)]
+        },
+        anemone_giant_green: {
+          mat: matSoft, maxInstances: 620, cullDist: 380,
+          geos: [buildAnemone(0.38, 0.28, rng), buildAnemone(0.44, 0.34, rng)]
+        },
+        vent_chimney: {
+          mat: matChimney, maxInstances: 320, cullDist: 620,
+          geos: [buildVentChimney(rng), buildVentChimney(rng)]
+        },
+        riftia_worms: {
+          mat: matSoft, maxInstances: 960, cullDist: 420,
+          geos: [buildRiftiaWorms(rng), buildRiftiaWorms(rng)]
+        },
+        vent_mussels: {
+          mat: matRigid, maxInstances: 880, cullDist: 360,
+          geos: [buildVentMussels(rng)]
         }
       };
 
@@ -3744,6 +4921,7 @@ window.OC = window.OC || {};
   let lastDensity = -1;
   let dirtyRebuild = false;
   let totalVisibleInstances = 0;
+  let qualityHookBound = false;
 
   const _pos = new T.Vector3();
   const _quat = new T.Quaternion();
@@ -3836,6 +5014,7 @@ window.OC = window.OC || {};
     for (let i = 0; i < pools.length; i++) {
       const p = pools[i];
       p.mesh.count = p.count;
+      p.mesh.visible = p.count > 0;
       p.mesh.instanceMatrix.needsUpdate = true;
       if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
     }
@@ -3852,10 +5031,25 @@ window.OC = window.OC || {};
       chunkSize = biome.chunkSize || 150;
       chunkHalfCount = Math.round(biome.worldRadius / chunkSize);
 
-      if (group) scene.remove(group);
+      if (group) {
+        const disposedGeos = new Set();
+        const disposedMats = new Set();
+        group.traverse((o) => {
+          if (o.geometry && !disposedGeos.has(o.geometry)) {
+            o.geometry.dispose();
+            disposedGeos.add(o.geometry);
+          }
+          if (o.material && !disposedMats.has(o.material)) {
+            o.material.dispose();
+            disposedMats.add(o.material);
+          }
+        });
+        scene.remove(group);
+      }
       pools.length = 0;
       poolLookup.clear();
       chunkFloraCache.clear();
+      dirtyRebuild = false;
 
       group = new T.Group();
       scene.add(group);
@@ -3906,13 +5100,16 @@ window.OC = window.OC || {};
 
       rebuildActiveInstances(spawnPos);
 
-      OC.Quality.onChange((preset) => {
-        if (Math.abs(preset.floraDensity - lastDensity) > 0.05) {
-          chunkFloraCache.clear();
-          lastDensity = preset.floraDensity;
-        }
-        dirtyRebuild = true;
-      });
+      if (!qualityHookBound) {
+        qualityHookBound = true;
+        OC.Quality.onChange((preset) => {
+          if (Math.abs(preset.floraDensity - lastDensity) > 0.05) {
+            chunkFloraCache.clear();
+            lastDensity = preset.floraDensity;
+          }
+          dirtyRebuild = true;
+        });
+      }
     },
 
     update(camPos) {
@@ -3977,6 +5174,9 @@ window.OC = window.OC || {};
   let fishMatInstanced = null;
   let fishMatBiolum = null;
   let creatureMat = null;
+  let faunaGroup = null;
+  let activeSchoolsRef = [];
+  let qualityHookBound = false;
 
   /* ---------- Процедурная форма рыбы (нос +X, хвост -X) ---------- */
   function makeFishGeo(opts) {
@@ -4949,10 +6149,11 @@ window.OC = window.OC || {};
     };
   }
 
-  /* ---------- Рифовая акула и Китовая акула ---------- */
+  /* ---------- Рифовая, китовая и калифорнийская леопардовая акулы ---------- */
   function makeShark(scene, biome, opts) {
     const isWhale = !!opts.whaleShark;
-    const len = isWhale ? 11.5 : 4.2;
+    const isLeopard = opts.speciesKey === 'shark_leopard';
+    const len = isWhale ? 11.5 : (isLeopard ? 2.4 : 4.2);
     const group = new T.Group();
 
     const body = new T.SphereGeometry(1, 18, 12);
@@ -4972,6 +6173,10 @@ window.OC = window.OC || {};
         if (y < -0.1) { c.set(0xe4edf2); return; }
         const spot = Math.sin(x * 4.5) * Math.cos(z * 2.2);
         c.set(0x2a4054).lerp(new T.Color(0xddecf5), spot > 0.48 ? 0.92 : 0);
+      } else if (isLeopard) {
+        if (y < -0.06) { c.set(0xddd2b8); return; }
+        const saddle = Math.sin(z * 5.2) * Math.cos(x * 5.5);
+        c.set(0x9a8454).lerp(new T.Color(0x2d2416), saddle > 0.38 ? 0.85 : 0);
       } else {
         c.set(y > -0.05 ? 0x5d6e7a : 0xdde6ea);
       }
@@ -4982,7 +6187,7 @@ window.OC = window.OC || {};
     const dorsal = new T.ConeGeometry(len * 0.11, len * 0.24, 4);
     dorsal.scale(0.25, 1, 1.1);
     OC.geoPrep(dorsal);
-    OC.paint(dorsal, isWhale ? 0x2c4257 : 0x455661);
+    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : 0x455661));
     const dorM = new T.Mesh(dorsal, creatureMat);
     dorM.position.set(0, len * 0.15, len * 0.04);
     dorM.rotation.x = -0.35;
@@ -4992,7 +6197,7 @@ window.OC = window.OC || {};
     const pec = new T.ConeGeometry(len * 0.09, len * 0.28, 4);
     pec.scale(0.22, 1, 1);
     OC.geoPrep(pec);
-    OC.paint(pec, isWhale ? 0x2a4054 : 0x52626d);
+    OC.paint(pec, isWhale ? 0x2a4054 : (isLeopard ? 0x857046 : 0x52626d));
     for (const s of [-1, 1]) {
       const pm = new T.Mesh(pec, creatureMat);
       pm.position.set(s * len * 0.17, -len * 0.05, len * 0.12);
@@ -5007,21 +6212,22 @@ window.OC = window.OC || {};
     const tailTop = new T.ConeGeometry(len * 0.08, len * 0.34, 4);
     tailTop.scale(0.2, 1, 0.9);
     OC.geoPrep(tailTop);
-    OC.paint(tailTop, isWhale ? 0x2a4054 : 0x28323a);
+    OC.paint(tailTop, isWhale ? 0x2a4054 : (isLeopard ? 0x524229 : 0x28323a));
     const ttM = new T.Mesh(tailTop, creatureMat);
     ttM.position.set(0, len * 0.08, -len * 0.14);
     ttM.rotation.x = -0.6;
     const tailBot = new T.ConeGeometry(len * 0.06, len * 0.22, 4);
     tailBot.scale(0.2, 1, 0.8);
     OC.geoPrep(tailBot);
-    OC.paint(tailBot, isWhale ? 0x2a4054 : 0x455661);
+    OC.paint(tailBot, isWhale ? 0x2a4054 : (isLeopard ? 0x7c6840 : 0x455661));
     const tbM = new T.Mesh(tailBot, creatureMat);
     tbM.position.set(0, -len * 0.05, -len * 0.1);
     tbM.rotation.x = 2.4;
     tailPivot.add(ttM, tbM);
     group.add(tailPivot);
 
-    group.userData.key = isWhale ? 'shark_whale' : 'shark_reef';
+    const sKey = opts.speciesKey || (isWhale ? 'shark_whale' : 'shark_reef');
+    group.userData.key = sKey;
     scene.add(group);
 
     let ang = Math.random() * 6.28, t = Math.random() * 100;
@@ -5030,7 +6236,7 @@ window.OC = window.OC || {};
     let inspectBlend = 0;
 
     return {
-      key: isWhale ? 'shark_whale' : 'shark_reef',
+      key: sKey,
       isActivePredator: !isWhale,
       getPosition: () => group.position,
       update(dt, time, camPos, ctx) {
@@ -5254,8 +6460,370 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Калифорнийский морской лев (Zalophus californianus) ---------- */
+  function makeSeaLion(scene, biome, opts) {
+    const group = new T.Group();
+    const body = new T.SphereGeometry(1, 14, 10);
+    body.scale(0.46, 0.44, 1.55);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = z / 1.55;
+      const tap = t < 0 ? (1 - 0.65 * Math.pow(-t, 1.4)) : (1 - 0.42 * Math.pow(t, 2));
+      bp.setXYZ(i, x * tap, y * tap, z);
+    }
+    OC.geoPrep(body);
+    body.computeVertexNormals();
+    OC.paint(body, (x, y, z, c) => c.set(y > -0.05 ? 0x6c4c34 : 0x9b7552));
+    group.add(new T.Mesh(body, creatureMat));
+
+    const snout = new T.ConeGeometry(0.24, 0.62, 8);
+    snout.rotateX(Math.PI / 2);
+    OC.geoPrep(snout);
+    OC.paint(snout, 0x5c3e28);
+    const snM = new T.Mesh(snout, creatureMat);
+    snM.position.set(0, 0.08, 1.62);
+    group.add(snM);
+
+    const fFlips = [];
+    const fg = new T.SphereGeometry(1, 8, 5);
+    fg.scale(0.75, 0.08, 0.28);
+    OC.geoPrep(fg);
+    OC.paint(fg, 0x422d1d);
+    for (const s of [-1, 1]) {
+      const m = new T.Mesh(fg, creatureMat);
+      m.position.set(s * 0.62, -0.15, 0.48);
+      group.add(m);
+      fFlips.push({ m, s });
+    }
+    const hind = new T.ConeGeometry(0.32, 0.78, 4);
+    hind.scale(1.1, 1, 0.25);
+    hind.rotateX(-Math.PI / 2);
+    OC.geoPrep(hind);
+    OC.paint(hind, 0x422d1d);
+    const hindM = new T.Mesh(hind, creatureMat);
+    hindM.position.set(0, 0, -1.68);
+    group.add(hindM);
+
+    group.scale.setScalar(opts.scale || 1.0);
+    group.userData.key = 'sea_lion';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 60;
+    const a = new T.Vector3(), b = new T.Vector3();
+    function posAt(angV, tV, out) {
+      const rr = opts.r + Math.sin(tV * 0.55) * 9;
+      const x = opts.cx + Math.cos(angV) * rr;
+      const z = opts.cz + Math.sin(angV) * rr + Math.sin(angV * 2.0) * 6;
+      const y = Math.max(opts.y + Math.sin(tV * 0.85) * 4.5, biome.getHeight(x, z) + 2.4);
+      return out.set(x, Math.min(-1.0, y), z);
+    }
+
+    return {
+      key: 'sea_lion',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 5.2) / opts.r) * dt;
+        posAt(ang, t, a);
+        posAt(ang + 0.14, t + 0.25, b);
+        group.position.copy(a);
+        group.lookAt(b);
+        group.rotateZ(Math.sin(t * 0.9) * 0.42); // игривые бочки между ламинарией
+        const stroke = Math.sin(time * 4.2);
+        for (const f of fFlips) f.m.rotation.z = f.s * stroke * 0.65;
+        hindM.rotation.x = Math.sin(time * 4.2 + 0.8) * 0.35;
+      }
+    };
+  }
+
+  /* ---------- Глубоководный морской чёрт (Melanocetus) ---------- */
+  function makeAnglerfish(scene, biome, opts) {
+    const group = new T.Group();
+    const body = new T.SphereGeometry(0.75, 14, 10);
+    body.scale(0.82, 0.88, 1.18);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.set(y > 0 ? 0x1a151c : 0x2c2228));
+    group.add(new T.Mesh(body, creatureMat));
+
+    // Огромная нижняя челюсть с зубами
+    const jaw = new T.TorusGeometry(0.45, 0.08, 5, 10, Math.PI);
+    OC.geoPrep(jaw);
+    OC.paint(jaw, 0x352a32);
+    const jawM = new T.Mesh(jaw, creatureMat);
+    jawM.position.set(0, -0.22, 0.64);
+    jawM.rotation.x = Math.PI * 0.65;
+    group.add(jawM);
+
+    // Иллиций (удочка) и биолюминесцентная приманка-эска
+    const rodPts = [new T.Vector3(0, 0.55, 0.35), new T.Vector3(0, 1.05, 0.95), new T.Vector3(0, 0.42, 1.38)];
+    const rod = new T.TubeGeometry(new T.CatmullRomCurve3(rodPts), 8, 0.025, 5, false);
+    OC.geoPrep(rod);
+    OC.paint(rod, 0x3a3542);
+    group.add(new T.Mesh(rod, creatureMat));
+
+    const lureMat = new T.MeshBasicMaterial({ color: 0x62fff0 });
+    const lure = new T.Mesh(new T.SphereGeometry(0.14, 8, 6), lureMat);
+    lure.position.set(0, 0.4, 1.38);
+    group.add(lure);
+
+    const tail = new T.ConeGeometry(0.35, 0.72, 4);
+    tail.scale(0.24, 1, 1);
+    tail.rotateX(-Math.PI / 2);
+    OC.geoPrep(tail);
+    OC.paint(tail, 0x241d26);
+    const tM = new T.Mesh(tail, creatureMat);
+    tM.position.set(0, 0, -1.05);
+    group.add(tM);
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.userData.key = 'fish_angler';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 40;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'fish_angler',
+      isActivePredator: true,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 480) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 1.2) / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r, bz = opts.cz + Math.sin(ang + 0.1) * opts.r;
+        const ay = Math.max(opts.y + Math.sin(t * 0.4) * 2.5, biome.getHeight(ax, az) + 2.6);
+        const by = Math.max(opts.y + Math.sin(t * 0.4 + 0.2) * 2.5, biome.getHeight(bx, bz) + 2.6);
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        lure.position.y = 0.4 + Math.sin(time * 3.1) * 0.08;
+        lureMat.color.setHSL(0.47, 0.95, 0.56 + 0.22 * Math.sin(time * 4.5));
+        tM.rotation.y = Math.sin(time * 2.4) * 0.3;
+      }
+    };
+  }
+
+  /* ---------- Глубоководный абиссальный кальмар ---------- */
+  function makeAbyssalSquid(scene, biome, opts) {
+    const group = new T.Group();
+    const mantle = new T.ConeGeometry(0.46, 2.2, 10);
+    mantle.rotateX(Math.PI / 2);
+    OC.geoPrep(mantle);
+    OC.paint(mantle, (x, y, z, c) => c.set(z > 0 ? 0x691828 : 0x451220));
+    group.add(new T.Mesh(mantle, creatureMat));
+
+    const fins = new T.ConeGeometry(0.75, 0.95, 4);
+    fins.scale(1.1, 0.12, 1);
+    fins.rotateX(-Math.PI / 2);
+    OC.geoPrep(fins);
+    OC.paint(fins, 0x8c283c);
+    const finM = new T.Mesh(fins, creatureMat);
+    finM.position.set(0, 0, -0.82);
+    group.add(finM);
+
+    const armsPivot = new T.Group();
+    armsPivot.position.set(0, 0, 1.05);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const arm = new T.ConeGeometry(0.065, i < 2 ? 1.9 : 1.1, 4);
+      arm.rotateX(Math.PI / 2);
+      OC.geoPrep(arm);
+      OC.paint(arm, 0x721c2e);
+      const am = new T.Mesh(arm, creatureMat);
+      am.position.set(Math.cos(a) * 0.16, Math.sin(a) * 0.16, i < 2 ? 0.85 : 0.45);
+      armsPivot.add(am);
+    }
+    group.add(armsPivot);
+
+    // Светящиеся фотофоры вдоль мантии
+    const photMat = new T.MeshBasicMaterial({ color: 0x4df4ff });
+    for (const s of [-1, 1]) {
+      const dot = new T.Mesh(new T.SphereGeometry(0.06, 5, 4), photMat);
+      dot.position.set(s * 0.28, 0.12, 0.1);
+      group.add(dot);
+    }
+
+    group.scale.setScalar(opts.scale || 1.1);
+    group.userData.key = 'squid_abyssal';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 60;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'squid_abyssal',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 2.8) / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r, bz = opts.cz + Math.sin(ang + 0.1) * opts.r;
+        const ay = Math.max(opts.y + Math.sin(t * 0.35) * 5, biome.getHeight(ax, az) + 4);
+        const by = Math.max(opts.y + Math.sin(t * 0.35 + 0.2) * 5, biome.getHeight(bx, bz) + 4);
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        finM.rotation.z = Math.sin(time * 2.6) * 0.28;
+        armsPivot.rotation.x = Math.sin(time * 2.0) * 0.14;
+      }
+    };
+  }
+
+  /* ---------- Гримпотевтис / осьминог Дамбо (Grimpoteuthis) ---------- */
+  function makeDumboOctopus(scene, biome, opts) {
+    const group = new T.Group();
+    const bell = new T.SphereGeometry(0.65, 12, 10);
+    bell.scale(0.9, 1.15, 0.9);
+    OC.geoPrep(bell);
+    OC.paint(bell, (x, y, z, c) => c.set(y > 0 ? 0xd9a8c4 : 0xbd7fa8));
+    const bM = new T.Mesh(bell, creatureMat);
+    bM.position.y = 0.25;
+    group.add(bM);
+
+    const ears = [];
+    const earG = new T.SphereGeometry(0.32, 7, 5);
+    earG.scale(1.6, 0.2, 0.75);
+    OC.geoPrep(earG);
+    OC.paint(earG, 0xe8bcd4);
+    for (const s of [-1, 1]) {
+      const em = new T.Mesh(earG, creatureMat);
+      em.position.set(s * 0.62, 0.55, 0);
+      group.add(em);
+      ears.push({ em, s });
+    }
+
+    const skirt = new T.ConeGeometry(0.68, 0.55, 8);
+    OC.geoPrep(skirt);
+    OC.paint(skirt, 0xc789b0);
+    const skM = new T.Mesh(skirt, creatureMat);
+    skM.position.y = -0.22;
+    group.add(skM);
+
+    group.scale.setScalar(opts.scale || 1.1);
+    group.userData.key = 'octopus_dumbo';
+    scene.add(group);
+
+    let t = Math.random() * 40;
+    return {
+      key: 'octopus_dumbo',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.x - camPos.x, opts.z - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        const wx = opts.x + Math.sin(t * 0.28) * 5.5;
+        const wz = opts.z + Math.cos(t * 0.24) * 5.5;
+        const wy = biome.getHeight(wx, wz) + 2.2 + Math.sin(t * 0.8) * 1.4;
+        group.position.set(wx, wy, wz);
+        group.rotation.y = t * 0.35;
+        const flap = Math.sin(time * 2.1);
+        for (const e of ears) e.em.rotation.z = e.s * flap * 0.55;
+      }
+    };
+  }
+
+  /* ---------- Шлейфы чёрных курильщиков и термальный свет ---------- */
+  function makeVentPlume(scene, biome, tex, opts) {
+    const n = opts.n || 180;
+    const hMax = opts.height || 34;
+    const baseY = biome.getHeight(opts.x, opts.z) + (opts.chimneyH || 6.5);
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(n * 3);
+    const ph = new Float32Array(n);
+    const sz = new Float32Array(n);
+    const rng = OC.mulberry32(Math.abs(Math.round(opts.x * 13 + opts.z * 29)) + 77);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = (rng() - 0.5) * 1.4;
+      pos[i * 3 + 1] = rng() * hMax;
+      pos[i * 3 + 2] = (rng() - 0.5) * 1.4;
+      ph[i] = rng() * 100;
+      sz[i] = OC.lerp(1.4, 3.6, rng());
+    }
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aPhase', new T.BufferAttribute(ph, 1));
+    geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
+
+    const mat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: T.NormalBlending, fog: true,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        {
+          uTex: { value: tex },
+          uTime: OC.uTime,
+          uHMax: { value: hMax }
+        }
+      ]),
+      vertexShader: `
+        attribute float aPhase, aSize;
+        uniform float uTime, uHMax;
+        varying float vLife;
+        varying float vHeat;
+        #include <fog_pars_vertex>
+        void main(){
+          float y = mod(position.y + uTime * 3.8 + aPhase, uHMax);
+          float life = y / uHMax;
+          vLife = life;
+          vHeat = smoothstep(0.24, 0.0, life);
+          float billow = 0.8 + life * 6.2;
+          vec3 p = vec3(
+            position.x * billow + sin(uTime * 0.9 + aPhase + life * 4.0) * (0.6 + life * 2.2),
+            y,
+            position.z * billow + cos(uTime * 0.75 + aPhase * 1.3 + life * 4.0) * (0.6 + life * 2.2)
+          );
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = aSize * (1.0 + life * 2.4) * (240.0 / max(1.5, -mvPosition.z));
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        varying float vLife, vHeat;
+        #include <fog_pars_fragment>
+        void main(){
+          vec4 tx = texture2D(uTex, gl_PointCoord);
+          if (tx.a < 0.03) discard;
+          vec3 soot = vec3(0.11, 0.12, 0.14);
+          vec3 ember = vec3(0.92, 0.36, 0.08);
+          vec3 col = mix(soot, ember, vHeat * 0.72);
+          float alpha = tx.a * (1.0 - smoothstep(0.45, 1.0, vLife)) * smoothstep(0.0, 0.05, vLife) * 0.68;
+          gl_FragColor = vec4(col, alpha);
+          #include <fog_fragment>
+        }`
+    });
+
+    const pts = new T.Points(geo, mat);
+    pts.position.set(opts.x, baseY, opts.z);
+    pts.userData.key = 'vent_chimney';
+    scene.add(pts);
+
+    let light = null;
+    if (opts.light) {
+      light = new T.PointLight(0xff5e1a, 2.6, 52, 1.4);
+      light.position.set(opts.x, baseY + 1.5, opts.z);
+      scene.add(light);
+    }
+
+    return {
+      key: 'vent_chimney',
+      getPosition: () => pts.position,
+      update(dt, time, camPos) {
+        const d = Math.hypot(opts.x - camPos.x, opts.z - camPos.z);
+        const vis = d < 520;
+        pts.visible = vis;
+        if (light) light.intensity = vis ? (2.2 + 0.7 * Math.sin(time * 5.2 + opts.x)) : 0;
+      }
+    };
+  }
+
   /* ---------- Бесконечные пузыри, биолюминесцентный планктон и глубинный «морской снег» ---------- */
-  function createCameraRelativeParticles(scene, n, tex, mode) {
+  function createCameraRelativeParticles(scene, n, tex, mode, noSurface) {
     const kind = mode === true ? 'plankton' : (mode === false ? 'bubbles' : mode);
     const isPlankton = kind === 'plankton';
     const isSnow = kind === 'snow';
@@ -5302,12 +6870,13 @@ window.OC = window.OC || {};
           uFlowOffset: { value: new T.Vector3() },
           uColor: { value: new T.Color(isPlankton ? 0x7ef2ff : (isSnow ? 0xd9edf7 : 0xc6f2ff)) },
           uBio: { value: 0.4 },
-          uScale: { value: 1.0 }
+          uScale: { value: 1.0 },
+          uNoSurface: { value: noSurface ? 1.0 : 0.0 }
         }
       ]),
       vertexShader: `
         attribute float aPhase, aSize, aSpeed;
-        uniform float uTime, uScale, uBio;
+        uniform float uTime, uScale, uBio, uNoSurface;
         uniform vec3 uCamPos, uFlowOffset;
         varying float vAlpha;
         #include <fog_pars_vertex>
@@ -5317,8 +6886,8 @@ window.OC = window.OC || {};
           ${motionGLSL}
           vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
           vec3 worldP = uCamPos + rel;
-          // Не вылетаем над поверхностью моря (Y = 0)
-          float belowWater = step(worldP.y, -0.35);
+          // Не вылетаем над поверхностью моря (Y = 0), кроме абиссального рифта
+          float belowWater = max(uNoSurface, step(worldP.y, -0.35));
           vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
           gl_PointSize = belowWater * aSize * uScale * (${isPlankton ? '135.0' : (isSnow ? '105.0' : '115.0')} / max(1.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
@@ -5348,11 +6917,32 @@ window.OC = window.OC || {};
   }
 
   /* ---------- Сборка фауны по экологическому плану биома (biome.faunaPlan) ---------- */
+  function disposeFaunaGroup(scene) {
+    if (!faunaGroup) return;
+    const dGeos = new Set();
+    const dMats = new Set();
+    faunaGroup.traverse((o) => {
+      if (o.geometry && !dGeos.has(o.geometry)) { o.geometry.dispose(); dGeos.add(o.geometry); }
+      if (o.material) {
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of ms) {
+          if (m && !dMats.has(m)) { m.dispose(); dMats.add(m); }
+        }
+      }
+    });
+    scene.remove(faunaGroup);
+    faunaGroup = null;
+  }
+
   OC.FaunaEngine = {
     init(scene, biome) {
+      disposeFaunaGroup(scene);
+      faunaGroup = new T.Group();
+      scene.add(faunaGroup);
+
       fishMatInstanced = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.48, metalness: 0.06, side: T.DoubleSide
-      }), { causticStrength: 0.45, fishSwim: true });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.45, fishSwim: true });
 
       fishMatBiolum = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true,
@@ -5361,11 +6951,11 @@ window.OC = window.OC || {};
         roughness: 0.42,
         metalness: 0.08,
         side: T.DoubleSide
-      }), { causticStrength: 0.25, fishSwim: true });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.25, fishSwim: true });
 
       creatureMat = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.52, metalness: 0.06, side: T.DoubleSide
-      }), { causticStrength: 0.55 });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.55 });
 
       const plan = biome.faunaPlan || {};
       const agents = [];
@@ -5375,7 +6965,7 @@ window.OC = window.OC || {};
 
       const schoolsSpec = plan.schools || [];
       for (const s of schoolsSpec) {
-        const sch = makeSchool(scene, biome, s);
+        const sch = makeSchool(faunaGroup, biome, s);
         schools.push(sch);
         agents.push(sch);
         if (sch.isPredator) predatorAgents.push(sch);
@@ -5383,75 +6973,102 @@ window.OC = window.OC || {};
       }
 
       for (const sf of (plan.soloFish || [])) {
-        const a = makeSoloFish(scene, biome, sf);
+        const a = makeSoloFish(faunaGroup, biome, sf);
         agents.push(a);
       }
 
       for (const lf of (plan.lionfish || [])) {
-        const a = makeLionfish(scene, biome, lf);
+        const a = makeLionfish(faunaGroup, biome, lf);
         agents.push(a);
         predatorAgents.push(a);
         sonarTargets.push(a);
       }
 
       for (const oct of (plan.octopus || [])) {
-        agents.push(makeOctopus(scene, biome, oct));
+        agents.push(makeOctopus(faunaGroup, biome, oct));
       }
 
       for (const mor of (plan.moray || [])) {
-        agents.push(makeMoray(scene, biome, mor));
+        agents.push(makeMoray(faunaGroup, biome, mor));
       }
 
       for (const j of (plan.jellies || [])) {
-        agents.push(makeJelly(scene, j));
+        agents.push(makeJelly(faunaGroup, j));
       }
 
       for (const dg of (plan.dugongs || [])) {
-        const a = makeDugong(scene, biome, dg);
+        const a = makeDugong(faunaGroup, biome, dg);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const sl of (plan.seaLions || [])) {
+        const a = makeSeaLion(faunaGroup, biome, sl);
         agents.push(a);
         sonarTargets.push(a);
       }
 
       for (const tu of (plan.turtles || [])) {
-        const a = makeTurtle(scene, biome, tu);
+        const a = makeTurtle(faunaGroup, biome, tu);
         agents.push(a);
         sonarTargets.push(a);
       }
 
       for (const ry of (plan.rays || [])) {
-        const a = makeRay(scene, biome, ry);
+        const a = makeRay(faunaGroup, biome, ry);
         agents.push(a);
         sonarTargets.push(a);
       }
 
       for (const mn of (plan.mantas || [])) {
-        const a = makeManta(scene, biome, mn);
+        const a = makeManta(faunaGroup, biome, mn);
         agents.push(a);
         sonarTargets.push(a);
       }
 
       for (const sh of (plan.sharks || [])) {
-        const a = makeShark(scene, biome, sh);
+        const a = makeShark(faunaGroup, biome, sh);
         agents.push(a);
         if (a.isActivePredator) predatorAgents.push(a);
         sonarTargets.push(a);
       }
 
+      for (const angF of (plan.anglers || [])) {
+        const a = makeAnglerfish(faunaGroup, biome, angF);
+        agents.push(a);
+        predatorAgents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const sq of (plan.squids || [])) {
+        const a = makeAbyssalSquid(faunaGroup, biome, sq);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const db of (plan.dumbos || [])) {
+        agents.push(makeDumboOctopus(faunaGroup, biome, db));
+      }
+
       let whale = null;
       for (const wh of (plan.whales || [])) {
-        const w = makeHumpbackWhale(scene, biome, wh);
+        const w = makeHumpbackWhale(faunaGroup, biome, wh);
         if (!whale) whale = w;
         agents.push(w);
         sonarTargets.push(w);
       }
 
-      // ---- Пузыри, планктон и глубинный морской снег (вокруг камеры) ----
+      // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       const texSoft = OC.circleTexture(64, false);
       const texHard = OC.circleTexture(64, true);
-      const bubbleMat = createCameraRelativeParticles(scene, Math.round(900 * pCountMult), texHard, 'bubbles');
-      const planktonMat = createCameraRelativeParticles(scene, Math.round(1500 * pCountMult), texSoft, 'plankton');
-      const snowMat = createCameraRelativeParticles(scene, Math.round(1050 * pCountMult), texSoft, 'snow');
+      for (const vp of (plan.ventPlumes || [])) {
+        agents.push(makeVentPlume(faunaGroup, biome, texSoft, vp));
+      }
+      const noSurf = !!biome.noSurface;
+      const bubbleMat = createCameraRelativeParticles(faunaGroup, noSurf ? 80 : Math.round(900 * pCountMult), texHard, 'bubbles', noSurf);
+      const planktonMat = createCameraRelativeParticles(faunaGroup, Math.round(1500 * pCountMult), texSoft, 'plankton', noSurf);
+      const snowMat = createCameraRelativeParticles(faunaGroup, Math.round((noSurf ? 1400 : 1050) * pCountMult), texSoft, 'snow', noSurf);
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
       const dayPlanktonCol = new T.Color(0x9be8ff);
@@ -5472,10 +7089,11 @@ window.OC = window.OC || {};
 
       function refreshFaunaCounts() {
         let total = 0;
-        for (const sch of schools) total += sch.getCount();
+        for (const sch of activeSchoolsRef) total += sch.getCount();
         OC.faunaInfo.schoolFish = total;
       }
 
+      activeSchoolsRef = schools;
       OC.faunaInfo = {
         schoolFish: 0,
         schools: schools.length,
@@ -5484,10 +7102,13 @@ window.OC = window.OC || {};
       };
       refreshFaunaCounts();
 
-      OC.Quality.onChange((preset) => {
-        for (const sch of schools) sch.setQualityScale(preset.fishScale);
-        refreshFaunaCounts();
-      });
+      if (!qualityHookBound) {
+        qualityHookBound = true;
+        OC.Quality.onChange((preset) => {
+          for (const sch of activeSchoolsRef) sch.setQualityScale(preset.fishScale);
+          refreshFaunaCounts();
+        });
+      }
 
       return {
         agents,
@@ -5523,7 +7144,7 @@ window.OC = window.OC || {};
           snowMat.uniforms.uCamPos.value.copy(camPos);
 
           // Плавная адвекция планктона, пузырей и морского снега по локальному течению
-          if (biome.getCurrentAt && camPos.y < 1.5) {
+          if (biome.getCurrentAt && (biome.noSurface || camPos.y < 1.5)) {
             biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _currFlow);
             _flowAccum.addScaledVector(_currFlow, dt * 1.35);
             _flowAccum.x = ((_flowAccum.x % 180) + 180) % 180;
@@ -5996,7 +7617,8 @@ window.OC = window.OC || {};
     p.x = OC.clamp(p.x, -bound, bound);
     p.z = OC.clamp(p.z, -bound, bound);
     const fl = biomeRef.getHeight(p.x, p.z);
-    p.y = OC.clamp(p.y, fl + 1.65, 16.0); // Можно всплыть до +16 м над островком!
+    const maxY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+    p.y = OC.clamp(p.y, fl + 1.65, maxY);
   }
 
   OC.Navigation = {
@@ -6099,6 +7721,15 @@ window.OC = window.OC || {};
     },
 
     setMode,
+    setBiome(biome) {
+      biomeRef = biome;
+      state.mode = 'swim';
+      state.glide = null;
+      state.vel.set(0, 0, 0);
+      _curr.set(0, 0, 0);
+      this.resetToSpawn();
+      if (state.onModeChange) state.onModeChange('swim');
+    },
     getMode: () => state.mode,
     getPosition: () => state.pos,
     getYaw: () => state.yaw,
@@ -6262,7 +7893,7 @@ window.OC = window.OC || {};
         }
 
         // Приливные и прибойные течения океана (сносят батискаф в Проходе и над Гребнем)
-        if (!reduced && state.pos.y < -0.25 && biomeRef && biomeRef.getCurrentAt) {
+        if (!reduced && biomeRef && biomeRef.getCurrentAt && (state.pos.y < -0.25 || biomeRef.noSurface)) {
           biomeRef.getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
           state.vel.addScaledVector(_curr, 1.45 * dt);
         } else {
@@ -6276,7 +7907,7 @@ window.OC = window.OC || {};
         clampPosition(state.pos);
       }
 
-      const bob = reduced || state.pos.y > -0.2 ? 0 : Math.sin(time * 0.65) * 0.14;
+      const bob = reduced || (!biomeRef.noSurface && state.pos.y > -0.2) ? 0 : Math.sin(time * 0.65) * 0.14;
       camera.position.set(state.pos.x, state.pos.y + bob, state.pos.z);
 
       _fwd.set(
@@ -6303,7 +7934,23 @@ window.OC = window.OC || {};
   let pingState = null; // { x, z, startMs }
   const SIZE = 184;
 
-  function depthToRGB(y, uZoneColor) {
+  function depthToRGB(y) {
+    const theme = biomeRef && biomeRef.minimapTheme;
+    if (theme === 'kelp') {
+      if (y > 0.1) return [152, 154, 150]; // прибойные гранитные кекуры
+      if (y > -8) return [58, 168, 150];
+      if (y > -18) return [32, 128, 124];
+      if (y > -34) return [20, 92, 108];
+      if (y > -55) return [14, 56, 82];
+      return [8, 28, 52];
+    }
+    if (theme === 'abyss') {
+      if (y > -20) return [72, 74, 92]; // верх базальтового уступа
+      if (y > -32) return [124, 72, 52]; // гидротермальные поля
+      if (y > -48) return [54, 54, 74];
+      if (y > -78) return [26, 30, 50];
+      return [10, 14, 28];
+    }
     if (y > 0.1) return [242, 228, 194]; // суша / островок
     if (y > -3.5) return [88, 212, 206];
     if (y > -12) return [36, 172, 194];
@@ -6400,6 +8047,12 @@ window.OC = window.OC || {};
       pingState = { x, z, startMs: Date.now() };
     },
 
+    setBiome(biome) {
+      biomeRef = biome;
+      pingState = null;
+      if (canvas) renderBathymetry();
+    },
+
     update(camPos, yaw) {
       if (!ctx || !bgImage || !biomeRef) return;
       ctx.clearRect(0, 0, SIZE, SIZE);
@@ -6427,7 +8080,7 @@ window.OC = window.OC || {};
       // Ориентиры
       for (const lm of biomeRef.landmarks) {
         const [mx, my] = worldToMap(lm.x, lm.z);
-        ctx.fillStyle = lm.id === 'blue_hole' ? '#38b6ff' : '#ffd17a';
+        ctx.fillStyle = lm.id === 'blue_hole' || lm.id === 'canyon_abyss' ? '#38b6ff' : (lm.isHot ? '#ff7d45' : '#ffd17a');
         ctx.beginPath();
         ctx.arc(mx, my, 3.2, 0, Math.PI * 2);
         ctx.fill();
@@ -6478,13 +8131,48 @@ window.OC = window.OC || {};
 (function (OC) {
   'use strict';
 
-  const discovered = new Set(['floor']);
+  const discoveredByBiome = new Map();
   let modalEl = null;
   let gridEl = null;
   let countEl = null;
+  let titleEl = null;
   let currentCat = 'Все';
   let biomeRef = null;
   let onDiveCallback = null;
+
+  function getDiscoveredSet() {
+    const id = biomeRef ? biomeRef.id : 'default';
+    let s = discoveredByBiome.get(id);
+    if (!s) {
+      s = new Set(['floor']);
+      discoveredByBiome.set(id, s);
+    }
+    return s;
+  }
+
+  function resolveLandmark(zoneLabel) {
+    if (!biomeRef || !biomeRef.landmarks || !biomeRef.landmarks.length) return null;
+    const mapped = CATEGORY_LANDMARK[zoneLabel];
+    if (mapped) {
+      const hit = biomeRef.landmarks.find((l) => l.id === mapped);
+      if (hit) return hit;
+    }
+    const lbl = (zoneLabel || '').toLowerCase();
+    for (const lm of biomeRef.landmarks) {
+      const n = (lm.name || '').toLowerCase();
+      if (lbl && (n.includes(lbl) || lbl.includes(n.split(' ')[0]))) return lm;
+    }
+    if (biomeRef.zones) {
+      for (const z of biomeRef.zones) {
+        const zn = (z.shortName || '').toLowerCase();
+        if (zn && lbl.includes(zn.split(' ')[0])) {
+          const hit = biomeRef.landmarks.find((l) => l.zoneId === z.id);
+          if (hit) return hit;
+        }
+      }
+    }
+    return biomeRef.landmarks[0];
+  }
 
   const CATEGORY_LANDMARK = {
     'Мангровые отмели': 'mangroves',
@@ -6522,6 +8210,8 @@ window.OC = window.OC || {};
     if (!gridEl || !biomeRef) return;
     const enc = biomeRef.encyclopedia;
     const keys = Object.keys(enc);
+    const discovered = getDiscoveredSet();
+    if (titleEl) titleEl.textContent = 'Атлас · ' + biomeRef.name;
     if (countEl) countEl.textContent = discovered.size + ' / ' + keys.length;
 
     gridEl.innerHTML = '';
@@ -6544,8 +8234,7 @@ window.OC = window.OC || {};
 
       const goBtn = card.querySelector('.atlas-go');
       goBtn.addEventListener('click', () => {
-        const lmId = CATEGORY_LANDMARK[zoneLabel] || 'crest';
-        const lm = biomeRef.landmarks.find((l) => l.id === lmId) || biomeRef.landmarks[0];
+        const lm = resolveLandmark(zoneLabel);
         if (lm && onDiveCallback) {
           onDiveCallback(lm);
           thisClose();
@@ -6566,6 +8255,7 @@ window.OC = window.OC || {};
       modalEl = document.getElementById('atlas-modal');
       gridEl = document.getElementById('atlas-grid');
       countEl = document.getElementById('atlas-count');
+      titleEl = document.getElementById('atlas-title');
       const closeBtn = document.getElementById('atlas-close');
       const tabsEl = document.getElementById('atlas-tabs');
 
@@ -6587,7 +8277,18 @@ window.OC = window.OC || {};
       render();
     },
 
+    setBiome(biome) {
+      biomeRef = biome;
+      currentCat = 'Все';
+      const tabsEl = document.getElementById('atlas-tabs');
+      if (tabsEl) {
+        tabsEl.querySelectorAll('button[data-cat]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-cat') === 'Все'));
+      }
+      render();
+    },
+
     discover(key) {
+      const discovered = getDiscoveredSet();
       if (!key || discovered.has(key)) return false;
       if (biomeRef && biomeRef.encyclopedia[key]) {
         discovered.add(key);
@@ -6636,6 +8337,11 @@ window.OC = window.OC || {};
   const timeLabel = document.getElementById('time-label');
   const zoneChipsEl = document.getElementById('zone-chips');
   const qualityBtnsEl = document.getElementById('quality-btns');
+  const biomeBarEl = document.getElementById('biome-bar');
+  const biomeBtnsEl = document.getElementById('biome-btns');
+  const brandTitleEl = document.getElementById('brand-title');
+  const brandSubEl = document.getElementById('brand-sub');
+  const statusRegionEl = document.getElementById('status-region');
 
   const subHud = document.getElementById('sub-hud');
   const subHorizon = document.getElementById('sub-horizon');
@@ -6669,6 +8375,9 @@ window.OC = window.OC || {};
   let subMode = false;
   let toastTimer = 0;
   let pickedTime = 0;
+  let activeBiome = null;
+  let activeFauna = null;
+  let uiHandles = null;
   let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
   const _fwd = new T.Vector3();
 
@@ -6819,7 +8528,7 @@ window.OC = window.OC || {};
     }
   }
 
-  function bindUI(biome, fauna) {
+  function bindUI() {
     if (window.innerWidth < 1100 && panel) panel.classList.add('closed');
     if (btnPanel && panel) {
       btnPanel.classList.toggle('open', !panel.classList.contains('closed'));
@@ -6887,9 +8596,9 @@ window.OC = window.OC || {};
 
     const fireSonarPing = () => {
       const cam = OC.getCamera();
-      if (!cam || !fauna) return;
+      if (!cam || !activeFauna) return;
       OC.Navigation.getForward(_fwd);
-      const res = fauna.scanForward(cam.position, _fwd, 140);
+      const res = activeFauna.scanForward(cam.position, _fwd, 140);
       sonarPingState = {
         t: OC.uTime.value,
         range: res.range,
@@ -6938,7 +8647,7 @@ window.OC = window.OC || {};
     if (btnReset) {
       btnReset.addEventListener('click', () => {
         OC.Navigation.resetToSpawn();
-        toast('Возврат к центру Большого Барьерного рифа');
+        toast('Возврат к старту: ' + (activeBiome ? activeBiome.name : 'океан'));
       });
     }
 
@@ -6979,10 +8688,62 @@ window.OC = window.OC || {};
       });
     }
 
-    /* Кнопки быстрого перемещения по зонам рифа */
-    if (zoneChipsEl && biome.landmarks) {
+    const BIOME_SHORT = {
+      great_barrier_reef: 'Риф ББР',
+      kelp_forest: 'Ламинария',
+      hydrothermal_vents: 'Курильщики 2500м'
+    };
+    const BIOME_REGION = {
+      great_barrier_reef: 'GBR · Тихий океан',
+      kelp_forest: 'Монтерей · Калифорния',
+      hydrothermal_vents: 'ВТП · Абиссаль 2500 м'
+    };
+
+    function renderBiomeUI() {
+      const list = OC.Biomes.list();
+      const curId = activeBiome ? activeBiome.id : '';
+      if (brandTitleEl && activeBiome) {
+        const parts = activeBiome.name.split(' ');
+        brandTitleEl.innerHTML = parts.length > 1
+          ? (parts[0] + ' <span>' + parts.slice(1).join(' ') + '</span>')
+          : activeBiome.name;
+      }
+      if (brandSubEl && activeBiome) brandSubEl.textContent = activeBiome.subtitle || activeBiome.region;
+      if (statusRegionEl) statusRegionEl.textContent = BIOME_REGION[curId] || (activeBiome ? activeBiome.region : 'Океан');
+
+      if (biomeBarEl) {
+        biomeBarEl.innerHTML = '';
+        list.forEach((b) => {
+          const pill = document.createElement('button');
+          pill.className = 'biome-pill' + (b.id === curId ? ' on' : '');
+          pill.textContent = BIOME_SHORT[b.id] || b.name;
+          pill.title = b.name + ' · ' + b.region;
+          pill.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (b.id !== curId) switchBiome(b.id);
+          });
+          biomeBarEl.appendChild(pill);
+        });
+      }
+      if (biomeBtnsEl) {
+        biomeBtnsEl.innerHTML = '';
+        list.forEach((b) => {
+          const btn = document.createElement('button');
+          btn.className = 'btn chip' + (b.id === curId ? ' on' : '');
+          btn.textContent = BIOME_SHORT[b.id] || b.name;
+          btn.title = b.name + ' (' + b.region + ')';
+          btn.addEventListener('click', () => {
+            if (b.id !== curId) switchBiome(b.id);
+          });
+          biomeBtnsEl.appendChild(btn);
+        });
+      }
+    }
+
+    function renderZoneChips() {
+      if (!zoneChipsEl || !activeBiome || !activeBiome.landmarks) return;
       zoneChipsEl.innerHTML = '';
-      biome.landmarks.forEach((lm) => {
+      activeBiome.landmarks.forEach((lm) => {
         const b = document.createElement('button');
         b.className = 'btn chip';
         b.textContent = lm.name;
@@ -6994,6 +8755,9 @@ window.OC = window.OC || {};
         zoneChipsEl.appendChild(b);
       });
     }
+
+    renderBiomeUI();
+    renderZoneChips();
 
     /* Кнопки выбора качества графики */
     if (qualityBtnsEl) {
@@ -7043,7 +8807,7 @@ window.OC = window.OC || {};
         const next = OC.Navigation.getMode() === 'tour' ? 'swim' : 'tour';
         OC.Navigation.setMode(next);
       }
-      if (e.code === 'KeyR') { OC.Navigation.resetToSpawn(); toast('Возврат к центру рифа'); }
+      if (e.code === 'KeyR') { OC.Navigation.resetToSpawn(); toast('Возврат к старту: ' + (activeBiome ? activeBiome.name : 'океан')); }
       if (e.code === 'KeyK') { OC.Atlas.toggle(); }
       if (e.code === 'KeyH') {
         hudHidden = !hudHidden;
@@ -7057,48 +8821,87 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes };
+    return { syncModes, syncFlash, renderBiomeUI, renderZoneChips };
   }
+
+  function switchBiome(id) {
+    const prevBiome = activeBiome;
+    const next = OC.Biomes.setActive(id);
+    if (!next) return;
+    activeBiome = next;
+    const scene = OC.getScene();
+    const sp = new T.Vector3(next.spawn.pos[0], next.spawn.pos[1], next.spawn.pos[2]);
+
+    if (popup) popup.classList.add('hidden');
+    sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
+    if (sonarReadout) sonarReadout.textContent = 'Сканер · Чисто';
+
+    OC.refreshWorldForBiome(next);
+    OC.Terrain.init(scene, next, sp);
+    OC.FloraStreamer.init(scene, next, sp);
+    activeFauna = OC.FaunaEngine.init(scene, next);
+    activeFauna.setScale(window.innerHeight / 900);
+
+    OC.Navigation.setBiome(next);
+    OC.Minimap.setBiome(next);
+    OC.Atlas.setBiome(next);
+
+    const wasAbyss = prevBiome && prevBiome.noSurface;
+    if (next.noSurface && !OC.isFlashlightOn()) {
+      OC.setFlashlight(true);
+      if (uiHandles) uiHandles.syncFlash(true);
+    } else if (!next.noSurface && wasAbyss && OC.isFlashlightOn()) {
+      OC.setFlashlight(false);
+      if (uiHandles) uiHandles.syncFlash(false);
+    }
+    if (uiHandles) {
+      uiHandles.renderBiomeUI();
+      uiHandles.renderZoneChips();
+    }
+    toast(next.noSurface
+      ? (next.name + ' · Глубина 2440 м, прожектор включён (F)')
+      : (next.name + ' · ' + next.region));
+  }
+  OC.switchBiome = switchBiome;
 
   function boot() {
     try {
-      const biome = OC.Biomes.getActive();
+      activeBiome = OC.Biomes.getActive();
       setBar(0.25);
       const init = OC.initWorld(canvas);
       const renderer = init.renderer;
       const scene = init.scene;
       const camera = init.camera;
 
-      const sp = new T.Vector3(biome.spawn.pos[0], biome.spawn.pos[1], biome.spawn.pos[2]);
+      const sp = new T.Vector3(activeBiome.spawn.pos[0], activeBiome.spawn.pos[1], activeBiome.spawn.pos[2]);
 
       setBar(0.5);
-      OC.Terrain.init(scene, biome, sp);
+      OC.Terrain.init(scene, activeBiome, sp);
 
       setBar(0.72);
-      OC.FloraStreamer.init(scene, biome, sp);
+      OC.FloraStreamer.init(scene, activeBiome, sp);
 
       setBar(0.88);
-      const fauna = OC.FaunaEngine.init(scene, biome);
+      activeFauna = OC.FaunaEngine.init(scene, activeBiome);
 
-      let uiRefs = null;
-      OC.Navigation.init(canvas, biome, {
-        onPick: (cx, cy) => pickAt(cx, cy, biome),
-        onModeChange: (m) => { if (uiRefs) uiRefs.syncModes(m); },
+      OC.Navigation.init(canvas, activeBiome, {
+        onPick: (cx, cy) => pickAt(cx, cy, activeBiome),
+        onModeChange: (m) => { if (uiHandles) uiHandles.syncModes(m); },
         onTourToast: (title) => toast('Тур: ' + title)
       });
 
-      OC.Minimap.init(document.getElementById('minimap'), biome, (x, y, z, yaw, pitch, label) => {
+      OC.Minimap.init(document.getElementById('minimap'), activeBiome, (x, y, z, yaw, pitch, label) => {
         OC.Navigation.flyTo(x, y, z, yaw, pitch);
         if (label) toast('Переход: ' + label);
       });
 
-      OC.Atlas.init(biome, (lm) => {
+      OC.Atlas.init(activeBiome, (lm) => {
         OC.Navigation.flyTo(lm.x, lm.y, lm.z, lm.yaw, lm.pitch);
         toast('Курс на зону: ' + lm.name);
       });
 
-      uiRefs = bindUI(biome, fauna);
-      uiRefs.syncModes(OC.Navigation.getMode());
+      uiHandles = bindUI();
+      uiHandles.syncModes(OC.Navigation.getMode());
 
       setBar(1.0);
       setTimeout(() => {
@@ -7108,7 +8911,7 @@ window.OC = window.OC || {};
         }
       }, 280);
 
-      runLoop(renderer, scene, camera, biome, fauna);
+      runLoop(renderer, scene, camera);
     } catch (e) {
       console.error(e);
       if (loading) {
@@ -7117,7 +8920,7 @@ window.OC = window.OC || {};
     }
   }
 
-  function runLoop(renderer, scene, camera, biome, fauna) {
+  function runLoop(renderer, scene, camera) {
     let last = performance.now();
     let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0;
 
@@ -7126,7 +8929,7 @@ window.OC = window.OC || {};
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      fauna.setScale(h / 900);
+      if (activeFauna) activeFauna.setScale(h / 900);
     }
     window.addEventListener('resize', resize);
     resize();
@@ -7147,19 +8950,21 @@ window.OC = window.OC || {};
       OC.FloraStreamer.update(camPos);
       const camSpeed = OC.Navigation.getSpeed();
       const flashOn = OC.isFlashlightOn();
-      fauna.update(dt, time, camPos, camSpeed, flashOn);
+      if (activeFauna) activeFauna.update(dt, time, camPos, camSpeed, flashOn);
 
       hudTimer += rawDt;
-      if (hudTimer > 0.14) {
+      if (hudTimer > 0.14 && activeBiome) {
         hudTimer = 0;
+        const biome = activeBiome;
         const zone = biome.getZoneAt(camPos.x, camPos.y, camPos.z);
-        const depthM = Math.max(0, -camPos.y);
-        const tempC = (zone.tempC - Math.max(0, depthM - 15) * 0.065).toFixed(1);
+        const depthOffset = biome.depthOffset || 0;
+        const depthM = depthOffset + (depthOffset > 0 ? -camPos.y : Math.max(0, -camPos.y));
+        const tempC = (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065)).toFixed(1);
         const pal = OC.getPalette();
         const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
 
         if (teleZone) teleZone.textContent = zone.shortName;
-        if (teleDepth) teleDepth.textContent = camPos.y > 0.1 ? ('+' + camPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
+        if (teleDepth) teleDepth.textContent = (!biome.noSurface && camPos.y > 0.1) ? ('+' + camPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
         if (teleTemp) teleTemp.textContent = tempC + ' °C';
         if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
 
@@ -7185,8 +8990,8 @@ window.OC = window.OC || {};
             subCurrentEl.textContent = cKnots.toFixed(1) + ' уз';
             subCurrentEl.classList.toggle('warn', cKnots > 1.8);
           }
-          if (subPhaseEl) subPhaseEl.textContent = dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День');
-          drawEchosounder(camPos, OC.Navigation.getYaw(), biome, fauna, time);
+          if (subPhaseEl) subPhaseEl.textContent = biome.noSurface ? 'Абиссаль · 2500 м' : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'));
+          drawEchosounder(camPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }
 
         const t = OC.getTimeOfDay();

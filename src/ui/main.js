@@ -23,6 +23,11 @@ window.OC = window.OC || {};
   const timeLabel = document.getElementById('time-label');
   const zoneChipsEl = document.getElementById('zone-chips');
   const qualityBtnsEl = document.getElementById('quality-btns');
+  const biomeBarEl = document.getElementById('biome-bar');
+  const biomeBtnsEl = document.getElementById('biome-btns');
+  const brandTitleEl = document.getElementById('brand-title');
+  const brandSubEl = document.getElementById('brand-sub');
+  const statusRegionEl = document.getElementById('status-region');
 
   const subHud = document.getElementById('sub-hud');
   const subHorizon = document.getElementById('sub-horizon');
@@ -56,6 +61,9 @@ window.OC = window.OC || {};
   let subMode = false;
   let toastTimer = 0;
   let pickedTime = 0;
+  let activeBiome = null;
+  let activeFauna = null;
+  let uiHandles = null;
   let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
   const _fwd = new T.Vector3();
 
@@ -206,7 +214,7 @@ window.OC = window.OC || {};
     }
   }
 
-  function bindUI(biome, fauna) {
+  function bindUI() {
     if (window.innerWidth < 1100 && panel) panel.classList.add('closed');
     if (btnPanel && panel) {
       btnPanel.classList.toggle('open', !panel.classList.contains('closed'));
@@ -274,9 +282,9 @@ window.OC = window.OC || {};
 
     const fireSonarPing = () => {
       const cam = OC.getCamera();
-      if (!cam || !fauna) return;
+      if (!cam || !activeFauna) return;
       OC.Navigation.getForward(_fwd);
-      const res = fauna.scanForward(cam.position, _fwd, 140);
+      const res = activeFauna.scanForward(cam.position, _fwd, 140);
       sonarPingState = {
         t: OC.uTime.value,
         range: res.range,
@@ -325,7 +333,7 @@ window.OC = window.OC || {};
     if (btnReset) {
       btnReset.addEventListener('click', () => {
         OC.Navigation.resetToSpawn();
-        toast('Возврат к центру Большого Барьерного рифа');
+        toast('Возврат к старту: ' + (activeBiome ? activeBiome.name : 'океан'));
       });
     }
 
@@ -366,10 +374,62 @@ window.OC = window.OC || {};
       });
     }
 
-    /* Кнопки быстрого перемещения по зонам рифа */
-    if (zoneChipsEl && biome.landmarks) {
+    const BIOME_SHORT = {
+      great_barrier_reef: 'Риф ББР',
+      kelp_forest: 'Ламинария',
+      hydrothermal_vents: 'Курильщики 2500м'
+    };
+    const BIOME_REGION = {
+      great_barrier_reef: 'GBR · Тихий океан',
+      kelp_forest: 'Монтерей · Калифорния',
+      hydrothermal_vents: 'ВТП · Абиссаль 2500 м'
+    };
+
+    function renderBiomeUI() {
+      const list = OC.Biomes.list();
+      const curId = activeBiome ? activeBiome.id : '';
+      if (brandTitleEl && activeBiome) {
+        const parts = activeBiome.name.split(' ');
+        brandTitleEl.innerHTML = parts.length > 1
+          ? (parts[0] + ' <span>' + parts.slice(1).join(' ') + '</span>')
+          : activeBiome.name;
+      }
+      if (brandSubEl && activeBiome) brandSubEl.textContent = activeBiome.subtitle || activeBiome.region;
+      if (statusRegionEl) statusRegionEl.textContent = BIOME_REGION[curId] || (activeBiome ? activeBiome.region : 'Океан');
+
+      if (biomeBarEl) {
+        biomeBarEl.innerHTML = '';
+        list.forEach((b) => {
+          const pill = document.createElement('button');
+          pill.className = 'biome-pill' + (b.id === curId ? ' on' : '');
+          pill.textContent = BIOME_SHORT[b.id] || b.name;
+          pill.title = b.name + ' · ' + b.region;
+          pill.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (b.id !== curId) switchBiome(b.id);
+          });
+          biomeBarEl.appendChild(pill);
+        });
+      }
+      if (biomeBtnsEl) {
+        biomeBtnsEl.innerHTML = '';
+        list.forEach((b) => {
+          const btn = document.createElement('button');
+          btn.className = 'btn chip' + (b.id === curId ? ' on' : '');
+          btn.textContent = BIOME_SHORT[b.id] || b.name;
+          btn.title = b.name + ' (' + b.region + ')';
+          btn.addEventListener('click', () => {
+            if (b.id !== curId) switchBiome(b.id);
+          });
+          biomeBtnsEl.appendChild(btn);
+        });
+      }
+    }
+
+    function renderZoneChips() {
+      if (!zoneChipsEl || !activeBiome || !activeBiome.landmarks) return;
       zoneChipsEl.innerHTML = '';
-      biome.landmarks.forEach((lm) => {
+      activeBiome.landmarks.forEach((lm) => {
         const b = document.createElement('button');
         b.className = 'btn chip';
         b.textContent = lm.name;
@@ -381,6 +441,9 @@ window.OC = window.OC || {};
         zoneChipsEl.appendChild(b);
       });
     }
+
+    renderBiomeUI();
+    renderZoneChips();
 
     /* Кнопки выбора качества графики */
     if (qualityBtnsEl) {
@@ -430,7 +493,7 @@ window.OC = window.OC || {};
         const next = OC.Navigation.getMode() === 'tour' ? 'swim' : 'tour';
         OC.Navigation.setMode(next);
       }
-      if (e.code === 'KeyR') { OC.Navigation.resetToSpawn(); toast('Возврат к центру рифа'); }
+      if (e.code === 'KeyR') { OC.Navigation.resetToSpawn(); toast('Возврат к старту: ' + (activeBiome ? activeBiome.name : 'океан')); }
       if (e.code === 'KeyK') { OC.Atlas.toggle(); }
       if (e.code === 'KeyH') {
         hudHidden = !hudHidden;
@@ -444,48 +507,87 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes };
+    return { syncModes, syncFlash, renderBiomeUI, renderZoneChips };
   }
+
+  function switchBiome(id) {
+    const prevBiome = activeBiome;
+    const next = OC.Biomes.setActive(id);
+    if (!next) return;
+    activeBiome = next;
+    const scene = OC.getScene();
+    const sp = new T.Vector3(next.spawn.pos[0], next.spawn.pos[1], next.spawn.pos[2]);
+
+    if (popup) popup.classList.add('hidden');
+    sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
+    if (sonarReadout) sonarReadout.textContent = 'Сканер · Чисто';
+
+    OC.refreshWorldForBiome(next);
+    OC.Terrain.init(scene, next, sp);
+    OC.FloraStreamer.init(scene, next, sp);
+    activeFauna = OC.FaunaEngine.init(scene, next);
+    activeFauna.setScale(window.innerHeight / 900);
+
+    OC.Navigation.setBiome(next);
+    OC.Minimap.setBiome(next);
+    OC.Atlas.setBiome(next);
+
+    const wasAbyss = prevBiome && prevBiome.noSurface;
+    if (next.noSurface && !OC.isFlashlightOn()) {
+      OC.setFlashlight(true);
+      if (uiHandles) uiHandles.syncFlash(true);
+    } else if (!next.noSurface && wasAbyss && OC.isFlashlightOn()) {
+      OC.setFlashlight(false);
+      if (uiHandles) uiHandles.syncFlash(false);
+    }
+    if (uiHandles) {
+      uiHandles.renderBiomeUI();
+      uiHandles.renderZoneChips();
+    }
+    toast(next.noSurface
+      ? (next.name + ' · Глубина 2440 м, прожектор включён (F)')
+      : (next.name + ' · ' + next.region));
+  }
+  OC.switchBiome = switchBiome;
 
   function boot() {
     try {
-      const biome = OC.Biomes.getActive();
+      activeBiome = OC.Biomes.getActive();
       setBar(0.25);
       const init = OC.initWorld(canvas);
       const renderer = init.renderer;
       const scene = init.scene;
       const camera = init.camera;
 
-      const sp = new T.Vector3(biome.spawn.pos[0], biome.spawn.pos[1], biome.spawn.pos[2]);
+      const sp = new T.Vector3(activeBiome.spawn.pos[0], activeBiome.spawn.pos[1], activeBiome.spawn.pos[2]);
 
       setBar(0.5);
-      OC.Terrain.init(scene, biome, sp);
+      OC.Terrain.init(scene, activeBiome, sp);
 
       setBar(0.72);
-      OC.FloraStreamer.init(scene, biome, sp);
+      OC.FloraStreamer.init(scene, activeBiome, sp);
 
       setBar(0.88);
-      const fauna = OC.FaunaEngine.init(scene, biome);
+      activeFauna = OC.FaunaEngine.init(scene, activeBiome);
 
-      let uiRefs = null;
-      OC.Navigation.init(canvas, biome, {
-        onPick: (cx, cy) => pickAt(cx, cy, biome),
-        onModeChange: (m) => { if (uiRefs) uiRefs.syncModes(m); },
+      OC.Navigation.init(canvas, activeBiome, {
+        onPick: (cx, cy) => pickAt(cx, cy, activeBiome),
+        onModeChange: (m) => { if (uiHandles) uiHandles.syncModes(m); },
         onTourToast: (title) => toast('Тур: ' + title)
       });
 
-      OC.Minimap.init(document.getElementById('minimap'), biome, (x, y, z, yaw, pitch, label) => {
+      OC.Minimap.init(document.getElementById('minimap'), activeBiome, (x, y, z, yaw, pitch, label) => {
         OC.Navigation.flyTo(x, y, z, yaw, pitch);
         if (label) toast('Переход: ' + label);
       });
 
-      OC.Atlas.init(biome, (lm) => {
+      OC.Atlas.init(activeBiome, (lm) => {
         OC.Navigation.flyTo(lm.x, lm.y, lm.z, lm.yaw, lm.pitch);
         toast('Курс на зону: ' + lm.name);
       });
 
-      uiRefs = bindUI(biome, fauna);
-      uiRefs.syncModes(OC.Navigation.getMode());
+      uiHandles = bindUI();
+      uiHandles.syncModes(OC.Navigation.getMode());
 
       setBar(1.0);
       setTimeout(() => {
@@ -495,7 +597,7 @@ window.OC = window.OC || {};
         }
       }, 280);
 
-      runLoop(renderer, scene, camera, biome, fauna);
+      runLoop(renderer, scene, camera);
     } catch (e) {
       console.error(e);
       if (loading) {
@@ -504,7 +606,7 @@ window.OC = window.OC || {};
     }
   }
 
-  function runLoop(renderer, scene, camera, biome, fauna) {
+  function runLoop(renderer, scene, camera) {
     let last = performance.now();
     let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0;
 
@@ -513,7 +615,7 @@ window.OC = window.OC || {};
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      fauna.setScale(h / 900);
+      if (activeFauna) activeFauna.setScale(h / 900);
     }
     window.addEventListener('resize', resize);
     resize();
@@ -534,19 +636,21 @@ window.OC = window.OC || {};
       OC.FloraStreamer.update(camPos);
       const camSpeed = OC.Navigation.getSpeed();
       const flashOn = OC.isFlashlightOn();
-      fauna.update(dt, time, camPos, camSpeed, flashOn);
+      if (activeFauna) activeFauna.update(dt, time, camPos, camSpeed, flashOn);
 
       hudTimer += rawDt;
-      if (hudTimer > 0.14) {
+      if (hudTimer > 0.14 && activeBiome) {
         hudTimer = 0;
+        const biome = activeBiome;
         const zone = biome.getZoneAt(camPos.x, camPos.y, camPos.z);
-        const depthM = Math.max(0, -camPos.y);
-        const tempC = (zone.tempC - Math.max(0, depthM - 15) * 0.065).toFixed(1);
+        const depthOffset = biome.depthOffset || 0;
+        const depthM = depthOffset + (depthOffset > 0 ? -camPos.y : Math.max(0, -camPos.y));
+        const tempC = (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065)).toFixed(1);
         const pal = OC.getPalette();
         const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
 
         if (teleZone) teleZone.textContent = zone.shortName;
-        if (teleDepth) teleDepth.textContent = camPos.y > 0.1 ? ('+' + camPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
+        if (teleDepth) teleDepth.textContent = (!biome.noSurface && camPos.y > 0.1) ? ('+' + camPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
         if (teleTemp) teleTemp.textContent = tempC + ' °C';
         if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
 
@@ -572,8 +676,8 @@ window.OC = window.OC || {};
             subCurrentEl.textContent = cKnots.toFixed(1) + ' уз';
             subCurrentEl.classList.toggle('warn', cKnots > 1.8);
           }
-          if (subPhaseEl) subPhaseEl.textContent = dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День');
-          drawEchosounder(camPos, OC.Navigation.getYaw(), biome, fauna, time);
+          if (subPhaseEl) subPhaseEl.textContent = biome.noSurface ? 'Абиссаль · 2500 м' : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'));
+          drawEchosounder(camPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }
 
         const t = OC.getTimeOfDay();

@@ -3,13 +3,48 @@ window.OC = window.OC || {};
 (function (OC) {
   'use strict';
 
-  const discovered = new Set(['floor']);
+  const discoveredByBiome = new Map();
   let modalEl = null;
   let gridEl = null;
   let countEl = null;
+  let titleEl = null;
   let currentCat = 'Все';
   let biomeRef = null;
   let onDiveCallback = null;
+
+  function getDiscoveredSet() {
+    const id = biomeRef ? biomeRef.id : 'default';
+    let s = discoveredByBiome.get(id);
+    if (!s) {
+      s = new Set(['floor']);
+      discoveredByBiome.set(id, s);
+    }
+    return s;
+  }
+
+  function resolveLandmark(zoneLabel) {
+    if (!biomeRef || !biomeRef.landmarks || !biomeRef.landmarks.length) return null;
+    const mapped = CATEGORY_LANDMARK[zoneLabel];
+    if (mapped) {
+      const hit = biomeRef.landmarks.find((l) => l.id === mapped);
+      if (hit) return hit;
+    }
+    const lbl = (zoneLabel || '').toLowerCase();
+    for (const lm of biomeRef.landmarks) {
+      const n = (lm.name || '').toLowerCase();
+      if (lbl && (n.includes(lbl) || lbl.includes(n.split(' ')[0]))) return lm;
+    }
+    if (biomeRef.zones) {
+      for (const z of biomeRef.zones) {
+        const zn = (z.shortName || '').toLowerCase();
+        if (zn && lbl.includes(zn.split(' ')[0])) {
+          const hit = biomeRef.landmarks.find((l) => l.zoneId === z.id);
+          if (hit) return hit;
+        }
+      }
+    }
+    return biomeRef.landmarks[0];
+  }
 
   const CATEGORY_LANDMARK = {
     'Мангровые отмели': 'mangroves',
@@ -47,6 +82,8 @@ window.OC = window.OC || {};
     if (!gridEl || !biomeRef) return;
     const enc = biomeRef.encyclopedia;
     const keys = Object.keys(enc);
+    const discovered = getDiscoveredSet();
+    if (titleEl) titleEl.textContent = 'Атлас · ' + biomeRef.name;
     if (countEl) countEl.textContent = discovered.size + ' / ' + keys.length;
 
     gridEl.innerHTML = '';
@@ -69,8 +106,7 @@ window.OC = window.OC || {};
 
       const goBtn = card.querySelector('.atlas-go');
       goBtn.addEventListener('click', () => {
-        const lmId = CATEGORY_LANDMARK[zoneLabel] || 'crest';
-        const lm = biomeRef.landmarks.find((l) => l.id === lmId) || biomeRef.landmarks[0];
+        const lm = resolveLandmark(zoneLabel);
         if (lm && onDiveCallback) {
           onDiveCallback(lm);
           thisClose();
@@ -91,6 +127,7 @@ window.OC = window.OC || {};
       modalEl = document.getElementById('atlas-modal');
       gridEl = document.getElementById('atlas-grid');
       countEl = document.getElementById('atlas-count');
+      titleEl = document.getElementById('atlas-title');
       const closeBtn = document.getElementById('atlas-close');
       const tabsEl = document.getElementById('atlas-tabs');
 
@@ -112,7 +149,18 @@ window.OC = window.OC || {};
       render();
     },
 
+    setBiome(biome) {
+      biomeRef = biome;
+      currentCat = 'Все';
+      const tabsEl = document.getElementById('atlas-tabs');
+      if (tabsEl) {
+        tabsEl.querySelectorAll('button[data-cat]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-cat') === 'Все'));
+      }
+      render();
+    },
+
     discover(key) {
+      const discovered = getDiscoveredSet();
       if (!key || discovered.has(key)) return false;
       if (biomeRef && biomeRef.encyclopedia[key]) {
         discovered.add(key);

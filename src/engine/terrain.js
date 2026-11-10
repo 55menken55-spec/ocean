@@ -174,8 +174,15 @@ window.OC = window.OC || {};
       chunkSize = biome.chunkSize || 150;
       chunkRadiusCount = Math.round(biome.worldRadius / chunkSize);
 
-      if (group) scene.remove(group);
+      if (group) {
+        group.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+        });
+        scene.remove(group);
+      }
+      if (terrainMat) { terrainMat.dispose(); terrainMat = null; }
       chunks.clear();
+      initialized = false;
       group = new T.Group();
       scene.add(group);
 

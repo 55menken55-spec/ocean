@@ -381,7 +381,8 @@ window.OC = window.OC || {};
       uniforms: {
         uIntensity: { value: 0.0 },
         uColor: { value: new T.Color(0xcdf4ff) },
-        uTime: OC.uTime
+        uTime: OC.uTime,
+        uNoSurface: { value: 0.0 }
       },
       vertexShader: `
         varying vec3 vWorldP;
@@ -398,7 +399,7 @@ window.OC = window.OC || {};
         varying vec3 vWorldP;
         varying vec3 vNormW;
         varying float vDist;
-        uniform float uIntensity, uTime;
+        uniform float uIntensity, uTime, uNoSurface;
         uniform vec3 uColor;
         void main(){
           if (uIntensity < 0.01) discard;
@@ -406,7 +407,7 @@ window.OC = window.OC || {};
           float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.75);
           float axial = smoothstep(1.2, 8.5, vDist) * smoothstep(68.0, 10.0, vDist);
           float dust = 0.86 + 0.14 * sin(vWorldP.x * 0.45 + uTime * 0.9) * cos(vWorldP.z * 0.42 - uTime * 0.7);
-          float belowW = smoothstep(0.1, -0.4, vWorldP.y);
+          float belowW = max(uNoSurface, smoothstep(0.1, -0.4, vWorldP.y));
           float a = rim * axial * dust * belowW * uIntensity * 0.145;
           if (a < 0.002) discard;
           gl_FragColor = vec4(uColor, a);
@@ -618,6 +619,14 @@ window.OC = window.OC || {};
   OC.getScene = () => scene;
   OC.getCamera = () => camera;
   OC.getRenderer = () => renderer;
+  OC.refreshWorldForBiome = function (biome) {
+    if (!surfaceMat || !biome) return;
+    if (surfaceMat.uniforms.uFoamTex.value) surfaceMat.uniforms.uFoamTex.value.dispose();
+    surfaceMat.uniforms.uFoamTex.value = buildBathymetryFoamTex(biome);
+    surfaceMat.uniforms.uWorldSpan.value = (biome.worldRadius || 1200) * 2.0;
+    if (surfacePlane) surfacePlane.visible = !biome.noSurface;
+    if (sunSprite) sunSprite.visible = !biome.noSurface;
+  };
 
   /* ---------- Обновление мира на каждом кадре ---------- */
   OC.updateWorld = function (dt, time, camPos, autoCycle) {
@@ -641,6 +650,12 @@ window.OC = window.OC || {};
     pal.fogDen = opt.fogDensity;
     pal.bioGlow = opt.bioGlow;
     pal.sunAtten = opt.sunAtten;
+    if (opt.waterColor) pal.water.copy(opt.waterColor);
+    if (opt.skyTop) pal.skyTop.copy(opt.skyTop);
+    if (opt.skyBot) pal.skyBot.copy(opt.skyBot);
+    if (opt.aboveHoriz) pal.aboveHoriz.copy(opt.aboveHoriz);
+    if (opt.fillAColor) pal.fillA.copy(opt.fillAColor);
+    if (opt.fillBColor) pal.fillB.copy(opt.fillBColor);
 
     scene.fog.color.copy(opt.fogColor);
     scene.fog.density = opt.fogDensity;
@@ -648,24 +663,25 @@ window.OC = window.OC || {};
 
     hemi.color.copy(pal.hemiSky);
     hemi.groundColor.copy(pal.hemiGround);
-    hemi.intensity = pal.hemiI * (0.35 + 0.65 * opt.sunAtten);
+    hemi.intensity = pal.hemiI * (biome && biome.noSurface ? 0.14 : (0.35 + 0.65 * opt.sunAtten));
 
     sun.color.copy(pal.sunCol);
-    sun.intensity = pal.sunI * (0.22 + 0.78 * opt.sunAtten);
+    sun.intensity = pal.sunI * (biome && biome.noSurface ? 0.03 : (0.22 + 0.78 * opt.sunAtten));
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
     sunDir.set(Math.cos(ang) * 0.52, Math.max(0.18, Math.sin(ang) * 0.85 + 0.28), 0.34).normalize();
     sun.position.copy(sunDir).multiplyScalar(420);
     sunSprite.position.copy(camPos).addScaledVector(sunDir, 900);
+    sunSprite.visible = !(biome && biome.noSurface);
     sunSprite.material.opacity = (0.35 + 0.55 * pal.dayW) * (opt.aboveWater ? 0.9 : opt.sunAtten);
     sunSprite.material.color.copy(pal.sunCol);
 
     fillA.position.set(camPos.x - 65, camPos.y + 18, camPos.z + 50);
     fillB.position.set(camPos.x + 70, camPos.y + 24, camPos.z - 55);
     fillA.color.copy(pal.fillA);
-    fillA.intensity = pal.fillAI * (0.3 + 0.7 * opt.sunAtten);
+    fillA.intensity = pal.fillAI * (opt.fillAMult !== undefined ? opt.fillAMult : (0.3 + 0.7 * opt.sunAtten));
     fillB.color.copy(pal.fillB);
-    fillB.intensity = pal.fillBI * (0.3 + 0.7 * opt.sunAtten);
+    fillB.intensity = pal.fillBI * (opt.fillBMult !== undefined ? opt.fillBMult : (0.3 + 0.7 * opt.sunAtten));
 
     /* прожектор дайвера и объёмный луч в воде */
     const targetFlashI = flashlightOn ? 4.2 : 0.0;
@@ -676,18 +692,19 @@ window.OC = window.OC || {};
 
     if (flashBeam && flashBeamMat) {
       const beamStrength = (flashlight.intensity / 4.2) * OC.lerp(1.15, 0.42, pal.dayW * opt.sunAtten);
-      flashBeam.visible = beamStrength > 0.02 && camPos.y < 1.5;
+      flashBeam.visible = beamStrength > 0.02 && (biome && biome.noSurface ? true : camPos.y < 1.5);
       if (flashBeam.visible) {
         camRight.crossVectors(camFwd, camera.up).normalize();
         flashBeam.position.copy(camPos).addScaledVector(camera.up, -0.55).addScaledVector(camRight, 0.25);
         flashBeam.lookAt(flashTarget.position);
         flashBeamMat.uniforms.uIntensity.value = beamStrength;
+        flashBeamMat.uniforms.uNoSurface.value = (biome && biome.noSurface) ? 1.0 : 0.0;
         flashBeamMat.uniforms.uColor.value.copy(pal.water).lerp(_beamTint, 0.68);
       }
     }
 
     /* купол неба */
-    const aboveMix = OC.smoothstep(-0.3, 0.5, camPos.y);
+    const aboveMix = (biome && biome.noSurface) ? 0.0 : OC.smoothstep(-0.3, 0.5, camPos.y);
     skyMat.uniforms.uTop.value.copy(pal.skyTop);
     skyMat.uniforms.uMid.value.copy(opt.fogColor);
     skyMat.uniforms.uBot.value.copy(pal.skyBot);
@@ -708,18 +725,21 @@ window.OC = window.OC || {};
     }
 
     /* поверхность воды привязана к сетке вокруг камеры, чтобы волны не «плыли» */
-    const snap = 44;
-    surfacePlane.position.x = Math.round(camPos.x / snap) * snap;
-    surfacePlane.position.z = Math.round(camPos.z / snap) * snap;
-    surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
-    surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
-    surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);
-    surfaceMat.uniforms.uSunDir.value.copy(sunDir);
-    surfaceMat.uniforms.uDayW.value = pal.dayW;
-    surfaceMat.uniforms.uCamY.value = camPos.y;
+    surfacePlane.visible = !(biome && biome.noSurface);
+    if (surfacePlane.visible) {
+      const snap = 44;
+      surfacePlane.position.x = Math.round(camPos.x / snap) * snap;
+      surfacePlane.position.z = Math.round(camPos.z / snap) * snap;
+      surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
+      surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
+      surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);
+      surfaceMat.uniforms.uSunDir.value.copy(sunDir);
+      surfaceMat.uniforms.uDayW.value = pal.dayW;
+      surfaceMat.uniforms.uCamY.value = camPos.y;
+    }
 
     /* солнечные лучи в верхних слоях */
-    raysGroup.visible = camPos.y < 0.2 && opt.rayStrength > 0.02;
+    raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && opt.rayStrength > 0.02;
     if (raysGroup.visible) {
       raysGroup.position.x = Math.round(camPos.x / 60) * 60;
       raysGroup.position.z = Math.round(camPos.z / 60) * 60;

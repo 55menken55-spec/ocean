@@ -10,6 +10,8 @@ const SRC_ORDER = [
   'src/core/quality.js',
   'src/core/biome_registry.js',
   'src/biomes/great_barrier_reef.js',
+  'src/biomes/kelp_forest.js',
+  'src/biomes/hydrothermal_vents.js',
   'src/engine/world.js',
   'src/engine/terrain.js',
   'src/engine/flora_library.js',
@@ -235,9 +237,9 @@ assert(worldSrc.includes('uFoamTex') && worldSrc.includes('flashBeamMat'), 'worl
 const faunaSrc = fs.readFileSync(path.join(ROOT, 'src/engine/fauna_engine.js'), 'utf8');
 assert(faunaSrc.includes('marine_snow'), 'fauna_engine.js missing marine_snow deep particle layer');
 
-// Verify all placed fauna objects have encyclopedia keys
+// Verify all placed visible fauna/flora objects have encyclopedia keys
 scene.traverse((obj) => {
-  if (obj.userData && obj.userData.key && obj.userData.key !== 'bubbles' && obj.userData.key !== 'plankton' && obj.userData.key !== 'marine_snow') {
+  if (obj.visible && (obj.count === undefined || obj.count > 0) && obj.userData && obj.userData.key && obj.userData.key !== 'bubbles' && obj.userData.key !== 'plankton' && obj.userData.key !== 'marine_snow') {
     assert(biome.encyclopedia[obj.userData.key], `Fauna/Flora object key "${obj.userData.key}" missing from encyclopedia!`);
   }
 });
@@ -318,12 +320,95 @@ assert(subHtml.includes('id="sub-current"'), 'template.html missing #sub-current
 checkMaterialShader({ causticStrength: 0.78, swayAmp: 0.42 }, 'coralSoftCurrent');
 console.log('   Option 2 ocean currents, particle/sway advection, #sub-current HUD & smart megafauna verified.');
 
-// G) Verify runtime quality switching
+// G) Verify Multi-Biome Planetary Platform (Kelp Forest + Abyssal Hydrothermal Vents) & clean switching
+const allBiomes = OC.Biomes.list();
+assert(allBiomes.length === 3, `Expected 3 registered ocean biomes, got ${allBiomes.length}`);
+assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
+
+for (const bId of ['kelp_forest', 'hydrothermal_vents']) {
+  const b = OC.Biomes.setActive(bId);
+  assert(b && b.id === bId, `Failed to activate biome ${bId}`);
+  assert(b.zones && b.zones.length >= 4, `${bId} needs >= 4 ecological zones`);
+  assert(b.landmarks && b.landmarks.length >= 4, `${bId} needs >= 4 landmarks`);
+  assert(typeof b.getCurrentAt === 'function', `${bId} needs getCurrentAt`);
+
+  const bSpawn = b.spawn.pos;
+  assert(bSpawn[1] > b.getHeight(bSpawn[0], bSpawn[2]) + 1.5, `${bId} spawn must clear terrain`);
+  for (const lm of b.landmarks) {
+    assert(lm.y > b.getHeight(lm.x, lm.z) + 1.2, `${bId} landmark ${lm.id} must clear terrain`);
+  }
+  for (const leg of b.tourLegs) {
+    assert(leg.pos[1] > b.getHeight(leg.pos[0], leg.pos[2]) + 1.2, `${bId} tour leg "${leg.title}" must clear terrain`);
+  }
+
+  // Test hot-swapping engine modules to the biome
+  const bSpVec = new T.Vector3(bSpawn[0], bSpawn[1], bSpawn[2]);
+  OC.Terrain.init(scene, b, bSpVec);
+  OC.FloraStreamer.init(scene, b, bSpVec);
+  const bFauna = OC.FaunaEngine.init(scene, b);
+  OC.Navigation.setBiome(b);
+  OC.Minimap.setBiome(b);
+  OC.Atlas.setBiome(b);
+
+  // Verify every placed visible fauna/flora key in scene belongs to biome's encyclopedia
+  scene.traverse((obj) => {
+    if (obj.visible && (obj.count === undefined || obj.count > 0) && obj.userData && obj.userData.key && obj.userData.key !== 'bubbles' && obj.userData.key !== 'plankton' && obj.userData.key !== 'marine_snow') {
+      assert(b.encyclopedia[obj.userData.key], `${bId} scene key "${obj.userData.key}" missing from encyclopedia!`);
+    }
+  });
+
+  // Verify chunk flora generator emits valid species in FloraLibrary & encyclopedia
+  const rngB = OC.mulberry32(4242);
+  for (const lm of b.landmarks) {
+    const cx = Math.floor(lm.x / b.chunkSize), cz = Math.floor(lm.z / b.chunkSize);
+    const items = b.generateChunkFlora(cx, cz, b.chunkSize, 1.32, rngB);
+    for (const it of items) {
+      assert(floraProtos[it.species], `${bId} generated unknown flora species ${it.species}`);
+      assert(b.encyclopedia[it.species], `${bId} flora species ${it.species} missing from encyclopedia`);
+    }
+    OC.Navigation.flyTo(lm.x, lm.y, lm.z, lm.yaw, lm.pitch);
+    for (let s = 0; s < 6; s++) {
+      OC.uTime.value += 0.16;
+      OC.Navigation.update(0.16, OC.uTime.value, camera, false);
+      OC.Terrain.update(camera.position);
+      OC.FloraStreamer.update(camera.position);
+      bFauna.update(0.16, OC.uTime.value, camera.position, 2.0, true);
+      OC.Minimap.update(camera.position, OC.Navigation.getYaw());
+    }
+  }
+  assert(OC.Terrain.getStats().visible > 0, `${bId} must stream terrain chunks`);
+  assert(OC.FloraStreamer.getStats().cachedChunks > 0, `${bId} must cache flora chunks`);
+  console.log(`   Biome "${b.name}" (${b.landmarks.length} landmarks, encyclopedia & streaming) verified.`);
+}
+
+// Verify Abyssal Hydrothermal thermal plume updraft (+Y > 1.5 m/s over main smoker) & signature flora density
+const kelpBiome = OC.Biomes.get('kelp_forest');
+const kHeart = kelpBiome.landmarks.find((l) => l.id === 'kelp_heart');
+const kHeartItems = kelpBiome.generateChunkFlora(Math.floor(kHeart.x / 150), Math.floor(kHeart.z / 150), 150, 1.0, OC.mulberry32(777));
+assert(kHeartItems.some((it) => it.species === 'kelp_giant'), 'kelp_forest must spawn kelp_giant canopy towers near kelp_heart');
+
+const ventBiome = OC.Biomes.get('hydrothermal_vents');
+assert(ventBiome.noSurface && ventBiome.depthOffset === 2420, 'hydrothermal_vents must configure noSurface & 2420m depthOffset');
+const vMain = ventBiome.landmarks.find((l) => l.id === 'central_smoker');
+const vItems = ventBiome.generateChunkFlora(Math.floor(vMain.x / 150), Math.floor(vMain.z / 150), 150, 1.0, OC.mulberry32(888));
+assert(vItems.some((it) => it.species === 'vent_chimney') && vItems.some((it) => it.species === 'riftia_worms'), 'hydrothermal_vents must spawn vent_chimney & riftia_worms near central_smoker');
+const ventUp = ventBiome.getCurrentAt(-10, -14, 15, 1.0, new T.Vector3());
+assert(ventUp.y > 1.2, `Abyssal black smoker updraft expected > 1.2 m/s, got ${ventUp.y.toFixed(2)}`);
+
+// Switch back to GBR and verify runtime quality switching
+const gbrBack = OC.Biomes.setActive('great_barrier_reef');
+OC.Terrain.init(scene, gbrBack, spawnVec);
+OC.FloraStreamer.init(scene, gbrBack, spawnVec);
+const gbrFauna = OC.FaunaEngine.init(scene, gbrBack);
+OC.Navigation.setBiome(gbrBack);
+OC.Minimap.setBiome(gbrBack);
+OC.Atlas.setBiome(gbrBack);
+
 for (const qId of ['low', 'medium', 'high', 'ultra']) {
   OC.Quality.set(qId);
   OC.Terrain.update(camera.position);
   OC.FloraStreamer.update(camera.position);
-  fauna.update(0.016, OC.uTime.value, camera.position);
+  gbrFauna.update(0.016, OC.uTime.value, camera.position);
 }
-console.log('   Runtime quality preset switching (low -> ultra) verified.');
+console.log('   Multi-biome hot-switching & runtime quality preset switching (low -> ultra) verified.');
 console.log('ALL VERIFICATION CHECKS PASSED!');

@@ -7,6 +7,9 @@ window.OC = window.OC || {};
   let fishMatInstanced = null;
   let fishMatBiolum = null;
   let creatureMat = null;
+  let faunaGroup = null;
+  let activeSchoolsRef = [];
+  let qualityHookBound = false;
 
   /* ---------- Процедурная форма рыбы (нос +X, хвост -X) ---------- */
   function makeFishGeo(opts) {
@@ -979,10 +982,11 @@ window.OC = window.OC || {};
     };
   }
 
-  /* ---------- Рифовая акула и Китовая акула ---------- */
+  /* ---------- Рифовая, китовая и калифорнийская леопардовая акулы ---------- */
   function makeShark(scene, biome, opts) {
     const isWhale = !!opts.whaleShark;
-    const len = isWhale ? 11.5 : 4.2;
+    const isLeopard = opts.speciesKey === 'shark_leopard';
+    const len = isWhale ? 11.5 : (isLeopard ? 2.4 : 4.2);
     const group = new T.Group();
 
     const body = new T.SphereGeometry(1, 18, 12);
@@ -1002,6 +1006,10 @@ window.OC = window.OC || {};
         if (y < -0.1) { c.set(0xe4edf2); return; }
         const spot = Math.sin(x * 4.5) * Math.cos(z * 2.2);
         c.set(0x2a4054).lerp(new T.Color(0xddecf5), spot > 0.48 ? 0.92 : 0);
+      } else if (isLeopard) {
+        if (y < -0.06) { c.set(0xddd2b8); return; }
+        const saddle = Math.sin(z * 5.2) * Math.cos(x * 5.5);
+        c.set(0x9a8454).lerp(new T.Color(0x2d2416), saddle > 0.38 ? 0.85 : 0);
       } else {
         c.set(y > -0.05 ? 0x5d6e7a : 0xdde6ea);
       }
@@ -1012,7 +1020,7 @@ window.OC = window.OC || {};
     const dorsal = new T.ConeGeometry(len * 0.11, len * 0.24, 4);
     dorsal.scale(0.25, 1, 1.1);
     OC.geoPrep(dorsal);
-    OC.paint(dorsal, isWhale ? 0x2c4257 : 0x455661);
+    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : 0x455661));
     const dorM = new T.Mesh(dorsal, creatureMat);
     dorM.position.set(0, len * 0.15, len * 0.04);
     dorM.rotation.x = -0.35;
@@ -1022,7 +1030,7 @@ window.OC = window.OC || {};
     const pec = new T.ConeGeometry(len * 0.09, len * 0.28, 4);
     pec.scale(0.22, 1, 1);
     OC.geoPrep(pec);
-    OC.paint(pec, isWhale ? 0x2a4054 : 0x52626d);
+    OC.paint(pec, isWhale ? 0x2a4054 : (isLeopard ? 0x857046 : 0x52626d));
     for (const s of [-1, 1]) {
       const pm = new T.Mesh(pec, creatureMat);
       pm.position.set(s * len * 0.17, -len * 0.05, len * 0.12);
@@ -1037,21 +1045,22 @@ window.OC = window.OC || {};
     const tailTop = new T.ConeGeometry(len * 0.08, len * 0.34, 4);
     tailTop.scale(0.2, 1, 0.9);
     OC.geoPrep(tailTop);
-    OC.paint(tailTop, isWhale ? 0x2a4054 : 0x28323a);
+    OC.paint(tailTop, isWhale ? 0x2a4054 : (isLeopard ? 0x524229 : 0x28323a));
     const ttM = new T.Mesh(tailTop, creatureMat);
     ttM.position.set(0, len * 0.08, -len * 0.14);
     ttM.rotation.x = -0.6;
     const tailBot = new T.ConeGeometry(len * 0.06, len * 0.22, 4);
     tailBot.scale(0.2, 1, 0.8);
     OC.geoPrep(tailBot);
-    OC.paint(tailBot, isWhale ? 0x2a4054 : 0x455661);
+    OC.paint(tailBot, isWhale ? 0x2a4054 : (isLeopard ? 0x7c6840 : 0x455661));
     const tbM = new T.Mesh(tailBot, creatureMat);
     tbM.position.set(0, -len * 0.05, -len * 0.1);
     tbM.rotation.x = 2.4;
     tailPivot.add(ttM, tbM);
     group.add(tailPivot);
 
-    group.userData.key = isWhale ? 'shark_whale' : 'shark_reef';
+    const sKey = opts.speciesKey || (isWhale ? 'shark_whale' : 'shark_reef');
+    group.userData.key = sKey;
     scene.add(group);
 
     let ang = Math.random() * 6.28, t = Math.random() * 100;
@@ -1060,7 +1069,7 @@ window.OC = window.OC || {};
     let inspectBlend = 0;
 
     return {
-      key: isWhale ? 'shark_whale' : 'shark_reef',
+      key: sKey,
       isActivePredator: !isWhale,
       getPosition: () => group.position,
       update(dt, time, camPos, ctx) {
@@ -1284,8 +1293,370 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Калифорнийский морской лев (Zalophus californianus) ---------- */
+  function makeSeaLion(scene, biome, opts) {
+    const group = new T.Group();
+    const body = new T.SphereGeometry(1, 14, 10);
+    body.scale(0.46, 0.44, 1.55);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = z / 1.55;
+      const tap = t < 0 ? (1 - 0.65 * Math.pow(-t, 1.4)) : (1 - 0.42 * Math.pow(t, 2));
+      bp.setXYZ(i, x * tap, y * tap, z);
+    }
+    OC.geoPrep(body);
+    body.computeVertexNormals();
+    OC.paint(body, (x, y, z, c) => c.set(y > -0.05 ? 0x6c4c34 : 0x9b7552));
+    group.add(new T.Mesh(body, creatureMat));
+
+    const snout = new T.ConeGeometry(0.24, 0.62, 8);
+    snout.rotateX(Math.PI / 2);
+    OC.geoPrep(snout);
+    OC.paint(snout, 0x5c3e28);
+    const snM = new T.Mesh(snout, creatureMat);
+    snM.position.set(0, 0.08, 1.62);
+    group.add(snM);
+
+    const fFlips = [];
+    const fg = new T.SphereGeometry(1, 8, 5);
+    fg.scale(0.75, 0.08, 0.28);
+    OC.geoPrep(fg);
+    OC.paint(fg, 0x422d1d);
+    for (const s of [-1, 1]) {
+      const m = new T.Mesh(fg, creatureMat);
+      m.position.set(s * 0.62, -0.15, 0.48);
+      group.add(m);
+      fFlips.push({ m, s });
+    }
+    const hind = new T.ConeGeometry(0.32, 0.78, 4);
+    hind.scale(1.1, 1, 0.25);
+    hind.rotateX(-Math.PI / 2);
+    OC.geoPrep(hind);
+    OC.paint(hind, 0x422d1d);
+    const hindM = new T.Mesh(hind, creatureMat);
+    hindM.position.set(0, 0, -1.68);
+    group.add(hindM);
+
+    group.scale.setScalar(opts.scale || 1.0);
+    group.userData.key = 'sea_lion';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 60;
+    const a = new T.Vector3(), b = new T.Vector3();
+    function posAt(angV, tV, out) {
+      const rr = opts.r + Math.sin(tV * 0.55) * 9;
+      const x = opts.cx + Math.cos(angV) * rr;
+      const z = opts.cz + Math.sin(angV) * rr + Math.sin(angV * 2.0) * 6;
+      const y = Math.max(opts.y + Math.sin(tV * 0.85) * 4.5, biome.getHeight(x, z) + 2.4);
+      return out.set(x, Math.min(-1.0, y), z);
+    }
+
+    return {
+      key: 'sea_lion',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 5.2) / opts.r) * dt;
+        posAt(ang, t, a);
+        posAt(ang + 0.14, t + 0.25, b);
+        group.position.copy(a);
+        group.lookAt(b);
+        group.rotateZ(Math.sin(t * 0.9) * 0.42); // игривые бочки между ламинарией
+        const stroke = Math.sin(time * 4.2);
+        for (const f of fFlips) f.m.rotation.z = f.s * stroke * 0.65;
+        hindM.rotation.x = Math.sin(time * 4.2 + 0.8) * 0.35;
+      }
+    };
+  }
+
+  /* ---------- Глубоководный морской чёрт (Melanocetus) ---------- */
+  function makeAnglerfish(scene, biome, opts) {
+    const group = new T.Group();
+    const body = new T.SphereGeometry(0.75, 14, 10);
+    body.scale(0.82, 0.88, 1.18);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.set(y > 0 ? 0x1a151c : 0x2c2228));
+    group.add(new T.Mesh(body, creatureMat));
+
+    // Огромная нижняя челюсть с зубами
+    const jaw = new T.TorusGeometry(0.45, 0.08, 5, 10, Math.PI);
+    OC.geoPrep(jaw);
+    OC.paint(jaw, 0x352a32);
+    const jawM = new T.Mesh(jaw, creatureMat);
+    jawM.position.set(0, -0.22, 0.64);
+    jawM.rotation.x = Math.PI * 0.65;
+    group.add(jawM);
+
+    // Иллиций (удочка) и биолюминесцентная приманка-эска
+    const rodPts = [new T.Vector3(0, 0.55, 0.35), new T.Vector3(0, 1.05, 0.95), new T.Vector3(0, 0.42, 1.38)];
+    const rod = new T.TubeGeometry(new T.CatmullRomCurve3(rodPts), 8, 0.025, 5, false);
+    OC.geoPrep(rod);
+    OC.paint(rod, 0x3a3542);
+    group.add(new T.Mesh(rod, creatureMat));
+
+    const lureMat = new T.MeshBasicMaterial({ color: 0x62fff0 });
+    const lure = new T.Mesh(new T.SphereGeometry(0.14, 8, 6), lureMat);
+    lure.position.set(0, 0.4, 1.38);
+    group.add(lure);
+
+    const tail = new T.ConeGeometry(0.35, 0.72, 4);
+    tail.scale(0.24, 1, 1);
+    tail.rotateX(-Math.PI / 2);
+    OC.geoPrep(tail);
+    OC.paint(tail, 0x241d26);
+    const tM = new T.Mesh(tail, creatureMat);
+    tM.position.set(0, 0, -1.05);
+    group.add(tM);
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.userData.key = 'fish_angler';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 40;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'fish_angler',
+      isActivePredator: true,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 480) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 1.2) / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r, bz = opts.cz + Math.sin(ang + 0.1) * opts.r;
+        const ay = Math.max(opts.y + Math.sin(t * 0.4) * 2.5, biome.getHeight(ax, az) + 2.6);
+        const by = Math.max(opts.y + Math.sin(t * 0.4 + 0.2) * 2.5, biome.getHeight(bx, bz) + 2.6);
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        lure.position.y = 0.4 + Math.sin(time * 3.1) * 0.08;
+        lureMat.color.setHSL(0.47, 0.95, 0.56 + 0.22 * Math.sin(time * 4.5));
+        tM.rotation.y = Math.sin(time * 2.4) * 0.3;
+      }
+    };
+  }
+
+  /* ---------- Глубоководный абиссальный кальмар ---------- */
+  function makeAbyssalSquid(scene, biome, opts) {
+    const group = new T.Group();
+    const mantle = new T.ConeGeometry(0.46, 2.2, 10);
+    mantle.rotateX(Math.PI / 2);
+    OC.geoPrep(mantle);
+    OC.paint(mantle, (x, y, z, c) => c.set(z > 0 ? 0x691828 : 0x451220));
+    group.add(new T.Mesh(mantle, creatureMat));
+
+    const fins = new T.ConeGeometry(0.75, 0.95, 4);
+    fins.scale(1.1, 0.12, 1);
+    fins.rotateX(-Math.PI / 2);
+    OC.geoPrep(fins);
+    OC.paint(fins, 0x8c283c);
+    const finM = new T.Mesh(fins, creatureMat);
+    finM.position.set(0, 0, -0.82);
+    group.add(finM);
+
+    const armsPivot = new T.Group();
+    armsPivot.position.set(0, 0, 1.05);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const arm = new T.ConeGeometry(0.065, i < 2 ? 1.9 : 1.1, 4);
+      arm.rotateX(Math.PI / 2);
+      OC.geoPrep(arm);
+      OC.paint(arm, 0x721c2e);
+      const am = new T.Mesh(arm, creatureMat);
+      am.position.set(Math.cos(a) * 0.16, Math.sin(a) * 0.16, i < 2 ? 0.85 : 0.45);
+      armsPivot.add(am);
+    }
+    group.add(armsPivot);
+
+    // Светящиеся фотофоры вдоль мантии
+    const photMat = new T.MeshBasicMaterial({ color: 0x4df4ff });
+    for (const s of [-1, 1]) {
+      const dot = new T.Mesh(new T.SphereGeometry(0.06, 5, 4), photMat);
+      dot.position.set(s * 0.28, 0.12, 0.1);
+      group.add(dot);
+    }
+
+    group.scale.setScalar(opts.scale || 1.1);
+    group.userData.key = 'squid_abyssal';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 60;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'squid_abyssal',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 2.8) / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r, bz = opts.cz + Math.sin(ang + 0.1) * opts.r;
+        const ay = Math.max(opts.y + Math.sin(t * 0.35) * 5, biome.getHeight(ax, az) + 4);
+        const by = Math.max(opts.y + Math.sin(t * 0.35 + 0.2) * 5, biome.getHeight(bx, bz) + 4);
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        finM.rotation.z = Math.sin(time * 2.6) * 0.28;
+        armsPivot.rotation.x = Math.sin(time * 2.0) * 0.14;
+      }
+    };
+  }
+
+  /* ---------- Гримпотевтис / осьминог Дамбо (Grimpoteuthis) ---------- */
+  function makeDumboOctopus(scene, biome, opts) {
+    const group = new T.Group();
+    const bell = new T.SphereGeometry(0.65, 12, 10);
+    bell.scale(0.9, 1.15, 0.9);
+    OC.geoPrep(bell);
+    OC.paint(bell, (x, y, z, c) => c.set(y > 0 ? 0xd9a8c4 : 0xbd7fa8));
+    const bM = new T.Mesh(bell, creatureMat);
+    bM.position.y = 0.25;
+    group.add(bM);
+
+    const ears = [];
+    const earG = new T.SphereGeometry(0.32, 7, 5);
+    earG.scale(1.6, 0.2, 0.75);
+    OC.geoPrep(earG);
+    OC.paint(earG, 0xe8bcd4);
+    for (const s of [-1, 1]) {
+      const em = new T.Mesh(earG, creatureMat);
+      em.position.set(s * 0.62, 0.55, 0);
+      group.add(em);
+      ears.push({ em, s });
+    }
+
+    const skirt = new T.ConeGeometry(0.68, 0.55, 8);
+    OC.geoPrep(skirt);
+    OC.paint(skirt, 0xc789b0);
+    const skM = new T.Mesh(skirt, creatureMat);
+    skM.position.y = -0.22;
+    group.add(skM);
+
+    group.scale.setScalar(opts.scale || 1.1);
+    group.userData.key = 'octopus_dumbo';
+    scene.add(group);
+
+    let t = Math.random() * 40;
+    return {
+      key: 'octopus_dumbo',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.x - camPos.x, opts.z - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        const wx = opts.x + Math.sin(t * 0.28) * 5.5;
+        const wz = opts.z + Math.cos(t * 0.24) * 5.5;
+        const wy = biome.getHeight(wx, wz) + 2.2 + Math.sin(t * 0.8) * 1.4;
+        group.position.set(wx, wy, wz);
+        group.rotation.y = t * 0.35;
+        const flap = Math.sin(time * 2.1);
+        for (const e of ears) e.em.rotation.z = e.s * flap * 0.55;
+      }
+    };
+  }
+
+  /* ---------- Шлейфы чёрных курильщиков и термальный свет ---------- */
+  function makeVentPlume(scene, biome, tex, opts) {
+    const n = opts.n || 180;
+    const hMax = opts.height || 34;
+    const baseY = biome.getHeight(opts.x, opts.z) + (opts.chimneyH || 6.5);
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(n * 3);
+    const ph = new Float32Array(n);
+    const sz = new Float32Array(n);
+    const rng = OC.mulberry32(Math.abs(Math.round(opts.x * 13 + opts.z * 29)) + 77);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = (rng() - 0.5) * 1.4;
+      pos[i * 3 + 1] = rng() * hMax;
+      pos[i * 3 + 2] = (rng() - 0.5) * 1.4;
+      ph[i] = rng() * 100;
+      sz[i] = OC.lerp(1.4, 3.6, rng());
+    }
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aPhase', new T.BufferAttribute(ph, 1));
+    geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
+
+    const mat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: T.NormalBlending, fog: true,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        {
+          uTex: { value: tex },
+          uTime: OC.uTime,
+          uHMax: { value: hMax }
+        }
+      ]),
+      vertexShader: `
+        attribute float aPhase, aSize;
+        uniform float uTime, uHMax;
+        varying float vLife;
+        varying float vHeat;
+        #include <fog_pars_vertex>
+        void main(){
+          float y = mod(position.y + uTime * 3.8 + aPhase, uHMax);
+          float life = y / uHMax;
+          vLife = life;
+          vHeat = smoothstep(0.24, 0.0, life);
+          float billow = 0.8 + life * 6.2;
+          vec3 p = vec3(
+            position.x * billow + sin(uTime * 0.9 + aPhase + life * 4.0) * (0.6 + life * 2.2),
+            y,
+            position.z * billow + cos(uTime * 0.75 + aPhase * 1.3 + life * 4.0) * (0.6 + life * 2.2)
+          );
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = aSize * (1.0 + life * 2.4) * (240.0 / max(1.5, -mvPosition.z));
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        varying float vLife, vHeat;
+        #include <fog_pars_fragment>
+        void main(){
+          vec4 tx = texture2D(uTex, gl_PointCoord);
+          if (tx.a < 0.03) discard;
+          vec3 soot = vec3(0.11, 0.12, 0.14);
+          vec3 ember = vec3(0.92, 0.36, 0.08);
+          vec3 col = mix(soot, ember, vHeat * 0.72);
+          float alpha = tx.a * (1.0 - smoothstep(0.45, 1.0, vLife)) * smoothstep(0.0, 0.05, vLife) * 0.68;
+          gl_FragColor = vec4(col, alpha);
+          #include <fog_fragment>
+        }`
+    });
+
+    const pts = new T.Points(geo, mat);
+    pts.position.set(opts.x, baseY, opts.z);
+    pts.userData.key = 'vent_chimney';
+    scene.add(pts);
+
+    let light = null;
+    if (opts.light) {
+      light = new T.PointLight(0xff5e1a, 2.6, 52, 1.4);
+      light.position.set(opts.x, baseY + 1.5, opts.z);
+      scene.add(light);
+    }
+
+    return {
+      key: 'vent_chimney',
+      getPosition: () => pts.position,
+      update(dt, time, camPos) {
+        const d = Math.hypot(opts.x - camPos.x, opts.z - camPos.z);
+        const vis = d < 520;
+        pts.visible = vis;
+        if (light) light.intensity = vis ? (2.2 + 0.7 * Math.sin(time * 5.2 + opts.x)) : 0;
+      }
+    };
+  }
+
   /* ---------- Бесконечные пузыри, биолюминесцентный планктон и глубинный «морской снег» ---------- */
-  function createCameraRelativeParticles(scene, n, tex, mode) {
+  function createCameraRelativeParticles(scene, n, tex, mode, noSurface) {
     const kind = mode === true ? 'plankton' : (mode === false ? 'bubbles' : mode);
     const isPlankton = kind === 'plankton';
     const isSnow = kind === 'snow';
@@ -1332,12 +1703,13 @@ window.OC = window.OC || {};
           uFlowOffset: { value: new T.Vector3() },
           uColor: { value: new T.Color(isPlankton ? 0x7ef2ff : (isSnow ? 0xd9edf7 : 0xc6f2ff)) },
           uBio: { value: 0.4 },
-          uScale: { value: 1.0 }
+          uScale: { value: 1.0 },
+          uNoSurface: { value: noSurface ? 1.0 : 0.0 }
         }
       ]),
       vertexShader: `
         attribute float aPhase, aSize, aSpeed;
-        uniform float uTime, uScale, uBio;
+        uniform float uTime, uScale, uBio, uNoSurface;
         uniform vec3 uCamPos, uFlowOffset;
         varying float vAlpha;
         #include <fog_pars_vertex>
@@ -1347,8 +1719,8 @@ window.OC = window.OC || {};
           ${motionGLSL}
           vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
           vec3 worldP = uCamPos + rel;
-          // Не вылетаем над поверхностью моря (Y = 0)
-          float belowWater = step(worldP.y, -0.35);
+          // Не вылетаем над поверхностью моря (Y = 0), кроме абиссального рифта
+          float belowWater = max(uNoSurface, step(worldP.y, -0.35));
           vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
           gl_PointSize = belowWater * aSize * uScale * (${isPlankton ? '135.0' : (isSnow ? '105.0' : '115.0')} / max(1.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
@@ -1378,11 +1750,32 @@ window.OC = window.OC || {};
   }
 
   /* ---------- Сборка фауны по экологическому плану биома (biome.faunaPlan) ---------- */
+  function disposeFaunaGroup(scene) {
+    if (!faunaGroup) return;
+    const dGeos = new Set();
+    const dMats = new Set();
+    faunaGroup.traverse((o) => {
+      if (o.geometry && !dGeos.has(o.geometry)) { o.geometry.dispose(); dGeos.add(o.geometry); }
+      if (o.material) {
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of ms) {
+          if (m && !dMats.has(m)) { m.dispose(); dMats.add(m); }
+        }
+      }
+    });
+    scene.remove(faunaGroup);
+    faunaGroup = null;
+  }
+
   OC.FaunaEngine = {
     init(scene, biome) {
+      disposeFaunaGroup(scene);
+      faunaGroup = new T.Group();
+      scene.add(faunaGroup);
+
       fishMatInstanced = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.48, metalness: 0.06, side: T.DoubleSide
-      }), { causticStrength: 0.45, fishSwim: true });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.45, fishSwim: true });
 
       fishMatBiolum = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true,
@@ -1391,11 +1784,11 @@ window.OC = window.OC || {};
         roughness: 0.42,
         metalness: 0.08,
         side: T.DoubleSide
-      }), { causticStrength: 0.25, fishSwim: true });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.25, fishSwim: true });
 
       creatureMat = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.52, metalness: 0.06, side: T.DoubleSide
-      }), { causticStrength: 0.55 });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.55 });
 
       const plan = biome.faunaPlan || {};
       const agents = [];
@@ -1405,7 +1798,7 @@ window.OC = window.OC || {};
 
       const schoolsSpec = plan.schools || [];
       for (const s of schoolsSpec) {
-        const sch = makeSchool(scene, biome, s);
+        const sch = makeSchool(faunaGroup, biome, s);
         schools.push(sch);
         agents.push(sch);
         if (sch.isPredator) predatorAgents.push(sch);
@@ -1413,75 +1806,102 @@ window.OC = window.OC || {};
       }
 
       for (const sf of (plan.soloFish || [])) {
-        const a = makeSoloFish(scene, biome, sf);
+        const a = makeSoloFish(faunaGroup, biome, sf);
         agents.push(a);
       }
 
       for (const lf of (plan.lionfish || [])) {
-        const a = makeLionfish(scene, biome, lf);
+        const a = makeLionfish(faunaGroup, biome, lf);
         agents.push(a);
         predatorAgents.push(a);
         sonarTargets.push(a);
       }
 
       for (const oct of (plan.octopus || [])) {
-        agents.push(makeOctopus(scene, biome, oct));
+        agents.push(makeOctopus(faunaGroup, biome, oct));
       }
 
       for (const mor of (plan.moray || [])) {
-        agents.push(makeMoray(scene, biome, mor));
+        agents.push(makeMoray(faunaGroup, biome, mor));
       }
 
       for (const j of (plan.jellies || [])) {
-        agents.push(makeJelly(scene, j));
+        agents.push(makeJelly(faunaGroup, j));
       }
 
       for (const dg of (plan.dugongs || [])) {
-        const a = makeDugong(scene, biome, dg);
+        const a = makeDugong(faunaGroup, biome, dg);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const sl of (plan.seaLions || [])) {
+        const a = makeSeaLion(faunaGroup, biome, sl);
         agents.push(a);
         sonarTargets.push(a);
       }
 
       for (const tu of (plan.turtles || [])) {
-        const a = makeTurtle(scene, biome, tu);
+        const a = makeTurtle(faunaGroup, biome, tu);
         agents.push(a);
         sonarTargets.push(a);
       }
 
       for (const ry of (plan.rays || [])) {
-        const a = makeRay(scene, biome, ry);
+        const a = makeRay(faunaGroup, biome, ry);
         agents.push(a);
         sonarTargets.push(a);
       }
 
       for (const mn of (plan.mantas || [])) {
-        const a = makeManta(scene, biome, mn);
+        const a = makeManta(faunaGroup, biome, mn);
         agents.push(a);
         sonarTargets.push(a);
       }
 
       for (const sh of (plan.sharks || [])) {
-        const a = makeShark(scene, biome, sh);
+        const a = makeShark(faunaGroup, biome, sh);
         agents.push(a);
         if (a.isActivePredator) predatorAgents.push(a);
         sonarTargets.push(a);
       }
 
+      for (const angF of (plan.anglers || [])) {
+        const a = makeAnglerfish(faunaGroup, biome, angF);
+        agents.push(a);
+        predatorAgents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const sq of (plan.squids || [])) {
+        const a = makeAbyssalSquid(faunaGroup, biome, sq);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const db of (plan.dumbos || [])) {
+        agents.push(makeDumboOctopus(faunaGroup, biome, db));
+      }
+
       let whale = null;
       for (const wh of (plan.whales || [])) {
-        const w = makeHumpbackWhale(scene, biome, wh);
+        const w = makeHumpbackWhale(faunaGroup, biome, wh);
         if (!whale) whale = w;
         agents.push(w);
         sonarTargets.push(w);
       }
 
-      // ---- Пузыри, планктон и глубинный морской снег (вокруг камеры) ----
+      // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       const texSoft = OC.circleTexture(64, false);
       const texHard = OC.circleTexture(64, true);
-      const bubbleMat = createCameraRelativeParticles(scene, Math.round(900 * pCountMult), texHard, 'bubbles');
-      const planktonMat = createCameraRelativeParticles(scene, Math.round(1500 * pCountMult), texSoft, 'plankton');
-      const snowMat = createCameraRelativeParticles(scene, Math.round(1050 * pCountMult), texSoft, 'snow');
+      for (const vp of (plan.ventPlumes || [])) {
+        agents.push(makeVentPlume(faunaGroup, biome, texSoft, vp));
+      }
+      const noSurf = !!biome.noSurface;
+      const bubbleMat = createCameraRelativeParticles(faunaGroup, noSurf ? 80 : Math.round(900 * pCountMult), texHard, 'bubbles', noSurf);
+      const planktonMat = createCameraRelativeParticles(faunaGroup, Math.round(1500 * pCountMult), texSoft, 'plankton', noSurf);
+      const snowMat = createCameraRelativeParticles(faunaGroup, Math.round((noSurf ? 1400 : 1050) * pCountMult), texSoft, 'snow', noSurf);
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
       const dayPlanktonCol = new T.Color(0x9be8ff);
@@ -1502,10 +1922,11 @@ window.OC = window.OC || {};
 
       function refreshFaunaCounts() {
         let total = 0;
-        for (const sch of schools) total += sch.getCount();
+        for (const sch of activeSchoolsRef) total += sch.getCount();
         OC.faunaInfo.schoolFish = total;
       }
 
+      activeSchoolsRef = schools;
       OC.faunaInfo = {
         schoolFish: 0,
         schools: schools.length,
@@ -1514,10 +1935,13 @@ window.OC = window.OC || {};
       };
       refreshFaunaCounts();
 
-      OC.Quality.onChange((preset) => {
-        for (const sch of schools) sch.setQualityScale(preset.fishScale);
-        refreshFaunaCounts();
-      });
+      if (!qualityHookBound) {
+        qualityHookBound = true;
+        OC.Quality.onChange((preset) => {
+          for (const sch of activeSchoolsRef) sch.setQualityScale(preset.fishScale);
+          refreshFaunaCounts();
+        });
+      }
 
       return {
         agents,
@@ -1553,7 +1977,7 @@ window.OC = window.OC || {};
           snowMat.uniforms.uCamPos.value.copy(camPos);
 
           // Плавная адвекция планктона, пузырей и морского снега по локальному течению
-          if (biome.getCurrentAt && camPos.y < 1.5) {
+          if (biome.getCurrentAt && (biome.noSurface || camPos.y < 1.5)) {
             biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _currFlow);
             _flowAccum.addScaledVector(_currFlow, dt * 1.35);
             _flowAccum.x = ((_flowAccum.x % 180) + 180) % 180;

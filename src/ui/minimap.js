@@ -10,7 +10,23 @@ window.OC = window.OC || {};
   let pingState = null; // { x, z, startMs }
   const SIZE = 184;
 
-  function depthToRGB(y, uZoneColor) {
+  function depthToRGB(y) {
+    const theme = biomeRef && biomeRef.minimapTheme;
+    if (theme === 'kelp') {
+      if (y > 0.1) return [152, 154, 150]; // прибойные гранитные кекуры
+      if (y > -8) return [58, 168, 150];
+      if (y > -18) return [32, 128, 124];
+      if (y > -34) return [20, 92, 108];
+      if (y > -55) return [14, 56, 82];
+      return [8, 28, 52];
+    }
+    if (theme === 'abyss') {
+      if (y > -20) return [72, 74, 92]; // верх базальтового уступа
+      if (y > -32) return [124, 72, 52]; // гидротермальные поля
+      if (y > -48) return [54, 54, 74];
+      if (y > -78) return [26, 30, 50];
+      return [10, 14, 28];
+    }
     if (y > 0.1) return [242, 228, 194]; // суша / островок
     if (y > -3.5) return [88, 212, 206];
     if (y > -12) return [36, 172, 194];
@@ -107,6 +123,12 @@ window.OC = window.OC || {};
       pingState = { x, z, startMs: Date.now() };
     },
 
+    setBiome(biome) {
+      biomeRef = biome;
+      pingState = null;
+      if (canvas) renderBathymetry();
+    },
+
     update(camPos, yaw) {
       if (!ctx || !bgImage || !biomeRef) return;
       ctx.clearRect(0, 0, SIZE, SIZE);
@@ -134,7 +156,7 @@ window.OC = window.OC || {};
       // Ориентиры
       for (const lm of biomeRef.landmarks) {
         const [mx, my] = worldToMap(lm.x, lm.z);
-        ctx.fillStyle = lm.id === 'blue_hole' ? '#38b6ff' : '#ffd17a';
+        ctx.fillStyle = lm.id === 'blue_hole' || lm.id === 'canyon_abyss' ? '#38b6ff' : (lm.isHot ? '#ff7d45' : '#ffd17a');
         ctx.beginPath();
         ctx.arc(mx, my, 3.2, 0, Math.PI * 2);
         ctx.fill();

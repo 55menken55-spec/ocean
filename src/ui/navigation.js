@@ -92,7 +92,8 @@ window.OC = window.OC || {};
     p.x = OC.clamp(p.x, -bound, bound);
     p.z = OC.clamp(p.z, -bound, bound);
     const fl = biomeRef.getHeight(p.x, p.z);
-    p.y = OC.clamp(p.y, fl + 1.65, 16.0); // Можно всплыть до +16 м над островком!
+    const maxY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+    p.y = OC.clamp(p.y, fl + 1.65, maxY);
   }
 
   OC.Navigation = {
@@ -195,6 +196,15 @@ window.OC = window.OC || {};
     },
 
     setMode,
+    setBiome(biome) {
+      biomeRef = biome;
+      state.mode = 'swim';
+      state.glide = null;
+      state.vel.set(0, 0, 0);
+      _curr.set(0, 0, 0);
+      this.resetToSpawn();
+      if (state.onModeChange) state.onModeChange('swim');
+    },
     getMode: () => state.mode,
     getPosition: () => state.pos,
     getYaw: () => state.yaw,
@@ -358,7 +368,7 @@ window.OC = window.OC || {};
         }
 
         // Приливные и прибойные течения океана (сносят батискаф в Проходе и над Гребнем)
-        if (!reduced && state.pos.y < -0.25 && biomeRef && biomeRef.getCurrentAt) {
+        if (!reduced && biomeRef && biomeRef.getCurrentAt && (state.pos.y < -0.25 || biomeRef.noSurface)) {
           biomeRef.getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
           state.vel.addScaledVector(_curr, 1.45 * dt);
         } else {
@@ -372,7 +382,7 @@ window.OC = window.OC || {};
         clampPosition(state.pos);
       }
 
-      const bob = reduced || state.pos.y > -0.2 ? 0 : Math.sin(time * 0.65) * 0.14;
+      const bob = reduced || (!biomeRef.noSurface && state.pos.y > -0.2) ? 0 : Math.sin(time * 0.65) * 0.14;
       camera.position.set(state.pos.x, state.pos.y + bob, state.pos.z);
 
       _fwd.set(

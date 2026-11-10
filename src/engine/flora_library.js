@@ -793,6 +793,213 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 22. Гигантская калифорнийская ламинария (Macrocystis pyrifera) ---- */
+  function buildGiantKelp(hueShift, rng) {
+    const list = [];
+    const cHold = COL(0x5a4c28);
+    const cStipe = COL().setHSL(0.11 + hueShift, 0.56, 0.34);
+    const cBlade = COL().setHSL(0.12 + hueShift, 0.72, 0.44);
+    const cBladder = COL().setHSL(0.14 + hueShift, 0.78, 0.52);
+
+    // Конический ризоид-прикрепитель к гранитному дну
+    const hold = new T.ConeGeometry(0.85, 0.75, 7);
+    OC.geoPrep(hold);
+    OC.paint(hold, cHold);
+    OC.withSway(hold, () => 0);
+    hold.translate(0, 0.35, 0);
+    list.push(hold);
+
+    const tall = OC.lerp(13.5, 19.5, rng());
+    for (let sIdx = 0; sIdx < 3; sIdx++) {
+      const ph = (sIdx / 3) * Math.PI * 2 + rng();
+      const swayX = OC.lerp(0.55, 1.35, rng());
+      const pts = [];
+      for (let k = 0; k <= 7; k++) {
+        const t = k / 7;
+        const rad = 0.28 + Math.sin(t * Math.PI * 2.5 + ph) * 0.52 * t;
+        pts.push(new T.Vector3(Math.cos(ph + t * 2.2) * rad * swayX, 0.3 + t * tall, Math.sin(ph + t * 2.2) * rad * swayX));
+      }
+      const stipe = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 14, 0.065, 5, false);
+      OC.geoPrep(stipe);
+      OC.paint(stipe, cStipe);
+      OC.withSway(stipe, (x, y, z) => Math.pow(OC.clamp(y / tall, 0, 1), 1.35));
+      list.push(stipe);
+
+      // Поплавки-пневматоцисты и длинные гофрированные пластины вдоль стебля
+      const leafSteps = 7;
+      for (let li = 1; li <= leafSteps; li++) {
+        const lt = li / (leafSteps + 0.5);
+        const ly = 0.8 + lt * (tall - 1.2);
+        const ang = ph + lt * 4.5 + li * 1.1;
+        const lx = Math.cos(ph + lt * 2.2) * (0.28 + Math.sin(lt * Math.PI * 2.5 + ph) * 0.52 * lt) * swayX;
+        const lz = Math.sin(ph + lt * 2.2) * (0.28 + Math.sin(lt * Math.PI * 2.5 + ph) * 0.52 * lt) * swayX;
+        const sw = Math.pow(OC.clamp(ly / tall, 0, 1), 1.35);
+
+        const bulb = new T.SphereGeometry(0.11, 5, 4);
+        OC.geoPrep(bulb);
+        OC.paint(bulb, cBladder);
+        OC.withSway(bulb, () => sw);
+        OC.xform(bulb, { p: [lx + Math.cos(ang) * 0.14, ly, lz + Math.sin(ang) * 0.14] });
+        list.push(bulb);
+
+        const blLen = OC.lerp(1.4, 2.5, rng()) * (0.7 + 0.45 * lt);
+        const blade = new T.PlaneGeometry(0.46, blLen, 2, 4);
+        const bp = blade.attributes.position;
+        for (let k = 0; k < bp.count; k++) {
+          const bx = bp.getX(k), by = bp.getY(k) + blLen * 0.5;
+          const u = OC.clamp(by / blLen, 0, 1);
+          const w = Math.sin(Math.pow(u, 0.65) * Math.PI);
+          bp.setXYZ(k, bx * w, -u * 0.35 + Math.sin(u * 6.0) * 0.08, by);
+        }
+        OC.geoPrep(blade);
+        blade.computeVertexNormals();
+        OC.paint(blade, (x, y, z, c) => c.copy(cStipe).lerp(cBlade, OC.clamp(z / blLen, 0, 1)));
+        OC.withSway(blade, () => sw + 0.18);
+        OC.xform(blade, { r: [0.22, ang, 0], p: [lx, ly, lz] });
+        list.push(blade);
+      }
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 23. Фиолетовый морской ёж и охристая звезда Монтерея ---- */
+  function buildPurpleUrchin() {
+    const list = [];
+    const body = new T.SphereGeometry(0.42, 8, 6);
+    body.scale(1, 0.72, 1);
+    OC.geoPrep(body);
+    OC.paint(body, 0x4b1d6b);
+    OC.withSway(body, () => 0);
+    list.push(body);
+    for (let i = 0; i < 28; i++) {
+      const dir = OC.fibDir(i, 28);
+      const len = 0.42 + (i % 3) * 0.12;
+      const sp = new T.ConeGeometry(0.036, len, 4);
+      OC.geoPrep(sp);
+      sp.translate(0, len * 0.5, 0);
+      const q = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 1, 0), dir);
+      sp.applyMatrix4(new T.Matrix4().makeRotationFromQuaternion(q));
+      sp.translate(dir.x * 0.32, dir.y * 0.24, dir.z * 0.32);
+      OC.paint(sp, 0x7b33a8);
+      OC.withSway(sp, () => 0);
+      list.push(sp);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 24. Гидротермальная сульфидная труба («чёрный курильщик») ---- */
+  function buildVentChimney(rng) {
+    const list = [];
+    const ironDark = COL(0x1e2024);
+    const ironPyrite = COL(0x524634);
+    const rust = COL(0x8e421c);
+    const ember = COL(0xd96822);
+
+    const h = OC.lerp(5.2, 9.6, rng());
+    const segs = 5;
+    for (let i = 0; i < segs; i++) {
+      const t = i / segs;
+      const secH = h / segs * 1.25;
+      const rBot = OC.lerp(1.55, 0.52, t) * OC.lerp(0.85, 1.18, rng());
+      const rTop = rBot * 0.84;
+      const cyl = new T.CylinderGeometry(rTop, rBot, secH, 9, 2, true);
+      const p = cyl.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const vx = p.getX(k), vy = p.getY(k), vz = p.getZ(k);
+        const a = Math.atan2(vz, vx);
+        const fluting = 1 + 0.22 * Math.sin(a * 5 + i * 1.4) + 0.12 * Math.cos(vy * 2.5 + a * 3);
+        p.setXYZ(k, vx * fluting, vy, vz * fluting);
+      }
+      OC.geoPrep(cyl);
+      cyl.computeVertexNormals();
+      OC.paint(cyl, (x, y, z, c) => {
+        const band = Math.sin((y + t * h) * 2.4 + Math.atan2(z, x)) * 0.5 + 0.5;
+        c.copy(ironDark).lerp(ironPyrite, band * 0.65).lerp(rust, OC.smoothstep(0.45, 0.95, t) * 0.45);
+      });
+      OC.withSway(cyl, () => 0);
+      OC.xform(cyl, { p: [(rng() - 0.5) * 0.22 * (1 - t), t * h + secH * 0.45, (rng() - 0.5) * 0.22 * (1 - t)] });
+      list.push(cyl);
+
+      // Минеральный фланец (козырёк) на стыке этажей
+      if (i > 0 && i < segs - 1) {
+        const flange = new T.ConeGeometry(rBot * 1.38, 0.42, 8);
+        OC.geoPrep(flange);
+        OC.paint(flange, (x, y, z, c) => c.copy(ironPyrite).lerp(rust, 0.4));
+        OC.withSway(flange, () => 0);
+        OC.xform(flange, { p: [0, t * h, 0] });
+        list.push(flange);
+      }
+    }
+
+    // Жерло курильщика сверху (тёплый сернисто-пиритовый ободок)
+    const rim = new T.TorusGeometry(0.48, 0.16, 5, 9);
+    OC.geoPrep(rim);
+    OC.paint(rim, ember);
+    OC.withSway(rim, () => 0);
+    OC.xform(rim, { r: [Math.PI / 2, 0, 0], p: [0, h, 0] });
+    list.push(rim);
+
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 25. Гигантские трубчатые черви рифтии (Riftia pachyptila) ---- */
+  function buildRiftiaWorms(rng) {
+    const list = [];
+    const tubeA = COL(0xd9d5c8);
+    const tubeB = COL(0xa39f92);
+    const plumeA = COL(0xc91a2c);
+    const plumeB = COL(0xff4f45);
+
+    const n = 9 + Math.floor(rng() * 5);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + (rng() - 0.5) * 0.35;
+      const dist = i === 0 ? 0 : OC.lerp(0.25, 0.95, rng());
+      const h = OC.lerp(1.4, 2.85, rng());
+      const lean = OC.lerp(0.1, 0.42, rng());
+      const pts = [
+        new T.Vector3(Math.cos(a) * dist * 0.4, 0, Math.sin(a) * dist * 0.4),
+        new T.Vector3(Math.cos(a) * (dist + lean * 0.4), h * 0.55, Math.sin(a) * (dist + lean * 0.4)),
+        new T.Vector3(Math.cos(a) * (dist + lean), h, Math.sin(a) * (dist + lean))
+      ];
+      const tube = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 8, 0.085, 6, false);
+      OC.geoPrep(tube);
+      OC.paint(tube, (x, y, z, c) => {
+        const ring = Math.sin(y * 9.0) * 0.5 + 0.5;
+        c.copy(tubeB).lerp(tubeA, ring * 0.75);
+      });
+      OC.withSway(tube, (x, y, z) => OC.clamp(y / h, 0, 1) * 0.55);
+      list.push(tube);
+
+      const plume = new T.ConeGeometry(0.145, 0.44, 6);
+      OC.geoPrep(plume);
+      OC.paint(plume, (x, y, z, c) => c.copy(plumeA).lerp(plumeB, OC.clamp(y + 0.25, 0, 1)));
+      OC.withSway(plume, () => 0.75);
+      OC.xform(plume, { r: [Math.sin(a) * 0.2, 0, -Math.cos(a) * 0.2], p: [pts[2].x, pts[2].y + 0.16, pts[2].z] });
+      list.push(plume);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 26. Колония глубоководных мидий Bathymodiolus ---- */
+  function buildVentMussels(rng) {
+    const list = [];
+    const shellA = COL(0x7c5522);
+    const shellB = COL(0xc48b3b);
+    const count = 10 + Math.floor(rng() * 6);
+    for (let i = 0; i < count; i++) {
+      const a = rng() * Math.PI * 2;
+      const d = Math.sqrt(rng()) * 1.15;
+      const sh = new T.SphereGeometry(0.24, 6, 5);
+      sh.scale(1.65, 0.65, 0.92);
+      OC.geoPrep(sh);
+      OC.paint(sh, (x, y, z, c) => c.copy(shellA).lerp(shellB, OC.clamp(y + 0.25, 0, 1)));
+      OC.withSway(sh, () => 0);
+      OC.xform(sh, { r: [(rng() - 0.5) * 0.4, a, 0.25], p: [Math.cos(a) * d, 0.12 + rng() * 0.16, Math.sin(a) * d] });
+      list.push(sh);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   OC.FloraLibrary = {
     create() {
@@ -801,6 +1008,10 @@ window.OC = window.OC || {};
       const matRigid = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.85, metalness: 0.02, side: T.DoubleSide
       }), { causticStrength: 0.92, swayAmp: 0 });
+
+      const matChimney = OC.enhanceMaterial(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.72, metalness: 0.28, side: T.DoubleSide
+      }), { causticStrength: 0.0, swayAmp: 0 });
 
       const matClam = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.42, metalness: 0.12, side: T.DoubleSide
@@ -906,6 +1117,34 @@ window.OC = window.OC || {};
         shell_triton: {
           mat: matClam, maxInstances: 440, cullDist: 280,
           geos: [buildTritonShell()]
+        },
+        kelp_giant: {
+          mat: matPlant, maxInstances: 1100, cullDist: 640,
+          geos: [buildGiantKelp(0.0, rng), buildGiantKelp(0.03, rng)]
+        },
+        urchin_purple: {
+          mat: matRigid, maxInstances: 800, cullDist: 300,
+          geos: [buildPurpleUrchin()]
+        },
+        starfish_ochre: {
+          mat: matRigid, maxInstances: 520, cullDist: 300,
+          geos: [buildStarfish(5, 0.07, false), buildStarfish(5, 0.82, false)]
+        },
+        anemone_giant_green: {
+          mat: matSoft, maxInstances: 620, cullDist: 380,
+          geos: [buildAnemone(0.38, 0.28, rng), buildAnemone(0.44, 0.34, rng)]
+        },
+        vent_chimney: {
+          mat: matChimney, maxInstances: 320, cullDist: 620,
+          geos: [buildVentChimney(rng), buildVentChimney(rng)]
+        },
+        riftia_worms: {
+          mat: matSoft, maxInstances: 960, cullDist: 420,
+          geos: [buildRiftiaWorms(rng), buildRiftiaWorms(rng)]
+        },
+        vent_mussels: {
+          mat: matRigid, maxInstances: 880, cullDist: 360,
+          geos: [buildVentMussels(rng)]
         }
       };
 
