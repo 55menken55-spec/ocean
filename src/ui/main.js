@@ -11,6 +11,7 @@ window.OC = window.OC || {};
   const btnPanel = document.getElementById('btn-panel');
   const btnSub = document.getElementById('btn-sub');
   const btnSonar = document.getElementById('btn-sonar');
+  const btnHydro = document.getElementById('btn-hydro');
   const btnSound = document.getElementById('btn-sound');
   const btnFlash = document.getElementById('btn-flash');
   const btnAtlas = document.getElementById('btn-atlas');
@@ -48,6 +49,12 @@ window.OC = window.OC || {};
   const sonarReadout = document.getElementById('sonar-readout');
   const mapCovEl = document.getElementById('map-cov');
   const mapFogBtn = document.getElementById('map-fog-btn');
+  const hydroBox = document.getElementById('hydro-box');
+  const hydroCanvas = document.getElementById('hydro-canvas');
+  const hydroDb = document.getElementById('hydro-db');
+  const hydroSource = document.getElementById('hydro-source');
+  const hydroBand = document.getElementById('hydro-band');
+  const hydroListenBtn = document.getElementById('hydro-listen-btn');
 
   const teleZone = document.getElementById('tele-zone');
   const teleDepth = document.getElementById('tele-depth');
@@ -864,10 +871,9 @@ window.OC = window.OC || {};
       if (OC.Expedition && activeBiome) OC.Expedition.recordSonarPing(activeBiome.id, res);
       if (activeFauna.notifySonarPing) activeFauna.notifySonarPing(cam.position);
       OC.Minimap.triggerPing(cam.position.x, cam.position.z);
-      const scanRes = (OC.Sonar && activeBiome)
-        ? OC.Sonar.triggerScan(activeBiome, cam.position, OC.Navigation.getYaw(), 165)
-        : null;
+      const scanRes = (OC.Sonar && activeBiome) ? OC.Sonar.triggerScan(activeBiome, cam.position, OC.Navigation.getYaw(), 165) : null;
       if (mapCovEl && OC.Minimap.getCoverage) mapCovEl.textContent = OC.Minimap.getCoverage() + '%';
+      if (OC.Hydrophone && OC.Hydrophone.notifySonarPing) OC.Hydrophone.notifySonarPing();
       OC.sound.sonarPing(res.range, res.hit);
       if (sonarReadout) {
         sonarReadout.textContent = res.hit
@@ -882,6 +888,33 @@ window.OC = window.OC || {};
         ? ('Сонар: ' + res.range.toFixed(0) + ' м — ' + res.label)
         : ('3D-батиметрия: снято ' + (scanRes ? scanRes.pointCount : 1496) + ' точек рельефа'));
     };
+
+    const syncHydroMode = (on) => {
+      const next = (OC.Hydrophone && OC.Hydrophone.setOpen) ? OC.Hydrophone.setOpen(on) : !!on;
+      if (btnHydro) {
+        btnHydro.classList.toggle('on', next);
+        btnHydro.setAttribute('aria-pressed', next);
+      }
+      if (hydroBox) hydroBox.classList.toggle('hidden', !next);
+    };
+    syncHydroMode(false);
+    if (btnHydro) {
+      btnHydro.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = !(OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen());
+        syncHydroMode(next);
+        toast(next ? 'Гидрофон активен: живая FFT-спектрограмма (0–4 кГц)' : 'Гидрофон свёрнут');
+      });
+    }
+    if (hydroListenBtn) {
+      hydroListenBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (OC.Hydrophone && OC.Hydrophone.listenPeak) {
+          const lbl = OC.Hydrophone.listenPeak();
+          toast('Гидрофон: воспроизведение — ' + lbl);
+        }
+      });
+    }
 
     if (btnSonar) {
       btnSonar.addEventListener('click', (e) => {
@@ -1303,6 +1336,11 @@ window.OC = window.OC || {};
         toast(subMode ? 'Режим батискафа: эхолот и приборы включены' : 'Режим свободного дайвера');
       }
       if (e.code === 'KeyG') { fireSonarPing(); }
+      if (e.code === 'Backquote') {
+        const next = !(OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen());
+        syncHydroMode(next);
+        toast(next ? 'Гидрофон активен: живая FFT-спектрограмма (0–4 кГц)' : 'Гидрофон свёрнут');
+      }
       if (e.code === 'KeyV') {
         const next = OC.Navigation.getMode() === 'orbit' ? 'swim' : 'orbit';
         OC.Navigation.setMode(next);
@@ -1470,6 +1508,7 @@ window.OC = window.OC || {};
         OC.ROV.init(scene);
         OC.ROV.resetForBiome(activeBiome, sp);
       }
+      if (OC.Hydrophone) OC.Hydrophone.init(hydroCanvas);
 
       OC.Navigation.init(canvas, activeBiome, {
         onPick: (cx, cy) => pickAt(cx, cy, activeBiome),
@@ -1600,9 +1639,21 @@ window.OC = window.OC || {};
       const wState = OC.Weather ? OC.Weather.getState() : { stormMix: 0, droplets: 0 };
       updateLensDroplets(rawDt, camPos, wState, activeBiome);
 
+      if (OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen() && activeBiome) {
+        const hOffset = activeBiome.depthOffset || 0;
+        const hDepth = hOffset + (hOffset > 0 ? -craftPos.y : Math.max(0, -craftPos.y));
+        OC.Hydrophone.update(rawDt, activeBiome, activeFauna, craftPos, OC.Navigation.getYaw(), hDepth, wState.stormMix || 0);
+      }
+
       hudTimer += rawDt;
       if (hudTimer > 0.14 && activeBiome) {
         hudTimer = 0;
+        if (OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen()) {
+          const hs = OC.Hydrophone.getState();
+          if (hydroDb) hydroDb.textContent = hs.dbSPL.toFixed(1) + ' dB';
+          if (hydroSource) hydroSource.textContent = hs.dominantLabel;
+          if (hydroBand) hydroBand.textContent = hs.bandLabel;
+        }
         const biome = activeBiome;
         const zone = biome.getZoneAt(craftPos.x, craftPos.y, craftPos.z);
         const depthOffset = biome.depthOffset || 0;

@@ -6087,6 +6087,33 @@ window.OC = window.OC || {};
             }
           }
           return best;
+        },
+        /* Пассивный гидроакустический сканер всех звучащих существ и гео-источников вокруг */
+        scanAcousticSources(origin, maxRange) {
+          const maxR = maxRange || 260;
+          const out = [];
+          for (let i = 0; i < agents.length; i++) {
+            const tgt = agents[i];
+            const pos = tgt.getPosition ? tgt.getPosition() : null;
+            if (!pos) continue;
+            const dx = pos.x - origin.x;
+            const dy = pos.y - origin.y;
+            const dz = pos.z - origin.z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (dist > maxR) continue;
+            const enc = biome.encyclopedia && biome.encyclopedia[tgt.key];
+            const amp = Math.pow(1.0 - dist / maxR, 1.35);
+            const bearingDeg = ((Math.atan2(dx, -dz) * 180 / Math.PI) % 360 + 360) % 360;
+            out.push({
+              key: tgt.key,
+              label: enc ? enc[0] : (tgt.key || 'Акустический объект'),
+              dist,
+              bearingDeg,
+              amp
+            });
+          }
+          out.sort((a, b) => b.amp - a.amp);
+          return out.slice(0, 6);
         }
       };
     },

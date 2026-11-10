@@ -53,7 +53,17 @@ window.OC = window.OC || {};
       const ctx = new AC();
       const master = ctx.createGain();
       master.gain.value = 0;
-      master.connect(ctx.destination);
+      if (ctx.createAnalyser) {
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.72;
+        master.connect(analyser);
+        analyser.connect(ctx.destination);
+        S.analyser = analyser;
+        S.freqData = new Uint8Array(analyser.frequencyBinCount);
+      } else {
+        master.connect(ctx.destination);
+      }
       S.ctx = ctx; S.master = master;
 
       /* глубокий океанический гул */
@@ -991,6 +1001,14 @@ window.OC = window.OC || {};
     S.fade(1, 0.5);
     return !S.muted;
   };
+
+  S.getSpectrumData = function () {
+    if (!S.analyser || !S.freqData || S.muted || !S.ctx || S.ctx.state !== 'running') return null;
+    S.analyser.getByteFrequencyData(S.freqData);
+    return S.freqData;
+  };
+
+  S.getSampleRate = () => (S.ctx ? S.ctx.sampleRate : 44100);
 
   S.isOn = () => S.started && !S.muted;
   OC.sound = S;
