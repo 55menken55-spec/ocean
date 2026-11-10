@@ -6631,7 +6631,12 @@ window.OC = window.OC || {};
     const anchor = new T.Vector3(ax0, ay0, az0);
     const matArr = mesh.instanceMatrix.array;
     const isHostAnemone = !!opts.hostAnemone;
+    const isPrey = !isPredator && !isCleaner && !isHostAnemone && !isBiolum;
     let anemoneHostFloor = biome.getHeight(cx, cz);
+    let huntTimer = 0;
+    let huntCooldown = 8 + rng() * 14;
+    let huntTarget = null;
+    let schoolPanic = 0;
 
     // Если это семья рыб-клоунов, ставим реальную актинию-хозяина прямо на дно в центре территории
     if (isHostAnemone) {
@@ -6662,6 +6667,9 @@ window.OC = window.OC || {};
       key: opts.key || 'fish_blue',
       baseN,
       isPredator,
+      isPrey,
+      isHunting: () => huntTimer > 0,
+      getPanic: () => schoolPanic,
       center: anchor,
       getPosition: () => anchor,
       setQualityScale(mult) {
@@ -6687,7 +6695,11 @@ window.OC = window.OC || {};
         const camSpeed = ctx ? ctx.camSpeed : 0;
         const flashOn = ctx ? ctx.flashOn : false;
         const predators = ctx ? ctx.predators : null;
+        const preyCenters = ctx ? ctx.preyCenters : null;
+        const cleanClients = ctx ? ctx.cleanClients : null;
         const stations = ctx ? ctx.cleaningStations : null;
+        const sonarPulseAge = ctx ? ctx.sonarPulseAge : 99;
+        const sonarOrigin = ctx ? ctx.sonarOrigin : null;
 
         // Суточный ритм (день / сумерки / ночь)
         let activity = 1.0;
@@ -6705,6 +6717,30 @@ window.OC = window.OC || {};
           activity = OC.lerp(0.85, 1.05, dayW);
         }
 
+        // Охота хищных стай (барракуды) на ближайший косяк жертв
+        if (isPredator && preyCenters && preyCenters.length) {
+          if (huntTimer > 0) {
+            huntTimer -= stepDt;
+            activity *= 1.65;
+          } else {
+            huntCooldown -= stepDt;
+            if (huntCooldown <= 0) {
+              let bestD = 125;
+              let bestP = null;
+              for (let p = 0; p < preyCenters.length; p++) {
+                const pr = preyCenters[p];
+                const d = Math.hypot(pr.x - anchor.x, pr.z - anchor.z);
+                if (d < bestD) { bestD = d; bestP = pr; }
+              }
+              if (bestP) {
+                huntTarget = bestP;
+                huntTimer = 4.6;
+              }
+              huntCooldown = 15 + ((frameIdx * 7) % 10);
+            }
+          }
+        }
+
         t += stepDt;
         let hideInAnemone = false;
         if (isHostAnemone) {
@@ -6714,24 +6750,53 @@ window.OC = window.OC || {};
         const effRadius = isHostAnemone ? (hideInAnemone ? 1.2 : 4.2) : radius * radiusMult;
         ang += (speed * activity / Math.max(8, effRadius)) * angDir * stepDt;
         const r = effRadius + Math.sin(t * 0.16) * (effRadius * 0.18);
-        const ax = cx + Math.cos(ang) * r;
-        const az = cz + Math.sin(ang) * r;
+        let ax = cx + Math.cos(ang) * r;
+        let az = cz + Math.sin(ang) * r;
         const floorC = isHostAnemone ? anemoneHostFloor : biome.getHeight(ax, az);
-        const ay = isHostAnemone
+        let ay = isHostAnemone
           ? OC.clamp(hideInAnemone ? floorC + 0.95 : floorC + 2.25 + Math.sin(t * 0.6) * 0.55, floorC + 0.75, -1.2)
           : OC.clamp(yDepth + depthShift + Math.sin(t * 0.25) * yAmp, floorC + 2.2, -1.4);
+
+        // Наведение хищной стаи на жертву во время броска
+        if (huntTimer > 0 && huntTarget) {
+          ax = OC.lerp(ax, huntTarget.x, 0.72);
+          az = OC.lerp(az, huntTarget.z, 0.72);
+          ay = OC.lerp(ay, huntTarget.y, 0.72);
+        }
+
+        // Фототаксис светящихся видов к лучу прожектора в темноте / на глубине
+        if (isBiolum && flashOn && (dayW < 0.52 || biome.noSurface)) {
+          const dFlash = Math.hypot(camPos.x - ax, camPos.z - az);
+          if (dFlash < 44 && dFlash > 6) {
+            ax = OC.lerp(ax, camPos.x, 0.36);
+            az = OC.lerp(az, camPos.z, 0.36);
+            ay = OC.lerp(ay, Math.min(-1.8, camPos.y - 0.5), 0.36);
+          }
+        }
+
         anchor.set(ax, ay, az);
 
-        // Определяем, активна ли рядом станция чистки
+        // Определяем активную станцию чистки или присутствующую там мегафауну-клиента
         let stationPullX = 0, stationPullY = 0, stationPullZ = 0, hasStation = false;
-        if (isCleaner && stations && stations.length && dayW > 0.35) {
-          for (let s = 0; s < stations.length; s++) {
-            const st = stations[s];
-            const dS = Math.hypot(st.x - ax, st.z - az);
-            if (dS < st.radius * 2.2) {
-              stationPullX = st.x; stationPullY = st.y; stationPullZ = st.z;
-              hasStation = true;
-              break;
+        if (isCleaner && dayW > 0.32) {
+          if (cleanClients && cleanClients.length) {
+            for (let c = 0; c < cleanClients.length; c++) {
+              const cl = cleanClients[c];
+              if (Math.hypot(cl.x - ax, cl.z - az) < 42) {
+                stationPullX = cl.x; stationPullY = cl.y; stationPullZ = cl.z;
+                hasStation = true;
+                break;
+              }
+            }
+          }
+          if (!hasStation && stations && stations.length) {
+            for (let s = 0; s < stations.length; s++) {
+              const st = stations[s];
+              if (Math.hypot(st.x - ax, st.z - az) < st.radius * 2.2) {
+                stationPullX = st.x; stationPullY = st.y; stationPullZ = st.z;
+                hasStation = true;
+                break;
+              }
             }
           }
         }
@@ -6759,6 +6824,8 @@ window.OC = window.OC || {};
         const shyR2 = shyR * shyR;
         const minSpd = speed * 0.42 * activity;
         const maxSpdBase = speed * 1.38 * activity;
+        let maxPanicTick = 0;
+        const sonarWaveNear = sonarPulseAge < 2.2 && sonarOrigin && Math.hypot(anchor.x - sonarOrigin.x, anchor.z - sonarOrigin.z) < 115;
 
         for (let i = 0; i < n; i++) {
           const x = px[i], y = py[i], z = pz[i];
@@ -6811,19 +6878,21 @@ window.OC = window.OC || {};
 
             if (neigh > 0) {
               const invN = 1.0 / neigh;
-              fx += (aliX * invN - vxi) * 1.15;
-              fy += (aliY * invN - vyi) * 1.15;
-              fz += (aliZ * invN - vzi) * 1.15;
-              fx += (cohX * invN - x) * 0.65;
-              fy += (cohY * invN - y) * 0.55;
-              fz += (cohZ * invN - z) * 0.65;
+              const baitMult = schoolPanic > 0.35 ? 1.85 : 1.0;
+              fx += (aliX * invN - vxi) * 1.15 * baitMult;
+              fy += (aliY * invN - vyi) * 1.15 * baitMult;
+              fz += (aliZ * invN - vzi) * 1.15 * baitMult;
+              fx += (cohX * invN - x) * 0.65 * baitMult;
+              fy += (cohY * invN - y) * 0.55 * baitMult;
+              fz += (cohZ * invN - z) * 0.65 * baitMult;
             }
           }
 
-          // Притяжение к патрулируемой точке зоны / станции чистки
-          const hx = hasStation ? OC.lerp(anchor.x, stationPullX, 0.25) : anchor.x;
-          const hy = hasStation ? OC.lerp(anchor.y, stationPullY, 0.25) : anchor.y;
-          const hz = hasStation ? OC.lerp(anchor.z, stationPullZ, 0.25) : anchor.z;
+          // Притяжение к патрулируемой точке зоны / клиенту на станции чистки
+          const clientPull = hasStation && cleanClients && cleanClients.length ? 0.68 : 0.25;
+          const hx = hasStation ? OC.lerp(anchor.x, stationPullX, clientPull) : anchor.x;
+          const hy = hasStation ? OC.lerp(anchor.y, stationPullY, clientPull) : anchor.y;
+          const hz = hasStation ? OC.lerp(anchor.z, stationPullZ, clientPull) : anchor.z;
           const hdx = hx - x, hdy = hy - y, hdz = hz - z;
           const hd = Math.hypot(hdx, hdy, hdz);
           if (hd > spread * 0.65) {
@@ -6833,39 +6902,53 @@ window.OC = window.OC || {};
             fz += (hdz / hd) * pull;
           }
 
-          // Избегание хищников (акулы, барракуды, ночные крылатки)
+          // Избегание хищников (акулы, барракуды, ночные крылатки) -> волна паники + baitball
           if (fullBoids && !isPredator && predators && predators.length) {
             for (let p = 0; p < predators.length; p++) {
               const pr = predators[p];
               const pdx = x - pr.x, pdy = y - pr.y, pdz = z - pr.z;
               const pd2 = pdx * pdx + pdy * pdy + pdz * pdz;
-              if (pd2 < 576 && pd2 > 0.01) { // < 24 м
+              if (pd2 < 676 && pd2 > 0.01) { // < 26 м
                 const pd = Math.sqrt(pd2);
-                const flee = (24 - pd) * 2.1;
+                const flee = (26 - pd) * (pd < 11 ? 3.4 : 2.15);
                 fx += (pdx / pd) * flee;
-                fy += (pdy / pd) * flee * 0.6;
+                fy += (pdy / pd) * flee * 0.65;
                 fz += (pdz / pd) * flee;
-                panic = 1.65;
+                panic = Math.max(panic, pd < 11 ? 1.95 : 1.65);
+                maxPanicTick = Math.max(maxPanicTick, pd < 11 ? 1.0 : 0.65);
               }
             }
+          }
+
+          // Реакция на активный импульс сонара (G)
+          if (sonarWaveNear && sonarOrigin) {
+            const sdx = x - sonarOrigin.x, sdy = y - sonarOrigin.y, sdz = z - sonarOrigin.z;
+            const sd = Math.hypot(sdx, sdy, sdz) || 1;
+            const pulse = Math.max(0, 1 - sonarPulseAge / 2.2) * 14.0;
+            fx += (sdx / sd) * pulse;
+            fy += (sdy / sd) * pulse * 0.5;
+            fz += (sdz / sd) * pulse;
+            panic = Math.max(panic, 1.55);
+            maxPanicTick = Math.max(maxPanicTick, 0.5);
           }
 
           // Реакция на дайвера / батискаф и прожектор
           if (fullBoids) {
             const cdx = x - camPos.x, cdy = y - camPos.y, cdz = z - camPos.z;
             const cd2 = cdx * cdx + cdy * cdy + cdz * cdz;
-            if (shyness > 0 && cd2 < shyR2 && cd2 > 0.01) {
+            if (!isBiolum && shyness > 0 && cd2 < shyR2 && cd2 > 0.01) {
               const cd = Math.sqrt(cd2);
               const away = (shyR - cd) * 1.45 * shyness;
               fx += (cdx / cd) * away;
               fy += (cdy / cd) * away * 0.55;
               fz += (cdz / cd) * away;
               if (cd < 7) panic = Math.max(panic, 1.35);
-            } else if (curious > 0 && camSpeed < 4.5 && !flashOn && cd2 < 529 && cd2 > 28) {
+            } else if ((curious > 0 || (isBiolum && flashOn)) && camSpeed < 4.5 && cd2 < 529 && cd2 > 28) {
               const cd = Math.sqrt(cd2);
-              fx -= (cdx / cd) * curious * 1.4;
-              fy -= (cdy / cd) * curious * 0.7;
-              fz -= (cdz / cd) * curious * 1.4;
+              const pullC = isBiolum && flashOn ? 1.9 : curious;
+              fx -= (cdx / cd) * pullC * 1.4;
+              fy -= (cdy / cd) * pullC * 0.7;
+              fz -= (cdz / cd) * pullC * 1.4;
             }
           }
 
@@ -6936,6 +7019,7 @@ window.OC = window.OC || {};
           }
           matArr[off + 12] = nx; matArr[off + 13] = ny; matArr[off + 14] = nz; matArr[off + 15] = 1;
         }
+        schoolPanic = OC.lerp(schoolPanic, maxPanicTick, Math.min(1, stepDt * 3.5));
         mesh.instanceMatrix.needsUpdate = true;
       }
     };
@@ -7258,14 +7342,16 @@ window.OC = window.OC || {};
       update(dt, time, camPos, ctx) {
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 720) { group.visible = false; return; }
         group.visible = true;
-        // Манты притормаживают, проходя рядом со станциями чистки
+        // Манты притормаживают и зависают на станциях чистки
         let spd = opts.speed || 4.2;
+        let nearStation = false;
         const stations = ctx ? ctx.cleaningStations : null;
         if (stations) {
           for (let i = 0; i < stations.length; i++) {
             const st = stations[i];
-            if (Math.hypot(group.position.x - st.x, group.position.z - st.z) < st.radius * 1.4) {
-              spd *= 0.62;
+            if (Math.hypot(group.position.x - st.x, group.position.z - st.z) < st.radius * 1.65) {
+              spd *= 0.56;
+              nearStation = true;
               break;
             }
           }
@@ -7283,6 +7369,7 @@ window.OC = window.OC || {};
         a.set(ax, Math.min(-2.5, ay), az);
         b.set(bx, Math.min(-2.5, by), bz);
         group.position.copy(a);
+        if (nearStation && ctx && ctx.cleanClients) ctx.cleanClients.push(group.position);
         group.lookAt(b);
         group.rotateZ(Math.cos(ang) * 0.22 + Math.sin(t * 0.3) * 0.12);
         const flap = Math.sin(time * 1.25);
@@ -7355,13 +7442,26 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
-        const spd = OC.lerp(1.4, 2.2, dayW);
+        let spd = OC.lerp(1.4, 2.2, dayW);
+        let atClean = false;
+        const stations = ctx ? ctx.cleaningStations : null;
+        if (stations && dayW > 0.32) {
+          for (let i = 0; i < stations.length; i++) {
+            const st = stations[i];
+            if (Math.hypot(group.position.x - st.x, group.position.z - st.z) < st.radius * 1.45) {
+              spd *= 0.68;
+              atClean = true;
+              break;
+            }
+          }
+        }
         t += dt;
         breathPhase += dt;
         ang += (spd / opts.r) * dt;
         turtlePos(ang, t, breathPhase, a);
         turtlePos(ang + 0.14, t + 0.4, breathPhase + 0.4, b);
         group.position.copy(a);
+        if (atClean && ctx && ctx.cleanClients) ctx.cleanClients.push(group.position);
         group.lookAt(b);
         const stroke = Math.sin(time * 1.15);
         for (const f of flippers) {
@@ -7532,49 +7632,109 @@ window.OC = window.OC || {};
     const dir = Math.random() < 0.5 ? 1 : -1;
     const a = new T.Vector3(), b = new T.Vector3();
     let inspectBlend = 0;
+    let lungeTimer = 0;
+    let lungeCooldown = 12 + Math.random() * 12;
+    let lungeTarget = null;
+    let lungeBlend = 0;
 
     return {
       key: sKey,
       isActivePredator: !isWhale,
+      isHunting: () => lungeTimer > 0,
       getPosition: () => group.position,
       update(dt, time, camPos, ctx) {
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 760) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
         const flashOn = ctx ? ctx.flashOn : false;
+        const preyCenters = ctx ? ctx.preyCenters : null;
+        const stations = ctx ? ctx.cleaningStations : null;
+        const cleanClients = ctx ? ctx.cleanClients : null;
         const nightBoost = isWhale ? 1.0 : OC.lerp(1.22, 1.0, dayW);
         t += dt;
-        ang += ((opts.speed * nightBoost) / opts.r) * dir * dt;
 
-        // Патрулирование по вытянутой восьмёрке вдоль рельефа + любопытный осмотр дайвера на 18 м
+        // Охотничьи броски акул (рифовой, леопардовой, гренландской) на косяки рыб
+        if (!isWhale && preyCenters && preyCenters.length) {
+          if (lungeTimer > 0) {
+            lungeTimer -= dt;
+            if (lungeTarget && group.position.distanceTo(lungeTarget) < 6.5) {
+              lungeTimer = 0;
+              lungeCooldown = 18 + Math.random() * 12;
+            }
+          } else {
+            lungeCooldown -= dt;
+            if (lungeCooldown <= 0) {
+              let bestD = 138;
+              let bestP = null;
+              for (let p = 0; p < preyCenters.length; p++) {
+                const pr = preyCenters[p];
+                if (pr.y > -2.5) continue;
+                const d = Math.hypot(pr.x - group.position.x, pr.z - group.position.z);
+                if (d < bestD) { bestD = d; bestP = pr; }
+              }
+              if (bestP) {
+                lungeTarget = bestP;
+                lungeTimer = 4.6;
+              }
+              lungeCooldown = 16 + Math.random() * 12;
+            }
+          }
+        }
+        lungeBlend += ((lungeTimer > 0 && lungeTarget ? 1 : 0) - lungeBlend) * Math.min(1, dt * 2.4);
+
+        // Любопытный осмотр дайвера, если нет активного броска на косяк
         const dCam = Math.hypot(camPos.x - opts.cx, camPos.z - opts.cz);
-        const wantInspect = !isWhale && dCam < opts.r + 36 && camPos.y < -3.0;
+        const wantInspect = !isWhale && lungeTimer <= 0 && dCam < opts.r + 36 && camPos.y < -3.0;
         inspectBlend += ((wantInspect ? (flashOn ? 0.55 : 0.35) : 0) - inspectBlend) * Math.min(1, dt * 1.2);
 
-        const patCx = OC.lerp(opts.cx, camPos.x, inspectBlend);
-        const patCz = OC.lerp(opts.cz, camPos.z, inspectBlend);
-        const patR = OC.lerp(opts.r + Math.sin(t * 0.18) * 14, 18.0, inspectBlend);
+        // Станция чистки для рифовых акул
+        let atClean = false;
+        if (!isWhale && lungeTimer <= 0 && stations && dayW > 0.32) {
+          for (let i = 0; i < stations.length; i++) {
+            const st = stations[i];
+            if (Math.hypot(group.position.x - st.x, group.position.z - st.z) < st.radius * 1.35) {
+              atClean = true;
+              if (cleanClients) cleanClients.push(group.position);
+              break;
+            }
+          }
+        }
+
+        const speedMult = (lungeTimer > 0 ? 2.15 : (atClean ? 0.65 : 1.0)) * nightBoost;
+        ang += ((opts.speed * speedMult) / opts.r) * dir * dt;
+
+        let patCx = OC.lerp(opts.cx, camPos.x, inspectBlend);
+        let patCz = OC.lerp(opts.cz, camPos.z, inspectBlend);
+        let patR = OC.lerp(opts.r + Math.sin(t * 0.18) * 14, 18.0, inspectBlend);
+        if (lungeBlend > 0.02 && lungeTarget) {
+          patCx = OC.lerp(patCx, lungeTarget.x, lungeBlend);
+          patCz = OC.lerp(patCz, lungeTarget.z, lungeBlend);
+          patR = OC.lerp(patR, 5.5, lungeBlend);
+        }
 
         const ax = patCx + Math.cos(ang) * patR * 0.85;
-        const az = patCz + Math.sin(ang) * patR + Math.sin(ang * 2.0) * (isWhale ? 16 : 10) * (1 - inspectBlend);
+        const az = patCz + Math.sin(ang) * patR + Math.sin(ang * 2.0) * (isWhale ? 16 : 10) * (1 - Math.max(inspectBlend, lungeBlend));
         const bx = patCx + Math.cos(ang + 0.1 * dir) * patR * 0.85;
-        const bz = patCz + Math.sin(ang + 0.1 * dir) * patR + Math.sin((ang + 0.1 * dir) * 2.0) * (isWhale ? 16 : 10) * (1 - inspectBlend);
-        const baseY = OC.lerp(opts.y + Math.sin(t * 0.24) * 5, Math.min(-4, camPos.y + 1.5), inspectBlend);
+        const bz = patCz + Math.sin(ang + 0.1 * dir) * patR + Math.sin((ang + 0.1 * dir) * 2.0) * (isWhale ? 16 : 10) * (1 - Math.max(inspectBlend, lungeBlend));
+        let baseY = OC.lerp(opts.y + Math.sin(t * 0.24) * 5, Math.min(-4, camPos.y + 1.5), inspectBlend);
+        if (lungeBlend > 0.02 && lungeTarget) {
+          baseY = OC.lerp(baseY, lungeTarget.y, lungeBlend);
+        }
         const ay = Math.max(baseY, biome.getHeight(ax, az) + 4);
         const by = Math.max(baseY + Math.sin(t * 0.24 + 0.2) * 1.5, biome.getHeight(bx, bz) + 4);
         a.set(ax, Math.min(-2.5, ay), az);
         b.set(bx, Math.min(-2.5, by), bz);
         group.position.copy(a);
         group.lookAt(b);
-        const wagFreq = isWhale ? 1.5 : (isGreenland ? 1.65 : 3.2);
+        const wagFreq = (isWhale ? 1.5 : (isGreenland ? 1.65 : 3.2)) * (lungeTimer > 0 ? 1.75 : 1.0);
         tailPivot.rotation.y = Math.sin(time * wagFreq + t) * 0.34;
         group.rotation.y += Math.sin(time * wagFreq + t) * 0.04;
       }
     };
   }
 
-  /* ---------- Горбатый кит (Megaptera novaeangliae) ---------- */
-  function makeHumpbackWhale(scene, biome, opts) {
+  /* ---------- Горбатый кит (Megaptera novaeangliae) с эффектным выпрыгом (breach) ---------- */
+  function makeHumpbackWhale(scene, biome, opts, onSplash) {
     const len = 15.5;
     const group = new T.Group();
 
@@ -7620,36 +7780,60 @@ window.OC = window.OC || {};
     group.userData.key = 'whale_humpback';
     scene.add(group);
 
-    let ang = 0.6, t = 0;
+    let ang = 0.6, t = 28.0; // начинает ближе к циклу зрелищного выпрыгивания
+    let prevY = -12;
+    let breachingNow = false;
     const a = new T.Vector3(), b = new T.Vector3();
 
     function whalePos(angVal, tVal, out) {
-      // Длинный эллиптический ход вдоль внешней стены + периодическое всплытие на поверхность
+      // Длинный эллиптический ход вдоль внешней стены + периодическое всплытие и выпрыгивание (breach)
       const ax = opts.cx + Math.cos(angVal) * opts.r * 0.65;
       const az = opts.cz + Math.sin(angVal) * opts.r * 1.45;
       const cyc = tVal % 58.0;
-      let breathRise = 0;
-      if (cyc > 44.0 && cyc < 56.0) {
-        breathRise = Math.sin(((cyc - 44.0) / 12.0) * Math.PI);
-      }
       const deepY = Math.max(opts.y + Math.sin(tVal * 0.14) * 10, biome.getHeight(ax, az) + 12);
-      const y = Math.min(-3.4, OC.lerp(deepY, -3.8, breathRise));
+      let y;
+      if (cyc > 34.0 && cyc < 41.5) {
+        // Мощный разгон и выпрыг над водной гладью (+7.8 м)
+        const u = (cyc - 34.0) / 7.5;
+        const arc = Math.sin(u * Math.PI);
+        y = OC.lerp(Math.min(-18, deepY), 7.8, arc * arc * 0.85 + arc * 0.15);
+      } else if (cyc > 46.0 && cyc < 56.0) {
+        const breathRise = Math.sin(((cyc - 46.0) / 10.0) * Math.PI);
+        y = Math.min(-3.4, OC.lerp(deepY, -3.8, breathRise));
+      } else {
+        y = Math.min(-3.4, deepY);
+      }
       return out.set(ax, y, az);
     }
 
     return {
       key: 'whale_humpback',
+      isBreaching: () => breachingNow || group.position.y > -0.6,
       getPosition: () => group.position,
       update(dt, time, camPos) {
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 950) { group.visible = false; return; }
         group.visible = true;
         t += dt;
-        ang += (opts.speed / opts.r) * dt;
+        const cyc = t % 58.0;
+        const inBreach = cyc > 34.0 && cyc < 41.5;
+        ang += ((opts.speed * (inBreach ? 1.45 : 1.0)) / opts.r) * dt;
         whalePos(ang, t, a);
-        whalePos(ang + 0.08, t + 1.2, b);
+        whalePos(ang + 0.08, t + 1.0, b);
         group.position.copy(a);
         group.lookAt(b);
-        tailPivot.rotation.x = Math.sin(time * 0.95) * 0.34;
+        if (inBreach && a.y > -2.5) {
+          const u = OC.clamp((cyc - 34.0) / 7.5, 0, 1);
+          group.rotateZ(u * Math.PI * 1.45); // зрелищный разворот туловища в воздухе
+          breachingNow = a.y > 0.0;
+        } else {
+          breachingNow = false;
+        }
+        if (onSplash) {
+          if (prevY <= 0.15 && a.y > 0.15) onSplash(a, 0.7);
+          else if (prevY >= 0.15 && a.y < 0.15) onSplash(a, 1.0);
+        }
+        prevY = a.y;
+        tailPivot.rotation.x = Math.sin(time * (inBreach ? 1.85 : 0.95)) * 0.34;
       }
     };
   }
@@ -7759,7 +7943,7 @@ window.OC = window.OC || {};
   }
 
   /* ---------- Калифорнийский морской лев (Zalophus californianus) ---------- */
-  function makeSeaLion(scene, biome, opts) {
+  function makeSeaLion(scene, biome, opts, onSplash) {
     const group = new T.Group();
     const body = new T.SphereGeometry(1, 14, 10);
     body.scale(0.46, 0.44, 1.55);
@@ -7807,18 +7991,28 @@ window.OC = window.OC || {};
     group.userData.key = 'sea_lion';
     scene.add(group);
 
-    let ang = Math.random() * 6.28, t = Math.random() * 60;
+    let ang = Math.random() * 6.28, t = Math.random() * 60, prevY = -4;
+    let porpoising = false;
     const a = new T.Vector3(), b = new T.Vector3();
     function posAt(angV, tV, out) {
       const rr = opts.r + Math.sin(tV * 0.55) * 9;
       const x = opts.cx + Math.cos(angV) * rr;
       const z = opts.cz + Math.sin(angV) * rr + Math.sin(angV * 2.0) * 6;
-      const y = Math.max(opts.y + Math.sin(tV * 0.85) * 4.5, biome.getHeight(x, z) + 2.4);
-      return out.set(x, Math.min(-1.0, y), z);
+      const cyc = tV % 22.0;
+      let y;
+      if (!biome.noSurface && cyc > 16.5 && cyc < 20.5) {
+        const u = (cyc - 16.5) / 4.0;
+        const jump = Math.sin(u * Math.PI);
+        y = OC.lerp(Math.max(opts.y, biome.getHeight(x, z) + 2.4), 1.45, jump);
+      } else {
+        y = Math.min(-1.0, Math.max(opts.y + Math.sin(tV * 0.85) * 4.5, biome.getHeight(x, z) + 2.4));
+      }
+      return out.set(x, y, z);
     }
 
     return {
       key: 'sea_lion',
+      isPorpoising: () => porpoising,
       getPosition: () => group.position,
       update(dt, time, camPos) {
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
@@ -7829,6 +8023,12 @@ window.OC = window.OC || {};
         posAt(ang + 0.14, t + 0.25, b);
         group.position.copy(a);
         group.lookAt(b);
+        porpoising = a.y > -0.25;
+        if (onSplash) {
+          if (prevY <= 0.05 && a.y > 0.05) onSplash(a, 0.35);
+          else if (prevY >= 0.05 && a.y < 0.05) onSplash(a, 0.42);
+        }
+        prevY = a.y;
         group.rotateZ(Math.sin(t * 0.9) * 0.42); // игривые бочки между ламинарией
         const stroke = Math.sin(time * 4.2);
         for (const f of fFlips) f.m.rotation.z = f.s * stroke * 0.65;
@@ -8028,7 +8228,7 @@ window.OC = window.OC || {};
   }
 
   /* ---------- Белуха (Delphinapterus leucas) ---------- */
-  function makeBeluga(scene, biome, opts) {
+  function makeBeluga(scene, biome, opts, onSplash) {
     const len = opts.len || 4.8;
     const group = new T.Group();
 
@@ -8083,10 +8283,12 @@ window.OC = window.OC || {};
     group.userData.key = 'beluga';
     scene.add(group);
 
-    let ang = Math.random() * 6.28, t = Math.random() * 40;
+    let ang = Math.random() * 6.28, t = Math.random() * 40, prevY = -5;
+    let porpoising = false;
     const a = new T.Vector3(), b = new T.Vector3();
     return {
       key: 'beluga',
+      isPorpoising: () => porpoising,
       getPosition: () => group.position,
       update(dt, time, camPos) {
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 640) { group.visible = false; return; }
@@ -8097,13 +8299,29 @@ window.OC = window.OC || {};
         const az = opts.cz + Math.sin(ang) * opts.r + Math.sin(ang * 2.0) * 14;
         const bx = opts.cx + Math.cos(ang + 0.1) * opts.r;
         const bz = opts.cz + Math.sin(ang + 0.1) * opts.r + Math.sin((ang + 0.1) * 2.0) * 14;
-        const breath = Math.sin(t * 0.28) > 0.78 ? 1.0 : 0.0;
-        const ay = Math.max(OC.lerp(opts.y + Math.sin(t * 0.45) * 3.0, -1.6, breath), biome.getHeight(ax, az) + 2.8);
-        const by = Math.max(OC.lerp(opts.y + Math.sin(t * 0.45 + 0.15) * 3.0, -1.6, breath), biome.getHeight(bx, bz) + 2.8);
-        a.set(ax, Math.min(-1.5, ay), az);
-        b.set(bx, Math.min(-1.5, by), bz);
+        const cyc = t % 28.0;
+        const clearIce = !biome.getIceMaskAt || biome.getIceMaskAt(ax, az) < 0.35;
+        let ay, by;
+        if (clearIce && cyc > 22.0 && cyc < 25.2) {
+          const u = (cyc - 22.0) / 3.2;
+          const arc = Math.sin(u * Math.PI);
+          ay = OC.lerp(-2.5, 1.35, arc);
+          by = OC.lerp(-2.5, 1.35, Math.sin(Math.min(1, u + 0.08) * Math.PI));
+        } else {
+          const breath = Math.sin(t * 0.28) > 0.78 ? 1.0 : 0.0;
+          ay = Math.min(-1.5, Math.max(OC.lerp(opts.y + Math.sin(t * 0.45) * 3.0, -1.6, breath), biome.getHeight(ax, az) + 2.8));
+          by = Math.min(-1.5, Math.max(OC.lerp(opts.y + Math.sin(t * 0.45 + 0.15) * 3.0, -1.6, breath), biome.getHeight(bx, bz) + 2.8));
+        }
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
         group.position.copy(a);
         group.lookAt(b);
+        porpoising = a.y > -0.25;
+        if (onSplash) {
+          if (prevY <= 0.05 && a.y > 0.05) onSplash(a, 0.38);
+          else if (prevY >= 0.05 && a.y < 0.05) onSplash(a, 0.46);
+        }
+        prevY = a.y;
         tailPivot.rotation.x = Math.sin(time * 2.4 + t) * 0.36;
       }
     };
@@ -8510,6 +8728,118 @@ window.OC = window.OC || {};
     return mat;
   }
 
+  /* ---------- Система водных брызг (выпрыги китов, белух и морских львов) ---------- */
+  function makeSplashSystem(scene, texHard) {
+    const N = 420;
+    const pos = new Float32Array(N * 3);
+    const vel = new Float32Array(N * 3);
+    const life = new Float32Array(N);
+    const maxLife = new Float32Array(N);
+    const alpha = new Float32Array(N);
+    const size = new Float32Array(N);
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aAlpha', new T.BufferAttribute(alpha, 1));
+    geo.setAttribute('aSize', new T.BufferAttribute(size, 1));
+
+    const mat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, fog: true,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        { uTex: { value: texHard }, uScale: { value: 1.0 } }
+      ]),
+      vertexShader: `
+        attribute float aAlpha, aSize;
+        uniform float uScale;
+        varying float vAlpha;
+        #include <fog_pars_vertex>
+        void main(){
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aAlpha > 0.01 ? aSize * uScale * (185.0 / max(1.0, -mvPosition.z)) : 0.0;
+          gl_Position = projectionMatrix * mvPosition;
+          vAlpha = aAlpha;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        varying float vAlpha;
+        #include <fog_pars_fragment>
+        void main(){
+          vec4 tx = texture2D(uTex, gl_PointCoord);
+          if (tx.a < 0.03 || vAlpha < 0.01) discard;
+          gl_FragColor = vec4(vec3(0.92, 0.98, 1.0), tx.a * vAlpha);
+          #include <fog_fragment>
+        }`
+    });
+
+    const pts = new T.Points(geo, mat);
+    pts.frustumCulled = false;
+    pts.visible = false;
+    pts.userData.key = 'bubbles';
+    scene.add(pts);
+
+    let cursor = 0;
+    let activeCount = 0;
+
+    return {
+      emit(worldPos, intensity) {
+        const k = Math.max(18, Math.min(84, Math.round(74 * (intensity || 0.7))));
+        const spread = 1.6 + 2.8 * (intensity || 0.7);
+        for (let m = 0; m < k; m++) {
+          const i = cursor;
+          cursor = (cursor + 1) % N;
+          const a = Math.random() * 6.28318;
+          const r = Math.random() * spread;
+          const i3 = i * 3;
+          pos[i3]     = worldPos.x + Math.cos(a) * r;
+          pos[i3 + 1] = 0.15 + Math.random() * 0.45;
+          pos[i3 + 2] = worldPos.z + Math.sin(a) * r;
+          const outV = (1.5 + Math.random() * 5.2) * (0.55 + (intensity || 0.7) * 0.65);
+          vel[i3]     = Math.cos(a) * outV;
+          vel[i3 + 1] = (4.8 + Math.random() * 9.5) * (0.5 + (intensity || 0.7) * 0.65);
+          vel[i3 + 2] = Math.sin(a) * outV;
+          const ml = 0.85 + Math.random() * 0.95;
+          life[i] = ml;
+          maxLife[i] = ml;
+          alpha[i] = 0.9;
+          size[i] = (0.7 + Math.random() * 1.15) * (0.65 + (intensity || 0.7) * 0.65);
+        }
+        activeCount = N;
+        pts.visible = true;
+      },
+      update(dt) {
+        if (activeCount === 0) return;
+        let alive = 0;
+        for (let i = 0; i < N; i++) {
+          const l = life[i];
+          if (l <= 0) { alpha[i] = 0; continue; }
+          const nl = l - dt;
+          life[i] = nl;
+          if (nl <= 0) { alpha[i] = 0; continue; }
+          const i3 = i * 3;
+          vel[i3 + 1] -= 13.8 * dt;
+          pos[i3]     += vel[i3] * dt;
+          pos[i3 + 1] += vel[i3 + 1] * dt;
+          pos[i3 + 2] += vel[i3 + 2] * dt;
+          if (pos[i3 + 1] < -0.2) {
+            life[i] = 0;
+            alpha[i] = 0;
+            continue;
+          }
+          const frac = nl / maxLife[i];
+          alpha[i] = Math.min(0.92, frac * 1.35);
+          alive++;
+        }
+        geo.attributes.position.needsUpdate = true;
+        geo.attributes.aAlpha.needsUpdate = true;
+        geo.attributes.aSize.needsUpdate = true;
+        if (alive === 0) { activeCount = 0; pts.visible = false; }
+      },
+      setScale(s) { mat.uniforms.uScale.value = s; },
+      getActiveCount: () => activeCount
+    };
+  }
+
   /* ---------- Биолюминесцентный след ночесветок (Noctiluca) при движении дайвера ---------- */
   function makeBiolumTrail(scene, tex, noSurface) {
     const N = 180;
@@ -8649,7 +8979,20 @@ window.OC = window.OC || {};
       const agents = [];
       const schools = [];
       const predatorAgents = [];
+      const preySchools = [];
       const sonarTargets = [];
+      const texSoft = OC.circleTexture(64, false);
+      const texHard = OC.circleTexture(64, true);
+      const splashSystem = makeSplashSystem(faunaGroup, texHard);
+      const lastCamPos = new T.Vector3();
+
+      function emitSplash(worldPos, intensity) {
+        splashSystem.emit(worldPos, intensity);
+        if (intensity >= 0.6 && OC.sound && OC.sound.whaleSplash) {
+          const d = Math.hypot(worldPos.x - lastCamPos.x, worldPos.y - lastCamPos.y, worldPos.z - lastCamPos.z);
+          if (d < 360) OC.sound.whaleSplash(d);
+        }
+      }
 
       const schoolsSpec = plan.schools || [];
       for (const s of schoolsSpec) {
@@ -8657,6 +9000,7 @@ window.OC = window.OC || {};
         schools.push(sch);
         agents.push(sch);
         if (sch.isPredator) predatorAgents.push(sch);
+        else if (sch.isPrey) preySchools.push(sch);
         sonarTargets.push(sch);
       }
 
@@ -8690,9 +9034,11 @@ window.OC = window.OC || {};
         sonarTargets.push(a);
       }
 
+      const surfaceJumpers = [];
       for (const sl of (plan.seaLions || [])) {
-        const a = makeSeaLion(faunaGroup, biome, sl);
+        const a = makeSeaLion(faunaGroup, biome, sl, emitSplash);
         agents.push(a);
+        surfaceJumpers.push(a);
         sonarTargets.push(a);
       }
 
@@ -8714,10 +9060,14 @@ window.OC = window.OC || {};
         sonarTargets.push(a);
       }
 
+      const huntingAgents = [];
       for (const sh of (plan.sharks || [])) {
         const a = makeShark(faunaGroup, biome, sh);
         agents.push(a);
-        if (a.isActivePredator) predatorAgents.push(a);
+        if (a.isActivePredator) {
+          predatorAgents.push(a);
+          huntingAgents.push(a);
+        }
         sonarTargets.push(a);
       }
 
@@ -8739,8 +9089,9 @@ window.OC = window.OC || {};
       }
 
       for (const bl of (plan.belugas || [])) {
-        const a = makeBeluga(faunaGroup, biome, bl);
+        const a = makeBeluga(faunaGroup, biome, bl, emitSplash);
         agents.push(a);
+        surfaceJumpers.push(a);
         sonarTargets.push(a);
       }
 
@@ -8759,17 +9110,17 @@ window.OC = window.OC || {};
       }
 
       let whale = null;
+      const whalesList = [];
       for (const wh of (plan.whales || [])) {
-        const w = makeHumpbackWhale(faunaGroup, biome, wh);
+        const w = makeHumpbackWhale(faunaGroup, biome, wh, emitSplash);
         if (!whale) whale = w;
+        whalesList.push(w);
         agents.push(w);
         sonarTargets.push(w);
       }
 
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
-      const texSoft = OC.circleTexture(64, false);
-      const texHard = OC.circleTexture(64, true);
       for (const vp of (plan.ventPlumes || [])) {
         agents.push(makeVentPlume(faunaGroup, biome, texSoft, vp));
       }
@@ -8783,12 +9134,19 @@ window.OC = window.OC || {};
       const dayPlanktonCol = new T.Color(0x9be8ff);
 
       const predatorsBuf = [];
+      const preyCentersBuf = [];
+      const cleanClientsBuf = [];
+      const sonarOrigin = new T.Vector3();
       const updateCtx = {
         dayW: 1.0,
         camSpeed: 0,
         flashOn: false,
         predators: predatorsBuf,
+        preyCenters: preyCentersBuf,
+        cleanClients: cleanClientsBuf,
         cleaningStations: plan.cleaningStations || [],
+        sonarOrigin,
+        sonarPulseAge: 99,
         frameIdx: 0
       };
       const _scanSample = new T.Vector3();
@@ -8807,7 +9165,8 @@ window.OC = window.OC || {};
         schoolFish: 0,
         schools: schools.length,
         big: agents.length - schools.length,
-        whale
+        whale,
+        activeEvent: null
       };
       refreshFaunaCounts();
 
@@ -8822,16 +9181,24 @@ window.OC = window.OC || {};
       return {
         agents,
         whale,
+        notifySonarPing(origin) {
+          if (origin) sonarOrigin.copy(origin);
+          updateCtx.sonarPulseAge = 0;
+        },
+        getSplashCount: () => splashSystem.getActiveCount(),
+        getActiveEvent: () => OC.faunaInfo.activeEvent,
         update(dt, time, camPos, camSpeed, flashOn) {
           const pal = OC.getPalette();
           const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
 
+          lastCamPos.copy(camPos);
           updateCtx.dayW = dayW;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;
           updateCtx.frameIdx++;
+          if (updateCtx.sonarPulseAge < 90) updateCtx.sonarPulseAge += dt;
 
-          // Собираем активных хищников в переиспользуемый массив (без мусорных аллокаций)
+          // Собираем активных хищников и косяки жертв в переиспользуемые массивы (без GC аллокаций)
           predatorsBuf.length = 0;
           for (let i = 0; i < predatorAgents.length; i++) {
             const pa = predatorAgents[i];
@@ -8840,6 +9207,15 @@ window.OC = window.OC || {};
             if (p) predatorsBuf.push(p);
           }
 
+          preyCentersBuf.length = 0;
+          for (let i = 0; i < preySchools.length; i++) {
+            const ps = preySchools[i];
+            if (ps.mesh && ps.mesh.visible && ps.center) preyCentersBuf.push(ps.center);
+          }
+
+          // Клиенты станций чистки заполняются агентами в этом кадре (если остаются рядом — используются в следующем)
+          cleanClientsBuf.length = 0;
+
           if (fishMatBiolum) {
             fishMatBiolum.emissiveIntensity = OC.lerp(1.45, 0.25, dayW) + (pal.bioGlow || 0) * 0.45;
           }
@@ -8847,6 +9223,47 @@ window.OC = window.OC || {};
           for (let i = 0; i < agents.length; i++) {
             agents[i].update(dt, time, camPos, updateCtx);
           }
+          splashSystem.update(dt);
+
+          // Классифицируем ключевое природное событие в радиусе видимости
+          let ev = null;
+          for (let i = 0; i < whalesList.length; i++) {
+            if (whalesList[i].isBreaching()) {
+              const p = whalesList[i].getPosition();
+              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 420) { ev = 'breach'; break; }
+            }
+          }
+          if (!ev) {
+            for (let i = 0; i < huntingAgents.length; i++) {
+              if (huntingAgents[i].isHunting()) {
+                const p = huntingAgents[i].getPosition();
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 160) { ev = 'hunt'; break; }
+              }
+            }
+          }
+          if (!ev) {
+            for (let i = 0; i < preySchools.length; i++) {
+              if (preySchools[i].getPanic && preySchools[i].getPanic() > 0.5) {
+                const p = preySchools[i].center;
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 140) { ev = 'baitball'; break; }
+              }
+            }
+          }
+          if (!ev && cleanClientsBuf.length > 0) {
+            for (let i = 0; i < cleanClientsBuf.length; i++) {
+              const p = cleanClientsBuf[i];
+              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 120) { ev = 'cleaning'; break; }
+            }
+          }
+          if (!ev) {
+            for (let i = 0; i < surfaceJumpers.length; i++) {
+              if (surfaceJumpers[i].isPorpoising()) {
+                const p = surfaceJumpers[i].getPosition();
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 190) { ev = 'porpoising'; break; }
+              }
+            }
+          }
+          OC.faunaInfo.activeEvent = ev;
 
           bubbleMat.uniforms.uCamPos.value.copy(camPos);
           planktonMat.uniforms.uCamPos.value.copy(camPos);
@@ -8874,6 +9291,7 @@ window.OC = window.OC || {};
           planktonMat.uniforms.uScale.value = s;
           snowMat.uniforms.uScale.value = s;
           biolumTrail.setScale(s);
+          splashSystem.setScale(s);
         },
         /* Активное сонарное сканирование вперёд по курсу (рельеф + крупная фауна/стаи) */
         scanForward(origin, dir, maxRange) {
@@ -9747,6 +10165,32 @@ window.OC = window.OC || {};
     } catch (e) {
       return false;
     }
+  };
+
+  S.whaleSplash = function (dist) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const atten = OC.clamp(1.0 - (dist || 40) / 360, 0.15, 1.0);
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 1.9;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.65));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(920, now);
+    lp.frequency.exponentialRampToValueAtTime(160, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.18 * atten, now + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(g); g.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.05);
   };
 
   S.toggle = function () {
@@ -11598,6 +12042,15 @@ window.OC = window.OC || {};
   let lastEvalCtx = { zoneId: '', depthM: 0, currentKnots: 0, dayW: 1.0, flashOn: false };
   let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
   let lensDirty = false;
+  let lastEcoEvent = null;
+  let lastEcoEventAt = -100;
+  const ECO_LABELS = {
+    breach: 'Наблюдение: горбатый кит выпрыгивает из воды!',
+    hunt: 'Наблюдение: хищник атакует косяк!',
+    baitball: 'Наблюдение: стая сжалась в защитный шар (baitball)!',
+    cleaning: 'Наблюдение: симбиоз — чистильщики обслуживают гиганта',
+    porpoising: 'Наблюдение: морские млекопитающие выпрыгивают у поверхности'
+  };
   const _fwd = new T.Vector3();
   const _zeroNdc = new T.Vector2(0, 0);
 
@@ -11957,6 +12410,7 @@ window.OC = window.OC || {};
         hit: res.hit
       };
       if (OC.Expedition && activeBiome) OC.Expedition.recordSonarPing(activeBiome.id, res);
+      if (activeFauna.notifySonarPing) activeFauna.notifySonarPing(cam.position);
       OC.Minimap.triggerPing(cam.position.x, cam.position.z);
       OC.sound.sonarPing(res.range, res.hit);
       if (sonarReadout) {
@@ -12669,6 +13123,15 @@ window.OC = window.OC || {};
 
         OC.sound.update(depthM, zone.id, dayW, biome.id, wState.stormMix || 0);
         OC.Minimap.update(camPos, OC.Navigation.getYaw());
+
+        const ecoEv = OC.faunaInfo ? OC.faunaInfo.activeEvent : null;
+        if (ecoEv && (ecoEv !== lastEcoEvent || OC.uTime.value - lastEcoEventAt > 20) && OC.uTime.value > 5) {
+          lastEcoEvent = ecoEv;
+          lastEcoEventAt = OC.uTime.value;
+          if (ECO_LABELS[ecoEv]) toast(ECO_LABELS[ecoEv]);
+        } else if (!ecoEv) {
+          lastEcoEvent = null;
+        }
 
         if (subMode) {
           const flHere = biome.getHeight(camPos.x, camPos.z);

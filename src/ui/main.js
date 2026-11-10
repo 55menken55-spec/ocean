@@ -102,6 +102,15 @@ window.OC = window.OC || {};
   let lastEvalCtx = { zoneId: '', depthM: 0, currentKnots: 0, dayW: 1.0, flashOn: false };
   let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
   let lensDirty = false;
+  let lastEcoEvent = null;
+  let lastEcoEventAt = -100;
+  const ECO_LABELS = {
+    breach: 'Наблюдение: горбатый кит выпрыгивает из воды!',
+    hunt: 'Наблюдение: хищник атакует косяк!',
+    baitball: 'Наблюдение: стая сжалась в защитный шар (baitball)!',
+    cleaning: 'Наблюдение: симбиоз — чистильщики обслуживают гиганта',
+    porpoising: 'Наблюдение: морские млекопитающие выпрыгивают у поверхности'
+  };
   const _fwd = new T.Vector3();
   const _zeroNdc = new T.Vector2(0, 0);
 
@@ -461,6 +470,7 @@ window.OC = window.OC || {};
         hit: res.hit
       };
       if (OC.Expedition && activeBiome) OC.Expedition.recordSonarPing(activeBiome.id, res);
+      if (activeFauna.notifySonarPing) activeFauna.notifySonarPing(cam.position);
       OC.Minimap.triggerPing(cam.position.x, cam.position.z);
       OC.sound.sonarPing(res.range, res.hit);
       if (sonarReadout) {
@@ -1173,6 +1183,15 @@ window.OC = window.OC || {};
 
         OC.sound.update(depthM, zone.id, dayW, biome.id, wState.stormMix || 0);
         OC.Minimap.update(camPos, OC.Navigation.getYaw());
+
+        const ecoEv = OC.faunaInfo ? OC.faunaInfo.activeEvent : null;
+        if (ecoEv && (ecoEv !== lastEcoEvent || OC.uTime.value - lastEcoEventAt > 20) && OC.uTime.value > 5) {
+          lastEcoEvent = ecoEv;
+          lastEcoEventAt = OC.uTime.value;
+          if (ECO_LABELS[ecoEv]) toast(ECO_LABELS[ecoEv]);
+        } else if (!ecoEv) {
+          lastEcoEvent = null;
+        }
 
         if (subMode) {
           const flHere = biome.getHeight(camPos.x, camPos.z);

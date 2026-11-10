@@ -621,6 +621,32 @@ window.OC = window.OC || {};
     }
   };
 
+  S.whaleSplash = function (dist) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const atten = OC.clamp(1.0 - (dist || 40) / 360, 0.15, 1.0);
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 1.9;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.65));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(920, now);
+    lp.frequency.exponentialRampToValueAtTime(160, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.18 * atten, now + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(g); g.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.05);
+  };
+
   S.toggle = function () {
     if (!S.ctx) { const ok = S.ensure(); if (!ok) return false; return true; }
     S.muted = !S.muted;
