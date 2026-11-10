@@ -534,7 +534,7 @@ assert(memStorage.has('oc_ocean_expedition_v1'), 'Expedition state must persist 
 OC.Expedition.saveQuality('high');
 assert.equal(OC.Expedition.getSavedQuality(), 'high');
 OC.Expedition.setPhotoMode(false);
-console.log('   Direction 1 Explorer Gameplay & Arctic Missions (Photo camera, 16 missions, waypoints & localStorage persistence) verified.');
+console.log(`   Direction 1 Explorer Gameplay & Missions (Photo camera, ${OC.Expedition.MISSIONS.length} total missions, waypoints & localStorage persistence) verified.`);
 
 // I) Verify Direction 3 (Weather, Volumetric 3D God Rays, Storm Waves, Snell Dispersion, Noctiluca Trail & Thunder)
 assert(OC.Weather && typeof OC.Weather.setMode === 'function', 'OC.Weather module required');
@@ -1434,4 +1434,11 @@ assert(OC.faunaInfo.siltTurbidity > 0.25 && OC.faunaInfo.siltCount > 0, `Benthic
 
 OC.Biomes.setActive('great_barrier_reef');
 console.log(`   Gas Hydrates, Thermocline Schlieren Haze (${OC.faunaInfo.thermoDepthM} m) & Benthic Silt-Out Plumes (${OC.faunaInfo.siltCount} particles, turb=${OC.faunaInfo.siltTurbidity}) verified.`);
+
+// Z) Verify Step 10 (Interactive Onboarding, Quick-Help Modal ?/F1 & Perf Telemetry Export)
+const tplSrc = fs.readFileSync(path.join(ROOT, 'template.html'), 'utf8');
+const mainUiSrc = fs.readFileSync(path.join(ROOT, 'src/ui/main.js'), 'utf8');
+assert(tplSrc.includes('id="btn-help"') && tplSrc.includes('id="help-modal"') && tplSrc.includes('id="hero-tour-btn"') && tplSrc.includes('id="hero-help-btn"'), 'template.html must contain interactive onboarding & Quick-Help modal markup');
+assert(mainUiSrc.includes("e.code === 'Slash'") && mainUiSrc.includes('oc_onboard_seen_v1') && mainUiSrc.includes('OC.getPerfStats'), 'src/ui/main.js must wire Slash/F1 help modal, persisted onboarding dismissal & OC.getPerfStats');
+console.log('   Interactive Onboarding Bar, Quick-Help Shortcut Modal (? / F1) & Frame Telemetry verified.');
 console.log('ALL VERIFICATION CHECKS PASSED!');

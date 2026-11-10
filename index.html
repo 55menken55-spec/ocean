@@ -105,13 +105,32 @@
 
   /* ---------- Подсказка снизу ---------- */
   .hero{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:20;text-align:center;
-    pointer-events:none;transition:opacity 1.2s, transform 1.2s}
-  .hero.fade{opacity:0;transform:translateX(-50%) translateY(14px)}
-  .hero .pill{display:inline-flex;gap:16px;align-items:center;padding:10px 20px;border-radius:999px;
-    background:rgba(6,24,38,.58);border:1px solid var(--glass-brd);backdrop-filter:blur(12px);
-    font-size:11.5px;color:#d6effa}
+    pointer-events:auto;transition:opacity .7s, transform .7s}
+  .hero.fade{opacity:0;transform:translateX(-50%) translateY(14px);pointer-events:none}
+  .hero .pill{display:inline-flex;gap:12px;align-items:center;padding:8px 14px;border-radius:999px;
+    background:rgba(6,24,38,.74);border:1px solid var(--glass-brd);backdrop-filter:blur(12px);
+    font-size:11.5px;color:#d6effa;box-shadow:0 12px 32px rgba(0,0,0,.4)}
   .hero .pill span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
   .hero .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+  .hero-action{padding:4px 10px;border-radius:999px;border:1px solid rgba(88,224,255,.42);
+    background:rgba(88,224,255,.16);color:#e9fbff;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap;transition:.16s}
+  .hero-action:hover{background:rgba(88,224,255,.28);border-color:rgba(88,224,255,.78)}
+  .hero-close{width:22px;height:22px;border-radius:50%;border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.06);color:var(--dim);font-size:11px;cursor:pointer;line-height:1}
+  .hero-close:hover{color:#fff;border-color:rgba(255,255,255,.4)}
+
+  /* ---------- Модальное окно быстрой справки ---------- */
+  .help-box{max-width:860px}
+  .help-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;padding:12px 2px 4px;overflow-y:auto}
+  .help-cat{padding:12px 13px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(130,222,255,.16)}
+  .help-cat h4{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+  .help-item{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:6px 8px;margin-bottom:4px;
+    border-radius:9px;border:1px solid transparent;background:rgba(255,255,255,.025);color:var(--ink);font:inherit;
+    font-size:11.5px;text-align:left;cursor:pointer;transition:.15s}
+  .help-item:last-child{margin-bottom:0}
+  .help-item:hover{background:rgba(88,224,255,.12);border-color:rgba(88,224,255,.36)}
+  .help-item kbd{padding:2px 6px;border-radius:6px;background:rgba(88,224,255,.14);border:1px solid rgba(88,224,255,.32);
+    color:var(--accent);font:600 10px inherit;white-space:nowrap}
 
   /* ---------- Статус ---------- */
   .status{position:fixed;right:20px;bottom:14px;z-index:20;font-size:10.5px;letter-spacing:.14em;
@@ -472,6 +491,7 @@
   <button class="icon-btn" id="btn-flash" title="Прожектор батискафа (F)" aria-label="Прожектор">&#128294;</button>
   <button class="icon-btn" id="btn-sound" title="Звук океана (M)" aria-label="Звук">&#9835;</button>
   <button class="icon-btn" id="btn-atlas" title="Атлас рифа (K)" aria-label="Атлас">&#128214;</button>
+  <button class="icon-btn" id="btn-help" title="Подсказки и горячие клавиши (?)" aria-label="Справка">?</button>
   <button class="icon-btn" id="btn-panel" title="Настройки и зоны (H скрыть)" aria-label="Меню">&#9776;</button>
 </div>
 
@@ -755,12 +775,13 @@
   </div>
 </div>
 
-<div class="hero hud-hideable">
+<div class="hero hud-hideable" id="hero-onboard">
   <div class="pill">
-    <span><i class="dot"></i>WASD — плыть</span>
-    <span><i class="dot"></i>Space / C — глубина</span>
-    <span><i class="dot"></i>Мышь — обзор</span>
-    <span><i class="dot"></i>Клик — узнать существо</span>
+    <span><i class="dot"></i>WASD — плыть · Мышь — обзор</span>
+    <span><i class="dot"></i>G — 3D-сонар · ~ — гидрофон · Z — проба</span>
+    <button class="hero-action" id="hero-tour-btn" title="Начать сюжетный гид-тур по 9 океанам (T)">&#9654; Гид-тур (T)</button>
+    <button class="hero-action" id="hero-help-btn" title="Все команды и быстрый старт (?)">? Клавиши</button>
+    <button class="hero-close" id="hero-dismiss" title="Скрыть панель подсказок" aria-label="Скрыть подсказку">&#10005;</button>
   </div>
 </div>
 
@@ -876,6 +897,45 @@
       <button class="btn" id="journal-clear-wp" style="margin-left:auto">Снять маяк</button>
     </div>
     <div class="atlas-grid" id="journal-grid"></div>
+  </div>
+</div>
+
+<div class="atlas-modal hidden" id="help-modal" role="dialog" aria-modal="true" aria-label="Быстрый старт и горячие клавиши">
+  <div class="atlas-box help-box">
+    <div class="atlas-header">
+      <div><h3>Справочник пилота и горячие клавиши</h3><small>Нажмите на команду, чтобы активировать прибор прямо сейчас</small></div>
+      <button class="btn" id="help-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="help-grid">
+      <div class="help-cat">
+        <h4>Движение и обзор</h4>
+        <button class="help-item" data-help-act="reset"><span>Свободное плавание · Вернуться к старту</span><kbd>WASD / R</kbd></button>
+        <button class="help-item" data-help-act="orbit"><span>Всплыть / глубже · Сменить камеру (Орбита)</span><kbd>Space/C · V</kbd></button>
+        <button class="help-item" data-help-act="sub"><span>Режим батискафа (HUD и клиренс)</span><kbd>B</kbd></button>
+        <button class="help-item" data-help-act="flash"><span>Прожектор батискафа (фототаксис рыб)</span><kbd>F</kbd></button>
+      </div>
+      <div class="help-cat">
+        <h4>Сонар, Гидрофон и Карта</h4>
+        <button class="help-item" data-help-act="sonar"><span>3D-мультилучевой сонар и Туман войны</span><kbd>G</kbd></button>
+        <button class="help-item" data-help-act="hydro"><span>Гидрофон · Живая FFT-спектрограмма</span><kbd>~ / Ё</kbd></button>
+        <button class="help-item" data-help-act="globe"><span>3D-глобус планеты (9 экспедиций)</span><kbd>O</kbd></button>
+        <button class="help-item" data-help-act="weather"><span>Переключить погоду (Штиль/Зыбь/Шторм)</span><kbd>U</kbd></button>
+      </div>
+      <div class="help-cat">
+        <h4>Наука, ROV и Эколаб</h4>
+        <button class="help-item" data-help-act="sample"><span>Взять научную пробу манипулятором ROV</span><kbd>Z</kbd></button>
+        <button class="help-item" data-help-act="rov"><span>Приборы ROV и профиль CTD-зонда</span><kbd>I / Y</kbd></button>
+        <button class="help-item" data-help-act="lab"><span>Эколаб: стресс-тест и обесцвечивание</span><kbd>L</kbd></button>
+        <button class="help-item" data-help-act="journal"><span>Журнал, 36 миссий и Музей проб</span><kbd>J</kbd></button>
+      </div>
+      <div class="help-cat">
+        <h4>Атлас, Камера и Гид</h4>
+        <button class="help-item" data-help-act="tour"><span>Сюжетный гид-тур (47 этапов)</span><kbd>T</kbd></button>
+        <button class="help-item" data-help-act="atlas"><span>3D-Атлас: 205 видов и биоакустика</span><kbd>K</kbd></button>
+        <button class="help-item" data-help-act="cam"><span>Подводная фотокамера · Кино (2.39:1)</span><kbd>P / N</kbd></button>
+        <button class="help-item" data-help-act="sound"><span>Звук океана · Скрыть/показать HUD</span><kbd>M / H</kbd></button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -24206,6 +24266,12 @@ window.OC = window.OC || {};
   const rovSamplesEl = document.getElementById('rov-samples');
   const rovBtnMuseum = document.getElementById('rov-btn-museum');
   const rovSamplesClear = document.getElementById('rov-samples-clear');
+  const btnHelp = document.getElementById('btn-help');
+  const helpModal = document.getElementById('help-modal');
+  const helpClose = document.getElementById('help-close');
+  const heroTourBtn = document.getElementById('hero-tour-btn');
+  const heroHelpBtn = document.getElementById('hero-help-btn');
+  const heroDismiss = document.getElementById('hero-dismiss');
   const _rovScanOut = { kind: 'water', species: '', label: '', latin: '', dist: 0, colorHex: 0x58e0ff };
 
   let autoCycle = true;
@@ -25516,7 +25582,8 @@ window.OC = window.OC || {};
         }
       }
       if (e.code === 'Escape') {
-        if (OC.Globe && OC.Globe.isOpen()) OC.Globe.close();
+        if (helpModal && !helpModal.classList.contains('hidden')) toggleHelp(true);
+        else if (OC.Globe && OC.Globe.isOpen()) OC.Globe.close();
         else if (OC.Atlas.isOpen()) OC.Atlas.toggle();
         else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
         else if (labPanel && !labPanel.classList.contains('closed')) toggleLab(true);
@@ -25525,11 +25592,85 @@ window.OC = window.OC || {};
         else if (OC.Navigation.getMode() === 'cinema') OC.Navigation.setMode('swim');
         else if (OC.Navigation.getMode() === 'tour') OC.Navigation.stopTour();
       }
+      if (e.code === 'Slash' || e.code === 'F1') {
+        e.preventDefault();
+        toggleHelp(false);
+      }
     });
 
+    function toggleHelp(forceClose) {
+      if (!helpModal) return;
+      const shouldOpen = !forceClose && helpModal.classList.contains('hidden');
+      helpModal.classList.toggle('hidden', !shouldOpen);
+      if (btnHelp) btnHelp.classList.toggle('on', shouldOpen);
+      if (shouldOpen && hero) hero.classList.add('fade');
+    }
+    if (btnHelp) btnHelp.addEventListener('click', () => toggleHelp(false));
+    if (helpClose) helpClose.addEventListener('click', () => toggleHelp(true));
+    if (helpModal) {
+      helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal) toggleHelp(true);
+      });
+      helpModal.querySelectorAll('[data-help-act]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const act = btn.getAttribute('data-help-act');
+          toggleHelp(true);
+          if (act === 'reset') { OC.Navigation.resetToSpawn(); toast('Возврат к старту'); }
+          else if (act === 'orbit') { OC.Navigation.setMode(OC.Navigation.getMode() === 'orbit' ? 'swim' : 'orbit'); }
+          else if (act === 'sub') syncSubMode(!subMode);
+          else if (act === 'flash') { const on = OC.toggleFlashlight(); syncFlash(on); }
+          else if (act === 'sonar') fireSonarPing();
+          else if (act === 'hydro') syncHydroMode(!(OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen()));
+          else if (act === 'globe' && OC.Globe) OC.Globe.toggle();
+          else if (act === 'weather' && OC.Weather && !(activeBiome && activeBiome.noSurface)) {
+            OC.Weather.cycleMode(); syncWeatherButtons(); toast('Погода: ' + OC.Weather.getLabel(activeBiome));
+          }
+          else if (act === 'sample') triggerSampleGrab();
+          else if (act === 'rov') { if (toggleRovPanel(false)) triggerCtdCast(); }
+          else if (act === 'lab') toggleLab(false);
+          else if (act === 'journal') toggleJournal(false);
+          else if (act === 'tour') OC.Navigation.setMode(OC.Navigation.getMode() === 'tour' ? 'swim' : 'tour');
+          else if (act === 'atlas') OC.Atlas.toggle();
+          else if (act === 'cam') syncCamMode(!(OC.Expedition && OC.Expedition.isPhotoMode()));
+          else if (act === 'sound') {
+            const on = OC.sound.toggle();
+            if (btnSound) btnSound.classList.toggle('on', on);
+          }
+        });
+      });
+    }
+
+    function dismissHero(persist) {
+      if (hero) hero.classList.add('fade');
+      if (persist) {
+        try { localStorage.setItem('oc_onboard_seen_v1', '1'); } catch (e) {}
+      }
+    }
     if (hero) {
-      hero.addEventListener('click', () => hero.classList.add('fade'));
-      setTimeout(() => hero.classList.add('fade'), 13000);
+      let seenBefore = false;
+      try { seenBefore = localStorage.getItem('oc_onboard_seen_v1') === '1'; } catch (e) {}
+      if (seenBefore) hero.classList.add('fade');
+      else setTimeout(() => dismissHero(true), 18000);
+    }
+    if (heroTourBtn) {
+      heroTourBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dismissHero(true);
+        OC.Navigation.setMode('tour');
+      });
+    }
+    if (heroHelpBtn) {
+      heroHelpBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dismissHero(true);
+        toggleHelp(false);
+      });
+    }
+    if (heroDismiss) {
+      heroDismiss.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dismissHero(true);
+      });
     }
 
     return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };

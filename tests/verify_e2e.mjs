@@ -206,7 +206,7 @@ function makeStubEl(id, tag = 'DIV') {
   const attrs = new Map();
   const listeners = {};
   if (id === 'lab-panel' || id === 'rov-panel') cls.add('closed');
-  if (id === 'sub-hud' || id === 'sonar-box' || id === 'hydro-box' || id === 'cam-hud' || id === 'atlas-modal' || id === 'globe-modal' || id === 'journal-modal') {
+  if (id === 'sub-hud' || id === 'sonar-box' || id === 'hydro-box' || id === 'cam-hud' || id === 'atlas-modal' || id === 'globe-modal' || id === 'journal-modal' || id === 'help-modal') {
     cls.add('hidden');
   }
   const el = {
@@ -373,10 +373,16 @@ assert.equal(pageErrors.length, 0, `Boot logged errors:\n${pageErrors.join('\n')
 assert(rafQueue.length > 0, 'runLoop must schedule requestAnimationFrame after boot()');
 stepFrames(28);
 
-for (const code of ['KeyB', 'KeyF', 'KeyG', 'Backquote', 'KeyZ', 'KeyI', 'KeyI', 'KeyL', 'KeyL', 'KeyO', 'Escape', 'KeyK', 'Escape', 'KeyP', 'Enter', 'KeyP', 'KeyN', 'KeyX', 'KeyN']) {
+for (const code of ['KeyB', 'KeyF', 'KeyG', 'Backquote', 'KeyZ', 'KeyI', 'KeyI', 'KeyL', 'KeyL', 'KeyO', 'Escape', 'KeyK', 'Escape', 'KeyP', 'Enter', 'KeyP', 'KeyN', 'KeyX', 'KeyN', 'Slash', 'Escape']) {
   pressKey(code);
   stepFrames(4);
 }
+assert(getEl('help-modal').classList.contains('hidden'), 'Escape must close Quick-Help modal after Slash toggled it');
+pressKey('Slash');
+stepFrames(2);
+assert(!getEl('help-modal').classList.contains('hidden'), 'Slash (?) must open Quick-Help modal');
+pressKey('Escape');
+stepFrames(2);
 assert(OC.Hydrophone.isOpen(), 'Backquote (~) hotkey must open Hydrophone FFT');
 assert(OC.Minimap.getCoverage() > 0, 'Minimap Fog of War must show initial charted %');
 
