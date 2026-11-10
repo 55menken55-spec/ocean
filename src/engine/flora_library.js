@@ -1402,6 +1402,10 @@ window.OC = window.OC || {};
         vertexColors: true, roughness: 0.85, metalness: 0.02, side: T.DoubleSide
       }), { causticStrength: 0.92, swayAmp: 0 });
 
+      const matCoralRigid = enh(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.85, metalness: 0.02, side: T.DoubleSide
+      }), { causticStrength: 0.92, swayAmp: 0, bleachable: true });
+
       const matChimney = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.72, metalness: 0.28, side: T.DoubleSide
       }), { causticStrength: 0.0, swayAmp: 0 });
@@ -1413,6 +1417,10 @@ window.OC = window.OC || {};
       const matSoft = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.82, metalness: 0.0, side: T.DoubleSide
       }), { causticStrength: 0.78, swayAmp: 0.42 });
+
+      const matCoralSoft = enh(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.82, metalness: 0.0, side: T.DoubleSide
+      }), { causticStrength: 0.78, swayAmp: 0.42, bleachable: true });
 
       const matPlant = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.78, metalness: 0.0, side: T.DoubleSide
@@ -1433,35 +1441,35 @@ window.OC = window.OC || {};
 
       const prototypes = {
         coral_staghorn: {
-          mat: matRigid, maxInstances: 2000, cullDist: 580,
+          mat: matCoralRigid, maxInstances: 2000, cullDist: 580,
           geos: [buildStaghorn(0.94, rng), buildStaghorn(0.55, rng), buildStaghorn(0.76, rng), buildStaghorn(0.11, rng)]
         },
         coral_table: {
-          mat: matRigid, maxInstances: 1700, cullDist: 640,
+          mat: matCoralRigid, maxInstances: 1700, cullDist: 640,
           geos: [buildTable(0.09, rng), buildTable(0.44, rng), buildTable(0.86, rng), buildTable(0.96, rng)]
         },
         coral_brain: {
-          mat: matRigid, maxInstances: 1600, cullDist: 560,
+          mat: matCoralRigid, maxInstances: 1600, cullDist: 560,
           geos: [buildBrain(0.14, rng), buildBrain(0.24, rng), buildBrain(0.95, rng)]
         },
         coral_bommie: {
-          mat: matRigid, maxInstances: 520, cullDist: 700,
+          mat: matCoralRigid, maxInstances: 520, cullDist: 700,
           geos: [buildBommie(0.11, rng), buildBommie(0.48, rng)]
         },
         coral_plate: {
-          mat: matRigid, maxInstances: 1050, cullDist: 580,
+          mat: matCoralRigid, maxInstances: 1050, cullDist: 580,
           geos: [buildPlateCoral(0.08, rng), buildPlateCoral(0.82, rng)]
         },
         coral_crust: {
-          mat: matRigid, maxInstances: 2400, cullDist: 340,
+          mat: matCoralRigid, maxInstances: 2400, cullDist: 340,
           geos: [buildCrustCoral(0.94, rng), buildCrustCoral(0.09, rng), buildCrustCoral(0.76, rng)]
         },
         coral_fan: {
-          mat: matSoft, maxInstances: 980, cullDist: 540,
+          mat: matCoralSoft, maxInstances: 980, cullDist: 540,
           geos: [buildSeaFan(0.88, rng), buildSeaFan(0.02, rng), buildSeaFan(0.74, rng)]
         },
         coral_soft: {
-          mat: matSoft, maxInstances: 980, cullDist: 500,
+          mat: matCoralSoft, maxInstances: 980, cullDist: 500,
           geos: [buildSoftCoral(0.91, rng), buildSoftCoral(0.78, rng), buildSoftCoral(0.07, rng)]
         },
         coral_black: {
@@ -1481,7 +1489,7 @@ window.OC = window.OC || {};
           geos: [buildBarrelSponge(0.06, rng), buildBarrelSponge(0.84, rng)]
         },
         anemone: {
-          mat: matSoft, maxInstances: 900, cullDist: 440,
+          mat: matCoralSoft, maxInstances: 900, cullDist: 440,
           geos: [buildAnemone(0.74, 0.92, rng), buildAnemone(0.58, 0.50, rng), buildAnemone(0.95, 0.08, rng)]
         },
         giant_clam: {
@@ -1533,7 +1541,7 @@ window.OC = window.OC || {};
           geos: [buildStarfish(5, 0.07, false), buildStarfish(5, 0.82, false)]
         },
         anemone_giant_green: {
-          mat: matSoft, maxInstances: 620, cullDist: 380,
+          mat: matCoralSoft, maxInstances: 620, cullDist: 380,
           geos: [buildAnemone(0.38, 0.28, rng), buildAnemone(0.44, 0.34, rng)]
         },
         vent_chimney: {
@@ -1565,11 +1573,11 @@ window.OC = window.OC || {};
           geos: [buildArcticKelp(rng), buildArcticKelp(rng)]
         },
         coral_arctic_soft: {
-          mat: matSoft, maxInstances: 900, cullDist: 360,
+          mat: matCoralSoft, maxInstances: 900, cullDist: 360,
           geos: [buildArcticSoftCoral(rng), buildArcticSoftCoral(rng)]
         },
         anemone_arctic: {
-          mat: matSoft, maxInstances: 620, cullDist: 360,
+          mat: matCoralSoft, maxInstances: 620, cullDist: 360,
           geos: [buildAnemone(0.02, 0.96, rng), buildAnemone(0.06, 0.92, rng)]
         },
         sargassum: {
@@ -1581,11 +1589,11 @@ window.OC = window.OC || {};
           geos: [buildWreckAnchor(rng), buildWreckAnchor(rng)]
         },
         coral_whip: {
-          mat: matSoft, maxInstances: 900, cullDist: 460,
+          mat: matCoralSoft, maxInstances: 900, cullDist: 460,
           geos: [buildWhipCoral(0.07, rng), buildWhipCoral(0.13, rng)]
         },
         seafan_gold: {
-          mat: matSoft, maxInstances: 700, cullDist: 520,
+          mat: matCoralSoft, maxInstances: 700, cullDist: 520,
           geos: [buildGoldSeaFan(rng), buildGoldSeaFan(rng)]
         }
       };

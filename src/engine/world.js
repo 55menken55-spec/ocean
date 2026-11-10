@@ -58,30 +58,34 @@ window.OC = window.OC || {};
   const _worldCurr = new T.Vector3();
   const _stormCol = new T.Color(0x283848);
   const _lightCol = new T.Color(0xdcf0ff);
+  const _algalCol = new T.Color(0x1f5a38);
 
   const causticU = {
     uTime: OC.uTime,
     uCausticTex: { value: null },
     uCausticI: { value: 0.9 },
     uCausticCol: { value: new T.Color(0xc2f5ff) },
-    uCurrent: { value: new T.Vector2(0, 0) }
+    uCurrent: { value: new T.Vector2(0, 0) },
+    uBleach: { value: 0.0 }
   };
   OC.causticUniforms = causticU;
 
-  /* ---------- Улучшение стандартных материалов (каустика, колыхание, анимация рыб) ---------- */
+  /* ---------- Улучшение стандартных материалов (каустика, колыхание, анимация рыб, обесцвечивание) ---------- */
   OC.enhanceMaterial = function (mat, opts) {
     opts = opts || {};
     const cStr = opts.causticStrength !== undefined ? opts.causticStrength : 0.85;
     const swayAmp = opts.swayAmp || 0;
     const isTerrain = !!opts.isTerrain;
     const fishSwim = !!opts.fishSwim;
+    const bleachable = !!opts.bleachable;
 
     const cacheKey = [
       'oc',
       cStr.toFixed(2),
       swayAmp.toFixed(2),
       isTerrain ? 'T' : '0',
-      fishSwim ? 'F' : '0'
+      fishSwim ? 'F' : '0',
+      bleachable ? 'B' : '0'
     ].join('_');
 
     mat.onBeforeCompile = (sh) => {
@@ -90,8 +94,10 @@ window.OC = window.OC || {};
       sh.uniforms.uCausticI = causticU.uCausticI;
       sh.uniforms.uCausticCol = causticU.uCausticCol;
       sh.uniforms.uCurrent = causticU.uCurrent;
+      sh.uniforms.uBleach = causticU.uBleach;
       sh.uniforms.uCStrength = { value: cStr };
       sh.uniforms.uSwayAmp = { value: swayAmp };
+      sh.uniforms.uBleachable = { value: bleachable ? 1.0 : 0.0 };
 
       let vPre = 'varying vec3 vCWorld;\nvarying vec3 vCNormal;\nuniform float uTime;\n';
       if (swayAmp > 0) vPre += 'attribute float aSway;\nuniform float uSwayAmp;\nuniform vec2 uCurrent;\n';
@@ -154,6 +160,19 @@ window.OC = window.OC || {};
         uniform float uCausticI;
         uniform float uCStrength;
         uniform vec3 uCausticCol;
+        uniform float uBleach;
+        uniform float uBleachable;
+      `;
+
+      const fColor = `
+        #include <color_fragment>
+        if (uBleachable > 0.5 && uBleach > 0.002) {
+          float bLum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+          vec3 skel = vec3(0.96, 0.94, 0.89) * mix(0.68, 0.98, clamp(bLum * 1.65, 0.0, 1.0));
+          float patchN = sin(vCWorld.x * 0.42 + vCWorld.z * 0.37) * 0.12 + cos(vCWorld.y * 1.8) * 0.06;
+          float bMix = clamp(uBleach * 1.24 - (0.08 + patchN), 0.0, 1.0);
+          diffuseColor.rgb = mix(diffuseColor.rgb, skel, bMix);
+        }
       `;
 
       let fInject = '';
@@ -197,7 +216,9 @@ window.OC = window.OC || {};
       }
       fInject += '\n#include <fog_fragment>';
 
-      sh.fragmentShader = fPre + sh.fragmentShader.replace('#include <fog_fragment>', fInject);
+      sh.fragmentShader = fPre + sh.fragmentShader
+        .replace('#include <color_fragment>', fColor)
+        .replace('#include <fog_fragment>', fInject);
     };
     mat.customProgramCacheKey = () => cacheKey;
     return mat;
@@ -780,6 +801,8 @@ window.OC = window.OC || {};
 
     const biome = OC.Biomes.getActive();
     const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
+    const lab = OC.EcoLab ? OC.EcoLab.update(dt, biome, pal.dayW) : null;
+    causticU.uBleach.value = lab ? lab.bleaching : 0.0;
     const opt = biome
       ? biome.getOpticalProfile(camPos.x, camPos.y, camPos.z, pal.dayW)
       : {
@@ -802,11 +825,20 @@ window.OC = window.OC || {};
     if (wState.lightning > 0.02) {
       pal.fogCol.lerp(_lightCol, wState.lightning * (opt.aboveWater ? 0.45 : 0.16));
     }
-    pal.fogDen = opt.fogDensity + shallowTurb * 0.0045;
+    const algalMix = (lab && lab.algalTint > 0.01 && !opt.aboveWater && !(biome && biome.noSurface)) ? lab.algalTint * 0.48 : 0.0;
+    if (algalMix > 0.001) {
+      pal.fogCol.lerp(_algalCol, algalMix);
+    }
+    const labFogDelta = lab ? ((biome && biome.noSurface ? lab.turbidityAdd * 0.35 : lab.turbidityAdd) - lab.clarityBonus) : 0;
+    pal.fogDen = Math.max(0.0015, opt.fogDensity + shallowTurb * 0.0045 + labFogDelta);
     pal.bioGlow = opt.bioGlow;
-    pal.sunAtten = opt.sunAtten * stormAtten;
+    const bloomAtten = lab ? (1.0 - lab.algalTint * 0.42) : 1.0;
+    pal.sunAtten = opt.sunAtten * stormAtten * bloomAtten;
     if (opt.aboveTop) pal.aboveTop.copy(opt.aboveTop);
     if (opt.waterColor) pal.water.copy(opt.waterColor);
+    if (lab && lab.algalTint > 0.01 && !(biome && biome.noSurface)) {
+      pal.water.lerp(_algalCol, lab.algalTint * 0.38);
+    }
     if (opt.skyTop) pal.skyTop.copy(opt.skyTop);
     if (opt.skyBot) pal.skyBot.copy(opt.skyBot);
     if (opt.aboveHoriz) pal.aboveHoriz.copy(opt.aboveHoriz);
@@ -864,7 +896,9 @@ window.OC = window.OC || {};
     const aboveMix = (biome && biome.noSurface) ? 0.0 : OC.smoothstep(-0.3, 0.5, camPos.y);
     skyMat.uniforms.uTop.value.copy(pal.skyTop);
     skyMat.uniforms.uMid.value.copy(opt.fogColor);
+    if (algalMix > 0.001) skyMat.uniforms.uMid.value.lerp(_algalCol, algalMix);
     skyMat.uniforms.uBot.value.copy(pal.skyBot);
+    if (algalMix > 0.001) skyMat.uniforms.uBot.value.lerp(_algalCol, algalMix * 0.5);
     skyMat.uniforms.uAboveTop.value.copy(pal.aboveTop);
     skyMat.uniforms.uAboveHoriz.value.copy(pal.aboveHoriz);
     skyMat.uniforms.uSunCol.value.copy(pal.sunCol);
@@ -878,11 +912,12 @@ window.OC = window.OC || {};
     skySphere.position.copy(camPos);
 
     /* каустика и наклон кораллов по течению */
-    causticU.uCausticI.value = opt.causticStrength * (1.0 - wState.stormMix * 0.55);
+    causticU.uCausticI.value = opt.causticStrength * (1.0 - wState.stormMix * 0.55) * bloomAtten;
     causticU.uCausticCol.value.copy(pal.water);
     if (biome && biome.getCurrentAt) {
       biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
-      causticU.uCurrent.value.set(_worldCurr.x, _worldCurr.z);
+      const currMult = lab ? lab.currentMult : 1.0;
+      causticU.uCurrent.value.set(_worldCurr.x * currMult, _worldCurr.z * currMult);
     }
 
     /* поверхность воды привязана к сетке вокруг камеры, чтобы волны не «плыли» */
@@ -903,7 +938,7 @@ window.OC = window.OC || {};
     }
 
     /* объёмные 3D-конусы солнечных лучей, ориентированные по преломлённому солнцу */
-    const rayIntensity = opt.rayStrength * (1.0 - wState.stormMix * 0.65);
+    const rayIntensity = opt.rayStrength * (1.0 - wState.stormMix * 0.65) * bloomAtten;
     raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && rayIntensity > 0.02;
     if (raysGroup.visible) {
       raysGroup.position.x = Math.round(camPos.x / 60) * 60;

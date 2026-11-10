@@ -587,6 +587,8 @@ window.OC = window.OC || {};
         // Приливные и прибойные течения океана (сносят батискаф в Проходе и над Гребнем)
         if (!reduced && biomeRef && biomeRef.getCurrentAt && (state.pos.y < -0.25 || biomeRef.noSurface)) {
           biomeRef.getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
+          const flowMult = OC.EcoLab ? OC.EcoLab.getState().currentMult : 1.0;
+          _curr.multiplyScalar(flowMult);
           state.vel.addScaledVector(_curr, 1.45 * dt);
         } else {
           _curr.set(0, 0, 0);

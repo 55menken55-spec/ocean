@@ -15,6 +15,7 @@ window.OC = window.OC || {};
   const btnFlash = document.getElementById('btn-flash');
   const btnAtlas = document.getElementById('btn-atlas');
   const btnGlobe = document.getElementById('btn-globe');
+  const btnLab = document.getElementById('btn-lab');
   const btnCam = document.getElementById('btn-cam');
   const btnCinema = document.getElementById('btn-cinema');
   const btnJournal = document.getElementById('btn-journal');
@@ -99,6 +100,26 @@ window.OC = window.OC || {};
   const guidePause = document.getElementById('guide-pause');
   const guideNext = document.getElementById('guide-next');
   const guideExit = document.getElementById('guide-exit');
+
+  const labPanel = document.getElementById('lab-panel');
+  const labHealthNum = document.getElementById('lab-health-num');
+  const labStatus = document.getElementById('lab-status');
+  const labMBleach = document.getElementById('lab-m-bleach');
+  const labMO2 = document.getElementById('lab-m-o2');
+  const labMCalc = document.getElementById('lab-m-calc');
+  const labMFish = document.getElementById('lab-m-fish');
+  const labChart = document.getElementById('lab-chart');
+  const labPresetsEl = document.getElementById('lab-presets');
+  const labSpeedEl = document.getElementById('lab-speed-btns');
+  const labSTemp = document.getElementById('lab-s-temp');
+  const labVTemp = document.getElementById('lab-v-temp');
+  const labSPh = document.getElementById('lab-s-ph');
+  const labVPh = document.getElementById('lab-v-ph');
+  const labSNutr = document.getElementById('lab-s-nutr');
+  const labVNutr = document.getElementById('lab-v-nutr');
+  const labSCurr = document.getElementById('lab-s-curr');
+  const labVCurr = document.getElementById('lab-v-curr');
+  let lastLabTone = 'ok';
 
   let autoCycle = true;
   let hudHidden = false;
@@ -410,9 +431,127 @@ window.OC = window.OC || {};
       btnPanel.addEventListener('click', (e) => {
         e.stopPropagation();
         panel.classList.toggle('closed');
-        btnPanel.classList.toggle('open', !panel.classList.contains('closed'));
+        const isOpen = !panel.classList.contains('closed');
+        btnPanel.classList.toggle('open', isOpen);
+        if (isOpen && labPanel) {
+          labPanel.classList.add('closed');
+          if (btnLab) btnLab.classList.remove('on');
+        }
       });
     }
+
+    const syncLabControls = () => {
+      if (!OC.EcoLab) return;
+      const c = OC.EcoLab.getControls();
+      if (labSTemp) labSTemp.value = c.tempDelta.toFixed(1);
+      if (labVTemp) labVTemp.textContent = (c.tempDelta >= 0 ? '+' : '') + c.tempDelta.toFixed(1) + ' °C';
+      if (labSPh) labSPh.value = c.pH.toFixed(2);
+      if (labVPh) labVPh.textContent = c.pH.toFixed(2) + ' pH';
+      if (labSNutr) labSNutr.value = Math.round(c.nutrients * 100);
+      if (labVNutr) labVNutr.textContent = Math.round(c.nutrients * 100) + '%';
+      if (labSCurr) labSCurr.value = c.currentMult.toFixed(2);
+      if (labVCurr) labVCurr.textContent = c.currentMult.toFixed(2).replace(/0$/, '') + '×';
+      if (labPresetsEl) {
+        labPresetsEl.querySelectorAll('button[data-preset]').forEach((b) => {
+          b.classList.toggle('on', b.getAttribute('data-preset') === c.presetId);
+        });
+      }
+      if (labSpeedEl) {
+        labSpeedEl.querySelectorAll('button[data-ts]').forEach((b) => {
+          b.classList.toggle('on', Number(b.getAttribute('data-ts')) === c.timeScale);
+        });
+      }
+    };
+
+    const updateLabDisplay = () => {
+      if (!OC.EcoLab) return;
+      const st = OC.EcoLab.getState();
+      const hi = Math.round(st.healthIndex);
+      if (labHealthNum) {
+        labHealthNum.className = 'lab-health' + (st.statusTone !== 'ok' ? (' ' + st.statusTone) : '');
+        labHealthNum.innerHTML = `${hi}<span style="font-size:12px;color:var(--dim);font-weight:500"> / 100</span>`;
+      }
+      if (labStatus) {
+        const note = st.bleaching > 0.35
+          ? 'Кораллы теряют зооксантеллы'
+          : (st.dissolvedO2 < 4.5 ? 'Дефицит растворённого O₂' : (activeBiome ? activeBiome.name : 'Модель среды'));
+        labStatus.innerHTML = `${st.statusLabel}<small id="lab-biome-note">${note}</small>`;
+      }
+      if (labMBleach) labMBleach.textContent = Math.round(st.bleaching * 100) + '%';
+      if (labMO2) labMO2.textContent = st.dissolvedO2.toFixed(1) + ' мг/л';
+      if (labMCalc) labMCalc.textContent = Math.round(st.calcification) + '%';
+      if (labMFish) labMFish.textContent = Math.round(st.fishActivity * 100) + '%';
+      if (labChart) OC.EcoLab.drawChart(labChart);
+    };
+
+    const toggleLab = (forceClose) => {
+      if (!labPanel) return;
+      const opening = forceClose ? false : labPanel.classList.contains('closed');
+      labPanel.classList.toggle('closed', !opening);
+      if (btnLab) btnLab.classList.toggle('on', opening);
+      if (opening) {
+        if (panel) panel.classList.add('closed');
+        if (btnPanel) btnPanel.classList.remove('open');
+        syncLabControls();
+        updateLabDisplay();
+      }
+    };
+
+    if (btnLab) {
+      btnLab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleLab(false);
+      });
+    }
+    const labCloseBtn = document.getElementById('lab-close');
+    if (labCloseBtn) labCloseBtn.addEventListener('click', () => toggleLab(true));
+    const labResetBtn = document.getElementById('lab-reset');
+    if (labResetBtn) {
+      labResetBtn.addEventListener('click', () => {
+        if (!OC.EcoLab) return;
+        OC.EcoLab.reset();
+        syncLabControls();
+        updateLabDisplay();
+        toast('Параметры эколаборатории сброшены к норме');
+      });
+    }
+    if (labPresetsEl && OC.EcoLab) {
+      labPresetsEl.innerHTML = '';
+      for (const pr of OC.EcoLab.getPresets()) {
+        const b = document.createElement('button');
+        b.className = 'btn chip';
+        b.setAttribute('data-preset', pr.id);
+        b.textContent = pr.label;
+        b.addEventListener('click', () => {
+          OC.EcoLab.applyPreset(pr.id);
+          syncLabControls();
+          updateLabDisplay();
+          toast('Сценарий: ' + pr.label);
+        });
+        labPresetsEl.appendChild(b);
+      }
+    }
+    if (labSpeedEl && OC.EcoLab) {
+      labSpeedEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-ts]');
+        if (!btn) return;
+        OC.EcoLab.setParam('timeScale', Number(btn.getAttribute('data-ts')));
+        syncLabControls();
+      });
+    }
+    const bindLabSlider = (el, key, scale) => {
+      if (!el || !OC.EcoLab) return;
+      el.addEventListener('input', () => {
+        OC.EcoLab.setParam(key, parseFloat(el.value) / (scale || 1));
+        syncLabControls();
+        updateLabDisplay();
+      });
+    };
+    bindLabSlider(labSTemp, 'tempDelta', 1);
+    bindLabSlider(labSPh, 'pH', 1);
+    bindLabSlider(labSNutr, 'nutrients', 100);
+    bindLabSlider(labSCurr, 'currentMult', 1);
+    syncLabControls();
 
     const syncSound = (on) => {
       if (!btnSound) return;
@@ -939,6 +1078,7 @@ window.OC = window.OC || {};
         OC.Globe.toggle();
         if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
       }
+      if (e.code === 'KeyL') { toggleLab(false); }
       if (e.code === 'ArrowRight' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(1); }
       if (e.code === 'ArrowLeft' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(-1); }
       if (e.code === 'KeyP') {
@@ -986,6 +1126,7 @@ window.OC = window.OC || {};
         if (OC.Globe && OC.Globe.isOpen()) OC.Globe.close();
         else if (OC.Atlas.isOpen()) OC.Atlas.toggle();
         else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
+        else if (labPanel && !labPanel.classList.contains('closed')) toggleLab(true);
         else if (OC.Expedition && OC.Expedition.isPhotoMode()) syncCamMode(false);
         else if (OC.Navigation.getMode() === 'cinema') OC.Navigation.setMode('swim');
         else if (OC.Navigation.getMode() === 'tour') OC.Navigation.stopTour();
@@ -997,7 +1138,7 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
   }
 
   function switchBiome(id) {
@@ -1036,6 +1177,7 @@ window.OC = window.OC || {};
       uiHandles.renderBiomeUI();
       uiHandles.renderZoneChips();
       if (uiHandles.syncWeatherButtons) uiHandles.syncWeatherButtons();
+      if (uiHandles.updateLabDisplay) uiHandles.updateLabDisplay();
     }
     if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
     toast(next.noSurface
@@ -1199,7 +1341,9 @@ window.OC = window.OC || {};
         const rawTemp = biome.getTemperatureAt
           ? biome.getTemperatureAt(camPos.x, depthM, zone)
           : (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065));
-        const tempC = rawTemp.toFixed(1);
+        const labState = OC.EcoLab ? OC.EcoLab.getState() : null;
+        const adjTemp = labState ? Math.max(-1.9, rawTemp + labState.tempDelta) : rawTemp;
+        const tempC = adjTemp.toFixed(1);
         const pal = OC.getPalette();
         const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
         const curr = OC.Navigation.getCurrent ? OC.Navigation.getCurrent() : null;
@@ -1318,6 +1462,20 @@ window.OC = window.OC || {};
         if (guideProgBar && OC.Navigation.getMode() === 'tour') {
           const tSt = OC.Navigation.getTourState();
           if (tSt && tSt.active) guideProgBar.style.width = `${(tSt.progress * 100).toFixed(1)}%`;
+        }
+
+        if (labState) {
+          if (labPanel && !labPanel.classList.contains('closed') && uiHandles && uiHandles.updateLabDisplay) {
+            uiHandles.updateLabDisplay();
+          }
+          if (labState.statusTone !== lastLabTone) {
+            if (labState.statusTone === 'crit') {
+              toast('Внимание: ' + labState.statusLabel + '!');
+            } else if (lastLabTone === 'crit' && labState.statusTone === 'warn') {
+              toast('Экосистема начинает восстановление');
+            }
+            lastLabTone = labState.statusTone;
+          }
         }
       }
 

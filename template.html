@@ -346,6 +346,30 @@
     .guide-card{width:calc(100vw - 24px);bottom:66px;min-width:0}
   }
 
+  /* ---------- Экологическая лаборатория ---------- */
+  .lab-panel{width:334px;max-height:calc(100vh - 180px)}
+  .lab-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .lab-head h2{margin:0}
+  .lab-hero{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;
+    background:rgba(3,16,30,.72);border:1px solid rgba(130,222,255,.2);margin-bottom:10px}
+  .lab-health{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ok);line-height:1}
+  .lab-health.warn{color:var(--accent2)}
+  .lab-health.crit{color:#ff6b6b}
+  .lab-status{font-size:11px;font-weight:600;text-align:right;color:var(--ink)}
+  .lab-status small{display:block;font-size:9.5px;color:var(--dim);font-weight:400;margin-top:2px}
+  .lab-metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+  .lab-metric{padding:6px 8px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(130,222,255,.12);
+    display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--dim)}
+  .lab-metric b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+  #lab-chart{display:block;width:100%;height:72px;border-radius:10px;border:1px solid rgba(130,222,255,.16);margin-bottom:5px}
+  .lab-legend{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dim)}
+  .lab-legend i{display:inline-block;width:8px;height:2px;vertical-align:middle;margin-right:4px}
+  .lab-slider-row{margin-bottom:10px}
+  .lab-slider-row:last-child{margin-bottom:0}
+  .lab-shead{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:4px}
+  .lab-shead b{color:var(--accent);font-variant-numeric:tabular-nums}
+  input[type=range].lab-range{background:rgba(130,222,255,.22);margin:2px 0 0}
+
   /* ---------- Загрузка ---------- */
   #loading{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at 50% 60%,#0a2c44,#020c17 75%);
     display:grid;place-items:center;transition:opacity .7s}
@@ -402,6 +426,7 @@
 
 <div class="topright hud-hideable">
   <button class="icon-btn" id="btn-globe" title="3D-глобус планеты и экспедиции (O)" aria-label="Глобус">&#127760;</button>
+  <button class="icon-btn" id="btn-lab" title="Экологическая лаборатория и стресс-тест рифа (L)" aria-label="Лаборатория">&#9879;</button>
   <button class="icon-btn" id="btn-cam" title="Подводная фотокамера (P)" aria-label="Фотокамера">&#128247;</button>
   <button class="icon-btn" id="btn-cinema" title="Кинематографический режим и фильтры (N)" aria-label="Кино-режим">&#127916;</button>
   <button class="icon-btn" id="btn-journal" title="Миссии экспедиции и фотожурнал (J)" aria-label="Журнал">&#129517;</button>
@@ -489,9 +514,73 @@
       <kbd>F</kbd> прожектор · <kbd>B</kbd> батискаф · <kbd>G</kbd> сонар<br>
       <kbd>P</kbd> камера (<kbd>Enter</kbd> снять) · <kbd>J</kbd> миссии<br>
       <kbd>N</kbd> кино-режим · <kbd>X</kbd> цветофильтр<br>
-      <kbd>O</kbd> 3D-глобус · <kbd>T</kbd> гид-тур<br>
+      <kbd>O</kbd> 3D-глобус · <kbd>T</kbd> гид-тур · <kbd>L</kbd> эколаб<br>
       <kbd>V</kbd> орбита · <kbd>U</kbd> погода · <kbd>K</kbd> атлас<br>
       <kbd>M</kbd> звук · <kbd>H</kbd> скрыть HUD · Геймпад ✓
+    </div>
+  </div>
+</aside>
+
+<aside class="panel lab-panel closed hud-hideable" id="lab-panel" aria-label="Экологическая лаборатория">
+  <div class="group">
+    <div class="lab-head">
+      <h2>Экологическая лаборатория</h2>
+      <div class="row" style="gap:5px;flex:0 0 auto">
+        <button class="btn" id="lab-reset" style="padding:4px 8px;font-size:10.5px" title="Сбросить к норме">Сброс</button>
+        <button class="btn" id="lab-close" style="padding:4px 8px;font-size:10.5px" title="Закрыть (L)">&#10005;</button>
+      </div>
+    </div>
+    <div class="lab-hero">
+      <div>
+        <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim)">Индекс здоровья</div>
+        <div class="lab-health" id="lab-health-num">96<span style="font-size:12px;color:var(--dim);font-weight:500"> / 100</span></div>
+      </div>
+      <div class="lab-status" id="lab-status">Баланс экосистемы<small id="lab-biome-note">Нормальная нагрузка</small></div>
+    </div>
+    <div class="lab-metrics">
+      <div class="lab-metric"><span>Обесцвечивание</span><b id="lab-m-bleach">0%</b></div>
+      <div class="lab-metric"><span>Кислород O₂</span><b id="lab-m-o2">7.2 мг/л</b></div>
+      <div class="lab-metric"><span>Кальцификация</span><b id="lab-m-calc">100%</b></div>
+      <div class="lab-metric"><span>Активность рыб</span><b id="lab-m-fish">100%</b></div>
+    </div>
+    <canvas id="lab-chart" width="298" height="72"></canvas>
+    <div class="lab-legend">
+      <span><i style="background:#5be8b0"></i>Здоровье рифа</span>
+      <span><i style="background:#ffb574"></i>Обесцвечивание</span>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Сценарии стресс-теста</h2>
+    <div class="row" id="lab-presets"></div>
+  </div>
+
+  <div class="group">
+    <h2>Параметры среды в реальном времени</h2>
+    <div class="lab-slider-row">
+      <div class="lab-shead"><span>Δ Температуры воды</span><b id="lab-v-temp">+0.0 °C</b></div>
+      <input type="range" class="lab-range" id="lab-s-temp" min="-2.0" max="4.5" step="0.1" value="0.0" aria-label="Отклонение температуры воды">
+    </div>
+    <div class="lab-slider-row">
+      <div class="lab-shead"><span>Кислотность (pH)</span><b id="lab-v-ph">8.10 pH</b></div>
+      <input type="range" class="lab-range" id="lab-s-ph" min="7.55" max="8.25" step="0.01" value="8.10" aria-label="Кислотность pH">
+    </div>
+    <div class="lab-slider-row">
+      <div class="lab-shead"><span>Эвтрофикация (цветение)</span><b id="lab-v-nutr">18%</b></div>
+      <input type="range" class="lab-range" id="lab-s-nutr" min="0" max="100" step="1" value="18" aria-label="Эвтрофикация">
+    </div>
+    <div class="lab-slider-row">
+      <div class="lab-shead"><span>Сила океанического течения</span><b id="lab-v-curr">1.0×</b></div>
+      <input type="range" class="lab-range" id="lab-s-curr" min="0.2" max="3.0" step="0.05" value="1.0" aria-label="Сила течения">
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Скорость биопроцессов</h2>
+    <div class="row" id="lab-speed-btns">
+      <button class="btn on" data-ts="1">1×</button>
+      <button class="btn" data-ts="5">5× Быстро</button>
+      <button class="btn" data-ts="20">20× Таймлапс</button>
     </div>
   </div>
 </aside>

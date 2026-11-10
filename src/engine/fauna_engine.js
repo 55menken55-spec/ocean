@@ -255,6 +255,10 @@ window.OC = window.OC || {};
         } else {
           activity = OC.lerp(0.85, 1.05, dayW);
         }
+        if (ctx && ctx.fishActivity !== undefined) {
+          activity *= ctx.fishActivity;
+          if (ctx.fishActivity < 0.72) depthShift -= (0.72 - ctx.fishActivity) * 4.0;
+        }
 
         // Охота хищных стай (барракуды) на ближайший косяк жертв
         if (isPredator && preyCenters && preyCenters.length) {
@@ -3057,6 +3061,7 @@ window.OC = window.OC || {};
         dayW: 1.0,
         camSpeed: 0,
         flashOn: false,
+        fishActivity: 1.0,
         predators: predatorsBuf,
         preyCenters: preyCentersBuf,
         cleanClients: cleanClientsBuf,
@@ -3111,6 +3116,8 @@ window.OC = window.OC || {};
           updateCtx.dayW = dayW;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;
+          const ecoState = OC.EcoLab ? OC.EcoLab.getState() : null;
+          updateCtx.fishActivity = ecoState ? ecoState.fishActivity : 1.0;
           updateCtx.frameIdx++;
           if (updateCtx.sonarPulseAge < 90) updateCtx.sonarPulseAge += dt;
 
@@ -3188,7 +3195,8 @@ window.OC = window.OC || {};
           // Плавная адвекция планктона, пузырей и морского снега по локальному течению
           if (biome.getCurrentAt && (biome.noSurface || camPos.y < 1.5)) {
             biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _currFlow);
-            _flowAccum.addScaledVector(_currFlow, dt * 1.35);
+            const flowMult = ecoState ? ecoState.currentMult : 1.0;
+            _flowAccum.addScaledVector(_currFlow, dt * 1.35 * flowMult);
             _flowAccum.x = ((_flowAccum.x % 180) + 180) % 180;
             _flowAccum.y = ((_flowAccum.y % 110) + 110) % 110;
             _flowAccum.z = ((_flowAccum.z % 180) + 180) % 180;
