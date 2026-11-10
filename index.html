@@ -758,7 +758,7 @@
 <div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
   <div class="globe-box">
     <div class="atlas-header">
-      <div><h3>3D-глобус планеты</h3><small>6 океанических экспедиций · 32 этапов гида</small></div>
+      <div><h3>3D-глобус планеты</h3><small>7 океанических экспедиций · 37 этапов гида</small></div>
       <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
     </div>
     <div class="globe-body">
@@ -4961,6 +4961,576 @@ window.OC = window.OC || {};
   });
 })(window.OC);
 
+// === biomes/brine_pool.js ===
+/* ================= БИОМ: СОЛЯНОЙ БАССЕЙН И СУМЕРЕЧНАЯ ПЕЛАГИАЛЬ (МЕКСИКАНСКИЙ ЗАЛИВ · 650 М) ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  // Сдвиг глубины континентального склона Луизианы: -10 м -> 620 м, -82 м -> 692 м (~68 атм)
+  const DEPTH_OFFSET = 610;
+
+  // Два подводных соляных озера со сверхплотным рассолом (~230‰, плотность 1.22 г/см3)
+  const MAIN_POOL = { id: 'despair_basin', x: 0, z: -24, r: 68, level: -62.0, floorDepth: -73.0 };
+  const ORCA_POOL = { id: 'orca_cascade', x: -205, z: 175, r: 44, level: -48.0, floorDepth: -57.0 };
+
+  const HYDRATE_MOUNDS = [
+    { x: 92, z: -96, r: 42 },
+    { x: -96, z: 46, r: 38 },
+    { x: -145, z: 145, r: 34 }
+  ];
+
+  const DIAPIR_DOMES = [
+    { x: 245, z: -215, r: 120, peakH: -21.0 },
+    { x: -285, z: -135, r: 110, peakH: -23.0 }
+  ];
+
+  const ZONES = [
+    {
+      id: 'brine_lake',
+      name: 'Соляной бассейн Отчаяния (Brine Pool)',
+      shortName: 'Соляное озеро',
+      color: '#45f2c8',
+      depthLabel: '658 – 682 м',
+      tempC: 7.4,
+      description: 'Сверхсолёное подводное озеро рассола (230‰) с чётким зеркалом галоклина, волнами и архимедовой выталкивающей силой.'
+    },
+    {
+      id: 'mussel_shore',
+      name: 'Мидиевые берега и Газовые гидраты',
+      shortName: 'Мидиевый берег',
+      color: '#f2b84b',
+      depthLabel: '648 – 676 м',
+      tempC: 6.8,
+      description: 'Береговой вал соляного озера, покрытый плотными колониями мидий Bathymodiolus, червями Lamellibrachia и друзами метанового гидрата.'
+    },
+    {
+      id: 'salt_terrace',
+      name: 'Соляные диапиры и Каскад Орка',
+      shortName: 'Соляные уступы',
+      color: '#9ee8ff',
+      depthLabel: '630 – 666 м',
+      tempC: 6.4,
+      description: 'Тектонические купола юрской каменной соли с кристаллическими шпилями галита и верхним каскадным соляным бассейном Орка.'
+    },
+    {
+      id: 'twilight_pelagic',
+      name: 'Сумеречная пелагиаль (Мезопелагиаль)',
+      shortName: 'Сумеречная толща',
+      color: '#6e7eff',
+      depthLabel: '612 – 695 м',
+      tempC: 5.9,
+      description: 'Прозрачная мезопелагиаль Мексиканского залива, где днём сверху пробиваются остатки синего света, а ночью мигрируют миктофиды и гигантские сифонофоры.'
+    }
+  ];
+
+  function wavyPoolRadius(baseR, ang) {
+    return baseR * (1.0 + 0.12 * Math.sin(ang * 3.0 + 0.6) + 0.07 * Math.cos(ang * 5.0 - 0.4));
+  }
+
+  function getBrineSurfaceAt(x, z) {
+    const pools = [MAIN_POOL, ORCA_POOL];
+    for (let i = 0; i < pools.length; i++) {
+      const p = pools[i];
+      const dx = x - p.x;
+      const dz = z - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d > p.r * 1.25) continue;
+      const ang = Math.atan2(dz, dx);
+      const rad = wavyPoolRadius(p.r, ang);
+      if (d <= rad) {
+        return { id: p.id, level: p.level, radius: rad, shoreDist: rad - d };
+      }
+    }
+    return null;
+  }
+
+  function poolShoreMetrics(x, z, pool) {
+    const dx = x - pool.x;
+    const dz = z - pool.z;
+    const d = Math.hypot(dx, dz);
+    const ang = Math.atan2(dz, dx);
+    const rad = wavyPoolRadius(pool.r, ang);
+    return { d, rad, signed: d - rad }; // < 0 внутри озера, > 0 снаружи
+  }
+
+  function nearestHydrateDist(x, z) {
+    let best = 1e9;
+    for (let i = 0; i < HYDRATE_MOUNDS.length; i++) {
+      const d = Math.hypot(x - HYDRATE_MOUNDS[i].x, z - HYDRATE_MOUNDS[i].z);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  function nearestDiapirDist(x, z) {
+    let best = 1e9;
+    for (let i = 0; i < DIAPIR_DOMES.length; i++) {
+      const d = Math.hypot(x - DIAPIR_DOMES[i].x, z - DIAPIR_DOMES[i].z);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  function getHeight(x, z) {
+    // Пологий континентальный склон Луизианы: с запада (-38 м) к востоку (-76 м)
+    let h = OC.lerp(-42.0, -76.0, OC.smoothstep(-900, 900, x));
+    h += OC.fbm2(x * 0.008, z * 0.008, 3) * 8.5;
+    h += OC.fbm2(x * 0.032, z * 0.032, 2) * 2.1;
+
+    // Соляные диапировые купола на окраинах
+    for (let i = 0; i < DIAPIR_DOMES.length; i++) {
+      const dm = DIAPIR_DOMES[i];
+      const d = Math.hypot(x - dm.x, z - dm.z);
+      if (d < dm.r * 1.4) {
+        const u = OC.smoothstep(dm.r * 1.35, 18, d);
+        const ridge = (OC.ridged2(x * 0.025, z * 0.025, 2) - 0.3) * 5.0;
+        h = OC.lerp(h, dm.peakH + ridge, u * 0.88);
+      }
+    }
+
+    // Береговой вал и глубокая чаша главного соляного бассейна Отчаяния
+    const mMain = poolShoreMetrics(x, z, MAIN_POOL);
+    if (mMain.d < MAIN_POOL.r * 2.1) {
+      const rimBump = Math.exp(-Math.pow((mMain.signed - 7.5) / 14.0, 2)) * 6.5;
+      const outerBlend = OC.smoothstep(MAIN_POOL.r * 2.0, MAIN_POOL.r + 10.0, mMain.d);
+      h = OC.lerp(h, MAIN_POOL.level + 4.8 + rimBump, outerBlend * 0.72);
+      if (mMain.signed < 6.0) {
+        const inner = OC.smoothstep(6.0, -18.0, mMain.signed);
+        h = OC.lerp(h, MAIN_POOL.floorDepth + OC.noise2(x * 0.06, z * 0.06) * 1.4, inner);
+      }
+    }
+
+    // Береговой вал и чаша верхнего каскадного бассейна Орка
+    const mOrca = poolShoreMetrics(x, z, ORCA_POOL);
+    if (mOrca.d < ORCA_POOL.r * 2.1) {
+      const rimBump = Math.exp(-Math.pow((mOrca.signed - 6.0) / 11.0, 2)) * 5.2;
+      const outerBlend = OC.smoothstep(ORCA_POOL.r * 2.0, ORCA_POOL.r + 8.0, mOrca.d);
+      h = OC.lerp(h, ORCA_POOL.level + 4.4 + rimBump, outerBlend * 0.72);
+      if (mOrca.signed < 5.0) {
+        const inner = OC.smoothstep(5.0, -14.0, mOrca.signed);
+        h = OC.lerp(h, ORCA_POOL.floorDepth + OC.noise2(x * 0.06, z * 0.06) * 1.1, inner);
+      }
+    }
+
+    return OC.clamp(h, -88.0, -14.0);
+  }
+
+  function safeSpotY(x, z, desiredY, clearance) {
+    let minY = getHeight(x, z) + (clearance || 4.0);
+    const brine = getBrineSurfaceAt(x, z);
+    if (brine) minY = Math.max(minY, brine.level + 2.2);
+    return Math.max(desiredY, minY);
+  }
+
+  function getZoneAt(x, y, z) {
+    const mMain = poolShoreMetrics(x, z, MAIN_POOL);
+    const mOrca = poolShoreMetrics(x, z, ORCA_POOL);
+    const nearEdge = Math.min(mMain.signed, mOrca.signed);
+    if (nearEdge <= 6.5 && y < -40.0) return ZONES[0]; // brine_lake
+    if ((mMain.signed <= 48.0 || nearestHydrateDist(x, z) < 46.0) && y < -36.0) return ZONES[1]; // mussel_shore
+    if (nearestDiapirDist(x, z) < 120.0) return ZONES[2]; // salt_terrace
+    if (y > -34.0 || x > 320 || z < -360) return ZONES[3]; // twilight_pelagic
+    return ZONES[2]; // salt_terrace
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const mMain = poolShoreMetrics(x, z, MAIN_POOL);
+    const mOrca = poolShoreMetrics(x, z, ORCA_POOL);
+    const nearEdge = Math.min(mMain.signed, mOrca.signed);
+    const hd = nearestHydrateDist(x, z);
+    const n = OC.clamp(OC.fbm2(x * 0.05, z * 0.05, 2) * 0.8 + 0.5, 0, 1);
+
+    _colA.set(0x3a3446); // тёмный мезопелагический ил склона
+    _colB.set(0xc9f2f6); // кристаллические соляные корки галита у берега
+    _colC.set(0x2d2834); // плотный слой мидий / чёрный восстановительный осадок
+
+    out.copy(_colA).lerp(_colC, n * 0.55);
+
+    // Светлая кайма галита и оранжевых бактериальных матов прямо на урезе соляных озёр
+    if (Math.abs(nearEdge) < 18.0) {
+      const band = 1.0 - OC.smoothstep(0.0, 18.0, Math.abs(nearEdge));
+      out.lerp(_colB, band * (0.62 + n * 0.28));
+    }
+    if (hd < 44.0) {
+      out.lerp(_colC.set(0x9a7842), OC.smoothstep(44.0, 8.0, hd) * 0.58);
+    }
+    if (y > -32.0) {
+      // Светло-голубоватый диапировый гипс и карбонат на вершинах куполов
+      out.lerp(_colB.set(0x7488a2), OC.smoothstep(-32.0, -18.0, y) * 0.65);
+    }
+    return out;
+  }
+
+  function getTemperatureAt(x, depthM, zone) {
+    // Геотермальные соляные купола слегка подогревают придонный рассол до +7.4..+8.2 °C
+    let t = 6.2 - Math.max(0, (650 - depthM) * 0.012);
+    if (zone && zone.id === 'brine_lake') t = 7.6 + OC.clamp((depthM - 670) * 0.04, 0, 0.8);
+    else if (zone && zone.id === 'mussel_shore') t = 6.9;
+    else if (zone && zone.id === 'twilight_pelagic') t = 5.9;
+    return t;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const brine = getBrineSurfaceAt(x, z);
+    const inHalocline = !!(brine && y <= brine.level + 0.45);
+    const mMain = poolShoreMetrics(x, z, MAIN_POOL);
+    const lakeProx = OC.smoothstep(95, 5, Math.max(0, mMain.signed));
+    const hd = nearestHydrateDist(x, z);
+    const seepGlow = OC.smoothstep(65, 10, hd);
+    const twilightElev = OC.smoothstep(-74, -14, y);
+    const dayLum = (dayW !== undefined ? dayW : 1.0) * twilightElev;
+
+    // Сумеречная мезопелагиаль: днём слабая сине-фиолетовая дымка сверху, ночью тёмный космос с биолюминесценцией
+    _fogCol.set(0x040718)
+      .lerp(_colA.set(0x0e2a5c), dayLum * 0.72)
+      .lerp(_colB.set(0x0a2d36), lakeProx * 0.52)
+      .lerp(_colC.set(0x1b4648), inHalocline ? 0.75 : 0.0);
+
+    _waterCol.set(0x1e589e)
+      .lerp(_colA.set(0x2ae8cf), lakeProx * 0.58)
+      .lerp(_colB.set(0xf0b848), seepGlow * 0.25);
+
+    _skyTop.set(0x03081a).lerp(_colA.set(0x123e88), dayLum * 0.82);
+    _skyBot.set(0x020612).lerp(_colB.set(0x082336), lakeProx * 0.4);
+    _aboveHoriz.set(0x06132c);
+
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity: inHalocline ? 0.026 : OC.lerp(0.0105, 0.0155, Math.max(lakeProx, seepGlow)),
+      causticStrength: 0,
+      rayStrength: 0,
+      sunAtten: 0.22 * dayLum,
+      bioGlow: OC.lerp(1.0, 0.58, dayLum),
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz,
+      fillAColor: _colB.set(0x36f0da),
+      fillAMult: 0.45 + lakeProx * 0.65,
+      fillBColor: _colC.set(0xffb44c),
+      fillBMult: 0.22 + seepGlow * 0.72
+    };
+  }
+
+  function getCurrentAt(x, y, z, time, out) {
+    if (!out) out = new T.Vector3();
+    out.set(0.18 + Math.sin(time * 0.16 + z * 0.01) * 0.1, 0, -0.22);
+
+    // Восходящие пузырьковые потоки над газовыми гидратами
+    for (let i = 0; i < HYDRATE_MOUNDS.length; i++) {
+      const hm = HYDRATE_MOUNDS[i];
+      const d = Math.hypot(x - hm.x, z - hm.z);
+      if (d < hm.r) {
+        const above = Math.max(0, y - getHeight(x, z));
+        if (above < 36) {
+          const core = OC.smoothstep(hm.r, 5, d) * OC.smoothstep(36, 4, above);
+          out.y += core * 1.45;
+        }
+      }
+    }
+    return out;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+
+    function add(species, x, z, scale, tint) {
+      if (getBrineSurfaceAt(x, z)) return; // внутри мёртвого токсичного рассола флора не растёт — только на берегах!
+      const y = getHeight(x, z);
+      items.push({ species, x, y: y - 0.08, z, ry: rng() * 6.283, scale, tint: tint || 0xffffff });
+    }
+
+    // 1. Плотные береговые кольца мидий Bathymodiolus, соляных шпилей галита и трубчатых червей вдоль обоих озёр
+    const pools = [MAIN_POOL, ORCA_POOL];
+    for (let p = 0; p < pools.length; p++) {
+      const pl = pools[p];
+      if (pl.x + pl.r + 45 < x0 || pl.x - pl.r - 45 > x0 + chunkSize ||
+          pl.z + pl.r + 45 < z0 || pl.z - pl.r - 45 > z0 + chunkSize) continue;
+      const ringN = Math.round((p === 0 ? 52 : 34) * density);
+      for (let i = 0; i < ringN; i++) {
+        const ang = (i / Math.max(1, ringN)) * 6.283 + (rng() - 0.5) * 0.16;
+        const shoreR = wavyPoolRadius(pl.r, ang);
+        const offset = OC.lerp(2.2, 22.0, rng());
+        const px = pl.x + Math.cos(ang) * (shoreR + offset);
+        const pz = pl.z + Math.sin(ang) * (shoreR + offset);
+        if (px < x0 || px >= x0 + chunkSize || pz < z0 || pz >= z0 + chunkSize) continue;
+        const r = rng();
+        if (offset < 8.5 && r < 0.62) {
+          add('vent_mussels', px, pz, OC.lerp(0.9, 1.45, rng()), 0xc8c0a8);
+        } else if (offset < 13.0 && r < 0.82) {
+          add('halite_spire', px, pz, OC.lerp(0.75, 1.35, rng()));
+        } else {
+          add('cold_tubeworm', px, pz, OC.lerp(0.85, 1.35, rng()));
+        }
+      }
+    }
+
+    // 2. Поля метановых гидратов и кустов Lamellibrachia
+    for (let h = 0; h < HYDRATE_MOUNDS.length; h++) {
+      const hm = HYDRATE_MOUNDS[h];
+      if (hm.x + 55 < x0 || hm.x - 55 > x0 + chunkSize || hm.z + 55 < z0 || hm.z - 55 > z0 + chunkSize) continue;
+      const nH = Math.round(14 * density);
+      for (let i = 0; i < nH; i++) {
+        const a = rng() * 6.283;
+        const rr = OC.lerp(2, hm.r * 0.9, rng());
+        const px = hm.x + Math.cos(a) * rr;
+        const pz = hm.z + Math.sin(a) * rr;
+        if (px < x0 || px >= x0 + chunkSize || pz < z0 || pz >= z0 + chunkSize) continue;
+        add(rng() < 0.55 ? 'methane_hydrate' : 'cold_tubeworm', px, pz, OC.lerp(0.8, 1.4, rng()));
+      }
+    }
+
+    // 3. Соляные торосы, чёрные кораллы и глубоководные губки на соляных уступах
+    const slots = Math.round(22 * density);
+    for (let i = 0; i < slots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      if (getBrineSurfaceAt(px, pz)) continue;
+      const y = getHeight(px, pz);
+      const r = rng();
+      if (y > -38 && r < 0.42) {
+        add('halite_spire', px, pz, OC.lerp(0.75, 1.3, rng()));
+      } else if (r < 0.72) {
+        add('coral_black', px, pz, OC.lerp(0.8, 1.3, rng()));
+      } else {
+        add('sponge_tube', px, pz, OC.lerp(0.75, 1.25, rng()), 0xa8d8e8);
+      }
+    }
+
+    return items;
+  }
+
+  const _lmRaw = [
+    {
+      id: 'despair_basin',
+      name: 'Бассейн Отчаяния (Подводное озеро)',
+      zoneId: 'brine_lake',
+      isHot: true,
+      x: 18,
+      y: -52.0,
+      z: 62,
+      yaw: 2.86,
+      pitch: -0.22,
+      clearance: 5.5,
+      description: 'Изумрудно-ртутная гладь подводного соляного озера (230‰) с волнами галоклина, кристаллами галита и выталкивающей силой рассола.'
+    },
+    {
+      id: 'mussel_hydrates',
+      name: 'Мидиевые берега и Газовые гидраты',
+      zoneId: 'mussel_shore',
+      isHot: true,
+      x: HYDRATE_MOUNDS[0].x - 24,
+      y: -54.0,
+      z: HYDRATE_MOUNDS[0].z + 24,
+      yaw: -0.78,
+      pitch: -0.18,
+      clearance: 4.5,
+      description: 'Живые береговые рифы из хемосинтетических мидий Bathymodiolus, вековых червей Lamellibrachia и жёлтого «горящего льда» метана.'
+    },
+    {
+      id: 'orca_cascade',
+      name: 'Верхний каскад Орка',
+      zoneId: 'salt_terrace',
+      x: ORCA_POOL.x + 56,
+      y: -38.0,
+      z: ORCA_POOL.z - 34,
+      yaw: 2.15,
+      pitch: -0.20,
+      clearance: 5.0,
+      description: 'Верхний террасный соляной бассейн на склоне диапира Луизианы, окружённый кристаллическими башнями соли.'
+    },
+    {
+      id: 'twilight_column',
+      name: 'Сумеречная толща и Сифонофоры',
+      zoneId: 'twilight_pelagic',
+      x: -24,
+      y: -22.0,
+      z: -32,
+      yaw: 0.35,
+      pitch: -0.24,
+      clearance: 6.0,
+      description: 'Верхний горизонт мезопелагиали (632 м), где сверху струятся сумерки залива, а в толще парят сельдяной король, миктофиды и 14-метровые сифонофоры.'
+    },
+    {
+      id: 'salt_diapir',
+      name: 'Соляной купол и Химеры',
+      zoneId: 'salt_terrace',
+      x: 205,
+      y: -26.0,
+      z: -165,
+      yaw: -0.68,
+      pitch: -0.18,
+      clearance: 5.0,
+      description: 'Выдавленный тектоникой купол древней каменной соли с чёрными кораллами и глубоководными химерами Hydrolagus.'
+    }
+  ];
+
+  const landmarks = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: Math.min(-6.0, safeSpotY(lm.x, lm.z, lm.y, lm.clearance))
+  }));
+
+  const spawnX = landmarks[0].x;
+  const spawnZ = landmarks[0].z;
+  const spawnY = Math.min(-6.0, safeSpotY(spawnX, spawnZ, -51.0, 5.0));
+
+  const _tourRaw = [
+    { x: spawnX, y: -51.0, z: spawnZ, lx: MAIN_POOL.x, ly: MAIN_POOL.level, lz: MAIN_POOL.z, title: 'Озеро на дне океана: Бассейн Отчаяния (672 м)', duration: 10,
+      fact: 'Рассол в подводном озере в 4–5 раз солонее морской воды (~230‰). Из-за огромной плотности батискаф буквально плавает на его зеркале, не проваливаясь на дно!' },
+    { x: landmarks[1].x, y: -54.0, z: landmarks[1].z, lx: HYDRATE_MOUNDS[0].x, ly: -62.0, lz: HYDRATE_MOUNDS[0].z, title: 'Берег из мидий и «горящий лёд» CH₄', duration: 9,
+      fact: 'Пучки трубчатых червей Lamellibrachia у метановых гидратов растут крайне медленно и доживают до 250 лет — это одни из самых долгоживущих беспозвоночных планеты.' },
+    { x: landmarks[2].x, y: -38.0, z: ORCA_POOL.z - 34, lx: ORCA_POOL.x, ly: ORCA_POOL.level, lz: ORCA_POOL.z, title: 'Террасный соляной бассейн Орка', duration: 9,
+      fact: 'Под дном Мексиканского залива залегают километровые пласты юрской соли. Выдавливаясь вверх в виде диапиров, соль растворяется в воде и стекает в кратеры.' },
+    { x: landmarks[3].x, y: -22.0, z: landmarks[3].z, lx: 15, ly: -32.0, lz: -10, title: 'Сумеречная пелагиаль и Сифонофора', duration: 10,
+      fact: 'Ночью миллионы миктофид поднимаются из сумеречной зоны ближе к поверхности — это самая масштабная ежедневная миграция животных на Земле (DVM).' },
+    { x: landmarks[4].x, y: -26.0, z: landmarks[4].z, lx: 245, ly: -28.0, lz: -215, title: 'Сельдяной король и Глубоководная химера', duration: 10,
+      fact: 'Сельдяной король (Regalecus glesne) достигает 8–11 м в длину и вдохновил легенды о морских змеях, а химера Hydrolagus ориентируется с помощью электрорецепторов.' }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, Math.min(-6.0, safeSpotY(leg.x, leg.z, leg.y, 4.5)), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    fact: leg.fact,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    floor: ['Соляно-карбонатный ил склона Луизианы', 'Мексиканский залив', 'Геология', 'Все зоны', '612 – 710 м',
+      'Тёмный мезопелагический ил с прослоями юрской каменной соли, сульфидными матами и береговыми валами соляных озёр.'],
+    brine_pool_lake: ['Подводное соляное озеро (галоклин 230‰)', 'Brine Pool / Halocline Basin', 'Экспедиция', 'Соляное озеро', '658 – 682 м',
+      'Устойчивое озеро сверхплотного рассола на морском дне с собственными волнами, чётким берегом и архимедовой выталкивающей силой (~1.22 г/см³).'],
+    methane_hydrate: ['Кристаллы газового гидрата («горящий лёд»)', 'Methane Clathrate (CH₄·5.75H₂O)', 'Геология', 'Мидиевый берег', '650 – 676 м',
+      'Плотные янтарно-ледяные друзы замёрзшего метана и воды, стабильные под высоким давлением склона и питающие местную хемосинтетическую фауну.'],
+    cold_tubeworm: ['Вестиментифера холодных сипов', 'Lamellibrachia luymesi', 'Беспозвоночные', 'Мидиевый берег', '648 – 678 м',
+      'Колониальный червь в длинных хитиновых трубках; живёт до 250 лет, поглощая сероводород «корнями» из осадка вокруг соляных озёр.'],
+    halite_spire: ['Кристаллический соляной торос галита', 'Halite / Evaporite NaCl', 'Геология', 'Соляные уступы', '630 – 675 м',
+      'Бело-бирюзовые кристаллические наросты каменной соли, выпадающие по краям диапиров и вдоль береговой линии рассола.'],
+    vent_mussels: ['Береговая мидия холодных сипов', 'Bathymodiolus childressi', 'Беспозвоночные', 'Мидиевый берег', '654 – 680 м',
+      'Живые «береговые рифы» по кромке токсичного рассола; содержат в жабрах метанокислящих бактерий и выдерживают экстремальную солёность.'],
+    coral_black: ['Чёрный коралл соляных уступов', 'Leiopathes / Antipatharia', 'Кораллы', 'Соляные уступы', '626 – 668 м',
+      'Долгоживущие тёмные роговые кораллы на карбонатных крышах соляных куполов, процеживающие сумеречный морской снег.'],
+    sponge_tube: ['Стеклянная трубка мезопелагиали', 'Hexactinellida', 'Беспозвоночные', 'Соляные уступы', '628 – 670 м',
+      'Изящные кремниевые бокалы губок на твёрдых диапировых уступах, защищённых от плотного рассола.'],
+    siphonophore: ['Гигантская биолюминесцентная сифонофора', 'Praya dubia', 'Мегафауна', 'Сумеречная толща', '615 – 665 м',
+      '14-метровая колониальная цепь из двойного плавательного колокола и сотен светящихся циано-фиолетовых зооидов со смертоносной сетью нитей.'],
+    oarfish: ['Сельдяной король (Ремнеры)', 'Regalecus glesne', 'Рыбы', 'Сумеречная толща', '612 – 660 м',
+      'Легендарная серебристая ленточная рыба длиной до 8–11 м с алой короной спинных лучей, парящая волнами сквозь сумеречную зону.'],
+    chimaera: ['Глубоководная химера (Рыба-кролик)', 'Hydrolagus alberti', 'Мегафауна', 'Соляные уступы', '630 – 678 м',
+      'Древний родственник акул с изумрудно-зеркальными глазами и крыловидными плавниками, патрулирующий берега соляного озера в поисках моллюсков.'],
+    myctophid: ['Светящийся анчоус (Миктофида)', 'Myctophum punctatum', 'Рыбы', 'Сумеречная толща', '612 – 658 м',
+      'Самая многочисленная рыба сумеречной зоны с рядами светящихся брюшных фотофоров; ночью поднимается на 15+ м вверх в рамках суточной миграции.'],
+    hatchetfish: ['Глубоководный топорник', 'Argyropelecus aculeatus', 'Рыбы', 'Сумеречная толща', '616 – 662 м',
+      'Плоская зеркальная рыбка с телескопическими глазами, смотрящими вверх, и светящимся брюхом для маскировки контуром (контриллюминация).'],
+    squid_abyssal: ['Глубоководный сумеречный кальмар', 'Histioteuthis / Vampyroteuthis', 'Мегафауна', 'Сумеречная толща', '620 – 670 м',
+      'Парящий в мезопелагиали головоногий хищник с переливающимися фотофорами щупалец.'],
+    jelly_deep: ['Корономедуза сумеречной зоны', 'Atolla / Periphylla', 'Беспозвоночные', 'Сумеречная толща', '615 – 672 м',
+      'Биолюминесцентный «колокольчик» сумеречной воды, вспыхивающий голубовато-сиреневыми импульсами над поверхностью рассола.']
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [],
+    brineLakes: [
+      {
+        cx: MAIN_POOL.x, cz: MAIN_POOL.z, r: MAIN_POOL.r, level: MAIN_POOL.level,
+        radiusFn: (ang) => wavyPoolRadius(MAIN_POOL.r, ang),
+        label: 'Бассейн Отчаяния (галоклин 230‰)', light: true
+      },
+      {
+        cx: ORCA_POOL.x, cz: ORCA_POOL.z, r: ORCA_POOL.r, level: ORCA_POOL.level,
+        radiusFn: (ang) => wavyPoolRadius(ORCA_POOL.r, ang),
+        label: 'Каскадное соляное озеро Орка', light: true
+      }
+    ],
+    siphonophores: [
+      { cx: MAIN_POOL.x, cz: MAIN_POOL.z, r: 44, y: -32, speed: 1.75, scale: 1.15 },
+      { cx: -115, cz: 85, r: 48, y: -26, speed: 1.55, scale: 1.05 }
+    ],
+    oarfishes: [
+      { cx: 18, cz: -15, r: 58, y: -28, speed: 2.9, scale: 1.12 },
+      { cx: -145, cz: 110, r: 52, y: -24, speed: 2.7, scale: 1.02 }
+    ],
+    chimaeras: [
+      { cx: MAIN_POOL.x, cz: MAIN_POOL.z, r: 86, speed: 2.1, scale: 1.2 },
+      { cx: 205, cz: -180, r: 54, speed: 2.0, scale: 1.1 },
+      { cx: ORCA_POOL.x, cz: ORCA_POOL.z, r: 58, speed: 1.9, scale: 1.08 }
+    ],
+    ventPlumes: [
+      { x: HYDRATE_MOUNDS[0].x, z: HYDRATE_MOUNDS[0].z, chimneyH: 1.2, height: 28, n: 150, light: true, coldSeep: true, key: 'methane_hydrate' },
+      { x: HYDRATE_MOUNDS[1].x, z: HYDRATE_MOUNDS[1].z, chimneyH: 1.2, height: 26, n: 130, light: false, coldSeep: true, key: 'methane_hydrate' },
+      { x: HYDRATE_MOUNDS[2].x, z: HYDRATE_MOUNDS[2].z, chimneyH: 1.2, height: 24, n: 120, light: false, coldSeep: true, key: 'methane_hydrate' }
+    ],
+    schools: [
+      { key: 'myctophid', n: 56, cx: 12, cz: -18, radius: 52, yDepth: -36, yAmp: 4.5, spread: 14, speed: 6.2, scale: 0.42, diel: 'nocturnal', dvmAmp: 13.0, biolum: true, isPrey: true, shyness: 0.35,
+        geoOpts: { len: 0.72, height: 0.22, width: 0.14, colA: 0x1e385c, colB: 0x62f4ff, finCol: 0x8cd2ff, eyeScale: 1.4 } },
+      { key: 'hatchetfish', n: 40, cx: -68, cz: 25, radius: 44, yDepth: -38, yAmp: 4.0, spread: 11, speed: 4.4, scale: 0.40, diel: 'nocturnal', dvmAmp: 11.0, biolum: true, shyness: 0.30,
+        geoOpts: { len: 0.56, height: 0.42, width: 0.08, colA: 0x9eb8d6, colB: 0x9cf8ff, finCol: 0x52c4e8, eyeScale: 1.55 } },
+      { key: 'myctophid', n: 46, cx: -190, cz: 160, radius: 46, yDepth: -30, yAmp: 4.0, spread: 12, speed: 5.8, scale: 0.40, diel: 'nocturnal', dvmAmp: 12.0, biolum: true, isPrey: true, shyness: 0.35,
+        geoOpts: { len: 0.72, height: 0.22, width: 0.14, colA: 0x1e385c, colB: 0x62f4ff, finCol: 0x8cd2ff, eyeScale: 1.4 } }
+    ],
+    squids: [
+      { cx: 120, cz: -45, r: 58, y: -38, speed: 2.9, scale: 1.15 },
+      { cx: -125, cz: -75, r: 56, y: -36, speed: 2.7, scale: 1.1 }
+    ],
+    jellies: [
+      { x: 24, y: -48, z: -18, deep: true, size: 1.35 },
+      { x: -32, y: -44, z: -48, deep: true, size: 1.25 },
+      { x: -195, y: -34, z: 170, deep: true, size: 1.3 }
+    ]
+  };
+
+  OC.Biomes.register({
+    id: 'brine_pool',
+    name: 'Соляной бассейн',
+    region: 'Мексиканский залив · 650 м',
+    subtitle: 'Сумеречная пелагиаль · 612–710 м · 68 атм',
+    globe: {
+      lat: 27.78, lon: -91.22, coordLabel: '27.8° с.ш., 91.2° з.д.',
+      ocean: 'Мексиканский залив · Склон Луизианы', depthSpan: '612 – 710 м', tempSpan: '5.8 – 8.2 °C', color: '#45f2c8',
+      summary: 'Подводные соляные озёра с зеркалом галоклина (230‰) и архимедовой плавучестью, берега мидий и метановых гидратов, сифонофоры и сельдяной король.'
+    },
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    depthOffset: DEPTH_OFFSET,
+    noSurface: true,
+    twilightSurface: true,
+    maxCamY: -4.0,
+    minimapTheme: 'brine',
+    spawn: {
+      pos: [spawnX, spawnY, spawnZ],
+      yaw: 2.86,
+      pitch: -0.22
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getBrineSurfaceAt,
+    getZoneAt,
+    getTerrainColor,
+    getTemperatureAt,
+    getOpticalProfile,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
+  });
+})(window.OC);
+
 // === engine/weather.js ===
 /* ================= ДИНАМИЧЕСКАЯ СИСТЕМА ПОГОДЫ: ШТИЛЬ, ЗЫБЬ, ШТОРМ, ПУРГА И МОЛНИИ ================= */
 window.OC = window.OC || {};
@@ -5190,6 +5760,7 @@ window.OC = window.OC || {};
     if (biome.id === 'kelp_forest') return { baseTemp: 11.5, heatTolerance: 1.4, hasCorals: false, isAbyss: false };
     if (biome.id === 'hydrothermal_vents') return { baseTemp: 2.8, heatTolerance: 2.2, hasCorals: false, isAbyss: true };
     if (biome.id === 'mariana_trench') return { baseTemp: 2.1, heatTolerance: 2.4, hasCorals: false, isAbyss: true };
+    if (biome.id === 'brine_pool') return { baseTemp: 6.8, heatTolerance: 1.8, hasCorals: false, isAbyss: true };
     return { baseTemp: 27.0, heatTolerance: 1.1, hasCorals: true, isAbyss: false };
   }
 
@@ -6246,12 +6817,13 @@ window.OC = window.OC || {};
     scene.fog.density = pal.fogDen;
     renderer.toneMappingExposure = pal.exposure * (opt.aboveWater ? (1.02 - wState.stormMix * 0.14) : OC.lerp(0.82, 1.06, pal.sunAtten));
 
+    const twilightLux = (biome && biome.twilightSurface) ? opt.sunAtten : 0.0;
     hemi.color.copy(pal.hemiSky);
     hemi.groundColor.copy(pal.hemiGround);
-    hemi.intensity = pal.hemiI * (biome && biome.noSurface ? 0.14 : (0.35 + 0.65 * pal.sunAtten));
+    hemi.intensity = pal.hemiI * (biome && biome.noSurface ? (0.14 + twilightLux * 0.45) : (0.35 + 0.65 * pal.sunAtten));
 
     sun.color.copy(pal.sunCol);
-    sun.intensity = pal.sunI * (biome && biome.noSurface ? 0.03 : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
+    sun.intensity = pal.sunI * (biome && biome.noSurface ? (0.03 + twilightLux * 0.34) : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
     const sunElev = (biome && biome.hasAurora) ? Math.max(0.10, Math.sin(ang) * 0.42 + 0.18) : Math.max(0.18, Math.sin(ang) * 0.85 + 0.28);
@@ -8138,6 +8710,109 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 40. Газовый гидрат метана («горящий лёд» CH4) ---- */
+  function buildMethaneHydrate(rng) {
+    const list = [];
+    const cBase = COL(0x524c48);
+    const cIce = COL(0xf4cf76);
+    const cTip = COL(0xfff1c4);
+    const mound = OC.geoPrep(new T.DodecahedronGeometry(0.95, 1));
+    mound.scale(1.25, 0.55, 1.15);
+    OC.paint(mound, (x, y, z, col) => col.copy(y > 0.12 ? cIce : cBase));
+    OC.xform(mound, { p: [0, 0.25, 0] });
+    OC.withSway(mound, () => 0);
+    list.push(mound);
+
+    const nShards = 6;
+    for (let i = 0; i < nShards; i++) {
+      const a = (i / nShards) * 6.283 + rng() * 0.45;
+      const dist = OC.lerp(0.18, 0.68, rng());
+      const h = OC.lerp(0.75, 1.55, rng());
+      const r = OC.lerp(0.16, 0.34, rng());
+      const sh = OC.geoPrep(new T.CylinderGeometry(r * 0.28, r, h, 6, 1));
+      OC.paint(sh, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cIce).lerp(cTip, OC.smoothstep(0.35, 1.0, u));
+      });
+      OC.xform(sh, {
+        r: [Math.sin(a) * OC.lerp(0.18, 0.48, rng()), rng() * 1.4, Math.cos(a) * OC.lerp(0.18, 0.48, rng())],
+        p: [Math.cos(a) * dist, h * 0.45 + 0.18, Math.sin(a) * dist]
+      });
+      OC.withSway(sh, () => 0);
+      list.push(sh);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 41. Вестиментифера холодных сипов (Lamellibrachia luymesi) ---- */
+  function buildColdTubeworm(rng) {
+    const list = [];
+    const n = 10;
+    const cBase = COL(0x4a4236);
+    const cTube = COL(0xc4b08e);
+    const cPlume = COL(0xd92658);
+    const cTip = COL(0xff8eb4);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283 + OC.lerp(-0.25, 0.25, rng());
+      const dist = OC.lerp(0.06, 0.48, rng());
+      const h = OC.lerp(1.1, 2.35, rng());
+      const bend = OC.lerp(0.24, 0.56, rng());
+      const seg = OC.geoPrep(new T.CylinderGeometry(0.036, 0.055, h, 6, 5));
+      const sp = seg.attributes.position;
+      for (let v = 0; v < sp.count; v++) {
+        const vx = sp.getX(v), vy = sp.getY(v), vz = sp.getZ(v);
+        const u = OC.clamp((vy + h * 0.5) / h, 0, 1);
+        const curve = Math.sin(u * 2.4 + i) * 0.14 + u * u * bend;
+        sp.setXYZ(v, vx + Math.cos(a) * curve, vy, vz + Math.sin(a) * curve);
+      }
+      seg.computeVertexNormals();
+      OC.paint(seg, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBase).lerp(cTube, OC.smoothstep(0.08, 0.72, u));
+      });
+      OC.xform(seg, { p: [Math.cos(a) * dist * 0.4, h * 0.5, Math.sin(a) * dist * 0.4] });
+      OC.withSway(seg, (x, y) => Math.max(0, y) * 0.24);
+      list.push(seg);
+
+      const plume = OC.geoPrep(new T.ConeGeometry(0.095, 0.28, 7));
+      OC.paint(plume, (x, y, z, col) => col.copy(y > 0.04 ? cTip : cPlume));
+      OC.xform(plume, {
+        r: [Math.PI + Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35],
+        p: [Math.cos(a) * (dist * 0.4 + bend), h + 0.06, Math.sin(a) * (dist * 0.4 + bend)]
+      });
+      OC.withSway(plume, (x, y) => Math.max(0, y) * 0.35);
+      list.push(plume);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 42. Соляной кристалл галита / береговой торос (Halite Spire) ---- */
+  function buildHaliteSpire(rng) {
+    const list = [];
+    const cSaltA = COL(0xdbf6fa);
+    const cSaltB = COL(0x74d8dc);
+    const cBase = COL(0x6b828d);
+    const cnt = 5;
+    for (let i = 0; i < cnt; i++) {
+      const h = i === 0 ? OC.lerp(1.4, 2.2, rng()) : OC.lerp(0.65, 1.35, rng());
+      const w = i === 0 ? OC.lerp(0.62, 0.88, rng()) : OC.lerp(0.32, 0.55, rng());
+      const ox = i === 0 ? 0 : Math.cos(i * 1.45) * OC.lerp(0.35, 0.75, rng());
+      const oz = i === 0 ? 0 : Math.sin(i * 1.45) * OC.lerp(0.35, 0.75, rng());
+      const box = OC.geoPrep(new T.BoxGeometry(w, h, w * OC.lerp(0.82, 1.18, rng())));
+      OC.paint(box, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBase).lerp(cSaltB, OC.smoothstep(0.05, 0.45, u)).lerp(cSaltA, OC.smoothstep(0.55, 1.0, u));
+      });
+      OC.xform(box, {
+        r: [(rng() - 0.5) * 0.25, rng() * 1.5, (rng() - 0.5) * 0.25],
+        p: [ox, h * 0.46, oz]
+      });
+      OC.withSway(box, () => 0);
+      list.push(box);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   let previewCache = null;
 
@@ -8156,6 +8831,11 @@ window.OC = window.OC || {};
 
       const matChimney = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.72, metalness: 0.28, side: T.DoubleSide
+      }), { causticStrength: 0.0, swayAmp: 0 });
+
+      const matHydrate = enh(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.28, metalness: 0.06,
+        emissive: new T.Color(0x4a3108), emissiveIntensity: 0.42, side: T.DoubleSide
       }), { causticStrength: 0.0, swayAmp: 0 });
 
       const matClam = enh(new T.MeshStandardMaterial({
@@ -8355,6 +9035,18 @@ window.OC = window.OC || {};
         serpentinite_vent: {
           mat: matChimney, maxInstances: 320, cullDist: 620,
           geos: [buildSerpentiniteVent(rng), buildSerpentiniteVent(rng)]
+        },
+        methane_hydrate: {
+          mat: matHydrate, maxInstances: 520, cullDist: 500,
+          geos: [buildMethaneHydrate(rng), buildMethaneHydrate(rng)]
+        },
+        cold_tubeworm: {
+          mat: matSoft, maxInstances: 960, cullDist: 440,
+          geos: [buildColdTubeworm(rng), buildColdTubeworm(rng)]
+        },
+        halite_spire: {
+          mat: matIce, maxInstances: 540, cullDist: 560,
+          geos: [buildHaliteSpire(rng), buildHaliteSpire(rng)]
         }
       };
 
@@ -8791,6 +9483,7 @@ window.OC = window.OC || {};
     const yDepth = opts.yDepth || -8;
     const yAmp = opts.yAmp || 3.5;
     const diel = opts.diel || 'diurnal';
+    const dvmAmp = opts.dvmAmp || 4.5;
     const shyness = opts.shyness !== undefined ? opts.shyness : 0.7;
     const curious = opts.curious || 0;
     const isPredator = !!opts.isPredator;
@@ -8933,7 +9626,7 @@ window.OC = window.OC || {};
           radiusMult = OC.lerp(0.55, 1.0, dayW);
         } else if (diel === 'nocturnal') {
           activity = OC.lerp(1.25, 0.55, dayW);
-          depthShift = OC.lerp(4.5, -4.0, dayW); // ночью поднимаются охотиться, днём в тени грота
+          depthShift = OC.lerp(dvmAmp, -dvmAmp * 0.85, dayW); // ночью поднимаются охотиться, днём опускаются глубже
           radiusMult = OC.lerp(1.25, 0.6, dayW);
         } else {
           activity = OC.lerp(0.85, 1.05, dayW);
@@ -11522,6 +12215,484 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Подводное соляное озеро с галоклином (Brine Pool) ---------- */
+  function makeBrineLake(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    const level = preview ? 0 : (opts.level !== undefined ? opts.level : -62.0);
+    const baseR = preview ? 4.4 : (opts.r || 68);
+    const RINGS = 14;
+    const SEGS = 48;
+
+    const group = new T.Group();
+    group.position.set(cx, level, cz);
+    group.userData.key = 'brine_pool_lake';
+
+    const radiusAt = (ang) => {
+      if (!preview && opts.radiusFn) return opts.radiusFn(ang);
+      return baseR * (1.0 + 0.12 * Math.sin(ang * 3.0 + 0.6) + 0.07 * Math.cos(ang * 5.0 - 0.4));
+    };
+
+    const vertCount = 1 + RINGS * SEGS;
+    const pos = new Float32Array(vertCount * 3);
+    const edge = new Float32Array(vertCount);
+    const uvs = new Float32Array(vertCount * 2);
+    const indices = [];
+
+    pos[0] = 0; pos[1] = 0; pos[2] = 0;
+    edge[0] = 0;
+    uvs[0] = 0.5; uvs[1] = 0.5;
+
+    let ptr = 1;
+    for (let r = 1; r <= RINGS; r++) {
+      const f = r / RINGS;
+      for (let s = 0; s < SEGS; s++) {
+        const ang = (s / SEGS) * Math.PI * 2;
+        const rr = radiusAt(ang) * f;
+        const vx = Math.cos(ang) * rr;
+        const vz = Math.sin(ang) * rr;
+        pos[ptr * 3] = vx;
+        pos[ptr * 3 + 1] = 0;
+        pos[ptr * 3 + 2] = vz;
+        edge[ptr] = f;
+        uvs[ptr * 2] = 0.5 + (vx / (baseR * 2.4));
+        uvs[ptr * 2 + 1] = 0.5 + (vz / (baseR * 2.4));
+        ptr++;
+      }
+    }
+
+    for (let s = 0; s < SEGS; s++) {
+      const next = (s + 1) % SEGS;
+      indices.push(0, 1 + next, 1 + s);
+    }
+    for (let r = 1; r < RINGS; r++) {
+      const r0 = 1 + (r - 1) * SEGS;
+      const r1 = 1 + r * SEGS;
+      for (let s = 0; s < SEGS; s++) {
+        const next = (s + 1) % SEGS;
+        indices.push(r0 + s, r0 + next, r1 + s);
+        indices.push(r0 + next, r1 + next, r1 + s);
+      }
+    }
+
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aEdge', new T.BufferAttribute(edge, 1));
+    geo.setAttribute('uv', new T.BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+
+    const mat = new T.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: T.DoubleSide,
+      fog: !preview,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        {
+          uTime: OC.uTime,
+          uAmp: { value: preview ? 0.04 : 0.24 }
+        }
+      ]),
+      vertexShader: `
+        attribute float aEdge;
+        uniform float uTime, uAmp;
+        varying float vEdge;
+        varying vec3 vWorld;
+        #include <fog_pars_vertex>
+        void main(){
+          vEdge = aEdge;
+          vec3 p = position;
+          float damp = 1.0 - smoothstep(0.74, 1.0, aEdge);
+          float w = sin(p.x * 0.16 + uTime * 1.4) * cos(p.z * 0.18 - uTime * 1.15) * 0.55
+                  + sin((p.x + p.z) * 0.31 - uTime * 2.1) * 0.45;
+          p.y += w * uAmp * damp;
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          vWorld = (modelMatrix * vec4(p, 1.0)).xyz;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform float uTime;
+        varying float vEdge;
+        varying vec3 vWorld;
+        #include <fog_pars_fragment>
+        void main(){
+          float r1 = sin(vWorld.x * 0.42 + uTime * 1.3) * cos(vWorld.z * 0.38 - uTime * 1.05);
+          float r2 = sin((vWorld.x - vWorld.z) * 0.72 + uTime * 1.85);
+          float rip = 0.5 + 0.5 * (r1 * 0.6 + r2 * 0.4);
+          vec3 toCam = normalize(cameraPosition - vWorld);
+          float fresnel = pow(1.0 - abs(toCam.y), 2.2);
+
+          vec3 deepBrine = vec3(0.05, 0.28, 0.34);
+          vec3 sheen = vec3(0.24, 0.92, 0.86);
+          vec3 rimSalt = vec3(0.84, 0.99, 0.98);
+
+          vec3 col = mix(deepBrine, sheen, clamp(rip * 0.48 + fresnel * 0.65, 0.0, 1.0));
+          float shoreBand = smoothstep(0.84, 0.98, vEdge);
+          col = mix(col, rimSalt, shoreBand * 0.92);
+          float alpha = mix(0.76, 0.94, max(fresnel * 0.5, shoreBand));
+          gl_FragColor = vec4(col, alpha);
+          #include <fog_fragment>
+        }`
+    });
+
+    const lakeMesh = new T.Mesh(geo, mat);
+    lakeMesh.userData.key = 'brine_pool_lake';
+    group.add(lakeMesh);
+
+    // Кристаллическая береговая кромка галита для превью в Атласе
+    if (preview) {
+      const rimGeo = new T.TorusGeometry(baseR * 0.98, 0.24, 8, 42);
+      rimGeo.rotateX(Math.PI / 2);
+      OC.geoPrep(rimGeo);
+      OC.paint(rimGeo, 0xd8f8fc);
+      group.add(new T.Mesh(rimGeo, creatureMat));
+    }
+
+    let halo = null;
+    if (!preview && opts.light !== false) {
+      halo = new T.PointLight(0x36f0da, 1.35, baseR * 2.2, 1.4);
+      halo.position.set(0, 6.5, 0);
+      group.add(halo);
+    }
+
+    scene.add(group);
+    return {
+      key: 'brine_pool_lake',
+      sonarLabel: opts.label || 'Подводное соляное озеро (галоклин 230‰)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (preview) return;
+        const d = Math.hypot(cx - camPos.x, cz - camPos.z);
+        group.visible = d < 650;
+        if (halo) halo.intensity = group.visible ? (1.15 + 0.3 * Math.sin(time * 1.6 + cx * 0.05)) : 0;
+      }
+    };
+  }
+
+  /* ---------- Гигантская биолюминесцентная сифонофора (Praya dubia) ---------- */
+  function makeSiphonophore(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    group.userData.key = 'siphonophore';
+
+    const nSeg = 18;
+    const segs = [];
+    const bellMat = new T.MeshStandardMaterial({
+      color: 0xa6f4ff,
+      emissive: new T.Color(0x28c8ff),
+      emissiveIntensity: 0.72,
+      transparent: true,
+      opacity: 0.66,
+      roughness: 0.18
+    });
+    const coreMat = new T.MeshStandardMaterial({
+      color: 0xff9ef6,
+      emissive: new T.Color(0xc84eff),
+      emissiveIntensity: 0.95,
+      transparent: true,
+      opacity: 0.85,
+      roughness: 0.28
+    });
+    const tentMat = new T.MeshBasicMaterial({
+      color: 0x62f4ff,
+      transparent: true,
+      opacity: 0.45
+    });
+
+    const bellGeo = new T.SphereGeometry(0.42, 10, 8);
+    bellGeo.scale(0.95, 0.88, 1.35);
+    const bodyGeo = new T.SphereGeometry(0.24, 8, 6);
+    bodyGeo.scale(0.8, 0.8, 1.55);
+    const tentGeo = new T.CylinderGeometry(0.012, 0.004, 1.65, 4);
+
+    for (let i = 0; i < nSeg; i++) {
+      const sg = new T.Group();
+      if (i < 2) {
+        const bL = new T.Mesh(bellGeo, bellMat);
+        bL.position.set(-0.22, 0, -i * 0.45);
+        const bR = new T.Mesh(bellGeo, bellMat);
+        bR.position.set(0.22, 0, -i * 0.45);
+        sg.add(bL, bR);
+      } else {
+        const f = 1.0 - (i / nSeg) * 0.58;
+        const m = new T.Mesh(bodyGeo, i % 2 === 0 ? coreMat : bellMat);
+        m.scale.setScalar(f);
+        sg.add(m);
+        if (i % 2 === 0) {
+          const t = new T.Mesh(tentGeo, tentMat);
+          t.position.y = -0.82 * f;
+          t.scale.setScalar(f);
+          sg.add(t);
+        }
+      }
+      sg.userData.key = 'siphonophore';
+      group.add(sg);
+      segs.push(sg);
+    }
+
+    const scale = opts.scale || 1.1;
+    group.scale.setScalar(scale);
+    scene.add(group);
+
+    if (preview) {
+      for (let i = 0; i < segs.length; i++) {
+        segs[i].position.set(Math.sin(i * 0.42) * 0.65, Math.cos(i * 0.35) * 0.38, (nSeg * 0.25) - i * 0.52);
+      }
+      return { key: 'siphonophore', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    const r = opts.r || 42;
+    const yBase = opts.y || -36;
+    const spd = opts.speed || 1.65;
+    let ang = Math.random() * 6.28;
+    const headPos = new T.Vector3();
+    const lookPos = new T.Vector3();
+    return {
+      key: 'siphonophore',
+      sonarLabel: 'Гигантская сифонофора (Praya dubia)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 460) { group.visible = false; return; }
+        group.visible = true;
+        ang += (spd / Math.max(12, r)) * dt;
+        const hx = cx + Math.cos(ang) * r;
+        const hz = cz + Math.sin(ang) * r * 0.82;
+        const hy = Math.max(yBase + Math.sin(time * 0.32 + ang) * 5.0, biome.getHeight(hx, hz) + 6.5);
+        const nx = cx + Math.cos(ang + 0.08) * r;
+        const nz = cz + Math.sin(ang + 0.08) * r * 0.82;
+        const ny = Math.max(yBase + Math.sin(time * 0.32 + ang + 0.08) * 5.0, biome.getHeight(nx, nz) + 6.5);
+        headPos.set(hx, hy, hz);
+        lookPos.set(nx, ny, nz);
+        group.position.copy(headPos);
+        group.lookAt(lookPos);
+
+        for (let i = 0; i < segs.length; i++) {
+          const ph = time * 2.1 - i * 0.44;
+          segs[i].position.set(Math.sin(ph) * (0.16 + i * 0.045), Math.cos(ph * 0.8) * (0.08 + i * 0.025), -i * 0.58);
+          segs[i].rotation.y = Math.cos(ph) * 0.25;
+        }
+      }
+    };
+  }
+
+  /* ---------- Сельдяной король / Ремнеры (Regalecus glesne) ---------- */
+  function makeOarfish(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    group.userData.key = 'oarfish';
+
+    const nSeg = 12;
+    const segs = [];
+    const silverMat = new T.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.22,
+      metalness: 0.58,
+      side: T.DoubleSide
+    });
+    const crestMat = new T.MeshStandardMaterial({
+      color: 0xe62434,
+      emissive: new T.Color(0x520810),
+      emissiveIntensity: 0.38,
+      roughness: 0.42,
+      side: T.DoubleSide
+    });
+
+    for (let i = 0; i < nSeg; i++) {
+      const sg = new T.Group();
+      const f = 1.0 - (i / nSeg) * 0.65;
+      const bodyG = new T.BoxGeometry(0.11 * f, 0.52 * f, 0.72);
+      OC.geoPrep(bodyG);
+      OC.paint(bodyG, (x, y, z, c) => c.set(Math.abs(y) < 0.14 ? 0xedf6ff : 0x9bb4cf));
+      sg.add(new T.Mesh(bodyG, silverMat));
+
+      // Непрерывный алый спинной плавник вдоль всей ленты
+      const finG = new T.PlaneGeometry(0.72, 0.36 * f);
+      finG.rotateY(Math.PI / 2);
+      const finM = new T.Mesh(finG, crestMat);
+      finM.position.y = 0.40 * f;
+      sg.add(finM);
+
+      if (i === 0) {
+        // Знаменитый алый головной гребень + два длинных брюшных «весла»
+        for (let c = 0; c < 4; c++) {
+          const cr = new T.CylinderGeometry(0.014, 0.025, 1.05 - c * 0.12, 5);
+          const cm = new T.Mesh(cr, crestMat);
+          cm.position.set(0, 0.65 - c * 0.05, 0.12 - c * 0.1);
+          cm.rotation.x = -0.35 - c * 0.14;
+          sg.add(cm);
+        }
+        const eyeGeo = new T.SphereGeometry(0.068, 8, 6);
+        const eyeMat = new T.MeshBasicMaterial({ color: 0xffe488 });
+        for (const s of [-1, 1]) {
+          const em = new T.Mesh(eyeGeo, eyeMat);
+          em.position.set(s * 0.065, 0.06, 0.22);
+          sg.add(em);
+
+          const oar = new T.CylinderGeometry(0.012, 0.008, 1.35, 5);
+          const om = new T.Mesh(oar, crestMat);
+          om.position.set(s * 0.09, -0.58, -0.05);
+          om.rotation.x = 0.72;
+          om.rotation.z = -s * 0.28;
+          sg.add(om);
+        }
+      }
+
+      sg.userData.key = 'oarfish';
+      group.add(sg);
+      segs.push(sg);
+    }
+
+    const scale = opts.scale || 1.05;
+    group.scale.setScalar(scale);
+    scene.add(group);
+
+    if (preview) {
+      for (let i = 0; i < segs.length; i++) {
+        segs[i].position.set(Math.sin(i * 0.55) * 0.42, 0, (nSeg * 0.3) - i * 0.65);
+        segs[i].rotation.y = Math.cos(i * 0.55) * 0.26;
+      }
+      return { key: 'oarfish', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    const r = opts.r || 55;
+    const yBase = opts.y || -32;
+    const spd = opts.speed || 2.8;
+    let ang = Math.random() * 6.28;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'oarfish',
+      sonarLabel: 'Сельдяной король (Regalecus glesne)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 480) { group.visible = false; return; }
+        group.visible = true;
+        ang += (spd / Math.max(18, r)) * dt;
+        const ax = cx + Math.cos(ang) * r;
+        const az = cz + Math.sin(ang) * r;
+        const ay = Math.max(yBase + Math.sin(time * 0.38 + ang) * 7.5, biome.getHeight(ax, az) + 6.0);
+        const bx = cx + Math.cos(ang + 0.07) * r;
+        const bz = cz + Math.sin(ang + 0.07) * r;
+        const by = Math.max(yBase + Math.sin(time * 0.38 + ang + 0.07) * 7.5, biome.getHeight(bx, bz) + 6.0);
+        a.set(ax, Math.min(-6, ay), az);
+        b.set(bx, Math.min(-6, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+
+        for (let i = 0; i < segs.length; i++) {
+          const ph = time * 3.4 - i * 0.58;
+          segs[i].position.set(Math.sin(ph) * (0.08 + i * 0.042), 0, -i * 0.66);
+          segs[i].rotation.y = Math.cos(ph) * 0.28;
+        }
+      }
+    };
+  }
+
+  /* ---------- Глубоководная химера / Рыба-кролик (Hydrolagus) ---------- */
+  function makeChimaera(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    const parts = [];
+
+    const body = new T.SphereGeometry(0.45, 14, 10);
+    body.scale(0.85, 0.92, 1.95);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const z = bp.getZ(i);
+      const taper = z < 0 ? OC.clamp(1.0 + z * 0.72, 0.12, 1.0) : (1.0 - Math.pow(z, 1.8) * 0.22);
+      bp.setX(i, bp.getX(i) * taper);
+      bp.setY(i, bp.getY(i) * taper);
+    }
+    OC.geoPrep(body);
+    body.computeVertexNormals();
+    OC.paint(body, (x, y, z, c) => c.set(y > 0 ? 0x6f6282 : 0xb8b2c4));
+    parts.push(body);
+
+    const dorsal = new T.ConeGeometry(0.18, 0.78, 5);
+    dorsal.scale(0.32, 1, 1.35);
+    OC.geoPrep(dorsal);
+    OC.paint(dorsal, 0x524564);
+    OC.xform(dorsal, { r: [-0.25, 0, 0], p: [0, 0.48, 0.14] });
+    parts.push(dorsal);
+
+    const whip = new T.ConeGeometry(0.085, 1.55, 6);
+    whip.rotateX(-Math.PI / 2);
+    OC.geoPrep(whip);
+    OC.paint(whip, 0x8e869c);
+    OC.xform(whip, { p: [0, -0.02, -1.45] });
+    parts.push(whip);
+
+    group.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+    // Огромные изумрудно-отражающие глаза химеры
+    const eyeMat = new T.MeshBasicMaterial({ color: 0x64ffbe });
+    const eyeGeo = new T.SphereGeometry(0.11, 8, 6);
+    for (const s of [-1, 1]) {
+      const em = new T.Mesh(eyeGeo, eyeMat);
+      em.position.set(s * 0.28, 0.11, 0.45);
+      group.add(em);
+    }
+
+    // Широкие крыловидные грудные плавники
+    const wingGeo = new T.ConeGeometry(0.56, 0.96, 4);
+    wingGeo.scale(0.14, 1.0, 0.75);
+    wingGeo.rotateZ(Math.PI / 2);
+    OC.geoPrep(wingGeo);
+    OC.paint(wingGeo, 0x7b6c92);
+    const wings = [];
+    for (const s of [-1, 1]) {
+      const wPiv = new T.Group();
+      wPiv.position.set(s * 0.28, -0.08, 0.22);
+      const wm = new T.Mesh(wingGeo, creatureMat);
+      wm.position.set(s * 0.42, 0, -0.06);
+      if (s < 0) wm.rotation.y = Math.PI;
+      wPiv.add(wm);
+      group.add(wPiv);
+      wings.push({ piv: wPiv, side: s });
+    }
+
+    group.scale.setScalar(opts.scale || 1.15);
+    group.userData.key = 'chimaera';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 30;
+    const cx = opts.cx || 0, cz = opts.cz || 0, r = opts.r || 42;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'chimaera',
+      sonarLabel: 'Глубоководная химера (Hydrolagus)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 2.1) / Math.max(10, r)) * dt;
+        const ax = cx + Math.cos(ang) * r;
+        const az = cz + Math.sin(ang) * r;
+        const bx = cx + Math.cos(ang + 0.09) * r;
+        const bz = cz + Math.sin(ang + 0.09) * r;
+        const ay = biome.getHeight(ax, az) + 2.4 + Math.sin(t * 0.9) * 0.75;
+        const by = biome.getHeight(bx, bz) + 2.4 + Math.sin(t * 0.9 + 0.14) * 0.75;
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        const flap = Math.sin(time * 3.1 + t) * 0.34;
+        wings[0].piv.rotation.z = flap;
+        wings[1].piv.rotation.z = -flap;
+      }
+    };
+  }
+
   /* ---------- Надводное научно-исследовательское судно (Mother-Ship НИС) ---------- */
   function makeResearchVessel(scene, biome, opts) {
     opts = opts || {};
@@ -12827,6 +13998,30 @@ window.OC = window.OC || {};
         agents.push(makeSeaPig(faunaGroup, biome, sp));
       }
 
+      for (const bl of (plan.brineLakes || [])) {
+        const blo = makeBrineLake(faunaGroup, biome, bl);
+        agents.push(blo);
+        sonarTargets.push(blo);
+      }
+
+      for (const sph of (plan.siphonophores || [])) {
+        const spho = makeSiphonophore(faunaGroup, biome, sph);
+        agents.push(spho);
+        sonarTargets.push(spho);
+      }
+
+      for (const orf of (plan.oarfishes || [])) {
+        const orfo = makeOarfish(faunaGroup, biome, orf);
+        agents.push(orfo);
+        sonarTargets.push(orfo);
+      }
+
+      for (const ch of (plan.chimaeras || [])) {
+        const cho = makeChimaera(faunaGroup, biome, ch);
+        agents.push(cho);
+        sonarTargets.push(cho);
+      }
+
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
@@ -13147,6 +14342,10 @@ window.OC = window.OC || {};
               c.setHex(0x4b5c69).lerp(new T.Color(0x88b4cc), OC.clamp((y - avgY) * 0.25 + 0.3, 0, 0.7));
             } else if (bId === 'wreck_atoll') {
               c.setHex(0xe5d7b4).lerp(new T.Color(0x8ab894), Math.sin(x * 0.38 + z * 0.42) * 0.35 + 0.35);
+            } else if (bId === 'mariana_trench') {
+              c.setHex(0x282c36).lerp(new T.Color(0x6d8492), Math.sin(x * 0.45 + z * 0.35) * 0.25 + 0.25);
+            } else if (bId === 'brine_pool') {
+              c.setHex(0x3a3248).lerp(new T.Color(0x8cd2d8), Math.sin(x * 0.42 + z * 0.42) * 0.32 + 0.35);
             } else {
               c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
             }
@@ -13220,6 +14419,14 @@ window.OC = window.OC || {};
           makeHadalSnailfish(tmpGroup, dummyBiome, { cx: 0, cz: 0, scale: 1.5 });
         } else if (key === 'sea_pig') {
           makeSeaPig(tmpGroup, dummyBiome, { cx: 0, cz: 0, singlePreview: true });
+        } else if (key === 'brine_pool_lake') {
+          makeBrineLake(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'siphonophore') {
+          makeSiphonophore(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'oarfish') {
+          makeOarfish(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'chimaera') {
+          makeChimaera(tmpGroup, dummyBiome, { cx: 0, cz: 0, scale: 1.25 });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;
@@ -13445,7 +14652,7 @@ window.OC = window.OC || {};
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') {
           if (S.currentDepth < 32 && Math.random() < 0.55) S.iceCrack();
-        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench') {
+        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') {
           S.shrimpSnap();
         }
       }
@@ -13564,7 +14771,7 @@ window.OC = window.OC || {};
     const t = setTimeout(() => {
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') S.belugaCall();
-        else if (S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench') S.whale();
+        else if (S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') S.whale();
       }
       S.scheduleWhale();
     }, rnd(14000, 32000));
@@ -13717,6 +14924,9 @@ window.OC = window.OC || {};
     if (key === 'whale_fall') return 'Резонанс гадали и шорох оазиса';
     if (key === 'serpentinite_vent' || key === 'osedax_plume') return 'Пульс метанового сипа и гадали';
     if (key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge') return 'Биоакустика Бездны Челленджера';
+    if (key === 'brine_pool_lake') return 'Резонанс галоклина и плотного рассола';
+    if (key === 'methane_hydrate' || key === 'halite_spire' || key === 'cold_tubeworm') return 'Пульс газового гидрата и сипа';
+    if (key === 'siphonophore' || key === 'oarfish' || key === 'chimaera' || key === 'myctophid' || key === 'hatchetfish') return 'Био-перелив сумеречной зоны';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
@@ -13854,7 +15064,7 @@ window.OC = window.OC || {};
           o.connect(bp); bp.connect(g); g.connect(out);
           o.start(now + i * 0.08); o.stop(now + 1.5);
         });
-      } else if (key === 'whale_fall' || key === 'serpentinite_vent' || key === 'osedax_plume') {
+      } else if (key === 'whale_fall' || key === 'serpentinite_vent' || key === 'osedax_plume' || key === 'brine_pool_lake' || key === 'methane_hydrate' || key === 'halite_spire' || key === 'cold_tubeworm') {
         // Глубокий гадальный бас + мягкие стеклянные обертоны оазиса 11 км глубины
         const o = ctx.createOscillator();
         const lp = ctx.createBiquadFilter();
@@ -13896,7 +15106,7 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
         src.connect(bp); bp.connect(g); g.connect(out);
         src.start(now); src.stop(now + dur + 0.05);
-      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo' || key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge') {
+      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo' || key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge' || key === 'siphonophore' || key === 'oarfish' || key === 'chimaera' || key === 'myctophid' || key === 'hatchetfish') {
         [660, 990, 1320].forEach((f, i) => {
           const t = now + i * 0.14;
           const o = ctx.createOscillator();
@@ -14211,8 +15421,8 @@ window.OC = window.OC || {};
     'coral_boulder', 'coral_pillar', 'coral_seafan', 'coral_soft', 'coral_whip',
     'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral'
   ]);
-  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume']);
-  const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle']);
+  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm']);
+  const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle', 'halite_spire']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
   const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm']);
 
@@ -14833,15 +16043,29 @@ window.OC = window.OC || {};
           category = 'Био-оазис глубин';
           chemNote = `Хемосинтез Osedax · Коллаген костей`;
           colorHex = 0xe84a76;
+        } else if (sp === 'methane_hydrate') {
+          category = 'Газовый гидрат';
+          chemNote = `CH₄·5.75H₂O · ~67 атм · Крио-клатрат`;
+          colorHex = 0xf4cf76;
+        } else if (sp === 'cold_tubeworm') {
+          category = 'Био-оазис сипа';
+          chemNote = `Хемосинтез Lamellibrachia · До 250 лет`;
+          colorHex = 0xd92658;
         } else {
           category = 'Сульфидная проба';
           chemNote = `H₂S-хемосинтез · ${(waterTemp + (sp === 'smoker_chimney' || sp === 'vent_chimney' ? 140 : 12)).toFixed(0)} °C очаг`;
           colorHex = 0xd68c45;
         }
       } else if (ICE_SPECIES.has(sp)) {
-        category = 'Крио-керн';
-        chemNote = `Рассол 42‰ · ${waterTemp.toFixed(1)} °C`;
-        colorHex = 0x8ae8ff;
+        if (sp === 'halite_spire') {
+          category = 'Эвапорит галита';
+          chemNote = `Кристалл NaCl · Рассол 230‰`;
+          colorHex = 0x74e8ec;
+        } else {
+          category = 'Крио-керн';
+          chemNote = `Рассол 42‰ · ${waterTemp.toFixed(1)} °C`;
+          colorHex = 0x8ae8ff;
+        }
       } else if (WRECK_SPECIES.has(sp)) {
         category = 'Архео-фрагмент';
         chemNote = `Патина бронзы и карбонат`;
@@ -14860,9 +16084,11 @@ window.OC = window.OC || {};
       category = 'Керн грунта';
       chemNote = biome.id === 'mariana_trench'
         ? `Радиоляриевый ил · ${depthM.toFixed(0)} м`
-        : (biome.id === 'hydrothermal_vents'
-          ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-          : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`));
+        : (biome.id === 'brine_pool'
+          ? `Рассол 230‰ и карбонатный ил · ${depthM.toFixed(0)} м`
+          : (biome.id === 'hydrothermal_vents'
+            ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
+            : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`)));
     }
 
     return {
@@ -14887,7 +16113,7 @@ window.OC = window.OC || {};
   function computeWaterColumn(biome, x, z, craftDepthM, labState) {
     const fl = biome.getHeight(x, z);
     const off = biome.depthOffset || 0;
-    const minDepthM = off > 0 ? Math.max(2400, off) : 0;
+    const minDepthM = off > 0 ? off : 0;
     const maxDepthM = Math.max(minDepthM + 10, off + (off > 0 ? -fl : Math.max(4, -fl)));
     const binsCount = 24;
     const deltaT = labState ? labState.tempDelta : 0;
@@ -14920,6 +16146,9 @@ window.OC = window.OC || {};
       } else if (biome.id === 'hydrothermal_vents') {
         // Ближе ко дну рифта тепловой фон повышается
         Tval += Math.pow(f, 3) * 3.4;
+      } else if (biome.id === 'brine_pool') {
+        // Придонный геотермальный галоклин соляного озера слегка теплее
+        Tval += OC.smoothstep(0.76, 1.0, f) * 1.4;
       }
       Tval = Math.max(-1.9, Tval);
 
@@ -15250,6 +16479,7 @@ window.OC = window.OC || {};
     targetYaw: 2.25,
     targetPitch: -0.14,
     swimSpeed: 18,
+    inBrine: false,
     // Вид от 3-го лица за аппаратом ROV
     rovView: false,
     chasePos: new T.Vector3(),
@@ -15495,8 +16725,13 @@ window.OC = window.OC || {};
     p.x = OC.clamp(p.x, -bound, bound);
     p.z = OC.clamp(p.z, -bound, bound);
     const fl = biomeRef.getHeight(p.x, p.z);
+    let minY = fl + 1.65;
+    if (biomeRef && biomeRef.getBrineSurfaceAt) {
+      const brine = biomeRef.getBrineSurfaceAt(p.x, p.z);
+      if (brine) minY = Math.max(minY, brine.level - 1.1);
+    }
     const maxY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
-    p.y = OC.clamp(p.y, fl + 1.65, maxY);
+    p.y = OC.clamp(p.y, minY, maxY);
   }
 
   OC.Navigation = {
@@ -15641,6 +16876,7 @@ window.OC = window.OC || {};
     },
     getTourState: buildTourState,
     getMode: () => state.mode,
+    isInBrine: () => state.inBrine,
     isRovView: () => state.rovView,
     setRovView(on) {
       state.rovView = !!on;
@@ -15680,6 +16916,7 @@ window.OC = window.OC || {};
       const sp = biomeRef.spawn;
       state.pos.set(sp.pos[0], sp.pos[1], sp.pos[2]);
       state.vel.set(0, 0, 0);
+      state.inBrine = false;
       state.yaw = sp.yaw;
       state.targetYaw = sp.yaw;
       state.pitch = sp.pitch;
@@ -15691,7 +16928,12 @@ window.OC = window.OC || {};
 
     flyTo(x, y, z, yaw, pitch) {
       if (state.mode === 'tour') setMode('swim');
-      const safeY = Math.max(y, biomeRef.getHeight(x, z) + 2.4);
+      let minSafe = biomeRef.getHeight(x, z) + 2.4;
+      if (biomeRef && biomeRef.getBrineSurfaceAt) {
+        const brine = biomeRef.getBrineSurfaceAt(x, z);
+        if (brine) minSafe = Math.max(minSafe, brine.level + 0.8);
+      }
+      const safeY = Math.max(y, minSafe);
       const dist = Math.hypot(x - state.pos.x, safeY - state.pos.y, z - state.pos.z);
 
       // Если точка далеко (> 380 м), телепортируемся в окрестность с коротким плавным подлётом
@@ -15875,11 +17117,29 @@ window.OC = window.OC || {};
           _curr.set(0, 0, 0);
         }
 
+        // Архимедова выталкивающая сила сверхсолёного подводного озера (галоклин ~230‰)
+        let nowInBrine = false;
+        if (biomeRef && biomeRef.getBrineSurfaceAt) {
+          const brine = biomeRef.getBrineSurfaceAt(state.pos.x, state.pos.z);
+          if (brine && state.pos.y < brine.level + 0.45) {
+            nowInBrine = true;
+            const sub = (brine.level + 0.06) - state.pos.y;
+            if (sub > 0) state.vel.y += sub * 28.0 * dt;
+            state.vel.y += Math.sin(time * 2.15 + state.pos.x * 0.25) * 0.32 * dt;
+            state.vel.y *= Math.exp(-8.5 * dt);
+          }
+        }
+        state.inBrine = nowInBrine;
+
         // Водное сопротивление / инерция
         const damp = Math.exp(-3.4 * dt);
         state.vel.multiplyScalar(damp);
         state.pos.addScaledVector(state.vel, dt);
         clampPosition(state.pos);
+        if (biomeRef && biomeRef.getBrineSurfaceAt) {
+          const brEnd = biomeRef.getBrineSurfaceAt(state.pos.x, state.pos.z);
+          state.inBrine = !!(brEnd && state.pos.y <= brEnd.level + 0.45);
+        }
       }
 
       _fwd.set(
@@ -16188,6 +17448,44 @@ window.OC = window.OC || {};
       landmarkId: 'hadal_escarpment',
       goal: 1,
       progress: (ctx) => (ctx.depthM >= 10915 && ctx.hasPhotoOrPing(['hadal_snailfish', 'sea_pig', 'amphipod'])) ? 1 : 0
+    },
+
+    // 7. Соляной бассейн Орка и Сумеречная пелагиаль (Мексиканский залив, 650 м)
+    {
+      id: 'bp_atlas_6',
+      biomeId: 'brine_pool',
+      title: 'Океанолог галоклина',
+      desc: 'Откройте 6 видов, минералов или явлений соляных озёр и сумеречной пелагиали Мексиканского залива.',
+      landmarkId: 'despair_basin',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'bp_brine_lake',
+      biomeId: 'brine_pool',
+      title: 'Зеркало «Бассейна Отчаяния»',
+      desc: 'Сфотографируйте на камеру (P) или просканируйте сонаром (G) подводное соляное озеро или соляной шпиль галита.',
+      landmarkId: 'despair_basin',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['brine_pool_lake', 'halite_spire']) ? 1 : 0
+    },
+    {
+      id: 'bp_hydrate_seep',
+      biomeId: 'brine_pool',
+      title: 'Берег мидий и «горящего льда»',
+      desc: 'Посетите Мидиевые берега (mussel_shore) и зафиксируйте (P/G) газовые гидраты метана или вестиментифер Lamellibrachia.',
+      landmarkId: 'mussel_hydrates',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('mussel_shore') && ctx.hasPhotoOrPing(['methane_hydrate', 'cold_tubeworm', 'vent_mussels']) ? 1 : 0
+    },
+    {
+      id: 'bp_twilight_giant',
+      biomeId: 'brine_pool',
+      title: 'Легенды сумеречной зоны',
+      desc: 'Сфотографируйте (P) гигантскую сифонофору, сельдяного короля, глубоководную химеру или мигрирующих миктофид.',
+      landmarkId: 'twilight_column',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['siphonophore', 'oarfish', 'chimaera', 'myctophid', 'hatchetfish']) ? 1 : 0
     }
   ];
 
@@ -16526,6 +17824,13 @@ window.OC = window.OC || {};
       if (y > -95) return [24, 34, 68];    // равнина и оазис китового падения
       return [12, 16, 40];                 // глубочайшая ось Бездны Челленджера
     }
+    if (theme === 'brine') {
+      if (y > -32) return [106, 124, 152]; // соляные диапиры
+      if (y > -48) return [72, 74, 104];   // склоны каскада Орка
+      if (y > -60) return [54, 50, 74];    // мидиевые берега и гидраты
+      if (y > -72) return [34, 32, 52];    // котловина рассола
+      return [18, 18, 34];                 // глубокий континентальный склон
+    }
     if (theme === 'arctic') {
       if (y > -11) return [218, 240, 252]; // кромка пакового припая
       if (y > -18) return [134, 206, 236]; // бирюзовые ледяные поля и полыньи
@@ -16565,9 +17870,13 @@ window.OC = window.OC || {};
       for (let px = 0; px < SIZE; px++) {
         const wx = ((px / (SIZE - 1)) * 2 - 1) * R;
         const y = biomeRef.getHeight(wx, wz);
-        const rgb = depthToRGB(y);
+        let rgb = depthToRGB(y);
+        const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
+        if (brine) {
+          rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
+        }
         // Лёгкая изогипса каждые 15 м
-        const contour = (y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
+        const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
         const idx = (py * SIZE + px) * 4;
         img.data[idx] = Math.min(255, rgb[0] * contour);
         img.data[idx + 1] = Math.min(255, rgb[1] * contour);
@@ -16635,7 +17944,7 @@ window.OC = window.OC || {};
           }
         }
         const [wx, wz] = mapToWorld(px, py);
-        const z = biomeRef.getZoneAt(wx, -10, wz);
+        const z = biomeRef.getZoneAt(wx, biomeRef.getHeight(wx, wz) + 2, wz);
         const wp = OC.Expedition.setWaypoint(biomeRef.id, wx, wz, z ? z.shortName : 'Метка');
         if (onWaypoint) onWaypoint(wp);
       }
@@ -17639,7 +18948,7 @@ window.OC = window.OC || {};
       orbitRing.rotation.y = 0.28;
       scene.add(orbitRing);
 
-      // Маяки 6 биомов + соединительные дуги маршрутов
+      // Маяки 7 биомов + соединительные дуги маршрутов
       buildBeaconsOnGlobe();
 
       raycaster = new T.Raycaster();
@@ -17699,8 +19008,8 @@ window.OC = window.OC || {};
       it.hit = hit;
     }
 
-    // Соединяем 6 точек планеты дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'hydrothermal_vents', 'arctic_sea'];
+    // Соединяем 7 точек планеты дугами глобальной экспедиции
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'brine_pool', 'hydrothermal_vents', 'arctic_sea'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);
@@ -19108,7 +20417,8 @@ window.OC = window.OC || {};
       hydrothermal_vents: 'Курильщики 2500м',
       arctic_sea: 'Арктика',
       wreck_atoll: 'Атолл и Корабль',
-      mariana_trench: 'Марианская 10920м'
+      mariana_trench: 'Марианская 10920м',
+      brine_pool: 'Соляной бассейн'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
@@ -19116,7 +20426,8 @@ window.OC = window.OC || {};
       hydrothermal_vents: 'ВТП · Абиссаль 2500 м',
       arctic_sea: 'Баффин · 74° с.ш.',
       wreck_atoll: 'Палау · Микронезия',
-      mariana_trench: 'Челленджер · 10 920 м'
+      mariana_trench: 'Челленджер · 10 920 м',
+      brine_pool: 'Мексиканский залив · 650 м'
     };
 
     function renderBiomeUI() {
@@ -19348,7 +20659,7 @@ window.OC = window.OC || {};
       }
       if (e.code === 'KeyU' && OC.Weather) {
         if (activeBiome && activeBiome.noSurface) {
-          toast('Погода на поверхности недоступна на глубине 2500 м');
+          toast('Погода на поверхности недоступна в глубоководной зоне');
         } else {
           OC.Weather.cycleMode();
           if (uiHandles && uiHandles.syncWeatherButtons) uiHandles.syncWeatherButtons();
@@ -19535,7 +20846,7 @@ window.OC = window.OC || {};
 
   function runLoop(renderer, scene, camera) {
     let last = performance.now();
-    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0;
+    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100;
 
     function resize() {
       const w = window.innerWidth, h = window.innerHeight;
@@ -19670,6 +20981,13 @@ window.OC = window.OC || {};
           lastEcoEvent = null;
         }
 
+        const inBrineNow = !!(OC.Navigation.isInBrine && OC.Navigation.isInBrine());
+        if (inBrineNow && !wasInBrine && time - lastBrineToastAt > 8) {
+          lastBrineToastAt = time;
+          toast('Галоклин рассола (230‰): архимедова плавучесть выталкивает батискаф!');
+        }
+        wasInBrine = inBrineNow;
+
         if (subMode) {
           const flHere = biome.getHeight(craftPos.x, craftPos.z);
           const clearance = Math.max(0, craftPos.y - flHere);
@@ -19688,11 +21006,14 @@ window.OC = window.OC || {};
             subCurrentEl.classList.toggle('warn', cKnots > 1.8);
           }
           if (subPhaseEl) {
-            subPhaseEl.textContent = biome.noSurface
-              ? 'Абиссаль · 2500 м'
-              : (biome.hasAurora
-                ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
-                : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День')));
+            subPhaseEl.textContent = inBrineNow
+              ? 'Галоклин · Рассол 230‰'
+              : (biome.noSurface
+                ? (biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
+                  : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м'))
+                : (biome.hasAurora
+                  ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
+                  : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'))));
           }
           drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }

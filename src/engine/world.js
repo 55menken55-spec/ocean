@@ -849,12 +849,13 @@ window.OC = window.OC || {};
     scene.fog.density = pal.fogDen;
     renderer.toneMappingExposure = pal.exposure * (opt.aboveWater ? (1.02 - wState.stormMix * 0.14) : OC.lerp(0.82, 1.06, pal.sunAtten));
 
+    const twilightLux = (biome && biome.twilightSurface) ? opt.sunAtten : 0.0;
     hemi.color.copy(pal.hemiSky);
     hemi.groundColor.copy(pal.hemiGround);
-    hemi.intensity = pal.hemiI * (biome && biome.noSurface ? 0.14 : (0.35 + 0.65 * pal.sunAtten));
+    hemi.intensity = pal.hemiI * (biome && biome.noSurface ? (0.14 + twilightLux * 0.45) : (0.35 + 0.65 * pal.sunAtten));
 
     sun.color.copy(pal.sunCol);
-    sun.intensity = pal.sunI * (biome && biome.noSurface ? 0.03 : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
+    sun.intensity = pal.sunI * (biome && biome.noSurface ? (0.03 + twilightLux * 0.34) : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
     const sunElev = (biome && biome.hasAurora) ? Math.max(0.10, Math.sin(ang) * 0.42 + 0.18) : Math.max(0.18, Math.sin(ang) * 0.85 + 0.28);

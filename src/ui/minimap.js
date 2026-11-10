@@ -34,6 +34,13 @@ window.OC = window.OC || {};
       if (y > -95) return [24, 34, 68];    // равнина и оазис китового падения
       return [12, 16, 40];                 // глубочайшая ось Бездны Челленджера
     }
+    if (theme === 'brine') {
+      if (y > -32) return [106, 124, 152]; // соляные диапиры
+      if (y > -48) return [72, 74, 104];   // склоны каскада Орка
+      if (y > -60) return [54, 50, 74];    // мидиевые берега и гидраты
+      if (y > -72) return [34, 32, 52];    // котловина рассола
+      return [18, 18, 34];                 // глубокий континентальный склон
+    }
     if (theme === 'arctic') {
       if (y > -11) return [218, 240, 252]; // кромка пакового припая
       if (y > -18) return [134, 206, 236]; // бирюзовые ледяные поля и полыньи
@@ -73,9 +80,13 @@ window.OC = window.OC || {};
       for (let px = 0; px < SIZE; px++) {
         const wx = ((px / (SIZE - 1)) * 2 - 1) * R;
         const y = biomeRef.getHeight(wx, wz);
-        const rgb = depthToRGB(y);
+        let rgb = depthToRGB(y);
+        const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
+        if (brine) {
+          rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
+        }
         // Лёгкая изогипса каждые 15 м
-        const contour = (y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
+        const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
         const idx = (py * SIZE + px) * 4;
         img.data[idx] = Math.min(255, rgb[0] * contour);
         img.data[idx + 1] = Math.min(255, rgb[1] * contour);
@@ -143,7 +154,7 @@ window.OC = window.OC || {};
           }
         }
         const [wx, wz] = mapToWorld(px, py);
-        const z = biomeRef.getZoneAt(wx, -10, wz);
+        const z = biomeRef.getZoneAt(wx, biomeRef.getHeight(wx, wz) + 2, wz);
         const wp = OC.Expedition.setWaypoint(biomeRef.id, wx, wz, z ? z.shortName : 'Метка');
         if (onWaypoint) onWaypoint(wp);
       }

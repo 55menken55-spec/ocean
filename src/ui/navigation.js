@@ -23,6 +23,7 @@ window.OC = window.OC || {};
     targetYaw: 2.25,
     targetPitch: -0.14,
     swimSpeed: 18,
+    inBrine: false,
     // Вид от 3-го лица за аппаратом ROV
     rovView: false,
     chasePos: new T.Vector3(),
@@ -268,8 +269,13 @@ window.OC = window.OC || {};
     p.x = OC.clamp(p.x, -bound, bound);
     p.z = OC.clamp(p.z, -bound, bound);
     const fl = biomeRef.getHeight(p.x, p.z);
+    let minY = fl + 1.65;
+    if (biomeRef && biomeRef.getBrineSurfaceAt) {
+      const brine = biomeRef.getBrineSurfaceAt(p.x, p.z);
+      if (brine) minY = Math.max(minY, brine.level - 1.1);
+    }
     const maxY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
-    p.y = OC.clamp(p.y, fl + 1.65, maxY);
+    p.y = OC.clamp(p.y, minY, maxY);
   }
 
   OC.Navigation = {
@@ -414,6 +420,7 @@ window.OC = window.OC || {};
     },
     getTourState: buildTourState,
     getMode: () => state.mode,
+    isInBrine: () => state.inBrine,
     isRovView: () => state.rovView,
     setRovView(on) {
       state.rovView = !!on;
@@ -453,6 +460,7 @@ window.OC = window.OC || {};
       const sp = biomeRef.spawn;
       state.pos.set(sp.pos[0], sp.pos[1], sp.pos[2]);
       state.vel.set(0, 0, 0);
+      state.inBrine = false;
       state.yaw = sp.yaw;
       state.targetYaw = sp.yaw;
       state.pitch = sp.pitch;
@@ -464,7 +472,12 @@ window.OC = window.OC || {};
 
     flyTo(x, y, z, yaw, pitch) {
       if (state.mode === 'tour') setMode('swim');
-      const safeY = Math.max(y, biomeRef.getHeight(x, z) + 2.4);
+      let minSafe = biomeRef.getHeight(x, z) + 2.4;
+      if (biomeRef && biomeRef.getBrineSurfaceAt) {
+        const brine = biomeRef.getBrineSurfaceAt(x, z);
+        if (brine) minSafe = Math.max(minSafe, brine.level + 0.8);
+      }
+      const safeY = Math.max(y, minSafe);
       const dist = Math.hypot(x - state.pos.x, safeY - state.pos.y, z - state.pos.z);
 
       // Если точка далеко (> 380 м), телепортируемся в окрестность с коротким плавным подлётом
@@ -648,11 +661,29 @@ window.OC = window.OC || {};
           _curr.set(0, 0, 0);
         }
 
+        // Архимедова выталкивающая сила сверхсолёного подводного озера (галоклин ~230‰)
+        let nowInBrine = false;
+        if (biomeRef && biomeRef.getBrineSurfaceAt) {
+          const brine = biomeRef.getBrineSurfaceAt(state.pos.x, state.pos.z);
+          if (brine && state.pos.y < brine.level + 0.45) {
+            nowInBrine = true;
+            const sub = (brine.level + 0.06) - state.pos.y;
+            if (sub > 0) state.vel.y += sub * 28.0 * dt;
+            state.vel.y += Math.sin(time * 2.15 + state.pos.x * 0.25) * 0.32 * dt;
+            state.vel.y *= Math.exp(-8.5 * dt);
+          }
+        }
+        state.inBrine = nowInBrine;
+
         // Водное сопротивление / инерция
         const damp = Math.exp(-3.4 * dt);
         state.vel.multiplyScalar(damp);
         state.pos.addScaledVector(state.vel, dt);
         clampPosition(state.pos);
+        if (biomeRef && biomeRef.getBrineSurfaceAt) {
+          const brEnd = biomeRef.getBrineSurfaceAt(state.pos.x, state.pos.z);
+          state.inBrine = !!(brEnd && state.pos.y <= brEnd.level + 0.45);
+        }
       }
 
       _fwd.set(

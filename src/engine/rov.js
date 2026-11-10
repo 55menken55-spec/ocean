@@ -16,8 +16,8 @@ window.OC = window.OC || {};
     'coral_boulder', 'coral_pillar', 'coral_seafan', 'coral_soft', 'coral_whip',
     'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral'
   ]);
-  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume']);
-  const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle']);
+  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm']);
+  const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle', 'halite_spire']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
   const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm']);
 
@@ -638,15 +638,29 @@ window.OC = window.OC || {};
           category = 'Био-оазис глубин';
           chemNote = `Хемосинтез Osedax · Коллаген костей`;
           colorHex = 0xe84a76;
+        } else if (sp === 'methane_hydrate') {
+          category = 'Газовый гидрат';
+          chemNote = `CH₄·5.75H₂O · ~67 атм · Крио-клатрат`;
+          colorHex = 0xf4cf76;
+        } else if (sp === 'cold_tubeworm') {
+          category = 'Био-оазис сипа';
+          chemNote = `Хемосинтез Lamellibrachia · До 250 лет`;
+          colorHex = 0xd92658;
         } else {
           category = 'Сульфидная проба';
           chemNote = `H₂S-хемосинтез · ${(waterTemp + (sp === 'smoker_chimney' || sp === 'vent_chimney' ? 140 : 12)).toFixed(0)} °C очаг`;
           colorHex = 0xd68c45;
         }
       } else if (ICE_SPECIES.has(sp)) {
-        category = 'Крио-керн';
-        chemNote = `Рассол 42‰ · ${waterTemp.toFixed(1)} °C`;
-        colorHex = 0x8ae8ff;
+        if (sp === 'halite_spire') {
+          category = 'Эвапорит галита';
+          chemNote = `Кристалл NaCl · Рассол 230‰`;
+          colorHex = 0x74e8ec;
+        } else {
+          category = 'Крио-керн';
+          chemNote = `Рассол 42‰ · ${waterTemp.toFixed(1)} °C`;
+          colorHex = 0x8ae8ff;
+        }
       } else if (WRECK_SPECIES.has(sp)) {
         category = 'Архео-фрагмент';
         chemNote = `Патина бронзы и карбонат`;
@@ -665,9 +679,11 @@ window.OC = window.OC || {};
       category = 'Керн грунта';
       chemNote = biome.id === 'mariana_trench'
         ? `Радиоляриевый ил · ${depthM.toFixed(0)} м`
-        : (biome.id === 'hydrothermal_vents'
-          ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-          : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`));
+        : (biome.id === 'brine_pool'
+          ? `Рассол 230‰ и карбонатный ил · ${depthM.toFixed(0)} м`
+          : (biome.id === 'hydrothermal_vents'
+            ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
+            : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`)));
     }
 
     return {
@@ -692,7 +708,7 @@ window.OC = window.OC || {};
   function computeWaterColumn(biome, x, z, craftDepthM, labState) {
     const fl = biome.getHeight(x, z);
     const off = biome.depthOffset || 0;
-    const minDepthM = off > 0 ? Math.max(2400, off) : 0;
+    const minDepthM = off > 0 ? off : 0;
     const maxDepthM = Math.max(minDepthM + 10, off + (off > 0 ? -fl : Math.max(4, -fl)));
     const binsCount = 24;
     const deltaT = labState ? labState.tempDelta : 0;
@@ -725,6 +741,9 @@ window.OC = window.OC || {};
       } else if (biome.id === 'hydrothermal_vents') {
         // Ближе ко дну рифта тепловой фон повышается
         Tval += Math.pow(f, 3) * 3.4;
+      } else if (biome.id === 'brine_pool') {
+        // Придонный геотермальный галоклин соляного озера слегка теплее
+        Tval += OC.smoothstep(0.76, 1.0, f) * 1.4;
       }
       Tval = Math.max(-1.9, Tval);
 

@@ -262,6 +262,44 @@ window.OC = window.OC || {};
       landmarkId: 'hadal_escarpment',
       goal: 1,
       progress: (ctx) => (ctx.depthM >= 10915 && ctx.hasPhotoOrPing(['hadal_snailfish', 'sea_pig', 'amphipod'])) ? 1 : 0
+    },
+
+    // 7. Соляной бассейн Орка и Сумеречная пелагиаль (Мексиканский залив, 650 м)
+    {
+      id: 'bp_atlas_6',
+      biomeId: 'brine_pool',
+      title: 'Океанолог галоклина',
+      desc: 'Откройте 6 видов, минералов или явлений соляных озёр и сумеречной пелагиали Мексиканского залива.',
+      landmarkId: 'despair_basin',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'bp_brine_lake',
+      biomeId: 'brine_pool',
+      title: 'Зеркало «Бассейна Отчаяния»',
+      desc: 'Сфотографируйте на камеру (P) или просканируйте сонаром (G) подводное соляное озеро или соляной шпиль галита.',
+      landmarkId: 'despair_basin',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['brine_pool_lake', 'halite_spire']) ? 1 : 0
+    },
+    {
+      id: 'bp_hydrate_seep',
+      biomeId: 'brine_pool',
+      title: 'Берег мидий и «горящего льда»',
+      desc: 'Посетите Мидиевые берега (mussel_shore) и зафиксируйте (P/G) газовые гидраты метана или вестиментифер Lamellibrachia.',
+      landmarkId: 'mussel_hydrates',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('mussel_shore') && ctx.hasPhotoOrPing(['methane_hydrate', 'cold_tubeworm', 'vent_mussels']) ? 1 : 0
+    },
+    {
+      id: 'bp_twilight_giant',
+      biomeId: 'brine_pool',
+      title: 'Легенды сумеречной зоны',
+      desc: 'Сфотографируйте (P) гигантскую сифонофору, сельдяного короля, глубоководную химеру или мигрирующих миктофид.',
+      landmarkId: 'twilight_column',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhoto(['siphonophore', 'oarfish', 'chimaera', 'myctophid', 'hatchetfish']) ? 1 : 0
     }
   ];
 

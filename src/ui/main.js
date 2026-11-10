@@ -1085,7 +1085,8 @@ window.OC = window.OC || {};
       hydrothermal_vents: 'Курильщики 2500м',
       arctic_sea: 'Арктика',
       wreck_atoll: 'Атолл и Корабль',
-      mariana_trench: 'Марианская 10920м'
+      mariana_trench: 'Марианская 10920м',
+      brine_pool: 'Соляной бассейн'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
@@ -1093,7 +1094,8 @@ window.OC = window.OC || {};
       hydrothermal_vents: 'ВТП · Абиссаль 2500 м',
       arctic_sea: 'Баффин · 74° с.ш.',
       wreck_atoll: 'Палау · Микронезия',
-      mariana_trench: 'Челленджер · 10 920 м'
+      mariana_trench: 'Челленджер · 10 920 м',
+      brine_pool: 'Мексиканский залив · 650 м'
     };
 
     function renderBiomeUI() {
@@ -1325,7 +1327,7 @@ window.OC = window.OC || {};
       }
       if (e.code === 'KeyU' && OC.Weather) {
         if (activeBiome && activeBiome.noSurface) {
-          toast('Погода на поверхности недоступна на глубине 2500 м');
+          toast('Погода на поверхности недоступна в глубоководной зоне');
         } else {
           OC.Weather.cycleMode();
           if (uiHandles && uiHandles.syncWeatherButtons) uiHandles.syncWeatherButtons();
@@ -1512,7 +1514,7 @@ window.OC = window.OC || {};
 
   function runLoop(renderer, scene, camera) {
     let last = performance.now();
-    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0;
+    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100;
 
     function resize() {
       const w = window.innerWidth, h = window.innerHeight;
@@ -1647,6 +1649,13 @@ window.OC = window.OC || {};
           lastEcoEvent = null;
         }
 
+        const inBrineNow = !!(OC.Navigation.isInBrine && OC.Navigation.isInBrine());
+        if (inBrineNow && !wasInBrine && time - lastBrineToastAt > 8) {
+          lastBrineToastAt = time;
+          toast('Галоклин рассола (230‰): архимедова плавучесть выталкивает батискаф!');
+        }
+        wasInBrine = inBrineNow;
+
         if (subMode) {
           const flHere = biome.getHeight(craftPos.x, craftPos.z);
           const clearance = Math.max(0, craftPos.y - flHere);
@@ -1665,11 +1674,14 @@ window.OC = window.OC || {};
             subCurrentEl.classList.toggle('warn', cKnots > 1.8);
           }
           if (subPhaseEl) {
-            subPhaseEl.textContent = biome.noSurface
-              ? 'Абиссаль · 2500 м'
-              : (biome.hasAurora
-                ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
-                : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День')));
+            subPhaseEl.textContent = inBrineNow
+              ? 'Галоклин · Рассол 230‰'
+              : (biome.noSurface
+                ? (biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
+                  : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м'))
+                : (biome.hasAurora
+                  ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
+                  : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'))));
           }
           drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }

@@ -369,7 +369,7 @@ window.OC = window.OC || {};
       orbitRing.rotation.y = 0.28;
       scene.add(orbitRing);
 
-      // Маяки 6 биомов + соединительные дуги маршрутов
+      // Маяки 7 биомов + соединительные дуги маршрутов
       buildBeaconsOnGlobe();
 
       raycaster = new T.Raycaster();
@@ -429,8 +429,8 @@ window.OC = window.OC || {};
       it.hit = hit;
     }
 
-    // Соединяем 6 точек планеты дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'hydrothermal_vents', 'arctic_sea'];
+    // Соединяем 7 точек планеты дугами глобальной экспедиции
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'brine_pool', 'hydrothermal_vents', 'arctic_sea'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);

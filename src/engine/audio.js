@@ -157,7 +157,7 @@ window.OC = window.OC || {};
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') {
           if (S.currentDepth < 32 && Math.random() < 0.55) S.iceCrack();
-        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench') {
+        } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') {
           S.shrimpSnap();
         }
       }
@@ -276,7 +276,7 @@ window.OC = window.OC || {};
     const t = setTimeout(() => {
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') S.belugaCall();
-        else if (S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench') S.whale();
+        else if (S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') S.whale();
       }
       S.scheduleWhale();
     }, rnd(14000, 32000));
@@ -429,6 +429,9 @@ window.OC = window.OC || {};
     if (key === 'whale_fall') return 'Резонанс гадали и шорох оазиса';
     if (key === 'serpentinite_vent' || key === 'osedax_plume') return 'Пульс метанового сипа и гадали';
     if (key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge') return 'Биоакустика Бездны Челленджера';
+    if (key === 'brine_pool_lake') return 'Резонанс галоклина и плотного рассола';
+    if (key === 'methane_hydrate' || key === 'halite_spire' || key === 'cold_tubeworm') return 'Пульс газового гидрата и сипа';
+    if (key === 'siphonophore' || key === 'oarfish' || key === 'chimaera' || key === 'myctophid' || key === 'hatchetfish') return 'Био-перелив сумеречной зоны';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
@@ -566,7 +569,7 @@ window.OC = window.OC || {};
           o.connect(bp); bp.connect(g); g.connect(out);
           o.start(now + i * 0.08); o.stop(now + 1.5);
         });
-      } else if (key === 'whale_fall' || key === 'serpentinite_vent' || key === 'osedax_plume') {
+      } else if (key === 'whale_fall' || key === 'serpentinite_vent' || key === 'osedax_plume' || key === 'brine_pool_lake' || key === 'methane_hydrate' || key === 'halite_spire' || key === 'cold_tubeworm') {
         // Глубокий гадальный бас + мягкие стеклянные обертоны оазиса 11 км глубины
         const o = ctx.createOscillator();
         const lp = ctx.createBiquadFilter();
@@ -608,7 +611,7 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
         src.connect(bp); bp.connect(g); g.connect(out);
         src.start(now); src.stop(now + dur + 0.05);
-      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo' || key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge') {
+      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo' || key === 'hadal_snailfish' || key === 'sea_pig' || key === 'amphipod' || key === 'hadal_sponge' || key === 'siphonophore' || key === 'oarfish' || key === 'chimaera' || key === 'myctophid' || key === 'hatchetfish') {
         [660, 990, 1320].forEach((f, i) => {
           const t = now + i * 0.14;
           const o = ctx.createOscillator();

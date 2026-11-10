@@ -1490,6 +1490,109 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 40. Газовый гидрат метана («горящий лёд» CH4) ---- */
+  function buildMethaneHydrate(rng) {
+    const list = [];
+    const cBase = COL(0x524c48);
+    const cIce = COL(0xf4cf76);
+    const cTip = COL(0xfff1c4);
+    const mound = OC.geoPrep(new T.DodecahedronGeometry(0.95, 1));
+    mound.scale(1.25, 0.55, 1.15);
+    OC.paint(mound, (x, y, z, col) => col.copy(y > 0.12 ? cIce : cBase));
+    OC.xform(mound, { p: [0, 0.25, 0] });
+    OC.withSway(mound, () => 0);
+    list.push(mound);
+
+    const nShards = 6;
+    for (let i = 0; i < nShards; i++) {
+      const a = (i / nShards) * 6.283 + rng() * 0.45;
+      const dist = OC.lerp(0.18, 0.68, rng());
+      const h = OC.lerp(0.75, 1.55, rng());
+      const r = OC.lerp(0.16, 0.34, rng());
+      const sh = OC.geoPrep(new T.CylinderGeometry(r * 0.28, r, h, 6, 1));
+      OC.paint(sh, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cIce).lerp(cTip, OC.smoothstep(0.35, 1.0, u));
+      });
+      OC.xform(sh, {
+        r: [Math.sin(a) * OC.lerp(0.18, 0.48, rng()), rng() * 1.4, Math.cos(a) * OC.lerp(0.18, 0.48, rng())],
+        p: [Math.cos(a) * dist, h * 0.45 + 0.18, Math.sin(a) * dist]
+      });
+      OC.withSway(sh, () => 0);
+      list.push(sh);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 41. Вестиментифера холодных сипов (Lamellibrachia luymesi) ---- */
+  function buildColdTubeworm(rng) {
+    const list = [];
+    const n = 10;
+    const cBase = COL(0x4a4236);
+    const cTube = COL(0xc4b08e);
+    const cPlume = COL(0xd92658);
+    const cTip = COL(0xff8eb4);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283 + OC.lerp(-0.25, 0.25, rng());
+      const dist = OC.lerp(0.06, 0.48, rng());
+      const h = OC.lerp(1.1, 2.35, rng());
+      const bend = OC.lerp(0.24, 0.56, rng());
+      const seg = OC.geoPrep(new T.CylinderGeometry(0.036, 0.055, h, 6, 5));
+      const sp = seg.attributes.position;
+      for (let v = 0; v < sp.count; v++) {
+        const vx = sp.getX(v), vy = sp.getY(v), vz = sp.getZ(v);
+        const u = OC.clamp((vy + h * 0.5) / h, 0, 1);
+        const curve = Math.sin(u * 2.4 + i) * 0.14 + u * u * bend;
+        sp.setXYZ(v, vx + Math.cos(a) * curve, vy, vz + Math.sin(a) * curve);
+      }
+      seg.computeVertexNormals();
+      OC.paint(seg, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBase).lerp(cTube, OC.smoothstep(0.08, 0.72, u));
+      });
+      OC.xform(seg, { p: [Math.cos(a) * dist * 0.4, h * 0.5, Math.sin(a) * dist * 0.4] });
+      OC.withSway(seg, (x, y) => Math.max(0, y) * 0.24);
+      list.push(seg);
+
+      const plume = OC.geoPrep(new T.ConeGeometry(0.095, 0.28, 7));
+      OC.paint(plume, (x, y, z, col) => col.copy(y > 0.04 ? cTip : cPlume));
+      OC.xform(plume, {
+        r: [Math.PI + Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35],
+        p: [Math.cos(a) * (dist * 0.4 + bend), h + 0.06, Math.sin(a) * (dist * 0.4 + bend)]
+      });
+      OC.withSway(plume, (x, y) => Math.max(0, y) * 0.35);
+      list.push(plume);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 42. Соляной кристалл галита / береговой торос (Halite Spire) ---- */
+  function buildHaliteSpire(rng) {
+    const list = [];
+    const cSaltA = COL(0xdbf6fa);
+    const cSaltB = COL(0x74d8dc);
+    const cBase = COL(0x6b828d);
+    const cnt = 5;
+    for (let i = 0; i < cnt; i++) {
+      const h = i === 0 ? OC.lerp(1.4, 2.2, rng()) : OC.lerp(0.65, 1.35, rng());
+      const w = i === 0 ? OC.lerp(0.62, 0.88, rng()) : OC.lerp(0.32, 0.55, rng());
+      const ox = i === 0 ? 0 : Math.cos(i * 1.45) * OC.lerp(0.35, 0.75, rng());
+      const oz = i === 0 ? 0 : Math.sin(i * 1.45) * OC.lerp(0.35, 0.75, rng());
+      const box = OC.geoPrep(new T.BoxGeometry(w, h, w * OC.lerp(0.82, 1.18, rng())));
+      OC.paint(box, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBase).lerp(cSaltB, OC.smoothstep(0.05, 0.45, u)).lerp(cSaltA, OC.smoothstep(0.55, 1.0, u));
+      });
+      OC.xform(box, {
+        r: [(rng() - 0.5) * 0.25, rng() * 1.5, (rng() - 0.5) * 0.25],
+        p: [ox, h * 0.46, oz]
+      });
+      OC.withSway(box, () => 0);
+      list.push(box);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   let previewCache = null;
 
@@ -1508,6 +1611,11 @@ window.OC = window.OC || {};
 
       const matChimney = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.72, metalness: 0.28, side: T.DoubleSide
+      }), { causticStrength: 0.0, swayAmp: 0 });
+
+      const matHydrate = enh(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.28, metalness: 0.06,
+        emissive: new T.Color(0x4a3108), emissiveIntensity: 0.42, side: T.DoubleSide
       }), { causticStrength: 0.0, swayAmp: 0 });
 
       const matClam = enh(new T.MeshStandardMaterial({
@@ -1707,6 +1815,18 @@ window.OC = window.OC || {};
         serpentinite_vent: {
           mat: matChimney, maxInstances: 320, cullDist: 620,
           geos: [buildSerpentiniteVent(rng), buildSerpentiniteVent(rng)]
+        },
+        methane_hydrate: {
+          mat: matHydrate, maxInstances: 520, cullDist: 500,
+          geos: [buildMethaneHydrate(rng), buildMethaneHydrate(rng)]
+        },
+        cold_tubeworm: {
+          mat: matSoft, maxInstances: 960, cullDist: 440,
+          geos: [buildColdTubeworm(rng), buildColdTubeworm(rng)]
+        },
+        halite_spire: {
+          mat: matIce, maxInstances: 540, cullDist: 560,
+          geos: [buildHaliteSpire(rng), buildHaliteSpire(rng)]
         }
       };
 

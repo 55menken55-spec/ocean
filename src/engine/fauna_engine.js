@@ -108,6 +108,7 @@ window.OC = window.OC || {};
     const yDepth = opts.yDepth || -8;
     const yAmp = opts.yAmp || 3.5;
     const diel = opts.diel || 'diurnal';
+    const dvmAmp = opts.dvmAmp || 4.5;
     const shyness = opts.shyness !== undefined ? opts.shyness : 0.7;
     const curious = opts.curious || 0;
     const isPredator = !!opts.isPredator;
@@ -250,7 +251,7 @@ window.OC = window.OC || {};
           radiusMult = OC.lerp(0.55, 1.0, dayW);
         } else if (diel === 'nocturnal') {
           activity = OC.lerp(1.25, 0.55, dayW);
-          depthShift = OC.lerp(4.5, -4.0, dayW); // ночью поднимаются охотиться, днём в тени грота
+          depthShift = OC.lerp(dvmAmp, -dvmAmp * 0.85, dayW); // ночью поднимаются охотиться, днём опускаются глубже
           radiusMult = OC.lerp(1.25, 0.6, dayW);
         } else {
           activity = OC.lerp(0.85, 1.05, dayW);
@@ -2839,6 +2840,484 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Подводное соляное озеро с галоклином (Brine Pool) ---------- */
+  function makeBrineLake(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    const level = preview ? 0 : (opts.level !== undefined ? opts.level : -62.0);
+    const baseR = preview ? 4.4 : (opts.r || 68);
+    const RINGS = 14;
+    const SEGS = 48;
+
+    const group = new T.Group();
+    group.position.set(cx, level, cz);
+    group.userData.key = 'brine_pool_lake';
+
+    const radiusAt = (ang) => {
+      if (!preview && opts.radiusFn) return opts.radiusFn(ang);
+      return baseR * (1.0 + 0.12 * Math.sin(ang * 3.0 + 0.6) + 0.07 * Math.cos(ang * 5.0 - 0.4));
+    };
+
+    const vertCount = 1 + RINGS * SEGS;
+    const pos = new Float32Array(vertCount * 3);
+    const edge = new Float32Array(vertCount);
+    const uvs = new Float32Array(vertCount * 2);
+    const indices = [];
+
+    pos[0] = 0; pos[1] = 0; pos[2] = 0;
+    edge[0] = 0;
+    uvs[0] = 0.5; uvs[1] = 0.5;
+
+    let ptr = 1;
+    for (let r = 1; r <= RINGS; r++) {
+      const f = r / RINGS;
+      for (let s = 0; s < SEGS; s++) {
+        const ang = (s / SEGS) * Math.PI * 2;
+        const rr = radiusAt(ang) * f;
+        const vx = Math.cos(ang) * rr;
+        const vz = Math.sin(ang) * rr;
+        pos[ptr * 3] = vx;
+        pos[ptr * 3 + 1] = 0;
+        pos[ptr * 3 + 2] = vz;
+        edge[ptr] = f;
+        uvs[ptr * 2] = 0.5 + (vx / (baseR * 2.4));
+        uvs[ptr * 2 + 1] = 0.5 + (vz / (baseR * 2.4));
+        ptr++;
+      }
+    }
+
+    for (let s = 0; s < SEGS; s++) {
+      const next = (s + 1) % SEGS;
+      indices.push(0, 1 + next, 1 + s);
+    }
+    for (let r = 1; r < RINGS; r++) {
+      const r0 = 1 + (r - 1) * SEGS;
+      const r1 = 1 + r * SEGS;
+      for (let s = 0; s < SEGS; s++) {
+        const next = (s + 1) % SEGS;
+        indices.push(r0 + s, r0 + next, r1 + s);
+        indices.push(r0 + next, r1 + next, r1 + s);
+      }
+    }
+
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aEdge', new T.BufferAttribute(edge, 1));
+    geo.setAttribute('uv', new T.BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+
+    const mat = new T.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: T.DoubleSide,
+      fog: !preview,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        {
+          uTime: OC.uTime,
+          uAmp: { value: preview ? 0.04 : 0.24 }
+        }
+      ]),
+      vertexShader: `
+        attribute float aEdge;
+        uniform float uTime, uAmp;
+        varying float vEdge;
+        varying vec3 vWorld;
+        #include <fog_pars_vertex>
+        void main(){
+          vEdge = aEdge;
+          vec3 p = position;
+          float damp = 1.0 - smoothstep(0.74, 1.0, aEdge);
+          float w = sin(p.x * 0.16 + uTime * 1.4) * cos(p.z * 0.18 - uTime * 1.15) * 0.55
+                  + sin((p.x + p.z) * 0.31 - uTime * 2.1) * 0.45;
+          p.y += w * uAmp * damp;
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          vWorld = (modelMatrix * vec4(p, 1.0)).xyz;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform float uTime;
+        varying float vEdge;
+        varying vec3 vWorld;
+        #include <fog_pars_fragment>
+        void main(){
+          float r1 = sin(vWorld.x * 0.42 + uTime * 1.3) * cos(vWorld.z * 0.38 - uTime * 1.05);
+          float r2 = sin((vWorld.x - vWorld.z) * 0.72 + uTime * 1.85);
+          float rip = 0.5 + 0.5 * (r1 * 0.6 + r2 * 0.4);
+          vec3 toCam = normalize(cameraPosition - vWorld);
+          float fresnel = pow(1.0 - abs(toCam.y), 2.2);
+
+          vec3 deepBrine = vec3(0.05, 0.28, 0.34);
+          vec3 sheen = vec3(0.24, 0.92, 0.86);
+          vec3 rimSalt = vec3(0.84, 0.99, 0.98);
+
+          vec3 col = mix(deepBrine, sheen, clamp(rip * 0.48 + fresnel * 0.65, 0.0, 1.0));
+          float shoreBand = smoothstep(0.84, 0.98, vEdge);
+          col = mix(col, rimSalt, shoreBand * 0.92);
+          float alpha = mix(0.76, 0.94, max(fresnel * 0.5, shoreBand));
+          gl_FragColor = vec4(col, alpha);
+          #include <fog_fragment>
+        }`
+    });
+
+    const lakeMesh = new T.Mesh(geo, mat);
+    lakeMesh.userData.key = 'brine_pool_lake';
+    group.add(lakeMesh);
+
+    // Кристаллическая береговая кромка галита для превью в Атласе
+    if (preview) {
+      const rimGeo = new T.TorusGeometry(baseR * 0.98, 0.24, 8, 42);
+      rimGeo.rotateX(Math.PI / 2);
+      OC.geoPrep(rimGeo);
+      OC.paint(rimGeo, 0xd8f8fc);
+      group.add(new T.Mesh(rimGeo, creatureMat));
+    }
+
+    let halo = null;
+    if (!preview && opts.light !== false) {
+      halo = new T.PointLight(0x36f0da, 1.35, baseR * 2.2, 1.4);
+      halo.position.set(0, 6.5, 0);
+      group.add(halo);
+    }
+
+    scene.add(group);
+    return {
+      key: 'brine_pool_lake',
+      sonarLabel: opts.label || 'Подводное соляное озеро (галоклин 230‰)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (preview) return;
+        const d = Math.hypot(cx - camPos.x, cz - camPos.z);
+        group.visible = d < 650;
+        if (halo) halo.intensity = group.visible ? (1.15 + 0.3 * Math.sin(time * 1.6 + cx * 0.05)) : 0;
+      }
+    };
+  }
+
+  /* ---------- Гигантская биолюминесцентная сифонофора (Praya dubia) ---------- */
+  function makeSiphonophore(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    group.userData.key = 'siphonophore';
+
+    const nSeg = 18;
+    const segs = [];
+    const bellMat = new T.MeshStandardMaterial({
+      color: 0xa6f4ff,
+      emissive: new T.Color(0x28c8ff),
+      emissiveIntensity: 0.72,
+      transparent: true,
+      opacity: 0.66,
+      roughness: 0.18
+    });
+    const coreMat = new T.MeshStandardMaterial({
+      color: 0xff9ef6,
+      emissive: new T.Color(0xc84eff),
+      emissiveIntensity: 0.95,
+      transparent: true,
+      opacity: 0.85,
+      roughness: 0.28
+    });
+    const tentMat = new T.MeshBasicMaterial({
+      color: 0x62f4ff,
+      transparent: true,
+      opacity: 0.45
+    });
+
+    const bellGeo = new T.SphereGeometry(0.42, 10, 8);
+    bellGeo.scale(0.95, 0.88, 1.35);
+    const bodyGeo = new T.SphereGeometry(0.24, 8, 6);
+    bodyGeo.scale(0.8, 0.8, 1.55);
+    const tentGeo = new T.CylinderGeometry(0.012, 0.004, 1.65, 4);
+
+    for (let i = 0; i < nSeg; i++) {
+      const sg = new T.Group();
+      if (i < 2) {
+        const bL = new T.Mesh(bellGeo, bellMat);
+        bL.position.set(-0.22, 0, -i * 0.45);
+        const bR = new T.Mesh(bellGeo, bellMat);
+        bR.position.set(0.22, 0, -i * 0.45);
+        sg.add(bL, bR);
+      } else {
+        const f = 1.0 - (i / nSeg) * 0.58;
+        const m = new T.Mesh(bodyGeo, i % 2 === 0 ? coreMat : bellMat);
+        m.scale.setScalar(f);
+        sg.add(m);
+        if (i % 2 === 0) {
+          const t = new T.Mesh(tentGeo, tentMat);
+          t.position.y = -0.82 * f;
+          t.scale.setScalar(f);
+          sg.add(t);
+        }
+      }
+      sg.userData.key = 'siphonophore';
+      group.add(sg);
+      segs.push(sg);
+    }
+
+    const scale = opts.scale || 1.1;
+    group.scale.setScalar(scale);
+    scene.add(group);
+
+    if (preview) {
+      for (let i = 0; i < segs.length; i++) {
+        segs[i].position.set(Math.sin(i * 0.42) * 0.65, Math.cos(i * 0.35) * 0.38, (nSeg * 0.25) - i * 0.52);
+      }
+      return { key: 'siphonophore', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    const r = opts.r || 42;
+    const yBase = opts.y || -36;
+    const spd = opts.speed || 1.65;
+    let ang = Math.random() * 6.28;
+    const headPos = new T.Vector3();
+    const lookPos = new T.Vector3();
+    return {
+      key: 'siphonophore',
+      sonarLabel: 'Гигантская сифонофора (Praya dubia)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 460) { group.visible = false; return; }
+        group.visible = true;
+        ang += (spd / Math.max(12, r)) * dt;
+        const hx = cx + Math.cos(ang) * r;
+        const hz = cz + Math.sin(ang) * r * 0.82;
+        const hy = Math.max(yBase + Math.sin(time * 0.32 + ang) * 5.0, biome.getHeight(hx, hz) + 6.5);
+        const nx = cx + Math.cos(ang + 0.08) * r;
+        const nz = cz + Math.sin(ang + 0.08) * r * 0.82;
+        const ny = Math.max(yBase + Math.sin(time * 0.32 + ang + 0.08) * 5.0, biome.getHeight(nx, nz) + 6.5);
+        headPos.set(hx, hy, hz);
+        lookPos.set(nx, ny, nz);
+        group.position.copy(headPos);
+        group.lookAt(lookPos);
+
+        for (let i = 0; i < segs.length; i++) {
+          const ph = time * 2.1 - i * 0.44;
+          segs[i].position.set(Math.sin(ph) * (0.16 + i * 0.045), Math.cos(ph * 0.8) * (0.08 + i * 0.025), -i * 0.58);
+          segs[i].rotation.y = Math.cos(ph) * 0.25;
+        }
+      }
+    };
+  }
+
+  /* ---------- Сельдяной король / Ремнеры (Regalecus glesne) ---------- */
+  function makeOarfish(scene, biome, opts) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    group.userData.key = 'oarfish';
+
+    const nSeg = 12;
+    const segs = [];
+    const silverMat = new T.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.22,
+      metalness: 0.58,
+      side: T.DoubleSide
+    });
+    const crestMat = new T.MeshStandardMaterial({
+      color: 0xe62434,
+      emissive: new T.Color(0x520810),
+      emissiveIntensity: 0.38,
+      roughness: 0.42,
+      side: T.DoubleSide
+    });
+
+    for (let i = 0; i < nSeg; i++) {
+      const sg = new T.Group();
+      const f = 1.0 - (i / nSeg) * 0.65;
+      const bodyG = new T.BoxGeometry(0.11 * f, 0.52 * f, 0.72);
+      OC.geoPrep(bodyG);
+      OC.paint(bodyG, (x, y, z, c) => c.set(Math.abs(y) < 0.14 ? 0xedf6ff : 0x9bb4cf));
+      sg.add(new T.Mesh(bodyG, silverMat));
+
+      // Непрерывный алый спинной плавник вдоль всей ленты
+      const finG = new T.PlaneGeometry(0.72, 0.36 * f);
+      finG.rotateY(Math.PI / 2);
+      const finM = new T.Mesh(finG, crestMat);
+      finM.position.y = 0.40 * f;
+      sg.add(finM);
+
+      if (i === 0) {
+        // Знаменитый алый головной гребень + два длинных брюшных «весла»
+        for (let c = 0; c < 4; c++) {
+          const cr = new T.CylinderGeometry(0.014, 0.025, 1.05 - c * 0.12, 5);
+          const cm = new T.Mesh(cr, crestMat);
+          cm.position.set(0, 0.65 - c * 0.05, 0.12 - c * 0.1);
+          cm.rotation.x = -0.35 - c * 0.14;
+          sg.add(cm);
+        }
+        const eyeGeo = new T.SphereGeometry(0.068, 8, 6);
+        const eyeMat = new T.MeshBasicMaterial({ color: 0xffe488 });
+        for (const s of [-1, 1]) {
+          const em = new T.Mesh(eyeGeo, eyeMat);
+          em.position.set(s * 0.065, 0.06, 0.22);
+          sg.add(em);
+
+          const oar = new T.CylinderGeometry(0.012, 0.008, 1.35, 5);
+          const om = new T.Mesh(oar, crestMat);
+          om.position.set(s * 0.09, -0.58, -0.05);
+          om.rotation.x = 0.72;
+          om.rotation.z = -s * 0.28;
+          sg.add(om);
+        }
+      }
+
+      sg.userData.key = 'oarfish';
+      group.add(sg);
+      segs.push(sg);
+    }
+
+    const scale = opts.scale || 1.05;
+    group.scale.setScalar(scale);
+    scene.add(group);
+
+    if (preview) {
+      for (let i = 0; i < segs.length; i++) {
+        segs[i].position.set(Math.sin(i * 0.55) * 0.42, 0, (nSeg * 0.3) - i * 0.65);
+        segs[i].rotation.y = Math.cos(i * 0.55) * 0.26;
+      }
+      return { key: 'oarfish', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    const r = opts.r || 55;
+    const yBase = opts.y || -32;
+    const spd = opts.speed || 2.8;
+    let ang = Math.random() * 6.28;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'oarfish',
+      sonarLabel: 'Сельдяной король (Regalecus glesne)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 480) { group.visible = false; return; }
+        group.visible = true;
+        ang += (spd / Math.max(18, r)) * dt;
+        const ax = cx + Math.cos(ang) * r;
+        const az = cz + Math.sin(ang) * r;
+        const ay = Math.max(yBase + Math.sin(time * 0.38 + ang) * 7.5, biome.getHeight(ax, az) + 6.0);
+        const bx = cx + Math.cos(ang + 0.07) * r;
+        const bz = cz + Math.sin(ang + 0.07) * r;
+        const by = Math.max(yBase + Math.sin(time * 0.38 + ang + 0.07) * 7.5, biome.getHeight(bx, bz) + 6.0);
+        a.set(ax, Math.min(-6, ay), az);
+        b.set(bx, Math.min(-6, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+
+        for (let i = 0; i < segs.length; i++) {
+          const ph = time * 3.4 - i * 0.58;
+          segs[i].position.set(Math.sin(ph) * (0.08 + i * 0.042), 0, -i * 0.66);
+          segs[i].rotation.y = Math.cos(ph) * 0.28;
+        }
+      }
+    };
+  }
+
+  /* ---------- Глубоководная химера / Рыба-кролик (Hydrolagus) ---------- */
+  function makeChimaera(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    const parts = [];
+
+    const body = new T.SphereGeometry(0.45, 14, 10);
+    body.scale(0.85, 0.92, 1.95);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const z = bp.getZ(i);
+      const taper = z < 0 ? OC.clamp(1.0 + z * 0.72, 0.12, 1.0) : (1.0 - Math.pow(z, 1.8) * 0.22);
+      bp.setX(i, bp.getX(i) * taper);
+      bp.setY(i, bp.getY(i) * taper);
+    }
+    OC.geoPrep(body);
+    body.computeVertexNormals();
+    OC.paint(body, (x, y, z, c) => c.set(y > 0 ? 0x6f6282 : 0xb8b2c4));
+    parts.push(body);
+
+    const dorsal = new T.ConeGeometry(0.18, 0.78, 5);
+    dorsal.scale(0.32, 1, 1.35);
+    OC.geoPrep(dorsal);
+    OC.paint(dorsal, 0x524564);
+    OC.xform(dorsal, { r: [-0.25, 0, 0], p: [0, 0.48, 0.14] });
+    parts.push(dorsal);
+
+    const whip = new T.ConeGeometry(0.085, 1.55, 6);
+    whip.rotateX(-Math.PI / 2);
+    OC.geoPrep(whip);
+    OC.paint(whip, 0x8e869c);
+    OC.xform(whip, { p: [0, -0.02, -1.45] });
+    parts.push(whip);
+
+    group.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+    // Огромные изумрудно-отражающие глаза химеры
+    const eyeMat = new T.MeshBasicMaterial({ color: 0x64ffbe });
+    const eyeGeo = new T.SphereGeometry(0.11, 8, 6);
+    for (const s of [-1, 1]) {
+      const em = new T.Mesh(eyeGeo, eyeMat);
+      em.position.set(s * 0.28, 0.11, 0.45);
+      group.add(em);
+    }
+
+    // Широкие крыловидные грудные плавники
+    const wingGeo = new T.ConeGeometry(0.56, 0.96, 4);
+    wingGeo.scale(0.14, 1.0, 0.75);
+    wingGeo.rotateZ(Math.PI / 2);
+    OC.geoPrep(wingGeo);
+    OC.paint(wingGeo, 0x7b6c92);
+    const wings = [];
+    for (const s of [-1, 1]) {
+      const wPiv = new T.Group();
+      wPiv.position.set(s * 0.28, -0.08, 0.22);
+      const wm = new T.Mesh(wingGeo, creatureMat);
+      wm.position.set(s * 0.42, 0, -0.06);
+      if (s < 0) wm.rotation.y = Math.PI;
+      wPiv.add(wm);
+      group.add(wPiv);
+      wings.push({ piv: wPiv, side: s });
+    }
+
+    group.scale.setScalar(opts.scale || 1.15);
+    group.userData.key = 'chimaera';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 30;
+    const cx = opts.cx || 0, cz = opts.cz || 0, r = opts.r || 42;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'chimaera',
+      sonarLabel: 'Глубоководная химера (Hydrolagus)',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 420) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += ((opts.speed || 2.1) / Math.max(10, r)) * dt;
+        const ax = cx + Math.cos(ang) * r;
+        const az = cz + Math.sin(ang) * r;
+        const bx = cx + Math.cos(ang + 0.09) * r;
+        const bz = cz + Math.sin(ang + 0.09) * r;
+        const ay = biome.getHeight(ax, az) + 2.4 + Math.sin(t * 0.9) * 0.75;
+        const by = biome.getHeight(bx, bz) + 2.4 + Math.sin(t * 0.9 + 0.14) * 0.75;
+        a.set(ax, ay, az);
+        b.set(bx, by, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        const flap = Math.sin(time * 3.1 + t) * 0.34;
+        wings[0].piv.rotation.z = flap;
+        wings[1].piv.rotation.z = -flap;
+      }
+    };
+  }
+
   /* ---------- Надводное научно-исследовательское судно (Mother-Ship НИС) ---------- */
   function makeResearchVessel(scene, biome, opts) {
     opts = opts || {};
@@ -4144,6 +4623,30 @@ window.OC = window.OC || {};
         agents.push(makeSeaPig(faunaGroup, biome, sp));
       }
 
+      for (const bl of (plan.brineLakes || [])) {
+        const blo = makeBrineLake(faunaGroup, biome, bl);
+        agents.push(blo);
+        sonarTargets.push(blo);
+      }
+
+      for (const sph of (plan.siphonophores || [])) {
+        const spho = makeSiphonophore(faunaGroup, biome, sph);
+        agents.push(spho);
+        sonarTargets.push(spho);
+      }
+
+      for (const orf of (plan.oarfishes || [])) {
+        const orfo = makeOarfish(faunaGroup, biome, orf);
+        agents.push(orfo);
+        sonarTargets.push(orfo);
+      }
+
+      for (const ch of (plan.chimaeras || [])) {
+        const cho = makeChimaera(faunaGroup, biome, ch);
+        agents.push(cho);
+        sonarTargets.push(cho);
+      }
+
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
@@ -4464,6 +4967,10 @@ window.OC = window.OC || {};
               c.setHex(0x4b5c69).lerp(new T.Color(0x88b4cc), OC.clamp((y - avgY) * 0.25 + 0.3, 0, 0.7));
             } else if (bId === 'wreck_atoll') {
               c.setHex(0xe5d7b4).lerp(new T.Color(0x8ab894), Math.sin(x * 0.38 + z * 0.42) * 0.35 + 0.35);
+            } else if (bId === 'mariana_trench') {
+              c.setHex(0x282c36).lerp(new T.Color(0x6d8492), Math.sin(x * 0.45 + z * 0.35) * 0.25 + 0.25);
+            } else if (bId === 'brine_pool') {
+              c.setHex(0x3a3248).lerp(new T.Color(0x8cd2d8), Math.sin(x * 0.42 + z * 0.42) * 0.32 + 0.35);
             } else {
               c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
             }
@@ -4537,6 +5044,14 @@ window.OC = window.OC || {};
           makeHadalSnailfish(tmpGroup, dummyBiome, { cx: 0, cz: 0, scale: 1.5 });
         } else if (key === 'sea_pig') {
           makeSeaPig(tmpGroup, dummyBiome, { cx: 0, cz: 0, singlePreview: true });
+        } else if (key === 'brine_pool_lake') {
+          makeBrineLake(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'siphonophore') {
+          makeSiphonophore(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'oarfish') {
+          makeOarfish(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'chimaera') {
+          makeChimaera(tmpGroup, dummyBiome, { cx: 0, cz: 0, scale: 1.25 });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;
