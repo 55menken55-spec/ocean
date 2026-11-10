@@ -188,6 +188,45 @@
     padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-family:inherit}
   .atlas-go:hover{background:rgba(88,224,255,.3)}
 
+  /* ---------- Подводная фотокамера исследователя ---------- */
+  .cam-hud{position:fixed;inset:0;z-index:24;pointer-events:none;transition:opacity .28s}
+  .cam-hud.hidden{opacity:0;pointer-events:none}
+  .cam-frame{position:fixed;inset:56px 64px 84px;border:1px solid rgba(160,240,255,.28);border-radius:12px}
+  .cam-thirds-v{position:absolute;top:0;bottom:0;left:33.33%;right:33.33%;border-left:1px dashed rgba(255,255,255,.1);border-right:1px dashed rgba(255,255,255,.1)}
+  .cam-thirds-h{position:absolute;left:0;right:0;top:33.33%;bottom:33.33%;border-top:1px dashed rgba(255,255,255,.1);border-bottom:1px dashed rgba(255,255,255,.1)}
+  .cam-focus{position:fixed;left:50%;top:50%;width:128px;height:96px;transform:translate(-50%,-50%);
+    border:1.5px solid rgba(91,232,176,.75);border-radius:10px;box-shadow:0 0 20px rgba(91,232,176,.15)}
+  .cam-target{position:fixed;left:50%;top:calc(50% + 62px);transform:translateX(-50%);
+    padding:5px 14px;border-radius:999px;background:rgba(4,18,32,.78);border:1px solid rgba(91,232,176,.4);
+    font-size:11.5px;color:#e4faff;white-space:nowrap;backdrop-filter:blur(8px)}
+  .cam-bar{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;
+    padding:8px 14px;border-radius:999px;background:rgba(4,18,32,.84);border:1px solid rgba(88,224,255,.35);
+    backdrop-filter:blur(12px);pointer-events:auto;box-shadow:0 12px 34px rgba(0,0,0,.5)}
+  .cam-bar .btn{padding:6px 11px;font-size:11.5px}
+  .cam-snap{padding:8px 18px !important;background:rgba(91,232,176,.24) !important;border-color:rgba(91,232,176,.8) !important;
+    color:#fff !important;font-weight:600 !important}
+  .cam-snap:hover{background:rgba(91,232,176,.4) !important}
+  .cam-flash{position:fixed;inset:0;z-index:90;background:#fff;opacity:0;pointer-events:none;transition:opacity .32s ease-out}
+  .cam-flash.bang{opacity:.78;transition:none}
+  .cam-preview{position:fixed;right:20px;bottom:84px;z-index:32;width:236px;padding:10px;border-radius:14px;
+    background:var(--glass-strong);border:1px solid rgba(91,232,176,.45);backdrop-filter:blur(14px);
+    box-shadow:0 16px 40px rgba(0,0,0,.55);transition:opacity .3s, transform .3s}
+  .cam-preview.hidden{opacity:0;transform:translateY(10px);pointer-events:none}
+  .cam-preview img{display:block;width:100%;border-radius:8px;margin-bottom:8px}
+  .cam-preview-meta{font-size:11px;line-height:1.45;color:var(--ink);margin-bottom:8px}
+  .cam-preview-meta small{display:block;color:var(--ok);font-size:10.5px}
+
+  /* ---------- Журнал экспедиции (Миссии + Фото) ---------- */
+  .mission-card{padding:14px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.14);
+    display:flex;flex-direction:column;gap:8px}
+  .mission-card.done{border-color:rgba(91,232,176,.5);background:rgba(91,232,176,.08)}
+  .mission-prog{height:5px;border-radius:5px;background:rgba(255,255,255,.1);overflow:hidden}
+  .mission-prog > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .3s}
+  .photo-card{padding:10px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.16);
+    display:flex;flex-direction:column;gap:6px}
+  .photo-card img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:9px;background:#04121f}
+  .tele-wp-hide{display:none !important}
+
   /* ---------- Тост ---------- */
   .toast{position:fixed;left:50%;top:72px;transform:translate(-50%,-12px);z-index:60;padding:9px 18px;
     border-radius:999px;background:rgba(5,22,38,.88);border:1px solid rgba(88,224,255,.38);
@@ -245,9 +284,13 @@
   <div class="tele-item"><span>Вода</span><b id="tele-temp">27.0 °C</b></div>
   <div class="tele-sep"></div>
   <div class="tele-item"><span>Курс</span><b id="tele-heading">С 000°</b></div>
+  <div class="tele-sep tele-wp-hide" id="tele-wp-sep"></div>
+  <div class="tele-item tele-wp-hide" id="tele-wp-wrap"><span>Маяк</span><b id="tele-wp">—</b></div>
 </div>
 
 <div class="topright hud-hideable">
+  <button class="icon-btn" id="btn-cam" title="Подводная фотокамера (P)" aria-label="Фотокамера">&#128247;</button>
+  <button class="icon-btn" id="btn-journal" title="Миссии экспедиции и фотожурнал (J)" aria-label="Журнал">&#129517;</button>
   <button class="icon-btn" id="btn-sub" title="Режим батискафа и эхолот (B)" aria-label="Батискаф">&#9678;</button>
   <button class="icon-btn" id="btn-sonar" title="Импульс сонара (G)" aria-label="Сонар">&#128225;</button>
   <button class="icon-btn" id="btn-flash" title="Прожектор батискафа (F)" aria-label="Прожектор">&#128294;</button>
@@ -319,10 +362,36 @@
       <kbd>Space/E</kbd> всплыть · <kbd>Q/C</kbd> глубже<br>
       <kbd>Мышь</kbd> обзор · <kbd>Клик</kbd> карточка вида<br>
       <kbd>F</kbd> прожектор · <kbd>B</kbd> батискаф · <kbd>G</kbd> сонар<br>
+      <kbd>P</kbd> камера (<kbd>Enter</kbd> снять) · <kbd>J</kbd> миссии<br>
       <kbd>V</kbd> орбита · <kbd>K</kbd> атлас · <kbd>M</kbd> звук · <kbd>H</kbd> HUD
     </div>
   </div>
 </aside>
+
+<div class="cam-hud hidden hud-hideable" id="cam-hud">
+  <div class="cam-frame">
+    <div class="cam-thirds-v"></div>
+    <div class="cam-thirds-h"></div>
+  </div>
+  <div class="cam-focus"></div>
+  <div class="cam-target" id="cam-target">Поиск объекта в кадре…</div>
+  <div class="cam-bar">
+    <button class="btn" id="cam-zoom-out" title="Шире угол ([)">− Угол</button>
+    <span id="cam-fov-label" style="font-size:11px;color:var(--dim);min-width:44px;text-align:center">52°</span>
+    <button class="btn" id="cam-zoom-in" title="Приблизить (])">+ Зум</button>
+    <button class="btn cam-snap" id="cam-snap" title="Сделать снимок (Enter)">&#128247; Снять (Enter)</button>
+    <button class="btn" id="cam-close">Закрыть (P)</button>
+  </div>
+</div>
+<div class="cam-flash" id="cam-flash"></div>
+<div class="cam-preview hidden hud-hideable" id="cam-preview">
+  <img id="cam-preview-img" alt="Подводный снимок">
+  <div class="cam-preview-meta" id="cam-preview-meta"></div>
+  <div class="row">
+    <a class="btn on" id="cam-download" download="ocean-photo.png" style="text-decoration:none">Скачать PNG</a>
+    <button class="btn" id="cam-open-journal">Галерея</button>
+  </div>
+</div>
 
 <div class="sub-hud hidden hud-hideable" id="sub-hud">
   <div class="sub-frame"></div>
@@ -347,8 +416,8 @@
 </div>
 
 <div class="minimap-box hud-hideable">
-  <canvas id="minimap" title="Кликните по карте или жёлтой точке для перехода"></canvas>
-  <div class="map-cap"><span>Батиметрия 2.4 км</span><span>Клик — переход</span></div>
+  <canvas id="minimap" title="Клик — переход · ПКМ или Shift+Клик — поставить/убрать маячок"></canvas>
+  <div class="map-cap"><span>Батиметрия 2.4 км</span><span>ПКМ — маяк</span></div>
 </div>
 
 <div class="touch-nav hud-hideable">
@@ -386,6 +455,21 @@
       <button class="btn" data-cat="Мегафауна">Мегафауна</button>
     </div>
     <div class="atlas-grid" id="atlas-grid"></div>
+  </div>
+</div>
+
+<div class="atlas-modal hidden" id="journal-modal" role="dialog" aria-modal="true" aria-label="Журнал экспедиции">
+  <div class="atlas-box">
+    <div class="atlas-header">
+      <div><h3 id="journal-title">Журнал экспедиции</h3><small id="journal-summary">Миссий: 0 / 12 · Снимков: 0</small></div>
+      <button class="btn" id="journal-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="atlas-tabs" id="journal-tabs">
+      <button class="btn on" data-jtab="missions">Научные миссии</button>
+      <button class="btn" data-jtab="photos">Фотожурнал</button>
+      <button class="btn" id="journal-clear-wp" style="margin-left:auto">Снять маяк</button>
+    </div>
+    <div class="atlas-grid" id="journal-grid"></div>
   </div>
 </div>
 

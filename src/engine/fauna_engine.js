@@ -2027,6 +2027,7 @@ window.OC = window.OC || {};
           }
 
           // 2. Проверяем попадание живых объектов в передний конус ~16 градусов (cos > 0.96)
+          let bestKey = null;
           for (let i = 0; i < sonarTargets.length; i++) {
             const tgt = sonarTargets[i];
             const pos = tgt.getPosition ? tgt.getPosition() : null;
@@ -2038,6 +2039,7 @@ window.OC = window.OC || {};
             if (dot > 0.945) {
               bestDist = dist;
               bestKind = 'fauna';
+              bestKey = tgt.key || null;
               const enc = biome.encyclopedia[tgt.key];
               bestLabel = enc ? enc[0] : (tgt.key || 'Морской объект');
             }
@@ -2047,8 +2049,40 @@ window.OC = window.OC || {};
             hit: bestDist <= maxR,
             range: bestDist <= maxR ? bestDist : maxR,
             kind: bestKind,
+            key: bestKey,
             label: bestLabel
           };
+        },
+        /* Фокусный сканер подводной фотокамеры по всем существам в кадре */
+        scanCameraTarget(origin, dir, maxRange) {
+          const maxR = maxRange || 95;
+          let bestScore = -1;
+          let best = null;
+          for (let i = 0; i < agents.length; i++) {
+            const tgt = agents[i];
+            const pos = tgt.getPosition ? tgt.getPosition() : null;
+            if (!pos) continue;
+            _toTarget.subVectors(pos, origin);
+            const dist = _toTarget.length();
+            if (dist < 1.5 || dist > maxR) continue;
+            const dot = _toTarget.dot(dir) / dist;
+            if (dot < 0.89) continue; // ~27° конус видоискателя
+            // Ближние и хорошо отцентрированные цели получают более высокий приоритет
+            const score = (dot - 0.88) * 12.0 + (1.0 - dist / maxR) * 1.4;
+            if (score > bestScore) {
+              bestScore = score;
+              const enc = biome.encyclopedia[tgt.key];
+              best = {
+                hit: true,
+                key: tgt.key,
+                label: enc ? enc[0] : tgt.key,
+                latin: enc ? enc[1] : '',
+                dist,
+                align: OC.clamp((dot - 0.89) / 0.11, 0, 1)
+              };
+            }
+          }
+          return best;
         }
       };
     }

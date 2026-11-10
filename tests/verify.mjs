@@ -18,6 +18,7 @@ const SRC_ORDER = [
   'src/engine/flora_streamer.js',
   'src/engine/fauna_engine.js',
   'src/engine/audio.js',
+  'src/ui/expedition.js',
   'src/ui/navigation.js',
   'src/ui/minimap.js',
   'src/ui/atlas.js',
@@ -36,8 +37,11 @@ const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 assert(!html.includes('/*__THREE__*/'), 'index.html must replace __THREE__ placeholder');
 assert(!html.includes('/*__SRC__*/'), 'index.html must replace __SRC__ placeholder');
 assert(html.length > 500000, 'index.html seems unexpectedly small');
-for (const domId of ['id="sub-hud"', 'id="sonar-box"', 'id="sonar-canvas"', 'id="btn-sub"', 'id="btn-sonar"']) {
-  assert(html.includes(domId), `index.html missing Stage 2 element ${domId}`);
+for (const domId of [
+  'id="sub-hud"', 'id="sonar-box"', 'id="sonar-canvas"', 'id="btn-sub"', 'id="btn-sonar"',
+  'id="btn-cam"', 'id="btn-journal"', 'id="cam-hud"', 'id="cam-flash"', 'id="cam-preview"', 'id="journal-modal"', 'id="tele-wp"'
+]) {
+  assert(html.includes(domId), `index.html missing required element ${domId}`);
 }
 
 console.log('3) Executing full engine integration & shader verification in VM...');
@@ -60,6 +64,7 @@ function makeStubEl(id) {
     },
     addEventListener: () => {},
     setAttribute: () => {},
+    toDataURL: (mime) => `data:${mime || 'image/png'};base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk`,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }),
     querySelector: () => makeStubEl('child'),
     querySelectorAll: () => [],
@@ -80,12 +85,14 @@ function makeStubEl(id) {
       closePath: () => {},
       fill: () => {},
       stroke: () => {},
+      fillText: () => {},
       save: () => {},
       restore: () => {},
       translate: () => {},
       rotate: () => {},
       fillStyle: '',
       strokeStyle: '',
+      font: '',
       lineWidth: 1,
       filter: '',
       setLineDash: () => {},
@@ -99,6 +106,7 @@ const getEl = (id) => {
   return elCache.get(id);
 };
 
+const memStorage = new Map();
 const sandbox = {
   window: null,
   document: {
@@ -106,6 +114,11 @@ const sandbox = {
     querySelector: () => makeStubEl('q'),
     querySelectorAll: () => [],
     createElement: (tag) => makeStubEl(tag),
+  },
+  localStorage: {
+    getItem: (k) => (memStorage.has(k) ? memStorage.get(k) : null),
+    setItem: (k, v) => memStorage.set(k, String(v)),
+    removeItem: (k) => memStorage.delete(k),
   },
   navigator: { maxTouchPoints: 0, hardwareConcurrency: 8 },
   performance: { now: () => Date.now() },
@@ -411,4 +424,48 @@ for (const qId of ['low', 'medium', 'high', 'ultra']) {
   gbrFauna.update(0.016, OC.uTime.value, camera.position);
 }
 console.log('   Multi-biome hot-switching & runtime quality preset switching (low -> ultra) verified.');
+
+// H) Verify Direction 1: Explorer Gameplay (Camera, 12 Scientific Missions, Minimap Waypoints, Persistence)
+assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
+assert.equal(OC.Expedition.MISSIONS.length, 12, `Expected 12 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+for (const b of OC.Biomes.list()) {
+  const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
+  assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
+  for (const m of bMissions) {
+    assert(b.landmarks.some((l) => l.id === m.landmarkId), `Mission ${m.id} references unknown landmark ${m.landmarkId}`);
+  }
+}
+
+// Photo mode, FOV zoom & camera autofocus targeting
+assert.equal(OC.Expedition.isPhotoMode(), false);
+assert.equal(OC.Expedition.setPhotoMode(true), true);
+const zoomedFov = OC.Expedition.adjustZoom(-20);
+assert(zoomedFov < 60 && zoomedFov >= 24, `Zoomed FOV out of range: ${zoomedFov}`);
+assert.equal(typeof gbrFauna.scanCameraTarget, 'function', 'FaunaEngine.scanCameraTarget required');
+assert.equal(typeof OC.sound.shutter, 'function', 'OC.sound.shutter required');
+assert.equal(typeof OC.sound.missionChime, 'function', 'OC.sound.missionChime required');
+
+// Recording photo updates gallery, Atlas discovery, and mission progression
+const stubCanvas = getEl('scene');
+const photoWhale = OC.Expedition.recordPhoto(stubCanvas, gbrBack, { hit: true, key: 'whale_humpback', label: 'Горбатый кит', latin: 'Megaptera novaeangliae', dist: 14, align: 0.96 }, 18.2, 1.0, false);
+assert(photoWhale && photoWhale.key === 'whale_humpback' && photoWhale.score >= 70, 'recordPhoto must compute high score for close centered whale');
+const photoLantern = OC.Expedition.recordPhoto(stubCanvas, gbrBack, { hit: true, key: 'fish_lantern', label: 'Рыба-фонарик', latin: 'Anomalopidae', dist: 11, align: 0.9 }, 58.0, 0.1, true);
+assert(OC.Expedition.getPhotos().some((p) => p.id === photoWhale.id), 'Recorded photo must appear in gallery');
+const resGbr = OC.Expedition.evaluateMissions(gbrBack, { zoneId: 'dropoff', depthM: 64, currentKnots: 0.4, dayW: 0.1, flashOn: true });
+assert(resGbr.list.find((m) => m.id === 'gbr_whale_photo').done, 'Mission gbr_whale_photo must complete after photographing whale_humpback');
+assert(resGbr.list.find((m) => m.id === 'gbr_night_bio').done, 'Mission gbr_night_bio must complete in deep night with fish_lantern & flashlight');
+OC.Expedition.clearPhotos();
+assert.equal(OC.Expedition.getPhotos().length, 0);
+
+// Waypoints set/get/clear & localStorage persistence
+const wp = OC.Expedition.setWaypoint('kelp_forest', -40, 85, 'Каньон');
+assert(wp && wp.x === -40 && wp.z === 85, 'setWaypoint must store coordinates');
+assert.equal(OC.Expedition.getWaypoint('kelp_forest').label, 'Каньон');
+OC.Expedition.clearWaypoint('kelp_forest');
+assert.equal(OC.Expedition.getWaypoint('kelp_forest'), null);
+assert(memStorage.has('oc_ocean_expedition_v1'), 'Expedition state must persist into localStorage');
+OC.Expedition.saveQuality('high');
+assert.equal(OC.Expedition.getSavedQuality(), 'high');
+OC.Expedition.setPhotoMode(false);
+console.log('   Direction 1 Explorer Gameplay (Photo camera, 12 missions, waypoints & localStorage persistence) verified.');
 console.log('ALL VERIFICATION CHECKS PASSED!');

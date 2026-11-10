@@ -90,7 +90,7 @@ window.OC = window.OC || {};
   }
 
   OC.Minimap = {
-    init(canvasEl, biome, onTeleport) {
+    init(canvasEl, biome, onTeleport, onWaypoint) {
       canvas = canvasEl;
       if (!canvas) return;
       canvas.width = SIZE;
@@ -99,10 +99,40 @@ window.OC = window.OC || {};
       biomeRef = biome;
       renderBathymetry();
 
+      function toggleWaypointAt(px, py) {
+        if (!OC.Expedition || !biomeRef) return;
+        const curWp = OC.Expedition.getWaypoint(biomeRef.id);
+        if (curWp) {
+          const [wpx, wpy] = worldToMap(curWp.x, curWp.z);
+          if (Math.hypot(wpx - px, wpy - py) < 12) {
+            OC.Expedition.clearWaypoint(biomeRef.id);
+            if (onWaypoint) onWaypoint(null);
+            return;
+          }
+        }
+        for (const lm of biomeRef.landmarks) {
+          const mp = worldToMap(lm.x, lm.z);
+          if (Math.hypot(mp[0] - px, mp[1] - py) < 11) {
+            const wp = OC.Expedition.setWaypoint(biomeRef.id, lm.x, lm.z, lm.name);
+            if (onWaypoint) onWaypoint(wp);
+            return;
+          }
+        }
+        const [wx, wz] = mapToWorld(px, py);
+        const z = biomeRef.getZoneAt(wx, -10, wz);
+        const wp = OC.Expedition.setWaypoint(biomeRef.id, wx, wz, z ? z.shortName : 'Метка');
+        if (onWaypoint) onWaypoint(wp);
+      }
+
       canvas.addEventListener('click', (e) => {
         const rect = canvas.getBoundingClientRect();
         const px = ((e.clientX - rect.left) / rect.width) * SIZE;
         const py = ((e.clientY - rect.top) / rect.height) * SIZE;
+
+        if (e.shiftKey) {
+          toggleWaypointAt(px, py);
+          return;
+        }
 
         // Проверяем клик по ориентиру (landmark)
         for (const lm of biomeRef.landmarks) {
@@ -116,6 +146,14 @@ window.OC = window.OC || {};
         const fl = biomeRef.getHeight(wx, wz);
         const targetY = Math.min(-3.0, Math.max(fl + 5.5, -28));
         if (onTeleport) onTeleport(wx, targetY, wz, undefined, -0.14, null);
+      });
+
+      canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const px = ((e.clientX - rect.left) / rect.width) * SIZE;
+        const py = ((e.clientY - rect.top) / rect.height) * SIZE;
+        toggleWaypointAt(px, py);
       });
     },
 
@@ -167,6 +205,35 @@ window.OC = window.OC || {};
 
       // Конус обзора и позиция камеры
       const [cx, cz] = worldToMap(camPos.x, camPos.z);
+
+      // Активный навигационный маячок (Waypoint) и пунктирный курс к нему
+      const wp = OC.Expedition && OC.Expedition.getWaypoint ? OC.Expedition.getWaypoint(biomeRef.id) : null;
+      if (wp) {
+        const [wx, wz] = worldToMap(wp.x, wp.z);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(91, 232, 176, 0.65)';
+        ctx.lineWidth = 1.3;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(cx, cz);
+        ctx.lineTo(wx, wz);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const pulse = 5 + Math.sin(Date.now() * 0.006) * 2.2;
+        ctx.strokeStyle = 'rgba(91, 232, 176, 0.85)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(wx, wz, pulse, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = '#5be8b0';
+        ctx.beginPath();
+        ctx.arc(wx, wz, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       ctx.save();
       ctx.translate(cx, cz);
       // В Three.js forward = (sin(yaw), cos(yaw)), на карте X вправо, Z вниз

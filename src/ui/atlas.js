@@ -16,7 +16,8 @@ window.OC = window.OC || {};
     const id = biomeRef ? biomeRef.id : 'default';
     let s = discoveredByBiome.get(id);
     if (!s) {
-      s = new Set(['floor']);
+      const saved = OC.Expedition && OC.Expedition.getSavedDiscovered ? OC.Expedition.getSavedDiscovered(id) : ['floor'];
+      s = new Set(saved && saved.length ? saved : ['floor']);
       discoveredByBiome.set(id, s);
     }
     return s;
@@ -164,6 +165,9 @@ window.OC = window.OC || {};
       if (!key || discovered.has(key)) return false;
       if (biomeRef && biomeRef.encyclopedia[key]) {
         discovered.add(key);
+        if (OC.Expedition && OC.Expedition.saveDiscovered) {
+          OC.Expedition.saveDiscovered(biomeRef.id, discovered);
+        }
         render();
         return true;
       }

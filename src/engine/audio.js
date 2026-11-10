@@ -286,6 +286,49 @@ window.OC = window.OC || {};
     else g.connect(S.master);
   };
 
+  S.shutter = function () {
+    if (S.muted) return;
+    if (!S.ctx && !S.ensure()) return;
+    if (S.ctx.state === 'suspended') S.ctx.resume();
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    [0, 0.055].forEach((offset, idx) => {
+      const o = ctx.createOscillator();
+      const f = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(idx === 0 ? 1850 : 1280, now + offset);
+      o.frequency.exponentialRampToValueAtTime(320, now + offset + 0.032);
+      f.type = 'bandpass';
+      f.frequency.value = idx === 0 ? 2200 : 1500;
+      f.Q.value = 1.6;
+      g.gain.setValueAtTime(0.085, now + offset);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.036);
+      o.connect(f); f.connect(g); g.connect(S.master);
+      o.start(now + offset); o.stop(now + offset + 0.04);
+    });
+  };
+
+  S.missionChime = function () {
+    if (S.muted) return;
+    if (!S.ctx && !S.ensure()) return;
+    if (S.ctx.state === 'suspended') S.ctx.resume();
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      const t = now + i * 0.075;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.055, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+      o.connect(g); g.connect(S.master);
+      o.start(t); o.stop(t + 0.45);
+    });
+  };
+
   S.toggle = function () {
     if (!S.ctx) { const ok = S.ensure(); if (!ok) return false; return true; }
     S.muted = !S.muted;

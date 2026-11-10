@@ -14,6 +14,8 @@ window.OC = window.OC || {};
   const btnSound = document.getElementById('btn-sound');
   const btnFlash = document.getElementById('btn-flash');
   const btnAtlas = document.getElementById('btn-atlas');
+  const btnCam = document.getElementById('btn-cam');
+  const btnJournal = document.getElementById('btn-journal');
   const btnReset = document.getElementById('btn-reset');
   const btnSwim = document.getElementById('btn-mode-swim');
   const btnOrbit = document.getElementById('btn-mode-orbit');
@@ -44,6 +46,24 @@ window.OC = window.OC || {};
   const teleDepth = document.getElementById('tele-depth');
   const teleTemp = document.getElementById('tele-temp');
   const teleHeading = document.getElementById('tele-heading');
+  const teleWpSep = document.getElementById('tele-wp-sep');
+  const teleWpWrap = document.getElementById('tele-wp-wrap');
+  const teleWp = document.getElementById('tele-wp');
+
+  const camHud = document.getElementById('cam-hud');
+  const camTargetEl = document.getElementById('cam-target');
+  const camFovLabel = document.getElementById('cam-fov-label');
+  const camFlash = document.getElementById('cam-flash');
+  const camPreview = document.getElementById('cam-preview');
+  const camPreviewImg = document.getElementById('cam-preview-img');
+  const camPreviewMeta = document.getElementById('cam-preview-meta');
+  const camDownload = document.getElementById('cam-download');
+
+  const journalModal = document.getElementById('journal-modal');
+  const journalTitle = document.getElementById('journal-title');
+  const journalSummary = document.getElementById('journal-summary');
+  const journalGrid = document.getElementById('journal-grid');
+  const journalTabs = document.getElementById('journal-tabs');
 
   const statChunks = document.getElementById('stat-chunks');
   const statCorals = document.getElementById('stat-corals');
@@ -64,8 +84,13 @@ window.OC = window.OC || {};
   let activeBiome = null;
   let activeFauna = null;
   let uiHandles = null;
+  let pendingPhotoCapture = false;
+  let previewHideTimer = 0;
+  let journalTab = 'missions';
+  let lastEvalCtx = { zoneId: '', depthM: 0, currentKnots: 0, dayW: 1.0, flashOn: false };
   let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
   const _fwd = new T.Vector3();
+  const _zeroNdc = new T.Vector2(0, 0);
 
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const raycaster = new T.Raycaster();
@@ -89,6 +114,82 @@ window.OC = window.OC || {};
     const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
     const dName = dirs[Math.round(deg / 45) % 8];
     return dName + ' ' + String(deg).padStart(3, '0') + '°';
+  }
+
+  function detectCenterTarget(camera, biome, fauna) {
+    if (!camera || !biome) return null;
+    camera.getWorldDirection(_fwd);
+    let faunaHit = (fauna && fauna.scanCameraTarget) ? fauna.scanCameraTarget(camera.position, _fwd, 95) : null;
+
+    raycaster.setFromCamera(_zeroNdc, camera);
+    const hits = raycaster.intersectObjects(OC.getScene().children, true);
+    let rayHit = null;
+    for (const h of hits) {
+      if (!h.object.visible || h.distance > 48) continue;
+      let o = h.object;
+      while (o && !o.userData.key) o = o.parent;
+      const key = o && o.userData.key ? o.userData.key : null;
+      if (!key || key === 'bubbles' || key === 'plankton' || key === 'marine_snow') continue;
+      const enc = biome.encyclopedia[key];
+      rayHit = { hit: true, key, label: enc ? enc[0] : key, latin: enc ? enc[1] : '', dist: h.distance, align: 0.92 };
+      break;
+    }
+
+    if (faunaHit && (!rayHit || rayHit.key === 'floor' || faunaHit.dist <= rayHit.dist + 8)) return faunaHit;
+    return rayHit;
+  }
+
+  function renderJournal() {
+    if (!journalGrid || !activeBiome || !OC.Expedition) return;
+    const res = OC.Expedition.evaluateMissions(activeBiome, lastEvalCtx);
+    const sum = OC.Expedition.getAllSummary();
+    if (journalTitle) journalTitle.textContent = 'Экспедиция · ' + activeBiome.name;
+    if (journalSummary) journalSummary.textContent = 'Миссий: ' + sum.missionsDone + ' / ' + sum.missionsTotal + ' · Снимков: ' + sum.photosCount;
+
+    journalGrid.innerHTML = '';
+    if (journalTab === 'missions') {
+      for (const m of res.list) {
+        const card = document.createElement('div');
+        card.className = 'mission-card' + (m.done ? ' done' : '');
+        const pct = Math.round((m.cur / Math.max(1, m.goal)) * 100);
+        const badge = m.done ? '<span class="atlas-badge ok">Выполнено ✓</span>' : '<span class="atlas-badge">' + m.cur + ' / ' + m.goal + '</span>';
+        card.innerHTML =
+          '<div class="atlas-top"><span>Научная задача</span>' + badge + '</div>' +
+          '<div class="atlas-name">' + m.title + '</div>' +
+          '<div class="atlas-desc">' + m.desc + '</div>' +
+          '<div class="mission-prog"><i style="width:' + pct + '%"></i></div>' +
+          '<div class="atlas-foot"><span>' + (m.done ? 'Задание засчитано' : 'В процессе') + '</span><button class="atlas-go">Поставить маяк →</button></div>';
+        const btn = card.querySelector('.atlas-go');
+        btn.addEventListener('click', () => {
+          const lm = activeBiome.landmarks.find((l) => l.id === m.landmarkId) || activeBiome.landmarks[0];
+          if (lm) {
+            OC.Expedition.setWaypoint(activeBiome.id, lm.x, lm.z, lm.name);
+            toast('Маяк поставлен: ' + lm.name);
+            if (journalModal) journalModal.classList.add('hidden');
+          }
+        });
+        journalGrid.appendChild(card);
+      }
+    } else {
+      const photos = OC.Expedition.getPhotos();
+      if (!photos.length) {
+        journalGrid.innerHTML = '<div style="grid-column:1/-1;color:var(--dim);font-size:13px;padding:18px 0">Пока нет подводных снимков. Нажмите <b>P</b> (или значок камеры), наведите видоискатель на обитателя или коралл и нажмите <b>Enter</b>!</div>';
+        return;
+      }
+      for (const ph of photos) {
+        const card = document.createElement('div');
+        card.className = 'photo-card';
+        const dlUrl = OC.Expedition.getPhotoDownloadUrl(ph.id);
+        card.innerHTML =
+          (ph.dataUrl ? '<img src="' + ph.dataUrl + '" alt="' + ph.title + '">' : '') +
+          '<div class="atlas-top"><span>' + ph.biomeName + ' · ' + ph.depthM + ' м</span><span class="atlas-badge ok">' + ph.score + '/100</span></div>' +
+          '<div class="atlas-name">' + ph.title + '</div>' +
+          '<div class="atlas-latin">' + ph.latin + (ph.dist ? (' · ' + ph.dist + ' м') : '') + '</div>' +
+          '<div class="atlas-foot"><span>' + new Date(ph.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' +
+          (dlUrl ? '<a class="atlas-go" style="text-decoration:none" href="' + dlUrl + '" download="' + ph.key + '.png">Скачать PNG</a>' : '') + '</div>';
+        journalGrid.appendChild(card);
+      }
+    }
   }
 
   function showInfo(key, cx, cy, biome) {
@@ -292,6 +393,7 @@ window.OC = window.OC || {};
         label: res.label,
         hit: res.hit
       };
+      if (OC.Expedition && activeBiome) OC.Expedition.recordSonarPing(activeBiome.id, res);
       OC.Minimap.triggerPing(cam.position.x, cam.position.z);
       OC.sound.sonarPing(res.range, res.hit);
       if (sonarReadout) {
@@ -312,6 +414,75 @@ window.OC = window.OC || {};
         fireSonarPing();
       });
     }
+
+    const syncCamMode = (on) => {
+      if (!OC.Expedition) return;
+      const next = OC.Expedition.setPhotoMode(on);
+      if (btnCam) btnCam.classList.toggle('on', next);
+      if (camHud) camHud.classList.toggle('hidden', !next);
+      if (!next && camPreview) camPreview.classList.add('hidden');
+      if (camFovLabel) camFovLabel.textContent = Math.round(OC.Expedition.getZoomFov()) + '°';
+    };
+    if (btnCam) {
+      btnCam.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = !(OC.Expedition && OC.Expedition.isPhotoMode());
+        syncCamMode(next);
+        toast(next ? 'Фотокамера: наведите и нажмите Enter' : 'Фотокамера закрыта');
+      });
+    }
+    const camCloseBtn = document.getElementById('cam-close');
+    if (camCloseBtn) camCloseBtn.addEventListener('click', () => syncCamMode(false));
+    const camZoomIn = document.getElementById('cam-zoom-in');
+    const camZoomOut = document.getElementById('cam-zoom-out');
+    if (camZoomIn) camZoomIn.addEventListener('click', () => {
+      if (!OC.Expedition) return;
+      const fov = OC.Expedition.adjustZoom(-6);
+      if (camFovLabel) camFovLabel.textContent = Math.round(fov) + '°';
+    });
+    if (camZoomOut) camZoomOut.addEventListener('click', () => {
+      if (!OC.Expedition) return;
+      const fov = OC.Expedition.adjustZoom(6);
+      if (camFovLabel) camFovLabel.textContent = Math.round(fov) + '°';
+    });
+    const camSnap = document.getElementById('cam-snap');
+    const triggerShutter = () => {
+      if (!OC.Expedition || !OC.Expedition.isPhotoMode()) return;
+      pendingPhotoCapture = true;
+    };
+    if (camSnap) camSnap.addEventListener('click', triggerShutter);
+    const camOpenJournal = document.getElementById('cam-open-journal');
+    if (camOpenJournal) camOpenJournal.addEventListener('click', () => {
+      syncCamMode(false);
+      journalTab = 'photos';
+      if (journalTabs) journalTabs.querySelectorAll('button[data-jtab]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-jtab') === 'photos'));
+      if (journalModal) { journalModal.classList.remove('hidden'); renderJournal(); }
+    });
+
+    const toggleJournal = (forceClose) => {
+      if (!journalModal) return;
+      const opening = forceClose ? false : journalModal.classList.contains('hidden');
+      journalModal.classList.toggle('hidden', !opening);
+      if (opening) renderJournal();
+    };
+    if (btnJournal) btnJournal.addEventListener('click', (e) => { e.stopPropagation(); toggleJournal(false); });
+    const jClose = document.getElementById('journal-close');
+    if (jClose) jClose.addEventListener('click', () => toggleJournal(true));
+    if (journalModal) journalModal.addEventListener('click', (e) => { if (e.target === journalModal) toggleJournal(true); });
+    if (journalTabs) {
+      journalTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-jtab]');
+        if (!btn) return;
+        journalTab = btn.getAttribute('data-jtab');
+        journalTabs.querySelectorAll('button[data-jtab]').forEach((b) => b.classList.toggle('on', b === btn));
+        renderJournal();
+      });
+    }
+    const clearWpBtn = document.getElementById('journal-clear-wp');
+    if (clearWpBtn) clearWpBtn.addEventListener('click', () => {
+      if (OC.Expedition && activeBiome) OC.Expedition.clearWaypoint(activeBiome.id);
+      toast('Навигационный маяк снят');
+    });
 
     function syncModes(mode) {
       if (btnSwim) btnSwim.classList.toggle('on', mode === 'swim');
@@ -458,6 +629,7 @@ window.OC = window.OC || {};
         if (!btn) return;
         const id = btn.getAttribute('data-q');
         const p = OC.Quality.set(id);
+        if (OC.Expedition && OC.Expedition.saveQuality) OC.Expedition.saveQuality(id);
         renderQualityButtons();
         toast('Качество графики: ' + p.label);
       });
@@ -495,11 +667,33 @@ window.OC = window.OC || {};
       }
       if (e.code === 'KeyR') { OC.Navigation.resetToSpawn(); toast('Возврат к старту: ' + (activeBiome ? activeBiome.name : 'океан')); }
       if (e.code === 'KeyK') { OC.Atlas.toggle(); }
+      if (e.code === 'KeyP') {
+        const next = !(OC.Expedition && OC.Expedition.isPhotoMode());
+        syncCamMode(next);
+        toast(next ? 'Фотокамера: наведите и нажмите Enter' : 'Фотокамера закрыта');
+      }
+      if (e.code === 'KeyJ') { toggleJournal(false); }
+      if (e.code === 'Enter' && OC.Expedition && OC.Expedition.isPhotoMode()) {
+        e.preventDefault();
+        triggerShutter();
+      }
+      if (e.code === 'BracketRight' && OC.Expedition && OC.Expedition.isPhotoMode()) {
+        const fov = OC.Expedition.adjustZoom(-5);
+        if (camFovLabel) camFovLabel.textContent = Math.round(fov) + '°';
+      }
+      if (e.code === 'BracketLeft' && OC.Expedition && OC.Expedition.isPhotoMode()) {
+        const fov = OC.Expedition.adjustZoom(5);
+        if (camFovLabel) camFovLabel.textContent = Math.round(fov) + '°';
+      }
       if (e.code === 'KeyH') {
         hudHidden = !hudHidden;
         hudEls.forEach((el) => el.classList.toggle('hud-hidden', hudHidden));
       }
-      if (e.code === 'Escape' && OC.Atlas.isOpen()) OC.Atlas.toggle();
+      if (e.code === 'Escape') {
+        if (OC.Atlas.isOpen()) OC.Atlas.toggle();
+        else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
+        else if (OC.Expedition && OC.Expedition.isPhotoMode()) syncCamMode(false);
+      }
     });
 
     if (hero) {
@@ -507,7 +701,7 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes, syncFlash, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, renderBiomeUI, renderZoneChips };
   }
 
   function switchBiome(id) {
@@ -519,6 +713,8 @@ window.OC = window.OC || {};
     const sp = new T.Vector3(next.spawn.pos[0], next.spawn.pos[1], next.spawn.pos[2]);
 
     if (popup) popup.classList.add('hidden');
+    if (camPreview) camPreview.classList.add('hidden');
+    if (uiHandles && uiHandles.syncCamMode) uiHandles.syncCamMode(false);
     sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
     if (sonarReadout) sonarReadout.textContent = 'Сканер · Чисто';
 
@@ -544,6 +740,7 @@ window.OC = window.OC || {};
       uiHandles.renderBiomeUI();
       uiHandles.renderZoneChips();
     }
+    if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
     toast(next.noSurface
       ? (next.name + ' · Глубина 2440 м, прожектор включён (F)')
       : (next.name + ' · ' + next.region));
@@ -552,6 +749,9 @@ window.OC = window.OC || {};
 
   function boot() {
     try {
+      const savedQ = OC.Expedition && OC.Expedition.getSavedQuality ? OC.Expedition.getSavedQuality() : null;
+      if (savedQ && OC.Quality.presets && OC.Quality.presets[savedQ]) OC.Quality.set(savedQ);
+
       activeBiome = OC.Biomes.getActive();
       setBar(0.25);
       const init = OC.initWorld(canvas);
@@ -579,6 +779,8 @@ window.OC = window.OC || {};
       OC.Minimap.init(document.getElementById('minimap'), activeBiome, (x, y, z, yaw, pitch, label) => {
         OC.Navigation.flyTo(x, y, z, yaw, pitch);
         if (label) toast('Переход: ' + label);
+      }, (wp) => {
+        toast(wp ? ('Маяк установлен: ' + wp.label) : 'Маяк снят');
       });
 
       OC.Atlas.init(activeBiome, (lm) => {
@@ -648,11 +850,55 @@ window.OC = window.OC || {};
         const tempC = (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065)).toFixed(1);
         const pal = OC.getPalette();
         const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
+        const curr = OC.Navigation.getCurrent ? OC.Navigation.getCurrent() : null;
+        const cKnots = curr ? curr.length() * 1.94384 : 0;
 
         if (teleZone) teleZone.textContent = zone.shortName;
         if (teleDepth) teleDepth.textContent = (!biome.noSurface && camPos.y > 0.1) ? ('+' + camPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
         if (teleTemp) teleTemp.textContent = tempC + ' °C';
         if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
+
+        // Навигационный маячок в телеметрии + авто-прибытие
+        if (OC.Expedition) {
+          const wp = OC.Expedition.getWaypoint(biome.id);
+          if (wp) {
+            const wpDx = wp.x - camPos.x;
+            const wpDz = wp.z - camPos.z;
+            const wpDist = Math.hypot(wpDx, wpDz);
+            if (wpDist < 24) {
+              OC.Expedition.clearWaypoint(biome.id);
+              toast('Вы прибыли к маячку: ' + wp.label);
+              if (teleWpSep) teleWpSep.classList.add('tele-wp-hide');
+              if (teleWpWrap) teleWpWrap.classList.add('tele-wp-hide');
+            } else {
+              const deg = ((Math.round(Math.atan2(wpDx, -wpDz) * 180 / Math.PI) % 360) + 360) % 360;
+              const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
+              const dStr = dirs[Math.round(deg / 45) % 8];
+              if (teleWpSep) teleWpSep.classList.remove('tele-wp-hide');
+              if (teleWpWrap) teleWpWrap.classList.remove('tele-wp-hide');
+              if (teleWp) teleWp.textContent = Math.round(wpDist) + ' м · ' + dStr;
+            }
+          } else {
+            if (teleWpSep) teleWpSep.classList.add('tele-wp-hide');
+            if (teleWpWrap) teleWpWrap.classList.add('tele-wp-hide');
+          }
+
+          // Обновление видоискателя фотокамеры и оценка научных миссий
+          if (OC.Expedition.isPhotoMode() && camTargetEl) {
+            const tgt = detectCenterTarget(camera, biome, activeFauna);
+            camTargetEl.textContent = tgt
+              ? ('В фокусе: ' + tgt.label + ' (' + tgt.dist.toFixed(0) + ' м)')
+              : 'Наведите центр рамки на вид или коралл';
+          }
+
+          lastEvalCtx = { zoneId: zone.id, depthM, currentKnots: cKnots, dayW, flashOn };
+          const mRes = OC.Expedition.evaluateMissions(biome, lastEvalCtx);
+          if (mRes.newlyCompleted.length) {
+            if (OC.sound && OC.sound.missionChime) OC.sound.missionChime();
+            toast('Миссия выполнена: ' + mRes.newlyCompleted[0].title + '!');
+            if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
+          }
+        }
 
         OC.sound.update(depthM, zone.id, dayW);
         OC.Minimap.update(camPos, OC.Navigation.getYaw());
@@ -671,8 +917,6 @@ window.OC = window.OC || {};
           }
           if (subSpeedEl) subSpeedEl.textContent = knots + ' уз';
           if (subCurrentEl) {
-            const curr = OC.Navigation.getCurrent ? OC.Navigation.getCurrent() : null;
-            const cKnots = curr ? curr.length() * 1.94384 : 0;
             subCurrentEl.textContent = cKnots.toFixed(1) + ' уз';
             subCurrentEl.classList.toggle('warn', cKnots > 1.8);
           }
@@ -707,7 +951,41 @@ window.OC = window.OC || {};
         popup.classList.add('hidden');
       }
 
+      // Плавный оптический зум объектива в режиме фотокамеры
+      const wantFov = (OC.Expedition && OC.Expedition.isPhotoMode()) ? OC.Expedition.getZoomFov() : 60;
+      if (Math.abs(camera.fov - wantFov) > 0.08) {
+        camera.fov = OC.lerp(camera.fov, wantFov, Math.min(1, rawDt * 12));
+        camera.updateProjectionMatrix();
+      }
+
       renderer.render(scene, camera);
+
+      if (pendingPhotoCapture && activeBiome && OC.Expedition) {
+        pendingPhotoCapture = false;
+        if (OC.sound && OC.sound.shutter) OC.sound.shutter();
+        if (camFlash) {
+          camFlash.classList.add('bang');
+          setTimeout(() => camFlash.classList.remove('bang'), 35);
+        }
+        const palSnap = OC.getPalette();
+        const daySnap = palSnap && typeof palSnap.dayW === 'number' ? palSnap.dayW : 1.0;
+        const depthSnap = (activeBiome.depthOffset || 0) + ((activeBiome.depthOffset || 0) > 0 ? -camPos.y : Math.max(0, -camPos.y));
+        const tgt = detectCenterTarget(camera, activeBiome, activeFauna);
+        const ph = OC.Expedition.recordPhoto(canvas, activeBiome, tgt, depthSnap, daySnap, flashOn);
+        const isNewAtlas = OC.Atlas.discover(ph.key);
+        if (camPreview && camPreviewImg && camPreviewMeta && camDownload) {
+          if (ph.dataUrl) camPreviewImg.src = ph.dataUrl;
+          camPreviewMeta.innerHTML = '<b>' + ph.title + '</b><small>Оценка кадра: ' + ph.score + '/100' + (isNewAtlas ? ' · Открыто в Атласе!' : '') + '</small>';
+          if (ph.downloadUrl) {
+            camDownload.href = ph.downloadUrl;
+            camDownload.download = ph.key + '_' + ph.depthM + 'm.png';
+          }
+          camPreview.classList.remove('hidden');
+          clearTimeout(previewHideTimer);
+          previewHideTimer = setTimeout(() => camPreview.classList.add('hidden'), 8000);
+        }
+        toast('Снимок: ' + ph.title + ' · ' + ph.score + '/100');
+      }
     }
 
     requestAnimationFrame(frame);
