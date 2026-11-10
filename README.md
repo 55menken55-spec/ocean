@@ -89,4 +89,16 @@ python3 -m http.server 8080 --bind 0.0.0.0
 
 # Запустить автоматическую проверку географии, шейдеров и стриминга
 node tests/verify.mjs
+
+# Проверить валидность всех Agent Skills (.agents/skills/)
+python3 .agents/skills/validate_skills.py
 ```
+
+---
+
+## Agent Skills проекта (`.agents/skills/`)
+
+В репозитории установлен полный комплект из **30 скилов** для AI-агентов (подробный каталог — в [`.agents/skills/README.md`](./.agents/skills/README.md)):
+- **7 проектных скилов под движок `ocean`:** `marine-biome-researcher`, `ocean-biome-architect`, `threejs-r128-procedural-mesh`, `ecosystem-ai-simulator`, `submersible-hud-design`, `webaudio-underwater-soundscape`, `ocean-qa-verification`.
+- **23 open-source скила с GitHub:** 3D/WebGL/шейдеры (`webgl-shader-fx`, `3d-graphics`, `threejs`, `threejs-3d`, `webgl`, `web-performance`), архитектура и проверка кода (`software-architecture`, `testing`, `webapp-testing`, `code-review`, `debugging`, `refactoring`), веб-дизайн и анимация (`frontend-design`, `design-taste-frontend`, `ui-checker`, `color-system`, `modern-css`, `ui-animation`, `algorithmic-art`), научный ресёрч и создание скилов (`openalex-database`, `literature-review`, `scientific-critical-thinking`, `skill-creator`).
+
