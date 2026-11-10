@@ -82,6 +82,12 @@ window.OC = window.OC || {};
     'Зал сталактитов': 'stalactite_cathedral',
     'Галоклин Анхелиты': 'angelita_halocline',
     'Бездна Эль-Пит': 'el_pit_depth',
+    'Арка Дарвина': 'darwins_arch',
+    'Лавовая бухта': 'lava_cove',
+    'Стена апвеллинга': 'upwelling_wall',
+    'Пелагиаль Вольфа': 'wolf_orca_shelf',
+    'Небо над Аркой Дарвина': 'darwins_arch',
+    'Пролив у Вольфа': 'wolf_orca_shelf',
     'Все зоны': 'crest'
   };
 

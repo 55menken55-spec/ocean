@@ -456,6 +456,11 @@ window.OC = window.OC || {};
     if (key === 'halocline_layer') return 'Акустика галоклина и облака H₂S';
     if (key === 'stalactite' || key === 'stalagmite' || key === 'ariadne_line') return 'Пещерный резонанс и капля воды';
     if (key === 'cave_remipede' || key === 'blind_brotula' || key === 'blind_tetra' || key === 'cave_shrimp' || key === 'cenote_molly') return 'Гидроотклик стигобионтов';
+    if (key === 'orca') return 'Импульсные позывные стаи косаток';
+    if (key === 'galapagos_penguin') return 'Подводный треск погони пингвина';
+    if (key === 'marine_iguana') return 'Лавовый прибой и соскабливание ульвы';
+    if (key === 'ocean_sunfish' || key === 'mobula_ray' || key === 'galapagos_shark' || key === 'darwins_arch') return 'Резонанс апвеллинга и Арки Дарвина';
+    if (key === 'volcanic_fumarole') return 'Пузырьковая вулканическая фумарола';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
@@ -650,7 +655,37 @@ window.OC = window.OC || {};
           o.connect(g); g.connect(out);
           o.start(t); o.stop(t + 0.55);
         });
-      } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') {
+      } else if (key === 'orca') {
+        // Фирменные гармонические импульсные крики стаи косаток и серия щелчков
+        [680, 1020, 520].forEach((f, i) => {
+          const t = now + i * 0.28;
+          const o = ctx.createOscillator();
+          const bp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * (i === 1 ? 1.48 : 0.74), t + 0.24);
+          bp.type = 'bandpass'; bp.frequency.value = f * 1.4; bp.Q.value = 1.9;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.095, t + 0.04);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+          o.connect(bp); bp.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.28);
+        });
+      } else if (key === 'galapagos_penguin') {
+        for (let i = 0; i < 4; i++) {
+          const t = now + i * 0.12;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(740 + i * 110, t);
+          o.frequency.exponentialRampToValueAtTime(420, t + 0.09);
+          g.gain.setValueAtTime(0.075, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.11);
+        }
+      } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels' || key === 'volcanic_fumarole') {
         const dur = 1.2;
         const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
         const d = buf.getChannelData(0);
@@ -783,7 +818,7 @@ window.OC = window.OC || {};
           o.connect(f); f.connect(g); g.connect(out);
           o.start(t); o.stop(t + 0.06);
         }
-      } else if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle') {
+      } else if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle' || key === 'ocean_sunfish' || key === 'mobula_ray' || key === 'galapagos_shark' || key === 'darwins_arch' || key === 'marine_iguana') {
         const o = ctx.createOscillator();
         const lp = ctx.createBiquadFilter();
         const g = ctx.createGain();

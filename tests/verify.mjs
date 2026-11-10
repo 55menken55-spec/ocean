@@ -17,6 +17,7 @@ const SRC_ORDER = [
   'src/biomes/mariana_trench.js',
   'src/biomes/brine_pool.js',
   'src/biomes/cenote_caves.js',
+  'src/biomes/galapagos_upwelling.js',
   'src/engine/weather.js',
   'src/engine/eco_lab.js',
   'src/engine/world.js',
@@ -355,13 +356,13 @@ assert(subHtml.includes('id="sub-current"'), 'template.html missing #sub-current
 checkMaterialShader({ causticStrength: 0.78, swayAmp: 0.42 }, 'coralSoftCurrent');
 console.log('   Option 2 ocean currents, particle/sway advection, #sub-current HUD & smart megafauna verified.');
 
-// G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea, Wreck Atoll, Mariana Trench, Brine Pool & Cenote Caves) & clean switching
+// G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea, Wreck Atoll, Mariana Trench, Brine Pool, Cenote Caves & Galapagos Upwelling) & clean switching
 const allBiomes = OC.Biomes.list();
-assert(allBiomes.length === 8, `Expected 8 registered ocean biomes, got ${allBiomes.length}`);
+assert(allBiomes.length === 9, `Expected 9 registered ocean biomes, got ${allBiomes.length}`);
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
 assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
-for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll', 'mariana_trench', 'brine_pool', 'cenote_caves']) {
+for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll', 'mariana_trench', 'brine_pool', 'cenote_caves', 'galapagos_upwelling']) {
   const b = OC.Biomes.setActive(bId);
   assert(b && b.id === bId, `Failed to activate biome ${bId}`);
   assert(b.zones && b.zones.length >= 4, `${bId} needs >= 4 ecological zones`);
@@ -479,9 +480,9 @@ for (const qId of ['low', 'medium', 'high', 'ultra']) {
 }
 console.log('   Multi-biome hot-switching & runtime quality preset switching (low -> ultra) verified.');
 
-// H) Verify Direction 1 + Arctic + Wreck Atoll + Mariana Trench + Brine Pool + Cenote Caves Missions (Camera, 32 Scientific Missions, Minimap Waypoints, Persistence)
+// H) Verify Direction 1 + Arctic + Wreck Atoll + Mariana Trench + Brine Pool + Cenote Caves + Galapagos Missions (Camera, 36 Scientific Missions, Minimap Waypoints, Persistence)
 assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-assert.equal(OC.Expedition.MISSIONS.length, 32, `Expected 32 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+assert.equal(OC.Expedition.MISSIONS.length, 36, `Expected 36 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
 for (const b of OC.Biomes.list()) {
   const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
   assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
@@ -766,7 +767,7 @@ OC.Atlas.setBiome(restoreGbr);
 
 console.log(`   5th Biome "Атолл Палау и Затонувший корабль" (SS Maru 68m, Hammerhead, Golden Jellyfish, 4 new flora prototypes, ${OC.Expedition.MISSIONS.length} total missions) verified.`);
 
-// M) Verify Direction 7: Interactive 3D Planet Globe & Guided Scientific Tours (42 stages across 8 biomes)
+// M) Verify Direction 7: Interactive 3D Planet Globe & Guided Scientific Tours (47 stages across 9 biomes)
 assert(OC.Globe && typeof OC.Globe.init === 'function' && typeof OC.Globe.getBeacons === 'function', 'OC.Globe API must be registered');
 assert.equal(typeof OC.sound.tourChime, 'function', 'OC.sound.tourChime required');
 assert.equal(typeof OC.sound.globeWhoosh, 'function', 'OC.sound.globeWhoosh required');
@@ -781,7 +782,7 @@ OC.Globe.init({
 });
 
 const beacons = OC.Globe.getBeacons();
-assert.equal(beacons.length, 8, '3D Globe must expose 8 expedition beacons');
+assert.equal(beacons.length, 9, '3D Globe must expose 9 expedition beacons');
 let totalTourStages = 0;
 for (const b of OC.Biomes.list()) {
   assert(b.globe && Number.isFinite(b.globe.lat) && Number.isFinite(b.globe.lon), `Biome ${b.id} missing globe coordinates`);
@@ -795,7 +796,7 @@ for (const b of OC.Biomes.list()) {
   const sum = OC.Expedition.getBiomeSummary(b);
   assert(sum.speciesTotal === Object.keys(b.encyclopedia).length && sum.missionsTotal === 4, `getBiomeSummary mismatch for ${b.id}`);
 }
-assert(totalTourStages === 42, `Expected 42 total guided tour stages across 8 biomes, got ${totalTourStages}`);
+assert(totalTourStages === 47, `Expected 47 total guided tour stages across 9 biomes, got ${totalTourStages}`);
 
 for (const bc of beacons) {
   const rad = Math.hypot(bc.x, bc.y, bc.z);
@@ -992,7 +993,7 @@ OC.Biomes.setActive('great_barrier_reef');
 console.log(`   Direction 9 3D ROV «Наутилус-IV» (3rd-person chase/orbit cam, manipulator sampling, CTD casts & 3D current streamlines) verified.`);
 
 // P) Verify Direction 10: Surface World & Expedition Mother-Ship (Research Vessel, Seabirds, Dolphins, Flying Fish)
-const surfBiomes = ['great_barrier_reef', 'kelp_forest', 'arctic_sea', 'wreck_atoll'];
+const surfBiomes = ['great_barrier_reef', 'kelp_forest', 'arctic_sea', 'wreck_atoll', 'galapagos_upwelling'];
 for (const bId of surfBiomes) {
   const sb = OC.Biomes.setActive(bId);
   assert(sb.encyclopedia.research_vessel, `${bId} missing encyclopedia.research_vessel`);
@@ -1219,4 +1220,62 @@ assert(ctdCc && ctdCc.maxDepthM > 52 && ctdCc.maxDepthM < 64 && ctdCc.bottomTemp
 
 OC.Biomes.setActive('great_barrier_reef');
 console.log(`   8th Biome "Юкатанские пещеры и Сеноты" (${ctdCc.maxDepthM} м, Cave Ceiling, Halocline & H₂S Cloud, Ariadne Line, Stalactites & Blind Cave Fauna) verified.`);
+
+// T) Verify 9th Biome: Galapagos Volcanic Upwelling & Darwin's Arch (galapagos_upwelling, 0-132 m, Cromwell Upwelling, Ocean Sunfish, Marine Iguana, Penguin, Orca, Mobula, Blue-footed Booby)
+const galBiome = OC.Biomes.setActive('galapagos_upwelling');
+assert(galBiome && !galBiome.noSurface && galBiome.minimapTheme === 'galapagos', 'galapagos_upwelling must expose surface ocean & galapagos theme');
+
+for (const spKey of ['volcanic_fumarole', 'tubastraea_coral', 'galapagos_barnacle', 'ulva_turf']) {
+  assert(floraProtos[spKey], `FloraLibrary missing galapagos_upwelling species ${spKey}`);
+  assert(galBiome.encyclopedia[spKey], `galapagos_upwelling encyclopedia missing ${spKey}`);
+}
+for (const fKey of ['darwins_arch', 'ocean_sunfish', 'marine_iguana', 'galapagos_penguin', 'orca', 'mobula_ray', 'galapagos_shark', 'sardine_baitball']) {
+  assert(galBiome.encyclopedia[fKey], `galapagos_upwelling encyclopedia missing fauna/feature ${fKey}`);
+}
+
+const galZoneHits = new Set([
+  galBiome.getZoneAt(-145, -6, -68).id,
+  galBiome.getZoneAt(0, -11, 42).id,
+  galBiome.getZoneAt(165, -26, -48).id,
+  galBiome.getZoneAt(375, -32, -85).id
+]);
+assert.equal(galZoneHits.size, 4, `Expected all 4 galapagos_upwelling zones reachable, got ${[...galZoneHits].join(', ')}`);
+
+// Verify Cromwell Undercurrent upward vertical upwelling flow along volcanic wall
+const galCurr = new T.Vector3();
+galBiome.getCurrentAt(165, -26, -48, 2.0, galCurr);
+assert(galCurr.y > 0.25 && galCurr.length() > 0.6, `Cromwell upwelling must produce strong upward flow along dropoff, got vy=${galCurr.y.toFixed(2)}`);
+
+// Verify central passage under Darwin's Arch (0, 0) stays deep & clear while flank pillars rise
+assert(galBiome.getHeight(0, 0) < -18.0, 'Darwin Arch central underwater passage must stay clear (< -18 m)');
+assert(galBiome.getHeight(-26, 0) > 0.0 && galBiome.getHeight(26, 0) > 0.0, 'Darwin Arch twin basalt pillars must rise above sea level');
+
+const galSp = new T.Vector3(galBiome.spawn.pos[0], galBiome.spawn.pos[1], galBiome.spawn.pos[2]);
+OC.Terrain.init(scene, galBiome, galSp);
+OC.FloraStreamer.init(scene, galBiome, galSp);
+const galFauna = OC.FaunaEngine.init(scene, galBiome);
+assert(galFauna.getVesselInfo() && galFauna.getVesselInfo().deckPos[1] > 0, 'galapagos_upwelling must anchor RV Beagle II safely in deep water');
+for (const k of ['darwins_arch', 'ocean_sunfish', 'marine_iguana', 'galapagos_penguin', 'orca', 'mobula_ray', 'galapagos_shark']) {
+  assert(galFauna.agents.some((a) => a.key === k), `galapagos_upwelling must instantiate ${k}`);
+}
+
+// Verify Ultra 5x5 flora pools for galapagos_upwelling never overflow maxInstances
+const galUltraCounts = {};
+for (let cx = -2; cx <= 2; cx++) {
+  for (let cz = -2; cz <= 2; cz++) {
+    const items = galBiome.generateChunkFlora(cx, cz, galBiome.chunkSize, 1.5, OC.mulberry32(cx * 37 + cz * 79 + 11));
+    for (const it of items) galUltraCounts[it.species] = (galUltraCounts[it.species] || 0) + 1;
+  }
+}
+for (const [spKey, cnt] of Object.entries(galUltraCounts)) {
+  assert(cnt <= floraProtos[spKey].maxInstances, `galapagos_upwelling Ultra 5x5 overflow for ${spKey}: ${cnt} > ${floraProtos[spKey].maxInstances}`);
+}
+assert(galUltraCounts.tubastraea_coral >= 12 && galUltraCounts.ulva_turf >= 12 && galUltraCounts.galapagos_barnacle >= 8, 'galapagos_upwelling must populate tubastraea_coral, ulva_turf & galapagos_barnacle');
+
+// Verify Cromwell cold subsurface thermocline CTD profile
+const ctdGal = OC.ROV.runCtdCast(galBiome, new T.Vector3(240, -55, -40), OC.EcoLab.getState());
+assert(ctdGal && ctdGal.surfaceTemp > 21.0 && ctdGal.bottomTemp < 17.5, `Galapagos CTD cast must capture Cromwell thermocline (surf=${ctdGal && ctdGal.surfaceTemp}, bot=${ctdGal && ctdGal.bottomTemp})`);
+
+OC.Biomes.setActive('great_barrier_reef');
+console.log(`   9th Biome "Галапагосский апвеллинг" (0–132 м, Cromwell Upwelling, Darwin's Arch, Mola mola, Marine Iguana, Penguin, Orca & Mobula) verified.`);
 console.log('ALL VERIFICATION CHECKS PASSED!');

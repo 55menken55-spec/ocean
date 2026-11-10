@@ -1087,7 +1087,8 @@ window.OC = window.OC || {};
       wreck_atoll: 'Атолл и Корабль',
       mariana_trench: 'Марианская 10920м',
       brine_pool: 'Соляной бассейн',
-      cenote_caves: 'Сеноты Юкатана'
+      cenote_caves: 'Сеноты Юкатана',
+      galapagos_upwelling: 'Галапагосы'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
@@ -1097,7 +1098,8 @@ window.OC = window.OC || {};
       wreck_atoll: 'Палау · Микронезия',
       mariana_trench: 'Челленджер · 10 920 м',
       brine_pool: 'Мексиканский залив · 650 м',
-      cenote_caves: 'Юкатан · Сак-Актун 58 м'
+      cenote_caves: 'Юкатан · Сак-Актун 58 м',
+      galapagos_upwelling: 'Эквадор · Апвеллинг'
     };
 
     function renderBiomeUI() {

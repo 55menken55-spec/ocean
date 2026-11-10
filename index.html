@@ -758,7 +758,7 @@
 <div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
   <div class="globe-box">
     <div class="atlas-header">
-      <div><h3>3D-глобус планеты</h3><small>8 океанических экспедиций · 42 этапа гида</small></div>
+      <div><h3>3D-глобус планеты</h3><small>9 океанических экспедиций · 47 этапов гида</small></div>
       <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
     </div>
     <div class="globe-body">
@@ -6159,6 +6159,505 @@ window.OC = window.OC || {};
   });
 })(window.OC);
 
+// === biomes/galapagos_upwelling.js ===
+/* ================= БИОМ 9: ГАЛАПАГОССКИЙ АПВЕЛЛИНГ И АРКА ДАРВИНА ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  const ZONES = [
+    {
+      id: 'lava_shallows',
+      name: 'Лавовая бухта и фумаролы',
+      shortName: 'Лавовая бухта',
+      color: '#52c288',
+      depthLabel: '0 – 17 м',
+      tempC: 23.4,
+      description: 'Чёрные базальтовые рифы и вулканические пузырьковые фумаролы, где пасутся морские игуаны и охотятся галапагосские пингвины.'
+    },
+    {
+      id: 'darwins_arch',
+      name: 'Арка Дарвина и базальтовые пинакли',
+      shortName: 'Арка Дарвина',
+      color: '#e8a238',
+      depthLabel: '0 – 36 м',
+      tempC: 21.8,
+      description: 'Монументальная природная базальтовая арка посреди Тихого океана — магнит для акул-молотов, галапагосских акул и морских львов.'
+    },
+    {
+      id: 'upwelling_wall',
+      name: 'Стена апвеллинга Кромвеля',
+      shortName: 'Стена апвеллинга',
+      color: '#28a99e',
+      depthLabel: '18 – 78 м',
+      tempC: 17.6,
+      description: 'Отвесный вулканический свал, куда поднимается холодное глубинное течение Кромвеля, питающее лун-рыб Mola mola, скатов мобула и косяки сардин.'
+    },
+    {
+      id: 'pelagic_abyss',
+      name: 'Пелагиаль островов Вольфа и Дарвина',
+      shortName: 'Пелагиаль Вольфа',
+      color: '#1b649c',
+      depthLabel: '65 – 132 м',
+      tempC: 15.2,
+      description: 'Богатые планктоном экваториальные глубины вдоль вулканического хребта, где патрулируют стаи косаток, китовые акулы и тунцы.'
+    }
+  ];
+
+  // Вулканические островки и базальтовые пинакли западной бухты (чистая вода вокруг судна НИС и центрального прохода арки)
+  const VOLCANIC_ISLETS = [
+    { x: -245, z: -140, r: 58, h: 5.2 },
+    { x: -290, z: 165, r: 52, h: 4.8 },
+    { x: -95, z: -265, r: 48, h: 4.4 },
+    // Опоры Арки Дарвина строго по бокам (-26 и +26), оставляя чистый проход (-22 м) посередине (0,0)
+    { x: -26, z: 0, r: 10, h: 2.2 },
+    { x: 26, z: 0, r: 10, h: 2.2 }
+  ];
+
+  const ARCH_POS = { x: 0, z: 0 };
+  const VESSEL_POS = { x: 265, z: -145 };
+
+  function wallCurve(z) {
+    return Math.sin(z * 0.0028 + 0.5) * 65 + Math.cos(z * 0.0052) * 26;
+  }
+
+  function getHeight(x, z) {
+    const wx = x - wallCurve(z);
+
+    // Западно-восточный профиль: лавовая отмель (-8..-17 м) -> плато Арки (-22 м) -> свал апвеллинга (-24 -> -122 м)
+    let h = -22.0;
+    if (wx < -120) {
+      const t = OC.smoothstep(-480, -120, wx);
+      h = OC.lerp(-8.2, -16.5, t);
+    } else if (wx < 95) {
+      const t = OC.smoothstep(-120, 95, wx);
+      h = OC.lerp(-16.5, -22.5, t);
+    } else if (wx < 340) {
+      const t = OC.smoothstep(95, 340, wx);
+      const terrace = Math.sin(t * Math.PI * 3.0) * 1.6 * Math.sin(t * Math.PI);
+      h = OC.lerp(-22.5, -88.0, t) + terrace;
+    } else {
+      const t = OC.smoothstep(340, 1050, wx);
+      h = OC.lerp(-88.0, -132.0, t);
+    }
+
+    // Ребристая фактура застывшей базальтовой лавы
+    const basaltRidges = Math.sin(x * 0.048 + z * 0.036) * 0.65;
+    const fbm = OC.fbm2(x * 0.0065, z * 0.0065, 3) * 3.2 + OC.fbm2(x * 0.026, z * 0.026, 2) * 1.1;
+    h += basaltRidges + fbm;
+
+    // Сглаженная площадка точно под пролётом Арки Дарвина (-22 м), чтобы ничто не перекрывало арку
+    const dArchCenter = Math.hypot(x - ARCH_POS.x, z - ARCH_POS.z);
+    if (dArchCenter < 22) {
+      const clear = OC.smoothstep(22, 10, dArchCenter);
+      h = OC.lerp(h, -22.0 + OC.noise2(x * 0.08, z * 0.08) * 0.5, clear);
+    }
+
+    // Вулканические островки и базальтовые опоры Арки Дарвина
+    for (let i = 0; i < VOLCANIC_ISLETS.length; i++) {
+      const isl = VOLCANIC_ISLETS[i];
+      const d = Math.hypot(x - isl.x, z - isl.z);
+      if (d < isl.r * 2.1) {
+        const shelf = OC.smoothstep(isl.r * 2.0, isl.r * 0.72, d);
+        const peak = OC.smoothstep(isl.r * 0.95, 0, d);
+        const rock = isl.h + OC.fbm2(x * 0.08, z * 0.08, 2) * 1.2;
+        h = Math.max(h, OC.lerp(-14.0, rock, Math.max(shelf * 0.48, peak)));
+      }
+    }
+
+    // Подводная кальдера вокруг судна НИС «Beagle II» всегда глубокая
+    const dv = Math.hypot(x - VESSEL_POS.x, z - VESSEL_POS.z);
+    if (dv < 90) {
+      h = Math.min(h, -48.0);
+    }
+
+    return h;
+  }
+
+  function safeSpotY(x, z, desiredY, minClearance) {
+    const fl = getHeight(x, z);
+    return Math.max(desiredY, fl + (minClearance || 2.8));
+  }
+
+  function getZoneAt(x, y, z) {
+    const dArch = Math.hypot(x - ARCH_POS.x, z - ARCH_POS.z);
+    if (dArch < 92 && y > -38) return ZONES[1]; // darwins_arch
+    if (x >= 285 || y <= -66) return ZONES[3]; // pelagic_abyss
+    if (x < -75 || y > -17.5) return ZONES[0]; // lava_shallows
+    return ZONES[2]; // upwelling_wall
+  }
+
+  function getCurrentAt(x, y, z, time, out) {
+    const wx = x - wallCurve(z);
+    // Глубинное экваториальное течение Кромвеля ударяется о склон и мощно устремляется вверх (апвеллинг)
+    const onWall = OC.smoothstep(-40, 120, wx) * OC.smoothstep(380, 150, wx);
+    const upSurge = onWall * (0.42 + 0.35 * Math.sin(time * 0.4 + z * 0.015));
+    const vx = 0.55 + 0.32 * onWall + Math.sin(time * 0.25 + z * 0.01) * 0.14;
+    const vz = 0.38 + Math.cos(time * 0.22 + x * 0.01) * 0.18;
+    const vy = upSurge - (y > -3.0 ? 0.18 : 0.0);
+    out.set(vx, vy, vz);
+    return out;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const above = y > 0.25;
+    if (above) {
+      _fogCol.set(0xbde4f4).lerp(_colA.set(0x0c1b2e), 1 - dayW);
+      _waterCol.set(0x168ea0);
+      _skyTop.set(0x2e82cb);
+      _skyBot.set(0xb2dff2);
+      _aboveHoriz.set(0xcbeafa).lerp(_colA.set(0x14263c), 1 - dayW);
+      return {
+        aboveWater: true,
+        fogColor: _fogCol,
+        fogDensity: 0.0005,
+        causticStrength: 0,
+        rayStrength: 0,
+        sunAtten: 1.0,
+        bioGlow: 0,
+        waterColor: _waterCol,
+        aboveHoriz: _aboveHoriz
+      };
+    }
+
+    const depth = Math.max(0, -y);
+    const wx = x - wallCurve(z);
+    const pelagicW = OC.smoothstep(95, 340, wx);
+    const atten = Math.exp(-depth * 0.028);
+
+    // Богатый изумруд планктонного апвеллинга -> глубокий тихоокеанский кобальт у Вольфа
+    _colA.set(0x148288).lerp(_colB.set(0x0c4c86), pelagicW);
+    _colA.lerp(_colC.set(0x041428), OC.clamp(depth / 110, 0, 0.9));
+    _fogCol.copy(_colA).multiplyScalar(0.15 + 0.85 * dayW);
+
+    _waterCol.set(0x22a69c).lerp(_colB.set(0x145a9a), pelagicW);
+    _skyTop.set(0x4fd4c6).lerp(_colB.set(0x164470), 1 - dayW);
+    _skyBot.set(0x031426);
+    _aboveHoriz.set(0xb0e2f4).lerp(_colB.set(0x122238), 1 - dayW);
+
+    const fogDensity = OC.lerp(0.0066, 0.0112, OC.clamp(depth / 95, 0, 1));
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity,
+      causticStrength: OC.clamp(atten * 0.92 * dayW, 0, 1.0),
+      rayStrength: OC.clamp(Math.exp(-depth * 0.04) * 1.02 * dayW, 0, 1.0),
+      sunAtten: atten,
+      bioGlow: OC.clamp((1 - dayW) * 0.82 + OC.smoothstep(45, 95, depth) * 0.48, 0, 1),
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz,
+      fillAColor: _colB.set(0x3ecfc0),
+      fillBColor: _colC.set(0x5292d4)
+    };
+  }
+
+  function getTerrainColor(x, y, z, outColor) {
+    const n = OC.noise2(x * 0.09, z * 0.09);
+    // Чёрный вулканический базальт, оливковая трава в зоне прибоя и глубокие синие пески склона
+    _colA.setHex(0x1b1a20);
+    _colB.setHex(0x3b3d35);
+    outColor.copy(_colA).lerp(_colB, OC.clamp(n * 0.5 + 0.45, 0, 1));
+
+    if (y > -10 && y < 2.5) {
+      _colC.setHex(0x3f613c);
+      outColor.lerp(_colC, OC.smoothstep(-10, -2, y) * 0.45);
+    }
+    if (y < -48) {
+      _colC.setHex(0x131922);
+      outColor.lerp(_colC, OC.smoothstep(-48, -95, y) * 0.7);
+    }
+    return outColor;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, densityScale, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+    const scale = densityScale || 1.0;
+
+    // 1. Плотный ковёр водоросли Ульва и морские жёлуди в мелководных лавовых бухтах (y: -18..-1)
+    const countShallows = Math.round(16 * scale);
+    for (let i = 0; i < countShallows; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const y = getHeight(x, z);
+      if (y > -18 && y < -0.7) {
+        const sp = rng() < 0.62 ? 'ulva_turf' : 'galapagos_barnacle';
+        items.push({
+          species: sp, x, y, z,
+          ry: rng() * Math.PI * 2,
+          scale: OC.lerp(0.85, 1.45, rng()),
+          tint: OC.lerp(0.85, 1.15, rng())
+        });
+      }
+    }
+
+    // 2. Неоново-оранжевые чашечки Tubastraea и чёрные кораллы на стене апвеллинга и опорах арки (-62..-8 м)
+    const countWall = Math.round(18 * scale);
+    for (let i = 0; i < countWall; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const y = getHeight(x, z);
+      if (y > -64 && y < -8) {
+        const sp = y < -30 && rng() < 0.36 ? 'coral_black' : 'tubastraea_coral';
+        items.push({
+          species: sp, x, y, z,
+          ry: rng() * Math.PI * 2,
+          scale: OC.lerp(0.9, 1.55, rng()),
+          tint: OC.lerp(0.88, 1.16, rng())
+        });
+      }
+    }
+
+    // 3. Вулканические CO2-фумаролы вокруг западной бухты (-18..-5 м)
+    if (x0 < -40 && x0 + chunkSize > -280 && z0 < 60 && z0 + chunkSize > -180) {
+      const nFum = Math.round(3 * scale);
+      for (let i = 0; i < nFum; i++) {
+        const x = x0 + rng() * chunkSize;
+        const z = z0 + rng() * chunkSize;
+        const y = getHeight(x, z);
+        if (y > -18 && y < -3.5) {
+          items.push({
+            species: 'volcanic_fumarole', x, y, z,
+            ry: rng() * Math.PI * 2,
+            scale: OC.lerp(0.95, 1.4, rng()),
+            tint: OC.lerp(0.88, 1.12, rng())
+          });
+        }
+      }
+    }
+
+    // 4. Фиолетовые морские ежи на каменистом лавовом грунте
+    const countUrchins = Math.round(5 * scale);
+    for (let i = 0; i < countUrchins; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const y = getHeight(x, z);
+      if (y > -24 && y < -1.5) {
+        items.push({
+          species: 'urchin_purple', x, y, z,
+          ry: rng() * Math.PI * 2,
+          scale: OC.lerp(0.8, 1.3, rng()),
+          tint: 1.0
+        });
+      }
+    }
+
+    return items;
+  }
+
+  const landmarks = [
+    { id: 'darwins_arch', name: 'Арка Дарвина', zoneId: 'darwins_arch', x: 0, z: 42, y: safeSpotY(0, 42, -11.5, 3.0), look: [0, -8, 0] },
+    { id: 'lava_cove', name: 'Лавовая бухта игуан и пингвинов', zoneId: 'lava_shallows', x: -145, z: -68, y: safeSpotY(-145, -68, -6.5, 2.5), look: [-140, -10, -80] },
+    { id: 'upwelling_wall', name: 'Стена апвеллинга Кромвеля', zoneId: 'upwelling_wall', x: 165, z: -48, y: safeSpotY(165, -48, -26.0, 4.0), look: [190, -28, -20] },
+    { id: 'sunfish_cleaning', name: 'Станция чистки Mola mola', zoneId: 'upwelling_wall', x: 195, z: 120, y: safeSpotY(195, 120, -22.0, 4.0), look: [210, -24, 105] },
+    { id: 'wolf_orca_shelf', name: 'Пелагиаль косаток и китовых акул', zoneId: 'pelagic_abyss', x: 375, z: -85, y: safeSpotY(375, -85, -32.0, 5.0), look: [330, -24, -100] }
+  ];
+
+  const spawn = {
+    pos: [landmarks[0].x, landmarks[0].y, landmarks[0].z],
+    yaw: 3.14,
+    pitch: -0.04
+  };
+
+  const _tourRaw = [
+    { x: 0, y: -11.5, z: 42, lx: 0, ly: -7.5, lz: 0, title: 'Арка Дарвина и акулы-молоты', duration: 10,
+      fact: 'Знаменитая базальтовая арка острова Дарвина стоит на пути экваториальных течений, собирая стаи акул-молотов и китовых акул.' },
+    { x: -145, y: -6.5, z: -68, lx: -140, ly: -9.5, lz: -80, title: 'Морские игуаны и вулканические фумаролы', duration: 9,
+      fact: 'Галапагосская морская игуана — единственная в мире ящерица, ныряющая в океан за зелёными водорослями ульва и согревающаяся затем на чёрной лаве.' },
+    { x: -165, y: -5.0, z: 25, lx: -145, ly: -4.5, lz: 8, title: 'Экваториальные пингвины и голубоногие олуши', duration: 9,
+      fact: 'Благодаря холодному течению Кромвеля галапагосский пингвин — единственный вид пингвинов, живущий и охотящийся прямо на экваторе.' },
+    { x: 195, y: -22.0, z: 120, lx: 215, ly: -23.0, lz: 110, title: 'Океаническая луна-рыба Mola mola и мобулы', duration: 10,
+      fact: 'Крупнейшая костная рыба планеты — Mola mola — поднимается из глубин к тёплым скалам, чтобы королевские рыбы-ангелы очистили её от паразитов.' },
+    { x: 375, y: -32.0, z: -85, lx: 330, ly: -20.0, lz: -105, title: 'Апвеллинг Кромвеля и охота косаток', duration: 10,
+      fact: 'Подъём богатых нитратами холодных вод вдоль вулканических островов создаёт мощнейшие косяки сардин, привлекающие стаи косаток и китов.' }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, Math.min(2.0, safeSpotY(leg.x, leg.z, leg.y, 3.2)), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    fact: leg.fact,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    floor: ['Вулканический базальт Галапагосов', 'Шельф Дарвина и Вольфа', 'Геология', 'Все зоны', '0 – 132 м',
+      'Тёмная застывшая базальтовая лава подводных щитовых вулканов Наска, богатая железом и оливковым песком.'],
+    darwins_arch: ['Арка Дарвина', 'Вулканическая базальтовая арка (48 м)', 'Геология', 'Арка Дарвина', '0 – 22 м',
+      'Монументальная природная арка из слоистого вулканического туфа, возвышающаяся над проходом между островами Дарвина и Вольфа.'],
+    volcanic_fumarole: ['Вулканическая CO₂-фумарола', 'Субмаринная фумарола Рока Редонда', 'Геология', 'Лавовая бухта', '4 – 18 м',
+      'Подводные трещины лавы с кристаллами серы, непрерывно выделяющие струи вулканического углекислого газа.'],
+    tubastraea_coral: ['Оранжевый коралл-чашечка', 'Tubastraea coccinea', 'Кораллы', 'Стена апвеллинга', '6 – 60 м',
+      'Азооксантеллатный ярко-оранжевый коралл, плотно покрывающий затенённые базальтовые стены течения Кромвеля.'],
+    galapagos_barnacle: ['Вулканический морской жёлудь', 'Megabalanus galapaganus', 'Беспозвоночные', 'Лавовая бухта', '0 – 16 м',
+      'Крупный эндемичный усоногий рачок с полосатыми известковыми домиками на прибойных лавовых камнях.'],
+    ulva_turf: ['Лавовый морской салат Ульва', 'Ulva lobata', 'Флора', 'Лавовая бухта', '0 – 16 м',
+      'Яркий ковёр зелёных и красных морских водорослей на омываемом прибоем базальте — главный рацион морских игуан.'],
+    coral_black: ['Эндемичный чёрный коралл', 'Antipathes galapagensis', 'Кораллы', 'Стена апвеллинга', '18 – 72 м',
+      'Кустистые тёмно-золотые колонии глубоководных горгонарий на прохладной отвесной стене апвеллинга.'],
+    urchin_purple: ['Тихоокеанский ёж-карандаш', 'Eucidaris galapagensis', 'Беспозвоночные', 'Лавовая бухта', '1 – 22 м',
+      'Толстоиглый ёж лавовых рифов, выедающий водоросли и формирующий корку кальциевого песка.'],
+    ocean_sunfish: ['Океаническая луна-рыба', 'Mola mola', 'Мегафауна', 'Стена апвеллинга', '8 – 90 м',
+      'Гигантская дискообразная костная рыба весом до 2 тонн, приплывающая из глубин на станции чистки у островов Исабела и Дарвина.'],
+    marine_iguana: ['Галапагосская морская игуана', 'Amblyrhynchus cristatus', 'Мегафауна', 'Лавовая бухта', '0 – 15 м',
+      'Уникальная морская рептилия-ныряльщик с плоским плавательным хвостом, соскребающая ульву с вулканических валунов.'],
+    galapagos_penguin: ['Галапагосский пингвин', 'Spheniscus mendiculus', 'Птицы', 'Лавовая бухта', '+1 .. -16 м',
+      'Самый северный и единственный экваториальный пингвин планеты, стремительно преследующий сардин в холодных струях апвеллинга.'],
+    orca: ['Косатка экваториальной Пацифики', 'Orcinus orca', 'Мегафауна', 'Пелагиаль Вольфа', '0 – 95 м',
+      'Могучий черно-белый хищник вершин пищевой пирамиды, охотящийся группами вдоль свала вулканических островов.'],
+    mobula_ray: ['Эскадра скатов мобула', 'Mobula munkiana', 'Мегафауна', 'Стена апвеллинга', '0 – 50 м',
+      'Синхронные стаи крылатых дьяволовых скатов с головными рожками, фильтрующие планктон и взлетающие над волнами.'],
+    galapagos_shark: ['Галапагосская акула', 'Carcharhinus galapagensis', 'Мегафауна', 'Арка Дарвина', '5 – 85 м',
+      'Крупная океаническая серая акула-хозяин вулканических пинаклей и обрывов островов Дарвина и Вольфа.'],
+    shark_hammerhead: ['Зубчатая акула-молот', 'Sphyrna lewini', 'Мегафауна', 'Арка Дарвина', '8 – 85 м',
+      'Огромные скопления акул-молотов, патрулирующие сильные течения перед Аркой Дарвина.'],
+    shark_whale: ['Беременная самка китовой акулы', 'Rhincodon typus', 'Мегафауна', 'Стена апвеллинга', '6 – 95 м',
+      'Гигантские 12-метровые китовые акулы, мигрирующие каждый сезон мимо Арки Дарвина в водах апвеллинга.'],
+    sea_lion: ['Галапагосский морской лев', 'Zalophus wollebaeki', 'Мегафауна', 'Арка Дарвина', '+2 .. -35 м',
+      'Игривые эндемичные ушастые тюлени, кружащие акробатические петли вокруг дайверов и Арки Дарвина.'],
+    turtle: ['Чёрная галапагосская черепаха', 'Chelonia mydas agassizii', 'Мегафауна', 'Лавовая бухта', '2 – 35 м',
+      'Меланистическая тихоокеанская зелёная черепаха с тёмным карапаксом, пасущаяся среди вулканических камней.'],
+    sardine_baitball: ['Мега-косяк сардин', 'Sardinops sagax', 'Рыбы', 'Стена апвеллинга', '3 – 45 м',
+      'Плотное мерцающее облако из сотен сардин, сжимающееся в оборонительный шар под атакой акул, пингвинов и олуш.'],
+    tuna_yellowfin: ['Желтопёрый тунец', 'Thunnus albacares', 'Рыбы', 'Пелагиаль Вольфа', '8 – 110 м',
+      'Стремительный океанический спринтер с ярко-жёлтыми серповидными плавниками на границе холодного апвеллинга.'],
+    king_angelfish: ['Королевский ангел-чистильщик', 'Holacanthus passer', 'Рыбы', 'Стена апвеллинга', '6 – 45 м',
+      'Пёстрый тёмно-синий ангел с белой полосой и огненным хвостом, очищающий Mola mola и акул-молотов от паразитов.'],
+    research_vessel: ['НИС «Beagle II»', 'Чарльз-Дарвиновский НИС (48 м)', 'Экспедиция', 'Пелагиаль Вольфа', '+18 .. -3 м',
+      'Экспедиционное судно океанологов станции Чарльза Дарвина, отслеживающее апвеллинг Кромвеля и пути миграции китовых акул.'],
+    seabird: ['Голубоногая олуша', 'Sula nebouxii', 'Птицы', 'Небо над Аркой Дарвина', '+1 .. +22 м',
+      'Знаменитая морская птица Галапагосов с бирюзовыми лапами, пикирующая стрелой вертикально в кипящие косяки сардин.'],
+    dolphin: ['Тропический дельфин-афалина', 'Tursiops truncatus', 'Мегафауна', 'Пролив у Вольфа', '+2.5 .. -10 м',
+      'Быстрые стаи дельфинов, рассекающие изумрудные волны экваториального апвеллинга рядом с НИС.'],
+    whale_humpback: ['Экваториальный горбатый кит', 'Megaptera novaeangliae', 'Мегафауна', 'Пелагиаль Вольфа', '0 – 85 м',
+      'Приходящие к тёплым берегам Эквадора и Галапагосов киты-великаны с эффектными прыжками над поверхностью.']
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [
+      { x: 195, y: -22, z: 120, radius: 24, name: 'Станция чистки Mola mola' },
+      { x: 14, y: -16, z: -12, radius: 22, name: 'Рифовая чистка у Арки Дарвина' }
+    ],
+    darwinsArches: [
+      { x: ARCH_POS.x, z: ARCH_POS.z }
+    ],
+    fumaroles: [
+      { x: -140, z: -80 },
+      { x: -188, z: -42 }
+    ],
+    sunfishes: [
+      { cx: 198, cz: 112, r: 26, y: -23, speed: 1.55, scale: 1.45, phase: 0.4 },
+      { cx: 162, cz: -52, r: 30, y: -28, speed: 1.45, scale: 1.28, phase: 2.3 }
+    ],
+    marineIguanas: [
+      { cx: -145, cz: -65, r: 16, y: -6.2, speed: 1.4, scale: 1.25, phase: 0.1 },
+      { cx: -178, cz: -38, r: 18, y: -5.8, speed: 1.5, scale: 1.15, phase: 1.9 },
+      { cx: -120, cz: -95, r: 14, y: -6.5, speed: 1.35, scale: 1.20, phase: 3.4 }
+    ],
+    penguins: [
+      { cx: -155, cz: 14, r: 22, y: -4.2, speed: 4.8, scale: 1.05, phase: 0.2 },
+      { cx: -135, cz: 32, r: 18, y: -5.0, speed: 5.1, scale: 0.98, phase: 2.1 },
+      { cx: -168, cz: -8, r: 24, y: -3.6, speed: 4.6, scale: 1.1, phase: 4.2 }
+    ],
+    orcas: [
+      { cx: 365, cz: -82, r: 68, y: -24, speed: 5.6, len: 7.4, phase: 0.0 },
+      { cx: 382, cz: -70, r: 64, y: -22, speed: 5.5, len: 6.2, phase: 0.35 }
+    ],
+    mobulas: [
+      { cx: 165, cz: -35, r: 48, y: -19, speed: 4.4, count: 5 },
+      { cx: 95, cz: 95, r: 54, y: -15, speed: 4.2, count: 5 }
+    ],
+    hammerheads: [
+      { cx: 15, cz: -10, r: 46, y: -14, speed: 5.2, len: 4.4 },
+      { cx: 170, cz: -45, r: 64, y: -28, speed: 5.6, len: 4.7 }
+    ],
+    sharks: [
+      { speciesKey: 'galapagos_shark', cx: 22, cz: 18, r: 52, y: -15, speed: 5.4 },
+      { speciesKey: 'galapagos_shark', cx: 185, cz: 45, r: 62, y: -25, speed: 5.7 },
+      { speciesKey: 'shark_whale', cx: 145, cz: -15, r: 85, y: -22, speed: 3.1, whaleShark: true }
+    ],
+    seaLions: [
+      { cx: -15, cz: 22, r: 26, y: -8, speed: 4.4, scale: 1.05 },
+      { cx: -130, cz: -45, r: 24, y: -6, speed: 4.6, scale: 1.0 }
+    ],
+    turtles: [
+      { cx: -148, cz: -72, r: 28, y: -7.5, speed: 1.9, size: 1.05 },
+      { cx: 20, cz: 40, r: 36, y: -11, speed: 2.0, size: 1.0 }
+    ],
+    whales: [
+      { cx: 410, cz: 110, r: 115, y: -22, speed: 4.1 }
+    ],
+    vessels: [
+      { x: VESSEL_POS.x, z: VESSEL_POS.z, yaw: 0.45, variant: 'galapagos' }
+    ],
+    seabirds: [
+      { cx: 0, cz: 0, r: 62, y: 12.0, count: 8, speed: 12.5, variant: 'booby' },
+      { cx: -150, cz: 0, r: 52, y: 10.5, count: 7, speed: 11.8, variant: 'booby' }
+    ],
+    dolphins: [
+      { cx: 285, cz: -45, r: 72, y: -4.5, count: 5, speed: 7.4, variant: 'spinner' }
+    ],
+    schools: [
+      { key: 'sardine_baitball', n: 180, cx: 145, cz: -25, radius: 34, yDepth: -14, yAmp: 4.5, spread: 7.5, speed: 7.8, scale: 0.36, diel: 'diurnal', shyness: 0.85,
+        geoOpts: { len: 0.92, height: 0.24, width: 0.13, colA: 0x3b6c94, colB: 0xdff2fb, finCol: 0x90b8cc } },
+      { key: 'sardine_baitball', n: 140, cx: -145, cz: 12, radius: 24, yDepth: -6, yAmp: 2.4, spread: 6.2, speed: 7.2, scale: 0.35, diel: 'diurnal', shyness: 0.85,
+        geoOpts: { len: 0.92, height: 0.24, width: 0.13, colA: 0x3b6c94, colB: 0xdff2fb, finCol: 0x90b8cc } },
+      { key: 'tuna_yellowfin', n: 32, cx: 340, cz: -65, radius: 52, yDepth: -24, yAmp: 6, spread: 13, speed: 10.6, scale: 0.82, predator: true, diel: 'diurnal', shyness: 0.2,
+        geoOpts: { len: 1.55, height: 0.48, width: 0.24, colA: 0x22385c, colB: 0xe6eff6, finCol: 0xf6c924 } },
+      { key: 'king_angelfish', n: 36, cx: 195, cz: 120, radius: 18, yDepth: -21, yAmp: 3, spread: 5.5, speed: 3.8, scale: 0.54, cleaner: true, diel: 'diurnal', shyness: 0.2,
+        geoOpts: { len: 0.95, height: 0.85, width: 0.14, colA: 0x1a3472, colB: 0xf4f8fc, finCol: 0xf4681c, stripes: 0.8 } }
+    ]
+  };
+
+  OC.Biomes.register({
+    id: 'galapagos_upwelling',
+    name: 'Галапагосы: Апвеллинг',
+    subtitle: 'Арка Дарвина и макро-фауна экватора · 0 – 132 м',
+    region: 'Восточная Пацифика (Экватор)',
+    worldRadius: 1200,
+    chunkSize: 150,
+    noSurface: false,
+    seaLevel: 0,
+    depthOffset: 0,
+    minimapTheme: 'galapagos',
+    globe: {
+      lat: -0.22,
+      lon: -91.42,
+      coordLabel: '0.2° S, 91.4° W',
+      ocean: 'Экваториальная Пацифика',
+      depthSpan: '0 – 132 м',
+      tempSpan: '15.2 – 23.8 °C',
+      color: '#34d399',
+      summary: 'Столкновение тёплого течения и холодного глубинного апвеллинга Кромвеля у вулканической Арки Дарвина: морские игуаны, экваториальные пингвины, Mola mola и косатки.'
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    spawn,
+    encyclopedia: ENCYCLOPEDIA,
+    faunaPlan: FAUNA_PLAN,
+    getHeight,
+    getZoneAt,
+    getCurrentAt,
+    getTerrainColor,
+    getOpticalProfile,
+    generateChunkFlora
+  });
+})(window.OC);
+
 // === engine/weather.js ===
 /* ================= ДИНАМИЧЕСКАЯ СИСТЕМА ПОГОДЫ: ШТИЛЬ, ЗЫБЬ, ШТОРМ, ПУРГА И МОЛНИИ ================= */
 window.OC = window.OC || {};
@@ -6394,6 +6893,7 @@ window.OC = window.OC || {};
     if (biome.id === 'mariana_trench') return { baseTemp: 2.1, heatTolerance: 2.4, hasCorals: false, isAbyss: true };
     if (biome.id === 'brine_pool') return { baseTemp: 6.8, heatTolerance: 1.8, hasCorals: false, isAbyss: true };
     if (biome.id === 'cenote_caves') return { baseTemp: 25.4, heatTolerance: 1.8, hasCorals: false, isAbyss: false };
+    if (biome.id === 'galapagos_upwelling') return { baseTemp: 19.6, heatTolerance: 1.5, hasCorals: true, isAbyss: false };
     return { baseTemp: 27.0, heatTolerance: 1.1, hasCorals: true, isAbyss: false };
   }
 
@@ -9722,6 +10222,131 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 46. Вулканическая CO2-фумарола (Рока Редонда) ---- */
+  function buildVolcanicFumarole(rng) {
+    const list = [];
+    const cBasalt = COL(0x1f1e24);
+    const cRust = COL(0x523726);
+    const cSulfur = COL(0xdcb428);
+
+    const nCones = 2 + Math.floor(rng() * 2);
+    for (let i = 0; i < nCones; i++) {
+      const h = i === 0 ? OC.lerp(1.4, 2.3, rng()) : OC.lerp(0.7, 1.3, rng());
+      const rBot = i === 0 ? OC.lerp(0.75, 1.05, rng()) : OC.lerp(0.38, 0.58, rng());
+      const rTop = rBot * 0.34;
+      const ox = i === 0 ? 0 : Math.cos(i * 2.2) * 0.65;
+      const oz = i === 0 ? 0 : Math.sin(i * 2.2) * 0.65;
+      const vent = new T.CylinderGeometry(rTop, rBot, h, 8, 4, true);
+      const vp = vent.attributes.position;
+      for (let k = 0; k < vp.count; k++) {
+        const vx = vp.getX(k), vy = vp.getY(k), vz = vp.getZ(k);
+        const rug = 1 + 0.22 * Math.sin(Math.atan2(vz, vx) * 4 + vy * 3.1);
+        vp.setXYZ(k, vx * rug, vy, vz * rug);
+      }
+      OC.geoPrep(vent);
+      vent.computeVertexNormals();
+      OC.paint(vent, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBasalt).lerp(cRust, OC.smoothstep(0.35, 0.78, u)).lerp(cSulfur, OC.smoothstep(0.76, 1.0, u));
+      });
+      OC.xform(vent, { p: [ox, h * 0.45, oz] });
+      OC.withSway(vent, () => 0);
+      list.push(vent);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 47. Неоново-оранжевый коралл-чашечка (Tubastraea coccinea) ---- */
+  function buildTubastraeaCoral(rng) {
+    const list = [];
+    const cBase = COL(0x7c2a12);
+    const cOrange = COL(0xf46818);
+    const cGold = COL(0xffc938);
+
+    const mound = OC.geoPrep(new T.SphereGeometry(0.42, 8, 6));
+    mound.scale(1.15, 0.62, 1.15);
+    OC.paint(mound, cBase);
+    OC.xform(mound, { p: [0, 0.14, 0] });
+    OC.withSway(mound, () => 0);
+    list.push(mound);
+
+    const nCups = 9;
+    for (let i = 0; i < nCups; i++) {
+      const a = (i / nCups) * Math.PI * 2 + rng() * 0.4;
+      const r = i === 0 ? 0.04 : OC.lerp(0.18, 0.36, rng());
+      const cupH = OC.lerp(0.18, 0.34, rng());
+      const cup = OC.geoPrep(new T.CylinderGeometry(0.11, 0.055, cupH, 7));
+      OC.paint(cup, (x, y, z, col) => {
+        const u = OC.clamp((y + cupH * 0.5) / cupH, 0, 1);
+        col.copy(cBase).lerp(cOrange, OC.smoothstep(0.15, 0.72, u)).lerp(cGold, OC.smoothstep(0.76, 1.0, u));
+      });
+      const tilt = i === 0 ? 0 : 0.48;
+      OC.xform(cup, { r: [Math.sin(a) * tilt, 0, -Math.cos(a) * tilt], p: [Math.cos(a) * r, 0.28, Math.sin(a) * r] });
+      OC.withSway(cup, () => 0);
+      list.push(cup);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 48. Вулканический морской жёлудь (Megabalanus galapaganus) ---- */
+  function buildGalapagosBarnacle(rng) {
+    const list = [];
+    const cShell = COL(0xdfd3c8);
+    const cRidge = COL(0x9b5a68);
+    const cDark = COL(0x3a2a30);
+
+    const nShells = 6;
+    for (let i = 0; i < nShells; i++) {
+      const a = i === 0 ? 0 : (i / (nShells - 1)) * Math.PI * 2 + rng() * 0.35;
+      const dist = i === 0 ? 0 : OC.lerp(0.24, 0.42, rng());
+      const h = i === 0 ? OC.lerp(0.55, 0.82, rng()) : OC.lerp(0.28, 0.52, rng());
+      const rB = i === 0 ? 0.28 : OC.lerp(0.14, 0.22, rng());
+      const cone = OC.geoPrep(new T.CylinderGeometry(rB * 0.46, rB, h, 7));
+      OC.paint(cone, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        const rib = Math.sin(Math.atan2(z, x) * 6.0);
+        col.copy(cShell).lerp(cRidge, rib > 0.2 ? 0.55 : 0.15).lerp(cDark, u > 0.86 ? 0.75 : 0);
+      });
+      OC.xform(cone, { r: [(rng() - 0.5) * 0.22, rng() * 2, (rng() - 0.5) * 0.22], p: [Math.cos(a) * dist, h * 0.44, Math.sin(a) * dist] });
+      OC.withSway(cone, () => 0);
+      list.push(cone);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 49. Лавовый ковёр морского салата Ульва (Ulva lobata) ---- */
+  function buildUlvaTurf(rng) {
+    const list = [];
+    const cGreen = COL(0x3cb846);
+    const cBright = COL(0x76e054);
+    const cRedTurf = COL(0x8c243a);
+    const isRed = rng() < 0.28;
+
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + rng() * 0.4;
+      const dist = OC.lerp(0.06, 0.36, rng());
+      const bw = OC.lerp(0.24, 0.42, rng());
+      const bh = OC.lerp(0.38, 0.72, rng());
+      const leaf = OC.geoPrep(new T.PlaneGeometry(bw, bh, 3, 4));
+      const lp = leaf.attributes.position;
+      for (let k = 0; k < lp.count; k++) {
+        const lx = lp.getX(k), ly = lp.getY(k);
+        const ruffle = Math.sin(ly * 7.5 + i * 1.3) * 0.08 + Math.cos(lx * 8.0) * 0.05;
+        lp.setZ(k, ruffle);
+      }
+      leaf.computeVertexNormals();
+      OC.paint(leaf, (x, y, z, col) => {
+        const u = OC.clamp((y + bh * 0.5) / bh, 0, 1);
+        if (isRed) col.copy(cRedTurf).offsetHSL(0, 0, u * 0.14);
+        else col.copy(cGreen).lerp(cBright, u);
+      });
+      OC.xform(leaf, { r: [0.32 * (rng() - 0.3), a, 0.25], p: [Math.cos(a) * dist, bh * 0.44, Math.sin(a) * dist] });
+      OC.withSway(leaf, (x, y) => Math.max(0, y) * 0.65);
+      list.push(leaf);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   let previewCache = null;
 
@@ -9968,6 +10593,22 @@ window.OC = window.OC || {};
         cenote_vine: {
           mat: matSoft, maxInstances: 320, cullDist: 520,
           geos: [buildCenoteVine(rng), buildCenoteVine(rng)]
+        },
+        volcanic_fumarole: {
+          mat: matChimney, maxInstances: 260, cullDist: 560,
+          geos: [buildVolcanicFumarole(rng), buildVolcanicFumarole(rng)]
+        },
+        tubastraea_coral: {
+          mat: matCoralRigid, maxInstances: 1000, cullDist: 440,
+          geos: [buildTubastraeaCoral(rng), buildTubastraeaCoral(rng)]
+        },
+        galapagos_barnacle: {
+          mat: matClam, maxInstances: 900, cullDist: 400,
+          geos: [buildGalapagosBarnacle(rng), buildGalapagosBarnacle(rng)]
+        },
+        ulva_turf: {
+          mat: matPlant, maxInstances: 1400, cullDist: 420,
+          geos: [buildUlvaTurf(rng), buildUlvaTurf(rng)]
         }
       };
 
@@ -11399,7 +12040,8 @@ window.OC = window.OC || {};
     const isWhale = !!opts.whaleShark;
     const isLeopard = opts.speciesKey === 'shark_leopard';
     const isGreenland = opts.speciesKey === 'shark_greenland';
-    const len = isWhale ? 11.5 : (isGreenland ? 5.4 : (isLeopard ? 2.4 : 4.2));
+    const isGalapagos = opts.speciesKey === 'galapagos_shark';
+    const len = isWhale ? 11.5 : (isGreenland ? 5.4 : (isLeopard ? 2.4 : (isGalapagos ? 3.8 : 4.2)));
     const group = new T.Group();
 
     const body = new T.SphereGeometry(1, 18, 12);
@@ -11426,6 +12068,8 @@ window.OC = window.OC || {};
       } else if (isGreenland) {
         const mott = Math.sin(z * 3.1 + x * 4.2) * 0.06;
         c.set(y > -0.1 ? 0x3b3838 : 0x565252).offsetHSL(0, 0, mott);
+      } else if (isGalapagos) {
+        c.set(y > -0.05 ? 0x484b44 : 0xe4e5de);
       } else {
         c.set(y > -0.05 ? 0x5d6e7a : 0xdde6ea);
       }
@@ -11433,10 +12077,10 @@ window.OC = window.OC || {};
     group.add(new T.Mesh(body, creatureMat));
 
     // Спинной плавник
-    const dorsal = new T.ConeGeometry(len * (isGreenland ? 0.07 : 0.11), len * (isGreenland ? 0.16 : 0.24), 4);
+    const dorsal = new T.ConeGeometry(len * (isGreenland ? 0.07 : 0.11), len * (isGreenland ? 0.16 : (isGalapagos ? 0.28 : 0.24)), 4);
     dorsal.scale(0.25, 1, 1.1);
     OC.geoPrep(dorsal);
-    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : (isGreenland ? 0x343131 : 0x455661)));
+    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : (isGreenland ? 0x343131 : (isGalapagos ? 0x3e413b : 0x455661))));
     const dorM = new T.Mesh(dorsal, creatureMat);
     dorM.position.set(0, len * 0.14, isGreenland ? -len * 0.04 : len * 0.04);
     dorM.rotation.x = -0.35;
@@ -14104,7 +14748,8 @@ window.OC = window.OC || {};
       polar:      { hull: 0xd63622, lower: 0x161c24, stripe: 0x11161c, deck: 0x2c4b47, crane: 0xf5b624, superCol: 0xf4f8fc },
       tropical:   { hull: 0xedf3f7, lower: 0x163858, stripe: 0x1fa8bc, deck: 0x2f5363, crane: 0xf5b624, superCol: 0xffffff },
       coastal:    { hull: 0x1f3e5a, lower: 0x121e2b, stripe: 0xe59824, deck: 0x364a56, crane: 0xf5b624, superCol: 0xf0f4f8 },
-      expedition: { hull: 0x184f62, lower: 0x142632, stripe: 0xeb6a34, deck: 0x374c45, crane: 0xf5b624, superCol: 0xf3f7f9 }
+      expedition: { hull: 0x184f62, lower: 0x142632, stripe: 0xeb6a34, deck: 0x374c45, crane: 0xf5b624, superCol: 0xf3f7f9 },
+      galapagos:  { hull: 0xf3f7fa, lower: 0x162b42, stripe: 0xd05c26, deck: 0x334d5b, crane: 0xf5b624, superCol: 0xffffff }
     };
     const pal = palettes[variant] || palettes.tropical;
 
@@ -14411,7 +15056,8 @@ window.OC = window.OC || {};
     const palMap = {
       tropical:  { body: 0xf7fbff, wing: 0xf2f7fc, tip: 0x1d2530, head: 0xf7fbff, beak: 0xf2a824, tail: 0xffffff, span: 1.55, tailLen: 0.72, fork: false },
       albatross: { body: 0x433b38, wing: 0x2f2926, tip: 0x1b1715, head: 0x5c534e, beak: 0x262426, tail: 0x2e2825, span: 2.35, tailLen: 0.34, fork: false },
-      arctic:    { body: 0xf4f9fd, wing: 0xdce8f2, tip: 0x26323d, head: 0x151b22, beak: 0xd92e28, tail: 0xf4f9fd, span: 1.38, tailLen: 0.52, fork: true }
+      arctic:    { body: 0xf4f9fd, wing: 0xdce8f2, tip: 0x26323d, head: 0x151b22, beak: 0xd92e28, tail: 0xf4f9fd, span: 1.38, tailLen: 0.52, fork: true },
+      booby:     { body: 0xf5f8fb, wing: 0x4d3c34, tip: 0x241b17, head: 0xf2f6fa, beak: 0x3eb4e8, tail: 0x42332c, span: 1.68, tailLen: 0.44, fork: false }
     };
     const bp = palMap[variant] || palMap.tropical;
 
@@ -15152,6 +15798,631 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Галапагосы: Океаническая луна-рыба (Mola mola), Морская игуана, Пингвин, Косатка, Мобула, Арка Дарвина, Фумаролы ---------- */
+  function makeOceanSunfish(scene, biome, opts) {
+    opts = opts || {};
+    const sz = opts.scale || 1.35;
+    const group = new T.Group();
+    const parts = [];
+
+    // Дискообразное сплющенное с боков тело с волнистым клавусом (Mola mola)
+    const body = new T.SphereGeometry(1.0, 20, 14);
+    body.scale(0.19 * sz, 0.96 * sz, 1.08 * sz);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      let x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const zn = z / (1.08 * sz);
+      if (zn < -0.58) {
+        const sc = 0.08 * Math.sin((y / sz) * 9.0);
+        z += sc * sz;
+        x *= 0.65;
+      }
+      bp.setXYZ(i, x, y, z);
+    }
+    body.computeVertexNormals();
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      const mottle = Math.sin(z * 4.2 + y * 3.8) * 0.07;
+      if (y > 0.25 * sz) c.set(0x525e66).offsetHSL(0, 0, mottle);
+      else if (y < -0.22 * sz) c.set(0xdde6ea).offsetHSL(0, 0, mottle * 0.5);
+      else c.set(0x8e9da5).offsetHSL(0, 0, mottle);
+    });
+    parts.push(body);
+
+    // Характерная вытянутая пасть и крупные глаза
+    const mouth = new T.TorusGeometry(0.11 * sz, 0.045 * sz, 6, 12);
+    OC.geoPrep(mouth);
+    OC.paint(mouth, 0x9aa6ad);
+    OC.xform(mouth, { p: [0, 0.02 * sz, 1.07 * sz] });
+    parts.push(mouth);
+
+    for (const s of [-1, 1]) {
+      const eye = new T.SphereGeometry(0.085 * sz, 8, 6);
+      OC.geoPrep(eye);
+      OC.paint(eye, 0x121820);
+      OC.xform(eye, { p: [s * 0.14 * sz, 0.24 * sz, 0.66 * sz] });
+      parts.push(eye);
+    }
+
+    const baseMesh = new T.Mesh(OC.mergeGeometries(parts), creatureMat);
+    group.add(baseMesh);
+
+    // Высокий спинной и анальный плавники (машут синхронно, как крылья)
+    const finDGeo = new T.ConeGeometry(0.24 * sz, 1.28 * sz, 5);
+    finDGeo.scale(0.18, 1.0, 1.0);
+    OC.geoPrep(finDGeo);
+    OC.paint(finDGeo, 0x455058);
+    const dorsalPivot = new T.Group();
+    dorsalPivot.position.set(0, 0.85 * sz, -0.35 * sz);
+    const dorM = new T.Mesh(finDGeo, creatureMat);
+    dorM.position.set(0, 0.54 * sz, -0.1 * sz);
+    dorM.rotation.x = -0.28;
+    dorsalPivot.add(dorM);
+    group.add(dorsalPivot);
+
+    const finAGeo = finDGeo.clone();
+    const analPivot = new T.Group();
+    analPivot.position.set(0, -0.85 * sz, -0.35 * sz);
+    const anaM = new T.Mesh(finAGeo, creatureMat);
+    anaM.position.set(0, -0.54 * sz, -0.1 * sz);
+    anaM.rotation.x = Math.PI + 0.28;
+    analPivot.add(anaM);
+    group.add(analPivot);
+
+    // Боковые округлые грудные плавники
+    const pecGeo = new T.SphereGeometry(0.22 * sz, 8, 6);
+    pecGeo.scale(0.14, 0.85, 0.85);
+    OC.geoPrep(pecGeo);
+    OC.paint(pecGeo, 0x76858f);
+    for (const s of [-1, 1]) {
+      const pm = new T.Mesh(pecGeo, creatureMat);
+      pm.position.set(s * 0.21 * sz, -0.05 * sz, 0.26 * sz);
+      pm.rotation.y = s * 0.45;
+      group.add(pm);
+    }
+
+    group.userData.key = 'ocean_sunfish';
+    scene.add(group);
+
+    if (opts.preview) {
+      return { key: 'ocean_sunfish', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0, cz = opts.cz || 0, rad = opts.r || 24, baseY = opts.y || -26;
+    let ang = Math.random() * 6.28;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'ocean_sunfish',
+      getPosition: () => group.position,
+      update(dt, time, camPos, ctx) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 640) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 1.65) / rad) * dt;
+        const flap = Math.sin(time * 2.4 + (opts.phase || 0)) * 0.42;
+        dorsalPivot.rotation.z = flap;
+        analPivot.rotation.z = -flap;
+
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.06) * rad;
+        const z2 = cz + Math.sin(ang + 0.06) * rad;
+        const y = Math.min(-4.2, Math.max((biome ? biome.getHeight(x, z) : -35) + 4.2, baseY + Math.sin(time * 0.55) * 2.2));
+        _a.set(x, y, z);
+        _b.set(x2, y, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        // Солнечное прогревание — лёгкий крен боком, как у настоящей Mola mola
+        group.rotateZ(Math.sin(time * 0.35 + (opts.phase || 0)) * 0.32);
+
+        const cleanClients = ctx ? ctx.cleanClients : null;
+        if (cleanClients && y > -38) cleanClients.push(group.position);
+      }
+    };
+  }
+
+  function makeMarineIguana(scene, biome, opts) {
+    opts = opts || {};
+    const sz = opts.scale || 1.15;
+    const group = new T.Group();
+    const parts = [];
+
+    // Мощное приземистое тело вулканической ящерицы
+    const torso = new T.SphereGeometry(0.24 * sz, 10, 8);
+    torso.scale(0.95, 0.72, 2.35);
+    OC.geoPrep(torso);
+    OC.paint(torso, (x, y, z, c) => {
+      const band = Math.sin(z * 9.0) * 0.5 + 0.5;
+      c.set(y > 0.02 ? 0x1c1e20 : 0x3b403c).lerp(new T.Color(0x28645c), band * 0.38);
+    });
+    parts.push(torso);
+
+    // Тупая морда для соскабливания водорослей и соляная «корона» на голове
+    const head = new T.SphereGeometry(0.18 * sz, 9, 7);
+    head.scale(0.92, 0.76, 1.18);
+    OC.geoPrep(head);
+    OC.paint(head, (x, y, z, c) => c.set(y > 0.08 * sz ? 0xd8dcd4 : 0x222526));
+    OC.xform(head, { p: [0, 0.06 * sz, 0.62 * sz] });
+    parts.push(head);
+
+    // Зубчатый спинной гребень шипов
+    for (let i = 0; i < 8; i++) {
+      const spH = (0.13 - Math.abs(i - 3) * 0.015) * sz;
+      const sp = new T.ConeGeometry(0.032 * sz, spH, 4);
+      OC.geoPrep(sp);
+      OC.paint(sp, i < 3 ? 0x3f8c7a : 0x26292c);
+      OC.xform(sp, { r: [-0.25, 0, 0], p: [0, 0.19 * sz, (0.48 - i * 0.14) * sz] });
+      parts.push(sp);
+    }
+
+    // Четыре когтистые лапы
+    for (const sx of [-1, 1]) {
+      for (const fz of [0.32, -0.28]) {
+        const limb = new T.CylinderGeometry(0.042 * sz, 0.032 * sz, 0.34 * sz, 5);
+        OC.geoPrep(limb);
+        OC.paint(limb, 0x1e2022);
+        OC.xform(limb, { r: [0.35, sx * 0.4, sx * 1.05], p: [sx * 0.24 * sz, -0.06 * sz, fz * sz] });
+        parts.push(limb);
+      }
+    }
+
+    group.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+    // Сильный плоский плавательный хвост из двух сегментов
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0.02 * sz, -0.52 * sz);
+    const tailGeo = new T.ConeGeometry(0.11 * sz, 1.15 * sz, 6);
+    tailGeo.scale(0.45, 1.0, 0.9);
+    tailGeo.rotateX(-Math.PI / 2);
+    OC.geoPrep(tailGeo);
+    OC.paint(tailGeo, (x, y, z, c) => c.set(z < -0.5 * sz ? 0x151719 : 0x2a312f));
+    const tailM = new T.Mesh(tailGeo, creatureMat);
+    tailM.position.set(0, 0, -0.52 * sz);
+    tailPivot.add(tailM);
+    group.add(tailPivot);
+
+    group.userData.key = 'marine_iguana';
+    scene.add(group);
+
+    if (opts.preview) {
+      return { key: 'marine_iguana', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || -145, cz = opts.cz || -55, rad = opts.r || 16;
+    let ang = Math.random() * 6.28;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'marine_iguana',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 1.45) / rad) * dt;
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.08) * rad;
+        const z2 = cz + Math.sin(ang + 0.08) * rad;
+        const fl = biome ? biome.getHeight(x, z) : -35;
+        // Чередует пастьбу у дна с подплывом к поверхности за воздухом
+        const cycle = Math.sin(time * 0.25 + (opts.phase || 0));
+        const targetY = cycle > 0.45 ? -1.4 : Math.max(fl + 0.42, (opts.y || -6.5) + Math.sin(time * 0.9) * 1.1);
+        const y = Math.min(-0.65, targetY);
+        const y2 = Math.min(-0.65, Math.max((biome ? biome.getHeight(x2, z2) : -35) + 0.42, y));
+        _a.set(x, y, z);
+        _b.set(x2, y2, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        tailPivot.rotation.y = Math.sin(time * 7.2 + (opts.phase || 0)) * 0.48;
+      }
+    };
+  }
+
+  function makeGalapagosPenguin(scene, biome, opts, emitSplash) {
+    opts = opts || {};
+    const sz = opts.scale || 1.05;
+    const group = new T.Group();
+    const parts = [];
+
+    const body = new T.SphereGeometry(0.21 * sz, 12, 9);
+    body.scale(0.86, 0.82, 2.05);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      // Белое брюхо, чёрная спинка и белая дуга вдоль боков шеи
+      const horseshoe = Math.abs(x) > 0.1 * sz && y > -0.02 && y < 0.09 * sz && z > 0.06 * sz;
+      if (horseshoe || y < -0.02 * sz) c.set(0xf2f6f9);
+      else c.set(0x161b22);
+    });
+    parts.push(body);
+
+    const head = new T.SphereGeometry(0.145 * sz, 10, 8);
+    head.scale(0.88, 0.9, 1.05);
+    OC.geoPrep(head);
+    OC.paint(head, (x, y, z, c) => {
+      if (y < -0.04 * sz || (Math.abs(x) > 0.08 * sz && y < 0.04 * sz)) c.set(0xf2f6f9);
+      else c.set(0x14181e);
+    });
+    OC.xform(head, { p: [0, 0.03 * sz, 0.44 * sz] });
+    parts.push(head);
+
+    const beak = new T.ConeGeometry(0.042 * sz, 0.16 * sz, 6);
+    beak.rotateX(Math.PI / 2);
+    OC.geoPrep(beak);
+    OC.paint(beak, (x, y, z, c) => c.set(y < 0 ? 0xf29688 : 0x202226));
+    OC.xform(beak, { p: [0, 0.01 * sz, 0.61 * sz] });
+    parts.push(beak);
+
+    group.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+    const wings = [];
+    for (const s of [-1, 1]) {
+      const wPivot = new T.Group();
+      wPivot.position.set(s * 0.17 * sz, 0.01 * sz, 0.16 * sz);
+      const wingGeo = new T.ConeGeometry(0.075 * sz, 0.34 * sz, 5);
+      wingGeo.scale(0.32, 1.0, 0.88);
+      wingGeo.rotateZ(-s * Math.PI / 2);
+      OC.geoPrep(wingGeo);
+      OC.paint(wingGeo, 0x1a2028);
+      const wm = new T.Mesh(wingGeo, creatureMat);
+      wm.position.set(s * 0.16 * sz, 0, -0.05 * sz);
+      wPivot.add(wm);
+      group.add(wPivot);
+      wings.push(wPivot);
+    }
+
+    group.userData.key = 'galapagos_penguin';
+    scene.add(group);
+
+    if (opts.preview) {
+      return { key: 'galapagos_penguin', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0, cz = opts.cz || 0, rad = opts.r || 19, baseY = opts.y || -4.5;
+    let ang = Math.random() * 6.28;
+    let prevY = baseY;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'galapagos_penguin',
+      isPorpoising: () => group.position.y > -0.15,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 560) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 4.8) / rad) * dt;
+        const waveY = Math.sin(time * 1.15 + (opts.phase || 0));
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.08) * rad;
+        const z2 = cz + Math.sin(ang + 0.08) * rad;
+        const y = Math.max((biome ? biome.getHeight(x, z) : -35) + 0.8, baseY + waveY * 4.2 + (waveY > 0.72 ? 2.2 : 0));
+        const y2 = Math.max((biome ? biome.getHeight(x2, z2) : -35) + 0.8, baseY + Math.sin((time + 0.08) * 1.15 + (opts.phase || 0)) * 4.2);
+        _a.set(x, y, z);
+        _b.set(x2, y2, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        const flap = Math.sin(time * 9.5 + (opts.phase || 0)) * 0.62;
+        wings[0].rotation.z = flap;
+        wings[1].rotation.z = -flap;
+        if (((prevY < 0 && y >= 0) || (prevY >= 0 && y < 0)) && emitSplash) emitSplash(_a, 0.35);
+        prevY = y;
+      }
+    };
+  }
+
+  function makeOrca(scene, biome, opts, emitSplash) {
+    opts = opts || {};
+    const len = opts.len || 7.2;
+    const group = new T.Group();
+    const parts = [];
+
+    const body = new T.SphereGeometry(1, 20, 14);
+    body.scale(len * 0.145, len * 0.16, len * 0.5);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = z / (len * 0.5);
+      const taper = t < 0 ? (1 - 0.72 * Math.pow(-t, 1.35)) : (1 - 0.35 * Math.pow(t, 2.2));
+      bp.setXYZ(i, x * taper, y * taper, z);
+    }
+    body.computeVertexNormals();
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      const zn = z / (len * 0.5);
+      // Классическая чёрно-белая расцветка косатки: белое глазное пятно, серое седло, белое брюхо
+      const eyePatch = Math.abs(x) > len * 0.055 && y > 0.02 && zn > 0.42 && zn < 0.68;
+      const saddle = y > len * 0.06 && zn < 0.05 && zn > -0.22;
+      const belly = y < -len * 0.02 || (zn < -0.15 && zn > -0.5 && Math.abs(x) > len * 0.05 && y < len * 0.04);
+      if (eyePatch || belly) c.set(0xf5f9fc);
+      else if (saddle) c.set(0x7c868f);
+      else c.set(0x11151a);
+    });
+    parts.push(body);
+
+    // Высокий саблевидный спинной плавник косатки (до 1.4 м)
+    const dor = new T.ConeGeometry(len * 0.075, len * 0.24, 5);
+    dor.scale(0.24, 1.0, 1.05);
+    OC.geoPrep(dor);
+    OC.paint(dor, 0x12161b);
+    OC.xform(dor, { r: [-0.22, 0, 0], p: [0, len * 0.21, len * 0.04] });
+    parts.push(dor);
+
+    // Округлые грудные ласты-вёсла
+    const pec = new T.SphereGeometry(len * 0.09, 9, 7);
+    pec.scale(0.18, 0.88, 1.08);
+    OC.geoPrep(pec);
+    OC.paint(pec, 0x12161b);
+    for (const s of [-1, 1]) {
+      const pm = pec.clone();
+      OC.xform(pm, { r: [0.15, s * 0.35, -s * 1.15], p: [s * len * 0.14, -len * 0.05, len * 0.16] });
+      parts.push(pm);
+    }
+
+    group.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+    // Горизонтальная хвостовая лопасть
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -len * 0.45);
+    const fluke = new T.ConeGeometry(len * 0.16, len * 0.18, 5);
+    fluke.scale(1.85, 0.18, 1.0);
+    fluke.rotateX(-Math.PI / 2);
+    OC.geoPrep(fluke);
+    OC.paint(fluke, (x, y, z, c) => c.set(y < 0 ? 0xeef4f8 : 0x11151a));
+    const flM = new T.Mesh(fluke, creatureMat);
+    flM.position.set(0, 0, -len * 0.08);
+    tailPivot.add(flM);
+    group.add(tailPivot);
+
+    group.userData.key = 'orca';
+    scene.add(group);
+
+    if (opts.preview) {
+      return { key: 'orca', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 180, cz = opts.cz || -120, rad = opts.r || 68, baseY = opts.y || -18;
+    let ang = Math.random() * 6.28;
+    let prevY = baseY;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'orca',
+      isActivePredator: true,
+      isPorpoising: () => group.position.y > -0.25,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 760) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 5.4) / rad) * dt;
+        const surfWave = Math.sin(time * 0.34 + (opts.phase || 0));
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.05) * rad;
+        const z2 = cz + Math.sin(ang + 0.05) * rad;
+        const y = Math.max((biome ? biome.getHeight(x, z) : -35) + 4.5, baseY + surfWave * (Math.abs(baseY) + 3.4));
+        const y2 = Math.max((biome ? biome.getHeight(x2, z2) : -35) + 4.5, baseY + Math.sin((time + 0.08) * 0.34 + (opts.phase || 0)) * (Math.abs(baseY) + 3.4));
+        _a.set(x, y, z);
+        _b.set(x2, y2, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        tailPivot.rotation.x = Math.sin(time * 3.8 + (opts.phase || 0)) * 0.35;
+        if (((prevY < 0 && y >= 0) || (prevY >= 0 && y < 0)) && emitSplash) emitSplash(_a, 0.72);
+        prevY = y;
+      }
+    };
+  }
+
+  function makeMobulaRay(scene, biome, opts, emitSplash) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const count = preview ? 1 : (opts.count || 5);
+    const group = new T.Group();
+    const rays = [];
+
+    function buildSingleMobula() {
+      const rRoot = new T.Group();
+      const parts = [];
+
+      const disk = new T.SphereGeometry(0.65, 12, 8);
+      disk.scale(0.82, 0.14, 0.96);
+      OC.geoPrep(disk);
+      OC.paint(disk, (x, y, z, c) => c.set(y > 0.0 ? 0x1e2b42 : 0xedf3f8));
+      parts.push(disk);
+
+      // Головные плавники-рожки (Mobula munkiana)
+      for (const s of [-1, 1]) {
+        const lobe = new T.ConeGeometry(0.06, 0.32, 5);
+        lobe.rotateX(Math.PI / 2);
+        OC.geoPrep(lobe);
+        OC.paint(lobe, 0x253550);
+        OC.xform(lobe, { r: [0, s * 0.2, 0], p: [s * 0.18, 0, 0.62] });
+        parts.push(lobe);
+      }
+
+      const tail = new T.ConeGeometry(0.032, 0.95, 5);
+      tail.rotateX(-Math.PI / 2);
+      OC.geoPrep(tail);
+      OC.paint(tail, 0x1b2638);
+      OC.xform(tail, { p: [0, 0, -0.95] });
+      parts.push(tail);
+
+      rRoot.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+      const wings = [];
+      for (const s of [-1, 1]) {
+        const wP = new T.Group();
+        wP.position.set(s * 0.42, 0, 0.05);
+        const wG = new T.ConeGeometry(0.38, 1.08, 4);
+        wG.scale(1.0, 0.14, 0.95);
+        wG.rotateZ(-s * Math.PI / 2);
+        OC.geoPrep(wG);
+        OC.paint(wG, (x, y, z, c) => c.set(y > 0.0 ? 0x24334d : 0xf0f6fa));
+        const wm = new T.Mesh(wG, creatureMat);
+        wm.position.set(s * 0.48, 0, -0.08);
+        wP.add(wm);
+        rRoot.add(wP);
+        wings.push(wP);
+      }
+      rRoot.userData.key = 'mobula_ray';
+      return { root: rRoot, wingL: wings[0], wingR: wings[1], phase: Math.random() * 6.28 };
+    }
+
+    for (let i = 0; i < count; i++) {
+      const m = buildSingleMobula();
+      const row = Math.ceil(i / 2);
+      const side = i === 0 ? 0 : (i % 2 === 1 ? -1 : 1);
+      m.ox = side * row * 2.4;
+      m.oz = -row * 1.9;
+      m.oy = (i % 2 === 0 ? 0.35 : -0.35);
+      group.add(m.root);
+      rays.push(m);
+    }
+
+    group.userData.key = 'mobula_ray';
+    scene.add(group);
+
+    if (preview) {
+      rays[0].wingL.rotation.z = -0.18;
+      rays[0].wingR.rotation.z = 0.18;
+      return { key: 'mobula_ray', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 65, cz = opts.cz || -38, rad = opts.r || 42, baseY = opts.y || -18;
+    let ang = Math.random() * 6.28;
+    let prevY = baseY;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'mobula_ray',
+      isPorpoising: () => group.position.y > -0.2,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 680) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 4.2) / rad) * dt;
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.06) * rad;
+        const z2 = cz + Math.sin(ang + 0.06) * rad;
+        const y = Math.max((biome ? biome.getHeight(x, z) : -35) + 3.2, baseY + Math.sin(time * 0.48) * 5.2);
+        const y2 = Math.max((biome ? biome.getHeight(x2, z2) : -35) + 3.2, baseY + Math.sin((time + 0.06) * 0.48) * 5.2);
+        _a.set(x, y, z);
+        _b.set(x2, y2, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        for (let i = 0; i < rays.length; i++) {
+          const r = rays[i];
+          r.root.position.set(r.ox, r.oy + Math.sin(time * 1.4 + i) * 0.25, r.oz);
+          const fl = Math.sin(time * 3.1 + r.phase) * 0.36;
+          r.wingL.rotation.z = fl;
+          r.wingR.rotation.z = -fl;
+        }
+        if (((prevY < 0 && y >= 0) || (prevY >= 0 && y < 0)) && emitSplash) emitSplash(_a, 0.42);
+        prevY = y;
+      }
+    };
+  }
+
+  function makeDarwinsArch(scene, biome, opts) {
+    opts = opts || {};
+    const ax = opts.x || 0, az = opts.z || 0;
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    const parts = [];
+
+    const cBasalt = new T.Color(0x1f1e22);
+    const cTuff = new T.Color(0x3a3734);
+    const cZone = new T.Color(0x526444);
+
+    // Монументальная сводчатая вулканическая арка Дарвина из базальтовых сегментов (свободный проход под сводом)
+    const spanX = 48;
+    const nSeg = 18;
+    for (let i = 0; i <= nSeg; i++) {
+      const u = i / nSeg;
+      const a = u * Math.PI;
+      const sx = -Math.cos(a) * (spanX * 0.5);
+      const sy = -22.5 + Math.sin(a) * 28.5; // от -22.5 м до +6.0 м над водой
+      const thick = 3.8 + (1 - Math.sin(a)) * 2.6 + Math.sin(i * 1.9) * 0.5;
+      const seg = new T.DodecahedronGeometry(thick, 1);
+      seg.scale(1.15, 1.32, 1.38);
+      const sp = seg.attributes.position;
+      for (let v = 0; v < sp.count; v++) {
+        const vx = sp.getX(v), vy = sp.getY(v), vz = sp.getZ(v);
+        const rug = 1 + 0.16 * Math.sin(vx * 1.2 + vy * 0.9) * Math.cos(vz * 1.1);
+        sp.setXYZ(v, vx * rug, vy * rug, vz * rug);
+      }
+      seg.computeVertexNormals();
+      OC.geoPrep(seg);
+      OC.paint(seg, (px, py, pz, col) => {
+        const wy = py + sy;
+        col.copy(cBasalt).lerp(cTuff, wy > -2.5 ? 0.55 : 0.18);
+        if (wy > -3.5 && wy < 1.2) col.lerp(cZone, 0.32);
+      });
+      OC.xform(seg, { r: [i * 0.25, i * 0.4, 0], p: [sx, sy, Math.sin(i * 0.9) * 1.1] });
+      parts.push(seg);
+    }
+
+    const archGeo = OC.mergeGeometries(parts);
+    const archMesh = new T.Mesh(archGeo, creatureMat);
+    group.add(archMesh);
+    group.userData.key = 'darwins_arch';
+    if (!preview) group.position.set(ax, 0, az);
+    else group.scale.setScalar(0.08);
+    scene.add(group);
+
+    return {
+      key: 'darwins_arch',
+      getPosition: () => group.position,
+      update() {}
+    };
+  }
+
+  function makeFumaroleVents(scene, biome, opts) {
+    opts = opts || {};
+    const vx = opts.x || -140, vz = opts.z || -80;
+    const vy = opts.y !== undefined ? opts.y : (biome ? biome.getHeight(vx, vz) : -12) + 0.8;
+    const N = 95;
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(N * 3);
+    const ph = new Float32Array(N);
+    const rng = OC.mulberry32(Math.abs(Math.round(vx * 17 + vz * 31)) + 77);
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = (rng() - 0.5) * 4.5;
+      pos[i * 3 + 1] = rng() * 14.0;
+      pos[i * 3 + 2] = (rng() - 0.5) * 4.5;
+      ph[i] = rng() * 6.28;
+    }
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    const mat = new T.PointsMaterial({
+      color: 0xdff8ff,
+      size: 0.42,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false
+    });
+    const pts = new T.Points(geo, mat);
+    pts.position.set(vx, vy, vz);
+    pts.userData.key = 'volcanic_fumarole';
+    scene.add(pts);
+
+    return {
+      key: 'volcanic_fumarole',
+      getPosition: () => pts.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(vx - camPos.x, vz - camPos.z) > 480) { pts.visible = false; return; }
+        pts.visible = true;
+        const arr = geo.attributes.position.array;
+        for (let i = 0; i < N; i++) {
+          let y = arr[i * 3 + 1] + dt * (2.6 + (i % 5) * 0.45);
+          if (y > 14.0 || vy + y > -0.4) y = 0.05;
+          arr[i * 3 + 1] = y;
+          arr[i * 3] += Math.sin(time * 2.5 + ph[i]) * dt * 0.22;
+        }
+        geo.attributes.position.needsUpdate = true;
+      }
+    };
+  }
+
   /* ---------- Сборка фауны по экологическому плану биома (biome.faunaPlan) ---------- */
   function disposeFaunaGroup(scene) {
     if (!faunaGroup) return;
@@ -15442,6 +16713,51 @@ window.OC = window.OC || {};
         sonarTargets.push(bro);
       }
 
+      for (const sf of (plan.sunfishes || [])) {
+        const sfo = makeOceanSunfish(faunaGroup, biome, sf);
+        agents.push(sfo);
+        sonarTargets.push(sfo);
+      }
+
+      for (const ig of (plan.marineIguanas || [])) {
+        const igo = makeMarineIguana(faunaGroup, biome, ig);
+        agents.push(igo);
+        sonarTargets.push(igo);
+      }
+
+      for (const pg of (plan.penguins || [])) {
+        const pgo = makeGalapagosPenguin(faunaGroup, biome, pg, emitSplash);
+        agents.push(pgo);
+        surfaceJumpers.push(pgo);
+        sonarTargets.push(pgo);
+      }
+
+      for (const oc of (plan.orcas || [])) {
+        const oco = makeOrca(faunaGroup, biome, oc, emitSplash);
+        agents.push(oco);
+        predatorAgents.push(oco);
+        surfaceJumpers.push(oco);
+        sonarTargets.push(oco);
+      }
+
+      for (const mb of (plan.mobulas || [])) {
+        const mbo = makeMobulaRay(faunaGroup, biome, mb, emitSplash);
+        agents.push(mbo);
+        surfaceJumpers.push(mbo);
+        sonarTargets.push(mbo);
+      }
+
+      for (const da of (plan.darwinsArches || [])) {
+        const dao = makeDarwinsArch(faunaGroup, biome, da);
+        agents.push(dao);
+        sonarTargets.push(dao);
+      }
+
+      for (const fm of (plan.fumaroles || [])) {
+        const fmo = makeFumaroleVents(faunaGroup, biome, fm);
+        agents.push(fmo);
+      }
+
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
@@ -15585,7 +16901,7 @@ window.OC = window.OC || {};
           }
           if (!ev) {
             for (let i = 0; i < surfaceJumpers.length; i++) {
-              if (surfaceJumpers[i].isPorpoising()) {
+              if (surfaceJumpers[i].isPorpoising && surfaceJumpers[i].isPorpoising()) {
                 const p = surfaceJumpers[i].getPosition();
                 if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 190) { ev = 'porpoising'; break; }
               }
@@ -15768,6 +17084,8 @@ window.OC = window.OC || {};
               c.setHex(0x3a3248).lerp(new T.Color(0x8cd2d8), Math.sin(x * 0.42 + z * 0.42) * 0.32 + 0.35);
             } else if (bId === 'cenote_caves') {
               c.setHex(0x8e836e).lerp(new T.Color(0xcab999), Math.sin(x * 0.44 + z * 0.4) * 0.38 + 0.4);
+            } else if (bId === 'galapagos_upwelling') {
+              c.setHex(0x232228).lerp(new T.Color(0x4c5840), Math.sin(x * 0.4 + z * 0.4) * 0.3 + 0.3);
             } else {
               c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
             }
@@ -15790,7 +17108,7 @@ window.OC = window.OC || {};
           makeTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, size: 1 });
         } else if (key === 'dugong') {
           makeDugong(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
-        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland') {
+        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark') {
           makeShark(tmpGroup, dummyBiome, {
             cx: 0, cz: 0, y: 0, r: 10, speed: 2,
             speciesKey: key, whaleShark: key === 'shark_whale'
@@ -15823,11 +17141,11 @@ window.OC = window.OC || {};
           makeGoldenJelly(tmpGroup, { cx: 0, cz: 0, y: 0, scale: 1 });
         } else if (key === 'research_vessel') {
           const bId = biome ? biome.id : 'great_barrier_reef';
-          const vVariant = bId === 'arctic_sea' ? 'polar' : bId === 'kelp_forest' ? 'coastal' : bId === 'wreck_atoll' ? 'expedition' : 'tropical';
+          const vVariant = bId === 'arctic_sea' ? 'polar' : bId === 'kelp_forest' ? 'coastal' : bId === 'wreck_atoll' ? 'expedition' : (bId === 'galapagos_upwelling' ? 'galapagos' : 'tropical');
           makeResearchVessel(tmpGroup, dummyBiome, { x: 0, z: 0, yaw: 0, variant: vVariant, preview: true });
         } else if (key === 'seabird') {
           const bId = biome ? biome.id : 'great_barrier_reef';
-          const sVariant = bId === 'arctic_sea' ? 'arctic' : bId === 'kelp_forest' ? 'albatross' : 'tropical';
+          const sVariant = bId === 'arctic_sea' ? 'arctic' : bId === 'kelp_forest' ? 'albatross' : (bId === 'galapagos_upwelling' ? 'booby' : 'tropical');
           makeSeabirdFlock(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, singlePreview: true, variant: sVariant });
         } else if (key === 'dolphin') {
           const bId = biome ? biome.id : 'great_barrier_reef';
@@ -15857,6 +17175,18 @@ window.OC = window.OC || {};
           makeCaveRemipede(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'blind_brotula') {
           makeBlindBrotula(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'ocean_sunfish') {
+          makeOceanSunfish(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'marine_iguana') {
+          makeMarineIguana(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'galapagos_penguin') {
+          makeGalapagosPenguin(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'orca') {
+          makeOrca(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'mobula_ray') {
+          makeMobulaRay(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'darwins_arch') {
+          makeDarwinsArch(tmpGroup, dummyBiome, { preview: true });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;
@@ -16381,6 +17711,11 @@ window.OC = window.OC || {};
     if (key === 'halocline_layer') return 'Акустика галоклина и облака H₂S';
     if (key === 'stalactite' || key === 'stalagmite' || key === 'ariadne_line') return 'Пещерный резонанс и капля воды';
     if (key === 'cave_remipede' || key === 'blind_brotula' || key === 'blind_tetra' || key === 'cave_shrimp' || key === 'cenote_molly') return 'Гидроотклик стигобионтов';
+    if (key === 'orca') return 'Импульсные позывные стаи косаток';
+    if (key === 'galapagos_penguin') return 'Подводный треск погони пингвина';
+    if (key === 'marine_iguana') return 'Лавовый прибой и соскабливание ульвы';
+    if (key === 'ocean_sunfish' || key === 'mobula_ray' || key === 'galapagos_shark' || key === 'darwins_arch') return 'Резонанс апвеллинга и Арки Дарвина';
+    if (key === 'volcanic_fumarole') return 'Пузырьковая вулканическая фумарола';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
@@ -16575,7 +17910,37 @@ window.OC = window.OC || {};
           o.connect(g); g.connect(out);
           o.start(t); o.stop(t + 0.55);
         });
-      } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') {
+      } else if (key === 'orca') {
+        // Фирменные гармонические импульсные крики стаи косаток и серия щелчков
+        [680, 1020, 520].forEach((f, i) => {
+          const t = now + i * 0.28;
+          const o = ctx.createOscillator();
+          const bp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * (i === 1 ? 1.48 : 0.74), t + 0.24);
+          bp.type = 'bandpass'; bp.frequency.value = f * 1.4; bp.Q.value = 1.9;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.095, t + 0.04);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+          o.connect(bp); bp.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.28);
+        });
+      } else if (key === 'galapagos_penguin') {
+        for (let i = 0; i < 4; i++) {
+          const t = now + i * 0.12;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(740 + i * 110, t);
+          o.frequency.exponentialRampToValueAtTime(420, t + 0.09);
+          g.gain.setValueAtTime(0.075, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.11);
+        }
+      } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels' || key === 'volcanic_fumarole') {
         const dur = 1.2;
         const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
         const d = buf.getChannelData(0);
@@ -16708,7 +18073,7 @@ window.OC = window.OC || {};
           o.connect(f); f.connect(g); g.connect(out);
           o.start(t); o.stop(t + 0.06);
         }
-      } else if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle') {
+      } else if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle' || key === 'ocean_sunfish' || key === 'mobula_ray' || key === 'galapagos_shark' || key === 'darwins_arch' || key === 'marine_iguana') {
         const o = ctx.createOscillator();
         const lp = ctx.createBiquadFilter();
         const g = ctx.createGain();
@@ -16903,13 +18268,14 @@ window.OC = window.OC || {};
   const CORAL_SPECIES = new Set([
     'coral_staghorn', 'coral_table', 'coral_brain', 'coral_plate', 'coral_crust',
     'coral_boulder', 'coral_pillar', 'coral_seafan', 'coral_soft', 'coral_whip',
-    'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral'
+    'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral', 'tubastraea_coral'
   ]);
-  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm']);
+  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm', 'volcanic_fumarole']);
   const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle', 'halite_spire']);
   const KARST_SPECIES = new Set(['stalactite', 'stalagmite']);
+  const VOLCANIC_SPECIES = new Set(['galapagos_barnacle', 'darwins_arch']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf']);
 
   let sceneRef = null;
   let rovGroup = null;
@@ -17540,6 +18906,10 @@ window.OC = window.OC || {};
           category = 'Био-оазис сипа';
           chemNote = `Хемосинтез Lamellibrachia · До 250 лет`;
           colorHex = 0xd92658;
+        } else if (sp === 'volcanic_fumarole') {
+          category = 'Вулканическая проба';
+          chemNote = `CO₂-фумарола и сера · ${waterTemp.toFixed(1)} °C`;
+          colorHex = 0xdcb428;
         } else {
           category = 'Сульфидная проба';
           chemNote = `H₂S-хемосинтез · ${(waterTemp + (sp === 'smoker_chimney' || sp === 'vent_chimney' ? 140 : 12)).toFixed(0)} °C очаг`;
@@ -17559,6 +18929,10 @@ window.OC = window.OC || {};
         category = 'Карстовый спелеотем';
         chemNote = sp === 'stalactite' ? 'Кальцит CaCO₃ · Рост ~0.1 мм/год' : 'Травертин CaCO₃ · Климатическая запись';
         colorHex = 0xe4d4b8;
+      } else if (VOLCANIC_SPECIES.has(sp)) {
+        category = 'Вулканический базальт';
+        chemNote = 'Лава Наска и панцири Megabalanus';
+        colorHex = 0x78767e;
       } else if (WRECK_SPECIES.has(sp)) {
         category = 'Архео-фрагмент';
         chemNote = `Патина бронзы и карбонат`;
@@ -17581,9 +18955,11 @@ window.OC = window.OC || {};
           ? `Рассол 230‰ и карбонатный ил · ${depthM.toFixed(0)} м`
           : (biome.id === 'cenote_caves'
             ? `Карстовый известняк · ${depthM.toFixed(0)} м`
-            : (biome.id === 'hydrothermal_vents'
-              ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-              : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`))));
+            : (biome.id === 'galapagos_upwelling'
+              ? `Базальт и оливковый песок · ${depthM.toFixed(0)} м`
+              : (biome.id === 'hydrothermal_vents'
+                ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
+                : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`)))));
     }
 
     return {
@@ -17635,6 +19011,9 @@ window.OC = window.OC || {};
       if (biome.id === 'cenote_caves') {
         // Инверсия галоклина сенотов: прохладная пресная вода сверху, теплее под галоклином (24+ м)
         Tval += OC.smoothstep(22, 28, d) * 0.6;
+      } else if (biome.id === 'galapagos_upwelling') {
+        // Холодный глубинный апвеллинг Кромвеля: резкий экваториальный термоклин
+        Tval -= OC.smoothstep(14, 52, d) * 5.8;
       } else if (!biome.noSurface && !biome.hasAurora) {
         const thermoDrop = OC.smoothstep(18, 65, d) * 3.8;
         Tval -= thermoDrop;
@@ -19059,6 +20438,44 @@ window.OC = window.OC || {};
       landmarkId: 'el_pit_depth',
       goal: 1,
       progress: (ctx) => (ctx.depthM >= 38 && ctx.hasPhoto(['blind_brotula', 'blind_tetra', 'cave_remipede'])) ? 1 : 0
+    },
+
+    // 9. Галапагосский апвеллинг и Арка Дарвина (Восточная Пацифика, 0–132 м)
+    {
+      id: 'gal_atlas_6',
+      biomeId: 'galapagos_upwelling',
+      title: 'Дарвиновский натуралист',
+      desc: 'Откройте 6 эндемиков, вулканических объектов или пелагических хищников Галапагосов в Атласе.',
+      landmarkId: 'darwins_arch',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'gal_iguana_penguin',
+      biomeId: 'galapagos_upwelling',
+      title: 'Дракон и пингвин экватора',
+      desc: 'Исследуйте Лавовую бухту (lava_shallows) и сфотографируйте (P) морскую игуану, галапагосского пингвина или фумаролу.',
+      landmarkId: 'lava_cove',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('lava_shallows') && ctx.hasPhoto(['marine_iguana', 'galapagos_penguin', 'volcanic_fumarole']) ? 1 : 0
+    },
+    {
+      id: 'gal_sunfish_mobula',
+      biomeId: 'galapagos_upwelling',
+      title: 'Гиганты течения Кромвеля',
+      desc: 'Посетите Стену апвеллинга (upwelling_wall) и сфотографируйте (P) луну-рыбу Mola mola, ската мобула или китовую акулу.',
+      landmarkId: 'sunfish_cleaning',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('upwelling_wall') && ctx.hasPhoto(['ocean_sunfish', 'mobula_ray', 'shark_whale']) ? 1 : 0
+    },
+    {
+      id: 'gal_orca_arch',
+      biomeId: 'galapagos_upwelling',
+      title: 'Косатки и Арка Дарвина',
+      desc: 'Отсканируйте сонаром (G) или снимите (P) косатку, галапагосскую акулу, акулу-молота или Арку Дарвина.',
+      landmarkId: 'wolf_orca_shelf',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['orca', 'galapagos_shark', 'shark_hammerhead', 'darwins_arch']) ? 1 : 0
     }
   ];
 
@@ -19409,6 +20826,13 @@ window.OC = window.OC || {};
       if (y > -29) return [42, 106, 108];  // карстовые залы
       if (y > -40) return [28, 72, 86];    // галоклин Анхелиты
       return [12, 32, 56];                 // глубокий колодец Эль-Пит
+    }
+    if (theme === 'galapagos') {
+      if (y > 0.1) return [56, 62, 54];    // чёрные базальтовые острова и опоры Арки Дарвина
+      if (y > -17) return [52, 168, 134];  // изумрудные лавовые бухты игуан и ульвы
+      if (y > -34) return [32, 128, 136];  // плато Арки Дарвина
+      if (y > -66) return [22, 90, 128];   // стена апвеллинга Кромвеля
+      return [10, 38, 76];                 // глубокая тихоокеанская пелагиаль
     }
     if (theme === 'arctic') {
       if (y > -11) return [218, 240, 252]; // кромка пакового припая
@@ -19815,6 +21239,12 @@ window.OC = window.OC || {};
     'Зал сталактитов': 'stalactite_cathedral',
     'Галоклин Анхелиты': 'angelita_halocline',
     'Бездна Эль-Пит': 'el_pit_depth',
+    'Арка Дарвина': 'darwins_arch',
+    'Лавовая бухта': 'lava_cove',
+    'Стена апвеллинга': 'upwelling_wall',
+    'Пелагиаль Вольфа': 'wolf_orca_shelf',
+    'Небо над Аркой Дарвина': 'darwins_arch',
+    'Пролив у Вольфа': 'wolf_orca_shelf',
     'Все зоны': 'crest'
   };
 
@@ -20618,7 +22048,7 @@ window.OC = window.OC || {};
     }
 
     // Соединяем 8 точек планеты дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea'];
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);
@@ -22028,7 +23458,8 @@ window.OC = window.OC || {};
       wreck_atoll: 'Атолл и Корабль',
       mariana_trench: 'Марианская 10920м',
       brine_pool: 'Соляной бассейн',
-      cenote_caves: 'Сеноты Юкатана'
+      cenote_caves: 'Сеноты Юкатана',
+      galapagos_upwelling: 'Галапагосы'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
@@ -22038,7 +23469,8 @@ window.OC = window.OC || {};
       wreck_atoll: 'Палау · Микронезия',
       mariana_trench: 'Челленджер · 10 920 м',
       brine_pool: 'Мексиканский залив · 650 м',
-      cenote_caves: 'Юкатан · Сак-Актун 58 м'
+      cenote_caves: 'Юкатан · Сак-Актун 58 м',
+      galapagos_upwelling: 'Эквадор · Апвеллинг'
     };
 
     function renderBiomeUI() {

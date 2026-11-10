@@ -14,13 +14,14 @@ window.OC = window.OC || {};
   const CORAL_SPECIES = new Set([
     'coral_staghorn', 'coral_table', 'coral_brain', 'coral_plate', 'coral_crust',
     'coral_boulder', 'coral_pillar', 'coral_seafan', 'coral_soft', 'coral_whip',
-    'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral'
+    'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral', 'tubastraea_coral'
   ]);
-  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm']);
+  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm', 'volcanic_fumarole']);
   const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle', 'halite_spire']);
   const KARST_SPECIES = new Set(['stalactite', 'stalagmite']);
+  const VOLCANIC_SPECIES = new Set(['galapagos_barnacle', 'darwins_arch']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf']);
 
   let sceneRef = null;
   let rovGroup = null;
@@ -651,6 +652,10 @@ window.OC = window.OC || {};
           category = 'Био-оазис сипа';
           chemNote = `Хемосинтез Lamellibrachia · До 250 лет`;
           colorHex = 0xd92658;
+        } else if (sp === 'volcanic_fumarole') {
+          category = 'Вулканическая проба';
+          chemNote = `CO₂-фумарола и сера · ${waterTemp.toFixed(1)} °C`;
+          colorHex = 0xdcb428;
         } else {
           category = 'Сульфидная проба';
           chemNote = `H₂S-хемосинтез · ${(waterTemp + (sp === 'smoker_chimney' || sp === 'vent_chimney' ? 140 : 12)).toFixed(0)} °C очаг`;
@@ -670,6 +675,10 @@ window.OC = window.OC || {};
         category = 'Карстовый спелеотем';
         chemNote = sp === 'stalactite' ? 'Кальцит CaCO₃ · Рост ~0.1 мм/год' : 'Травертин CaCO₃ · Климатическая запись';
         colorHex = 0xe4d4b8;
+      } else if (VOLCANIC_SPECIES.has(sp)) {
+        category = 'Вулканический базальт';
+        chemNote = 'Лава Наска и панцири Megabalanus';
+        colorHex = 0x78767e;
       } else if (WRECK_SPECIES.has(sp)) {
         category = 'Архео-фрагмент';
         chemNote = `Патина бронзы и карбонат`;
@@ -692,9 +701,11 @@ window.OC = window.OC || {};
           ? `Рассол 230‰ и карбонатный ил · ${depthM.toFixed(0)} м`
           : (biome.id === 'cenote_caves'
             ? `Карстовый известняк · ${depthM.toFixed(0)} м`
-            : (biome.id === 'hydrothermal_vents'
-              ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-              : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`))));
+            : (biome.id === 'galapagos_upwelling'
+              ? `Базальт и оливковый песок · ${depthM.toFixed(0)} м`
+              : (biome.id === 'hydrothermal_vents'
+                ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
+                : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`)))));
     }
 
     return {
@@ -746,6 +757,9 @@ window.OC = window.OC || {};
       if (biome.id === 'cenote_caves') {
         // Инверсия галоклина сенотов: прохладная пресная вода сверху, теплее под галоклином (24+ м)
         Tval += OC.smoothstep(22, 28, d) * 0.6;
+      } else if (biome.id === 'galapagos_upwelling') {
+        // Холодный глубинный апвеллинг Кромвеля: резкий экваториальный термоклин
+        Tval -= OC.smoothstep(14, 52, d) * 5.8;
       } else if (!biome.noSurface && !biome.hasAurora) {
         const thermoDrop = OC.smoothstep(18, 65, d) * 3.8;
         Tval -= thermoDrop;

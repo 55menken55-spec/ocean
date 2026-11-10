@@ -17,6 +17,7 @@ ORDER = [
     'biomes/mariana_trench.js',
     'biomes/brine_pool.js',
     'biomes/cenote_caves.js',
+    'biomes/galapagos_upwelling.js',
     'engine/weather.js',
     'engine/eco_lab.js',
     'engine/world.js',

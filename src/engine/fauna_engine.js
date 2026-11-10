@@ -1103,7 +1103,8 @@ window.OC = window.OC || {};
     const isWhale = !!opts.whaleShark;
     const isLeopard = opts.speciesKey === 'shark_leopard';
     const isGreenland = opts.speciesKey === 'shark_greenland';
-    const len = isWhale ? 11.5 : (isGreenland ? 5.4 : (isLeopard ? 2.4 : 4.2));
+    const isGalapagos = opts.speciesKey === 'galapagos_shark';
+    const len = isWhale ? 11.5 : (isGreenland ? 5.4 : (isLeopard ? 2.4 : (isGalapagos ? 3.8 : 4.2)));
     const group = new T.Group();
 
     const body = new T.SphereGeometry(1, 18, 12);
@@ -1130,6 +1131,8 @@ window.OC = window.OC || {};
       } else if (isGreenland) {
         const mott = Math.sin(z * 3.1 + x * 4.2) * 0.06;
         c.set(y > -0.1 ? 0x3b3838 : 0x565252).offsetHSL(0, 0, mott);
+      } else if (isGalapagos) {
+        c.set(y > -0.05 ? 0x484b44 : 0xe4e5de);
       } else {
         c.set(y > -0.05 ? 0x5d6e7a : 0xdde6ea);
       }
@@ -1137,10 +1140,10 @@ window.OC = window.OC || {};
     group.add(new T.Mesh(body, creatureMat));
 
     // Спинной плавник
-    const dorsal = new T.ConeGeometry(len * (isGreenland ? 0.07 : 0.11), len * (isGreenland ? 0.16 : 0.24), 4);
+    const dorsal = new T.ConeGeometry(len * (isGreenland ? 0.07 : 0.11), len * (isGreenland ? 0.16 : (isGalapagos ? 0.28 : 0.24)), 4);
     dorsal.scale(0.25, 1, 1.1);
     OC.geoPrep(dorsal);
-    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : (isGreenland ? 0x343131 : 0x455661)));
+    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : (isGreenland ? 0x343131 : (isGalapagos ? 0x3e413b : 0x455661))));
     const dorM = new T.Mesh(dorsal, creatureMat);
     dorM.position.set(0, len * 0.14, isGreenland ? -len * 0.04 : len * 0.04);
     dorM.rotation.x = -0.35;
@@ -3808,7 +3811,8 @@ window.OC = window.OC || {};
       polar:      { hull: 0xd63622, lower: 0x161c24, stripe: 0x11161c, deck: 0x2c4b47, crane: 0xf5b624, superCol: 0xf4f8fc },
       tropical:   { hull: 0xedf3f7, lower: 0x163858, stripe: 0x1fa8bc, deck: 0x2f5363, crane: 0xf5b624, superCol: 0xffffff },
       coastal:    { hull: 0x1f3e5a, lower: 0x121e2b, stripe: 0xe59824, deck: 0x364a56, crane: 0xf5b624, superCol: 0xf0f4f8 },
-      expedition: { hull: 0x184f62, lower: 0x142632, stripe: 0xeb6a34, deck: 0x374c45, crane: 0xf5b624, superCol: 0xf3f7f9 }
+      expedition: { hull: 0x184f62, lower: 0x142632, stripe: 0xeb6a34, deck: 0x374c45, crane: 0xf5b624, superCol: 0xf3f7f9 },
+      galapagos:  { hull: 0xf3f7fa, lower: 0x162b42, stripe: 0xd05c26, deck: 0x334d5b, crane: 0xf5b624, superCol: 0xffffff }
     };
     const pal = palettes[variant] || palettes.tropical;
 
@@ -4115,7 +4119,8 @@ window.OC = window.OC || {};
     const palMap = {
       tropical:  { body: 0xf7fbff, wing: 0xf2f7fc, tip: 0x1d2530, head: 0xf7fbff, beak: 0xf2a824, tail: 0xffffff, span: 1.55, tailLen: 0.72, fork: false },
       albatross: { body: 0x433b38, wing: 0x2f2926, tip: 0x1b1715, head: 0x5c534e, beak: 0x262426, tail: 0x2e2825, span: 2.35, tailLen: 0.34, fork: false },
-      arctic:    { body: 0xf4f9fd, wing: 0xdce8f2, tip: 0x26323d, head: 0x151b22, beak: 0xd92e28, tail: 0xf4f9fd, span: 1.38, tailLen: 0.52, fork: true }
+      arctic:    { body: 0xf4f9fd, wing: 0xdce8f2, tip: 0x26323d, head: 0x151b22, beak: 0xd92e28, tail: 0xf4f9fd, span: 1.38, tailLen: 0.52, fork: true },
+      booby:     { body: 0xf5f8fb, wing: 0x4d3c34, tip: 0x241b17, head: 0xf2f6fa, beak: 0x3eb4e8, tail: 0x42332c, span: 1.68, tailLen: 0.44, fork: false }
     };
     const bp = palMap[variant] || palMap.tropical;
 
@@ -4856,6 +4861,631 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---------- Галапагосы: Океаническая луна-рыба (Mola mola), Морская игуана, Пингвин, Косатка, Мобула, Арка Дарвина, Фумаролы ---------- */
+  function makeOceanSunfish(scene, biome, opts) {
+    opts = opts || {};
+    const sz = opts.scale || 1.35;
+    const group = new T.Group();
+    const parts = [];
+
+    // Дискообразное сплющенное с боков тело с волнистым клавусом (Mola mola)
+    const body = new T.SphereGeometry(1.0, 20, 14);
+    body.scale(0.19 * sz, 0.96 * sz, 1.08 * sz);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      let x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const zn = z / (1.08 * sz);
+      if (zn < -0.58) {
+        const sc = 0.08 * Math.sin((y / sz) * 9.0);
+        z += sc * sz;
+        x *= 0.65;
+      }
+      bp.setXYZ(i, x, y, z);
+    }
+    body.computeVertexNormals();
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      const mottle = Math.sin(z * 4.2 + y * 3.8) * 0.07;
+      if (y > 0.25 * sz) c.set(0x525e66).offsetHSL(0, 0, mottle);
+      else if (y < -0.22 * sz) c.set(0xdde6ea).offsetHSL(0, 0, mottle * 0.5);
+      else c.set(0x8e9da5).offsetHSL(0, 0, mottle);
+    });
+    parts.push(body);
+
+    // Характерная вытянутая пасть и крупные глаза
+    const mouth = new T.TorusGeometry(0.11 * sz, 0.045 * sz, 6, 12);
+    OC.geoPrep(mouth);
+    OC.paint(mouth, 0x9aa6ad);
+    OC.xform(mouth, { p: [0, 0.02 * sz, 1.07 * sz] });
+    parts.push(mouth);
+
+    for (const s of [-1, 1]) {
+      const eye = new T.SphereGeometry(0.085 * sz, 8, 6);
+      OC.geoPrep(eye);
+      OC.paint(eye, 0x121820);
+      OC.xform(eye, { p: [s * 0.14 * sz, 0.24 * sz, 0.66 * sz] });
+      parts.push(eye);
+    }
+
+    const baseMesh = new T.Mesh(OC.mergeGeometries(parts), creatureMat);
+    group.add(baseMesh);
+
+    // Высокий спинной и анальный плавники (машут синхронно, как крылья)
+    const finDGeo = new T.ConeGeometry(0.24 * sz, 1.28 * sz, 5);
+    finDGeo.scale(0.18, 1.0, 1.0);
+    OC.geoPrep(finDGeo);
+    OC.paint(finDGeo, 0x455058);
+    const dorsalPivot = new T.Group();
+    dorsalPivot.position.set(0, 0.85 * sz, -0.35 * sz);
+    const dorM = new T.Mesh(finDGeo, creatureMat);
+    dorM.position.set(0, 0.54 * sz, -0.1 * sz);
+    dorM.rotation.x = -0.28;
+    dorsalPivot.add(dorM);
+    group.add(dorsalPivot);
+
+    const finAGeo = finDGeo.clone();
+    const analPivot = new T.Group();
+    analPivot.position.set(0, -0.85 * sz, -0.35 * sz);
+    const anaM = new T.Mesh(finAGeo, creatureMat);
+    anaM.position.set(0, -0.54 * sz, -0.1 * sz);
+    anaM.rotation.x = Math.PI + 0.28;
+    analPivot.add(anaM);
+    group.add(analPivot);
+
+    // Боковые округлые грудные плавники
+    const pecGeo = new T.SphereGeometry(0.22 * sz, 8, 6);
+    pecGeo.scale(0.14, 0.85, 0.85);
+    OC.geoPrep(pecGeo);
+    OC.paint(pecGeo, 0x76858f);
+    for (const s of [-1, 1]) {
+      const pm = new T.Mesh(pecGeo, creatureMat);
+      pm.position.set(s * 0.21 * sz, -0.05 * sz, 0.26 * sz);
+      pm.rotation.y = s * 0.45;
+      group.add(pm);
+    }
+
+    group.userData.key = 'ocean_sunfish';
+    scene.add(group);
+
+    if (opts.preview) {
+      return { key: 'ocean_sunfish', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0, cz = opts.cz || 0, rad = opts.r || 24, baseY = opts.y || -26;
+    let ang = Math.random() * 6.28;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'ocean_sunfish',
+      getPosition: () => group.position,
+      update(dt, time, camPos, ctx) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 640) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 1.65) / rad) * dt;
+        const flap = Math.sin(time * 2.4 + (opts.phase || 0)) * 0.42;
+        dorsalPivot.rotation.z = flap;
+        analPivot.rotation.z = -flap;
+
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.06) * rad;
+        const z2 = cz + Math.sin(ang + 0.06) * rad;
+        const y = Math.min(-4.2, Math.max((biome ? biome.getHeight(x, z) : -35) + 4.2, baseY + Math.sin(time * 0.55) * 2.2));
+        _a.set(x, y, z);
+        _b.set(x2, y, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        // Солнечное прогревание — лёгкий крен боком, как у настоящей Mola mola
+        group.rotateZ(Math.sin(time * 0.35 + (opts.phase || 0)) * 0.32);
+
+        const cleanClients = ctx ? ctx.cleanClients : null;
+        if (cleanClients && y > -38) cleanClients.push(group.position);
+      }
+    };
+  }
+
+  function makeMarineIguana(scene, biome, opts) {
+    opts = opts || {};
+    const sz = opts.scale || 1.15;
+    const group = new T.Group();
+    const parts = [];
+
+    // Мощное приземистое тело вулканической ящерицы
+    const torso = new T.SphereGeometry(0.24 * sz, 10, 8);
+    torso.scale(0.95, 0.72, 2.35);
+    OC.geoPrep(torso);
+    OC.paint(torso, (x, y, z, c) => {
+      const band = Math.sin(z * 9.0) * 0.5 + 0.5;
+      c.set(y > 0.02 ? 0x1c1e20 : 0x3b403c).lerp(new T.Color(0x28645c), band * 0.38);
+    });
+    parts.push(torso);
+
+    // Тупая морда для соскабливания водорослей и соляная «корона» на голове
+    const head = new T.SphereGeometry(0.18 * sz, 9, 7);
+    head.scale(0.92, 0.76, 1.18);
+    OC.geoPrep(head);
+    OC.paint(head, (x, y, z, c) => c.set(y > 0.08 * sz ? 0xd8dcd4 : 0x222526));
+    OC.xform(head, { p: [0, 0.06 * sz, 0.62 * sz] });
+    parts.push(head);
+
+    // Зубчатый спинной гребень шипов
+    for (let i = 0; i < 8; i++) {
+      const spH = (0.13 - Math.abs(i - 3) * 0.015) * sz;
+      const sp = new T.ConeGeometry(0.032 * sz, spH, 4);
+      OC.geoPrep(sp);
+      OC.paint(sp, i < 3 ? 0x3f8c7a : 0x26292c);
+      OC.xform(sp, { r: [-0.25, 0, 0], p: [0, 0.19 * sz, (0.48 - i * 0.14) * sz] });
+      parts.push(sp);
+    }
+
+    // Четыре когтистые лапы
+    for (const sx of [-1, 1]) {
+      for (const fz of [0.32, -0.28]) {
+        const limb = new T.CylinderGeometry(0.042 * sz, 0.032 * sz, 0.34 * sz, 5);
+        OC.geoPrep(limb);
+        OC.paint(limb, 0x1e2022);
+        OC.xform(limb, { r: [0.35, sx * 0.4, sx * 1.05], p: [sx * 0.24 * sz, -0.06 * sz, fz * sz] });
+        parts.push(limb);
+      }
+    }
+
+    group.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+    // Сильный плоский плавательный хвост из двух сегментов
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0.02 * sz, -0.52 * sz);
+    const tailGeo = new T.ConeGeometry(0.11 * sz, 1.15 * sz, 6);
+    tailGeo.scale(0.45, 1.0, 0.9);
+    tailGeo.rotateX(-Math.PI / 2);
+    OC.geoPrep(tailGeo);
+    OC.paint(tailGeo, (x, y, z, c) => c.set(z < -0.5 * sz ? 0x151719 : 0x2a312f));
+    const tailM = new T.Mesh(tailGeo, creatureMat);
+    tailM.position.set(0, 0, -0.52 * sz);
+    tailPivot.add(tailM);
+    group.add(tailPivot);
+
+    group.userData.key = 'marine_iguana';
+    scene.add(group);
+
+    if (opts.preview) {
+      return { key: 'marine_iguana', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || -145, cz = opts.cz || -55, rad = opts.r || 16;
+    let ang = Math.random() * 6.28;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'marine_iguana',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 1.45) / rad) * dt;
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.08) * rad;
+        const z2 = cz + Math.sin(ang + 0.08) * rad;
+        const fl = biome ? biome.getHeight(x, z) : -35;
+        // Чередует пастьбу у дна с подплывом к поверхности за воздухом
+        const cycle = Math.sin(time * 0.25 + (opts.phase || 0));
+        const targetY = cycle > 0.45 ? -1.4 : Math.max(fl + 0.42, (opts.y || -6.5) + Math.sin(time * 0.9) * 1.1);
+        const y = Math.min(-0.65, targetY);
+        const y2 = Math.min(-0.65, Math.max((biome ? biome.getHeight(x2, z2) : -35) + 0.42, y));
+        _a.set(x, y, z);
+        _b.set(x2, y2, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        tailPivot.rotation.y = Math.sin(time * 7.2 + (opts.phase || 0)) * 0.48;
+      }
+    };
+  }
+
+  function makeGalapagosPenguin(scene, biome, opts, emitSplash) {
+    opts = opts || {};
+    const sz = opts.scale || 1.05;
+    const group = new T.Group();
+    const parts = [];
+
+    const body = new T.SphereGeometry(0.21 * sz, 12, 9);
+    body.scale(0.86, 0.82, 2.05);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      // Белое брюхо, чёрная спинка и белая дуга вдоль боков шеи
+      const horseshoe = Math.abs(x) > 0.1 * sz && y > -0.02 && y < 0.09 * sz && z > 0.06 * sz;
+      if (horseshoe || y < -0.02 * sz) c.set(0xf2f6f9);
+      else c.set(0x161b22);
+    });
+    parts.push(body);
+
+    const head = new T.SphereGeometry(0.145 * sz, 10, 8);
+    head.scale(0.88, 0.9, 1.05);
+    OC.geoPrep(head);
+    OC.paint(head, (x, y, z, c) => {
+      if (y < -0.04 * sz || (Math.abs(x) > 0.08 * sz && y < 0.04 * sz)) c.set(0xf2f6f9);
+      else c.set(0x14181e);
+    });
+    OC.xform(head, { p: [0, 0.03 * sz, 0.44 * sz] });
+    parts.push(head);
+
+    const beak = new T.ConeGeometry(0.042 * sz, 0.16 * sz, 6);
+    beak.rotateX(Math.PI / 2);
+    OC.geoPrep(beak);
+    OC.paint(beak, (x, y, z, c) => c.set(y < 0 ? 0xf29688 : 0x202226));
+    OC.xform(beak, { p: [0, 0.01 * sz, 0.61 * sz] });
+    parts.push(beak);
+
+    group.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+    const wings = [];
+    for (const s of [-1, 1]) {
+      const wPivot = new T.Group();
+      wPivot.position.set(s * 0.17 * sz, 0.01 * sz, 0.16 * sz);
+      const wingGeo = new T.ConeGeometry(0.075 * sz, 0.34 * sz, 5);
+      wingGeo.scale(0.32, 1.0, 0.88);
+      wingGeo.rotateZ(-s * Math.PI / 2);
+      OC.geoPrep(wingGeo);
+      OC.paint(wingGeo, 0x1a2028);
+      const wm = new T.Mesh(wingGeo, creatureMat);
+      wm.position.set(s * 0.16 * sz, 0, -0.05 * sz);
+      wPivot.add(wm);
+      group.add(wPivot);
+      wings.push(wPivot);
+    }
+
+    group.userData.key = 'galapagos_penguin';
+    scene.add(group);
+
+    if (opts.preview) {
+      return { key: 'galapagos_penguin', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 0, cz = opts.cz || 0, rad = opts.r || 19, baseY = opts.y || -4.5;
+    let ang = Math.random() * 6.28;
+    let prevY = baseY;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'galapagos_penguin',
+      isPorpoising: () => group.position.y > -0.15,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 560) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 4.8) / rad) * dt;
+        const waveY = Math.sin(time * 1.15 + (opts.phase || 0));
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.08) * rad;
+        const z2 = cz + Math.sin(ang + 0.08) * rad;
+        const y = Math.max((biome ? biome.getHeight(x, z) : -35) + 0.8, baseY + waveY * 4.2 + (waveY > 0.72 ? 2.2 : 0));
+        const y2 = Math.max((biome ? biome.getHeight(x2, z2) : -35) + 0.8, baseY + Math.sin((time + 0.08) * 1.15 + (opts.phase || 0)) * 4.2);
+        _a.set(x, y, z);
+        _b.set(x2, y2, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        const flap = Math.sin(time * 9.5 + (opts.phase || 0)) * 0.62;
+        wings[0].rotation.z = flap;
+        wings[1].rotation.z = -flap;
+        if (((prevY < 0 && y >= 0) || (prevY >= 0 && y < 0)) && emitSplash) emitSplash(_a, 0.35);
+        prevY = y;
+      }
+    };
+  }
+
+  function makeOrca(scene, biome, opts, emitSplash) {
+    opts = opts || {};
+    const len = opts.len || 7.2;
+    const group = new T.Group();
+    const parts = [];
+
+    const body = new T.SphereGeometry(1, 20, 14);
+    body.scale(len * 0.145, len * 0.16, len * 0.5);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = z / (len * 0.5);
+      const taper = t < 0 ? (1 - 0.72 * Math.pow(-t, 1.35)) : (1 - 0.35 * Math.pow(t, 2.2));
+      bp.setXYZ(i, x * taper, y * taper, z);
+    }
+    body.computeVertexNormals();
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      const zn = z / (len * 0.5);
+      // Классическая чёрно-белая расцветка косатки: белое глазное пятно, серое седло, белое брюхо
+      const eyePatch = Math.abs(x) > len * 0.055 && y > 0.02 && zn > 0.42 && zn < 0.68;
+      const saddle = y > len * 0.06 && zn < 0.05 && zn > -0.22;
+      const belly = y < -len * 0.02 || (zn < -0.15 && zn > -0.5 && Math.abs(x) > len * 0.05 && y < len * 0.04);
+      if (eyePatch || belly) c.set(0xf5f9fc);
+      else if (saddle) c.set(0x7c868f);
+      else c.set(0x11151a);
+    });
+    parts.push(body);
+
+    // Высокий саблевидный спинной плавник косатки (до 1.4 м)
+    const dor = new T.ConeGeometry(len * 0.075, len * 0.24, 5);
+    dor.scale(0.24, 1.0, 1.05);
+    OC.geoPrep(dor);
+    OC.paint(dor, 0x12161b);
+    OC.xform(dor, { r: [-0.22, 0, 0], p: [0, len * 0.21, len * 0.04] });
+    parts.push(dor);
+
+    // Округлые грудные ласты-вёсла
+    const pec = new T.SphereGeometry(len * 0.09, 9, 7);
+    pec.scale(0.18, 0.88, 1.08);
+    OC.geoPrep(pec);
+    OC.paint(pec, 0x12161b);
+    for (const s of [-1, 1]) {
+      const pm = pec.clone();
+      OC.xform(pm, { r: [0.15, s * 0.35, -s * 1.15], p: [s * len * 0.14, -len * 0.05, len * 0.16] });
+      parts.push(pm);
+    }
+
+    group.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+    // Горизонтальная хвостовая лопасть
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -len * 0.45);
+    const fluke = new T.ConeGeometry(len * 0.16, len * 0.18, 5);
+    fluke.scale(1.85, 0.18, 1.0);
+    fluke.rotateX(-Math.PI / 2);
+    OC.geoPrep(fluke);
+    OC.paint(fluke, (x, y, z, c) => c.set(y < 0 ? 0xeef4f8 : 0x11151a));
+    const flM = new T.Mesh(fluke, creatureMat);
+    flM.position.set(0, 0, -len * 0.08);
+    tailPivot.add(flM);
+    group.add(tailPivot);
+
+    group.userData.key = 'orca';
+    scene.add(group);
+
+    if (opts.preview) {
+      return { key: 'orca', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 180, cz = opts.cz || -120, rad = opts.r || 68, baseY = opts.y || -18;
+    let ang = Math.random() * 6.28;
+    let prevY = baseY;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'orca',
+      isActivePredator: true,
+      isPorpoising: () => group.position.y > -0.25,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 760) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 5.4) / rad) * dt;
+        const surfWave = Math.sin(time * 0.34 + (opts.phase || 0));
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.05) * rad;
+        const z2 = cz + Math.sin(ang + 0.05) * rad;
+        const y = Math.max((biome ? biome.getHeight(x, z) : -35) + 4.5, baseY + surfWave * (Math.abs(baseY) + 3.4));
+        const y2 = Math.max((biome ? biome.getHeight(x2, z2) : -35) + 4.5, baseY + Math.sin((time + 0.08) * 0.34 + (opts.phase || 0)) * (Math.abs(baseY) + 3.4));
+        _a.set(x, y, z);
+        _b.set(x2, y2, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        tailPivot.rotation.x = Math.sin(time * 3.8 + (opts.phase || 0)) * 0.35;
+        if (((prevY < 0 && y >= 0) || (prevY >= 0 && y < 0)) && emitSplash) emitSplash(_a, 0.72);
+        prevY = y;
+      }
+    };
+  }
+
+  function makeMobulaRay(scene, biome, opts, emitSplash) {
+    opts = opts || {};
+    const preview = !!opts.preview;
+    const count = preview ? 1 : (opts.count || 5);
+    const group = new T.Group();
+    const rays = [];
+
+    function buildSingleMobula() {
+      const rRoot = new T.Group();
+      const parts = [];
+
+      const disk = new T.SphereGeometry(0.65, 12, 8);
+      disk.scale(0.82, 0.14, 0.96);
+      OC.geoPrep(disk);
+      OC.paint(disk, (x, y, z, c) => c.set(y > 0.0 ? 0x1e2b42 : 0xedf3f8));
+      parts.push(disk);
+
+      // Головные плавники-рожки (Mobula munkiana)
+      for (const s of [-1, 1]) {
+        const lobe = new T.ConeGeometry(0.06, 0.32, 5);
+        lobe.rotateX(Math.PI / 2);
+        OC.geoPrep(lobe);
+        OC.paint(lobe, 0x253550);
+        OC.xform(lobe, { r: [0, s * 0.2, 0], p: [s * 0.18, 0, 0.62] });
+        parts.push(lobe);
+      }
+
+      const tail = new T.ConeGeometry(0.032, 0.95, 5);
+      tail.rotateX(-Math.PI / 2);
+      OC.geoPrep(tail);
+      OC.paint(tail, 0x1b2638);
+      OC.xform(tail, { p: [0, 0, -0.95] });
+      parts.push(tail);
+
+      rRoot.add(new T.Mesh(OC.mergeGeometries(parts), creatureMat));
+
+      const wings = [];
+      for (const s of [-1, 1]) {
+        const wP = new T.Group();
+        wP.position.set(s * 0.42, 0, 0.05);
+        const wG = new T.ConeGeometry(0.38, 1.08, 4);
+        wG.scale(1.0, 0.14, 0.95);
+        wG.rotateZ(-s * Math.PI / 2);
+        OC.geoPrep(wG);
+        OC.paint(wG, (x, y, z, c) => c.set(y > 0.0 ? 0x24334d : 0xf0f6fa));
+        const wm = new T.Mesh(wG, creatureMat);
+        wm.position.set(s * 0.48, 0, -0.08);
+        wP.add(wm);
+        rRoot.add(wP);
+        wings.push(wP);
+      }
+      rRoot.userData.key = 'mobula_ray';
+      return { root: rRoot, wingL: wings[0], wingR: wings[1], phase: Math.random() * 6.28 };
+    }
+
+    for (let i = 0; i < count; i++) {
+      const m = buildSingleMobula();
+      const row = Math.ceil(i / 2);
+      const side = i === 0 ? 0 : (i % 2 === 1 ? -1 : 1);
+      m.ox = side * row * 2.4;
+      m.oz = -row * 1.9;
+      m.oy = (i % 2 === 0 ? 0.35 : -0.35);
+      group.add(m.root);
+      rays.push(m);
+    }
+
+    group.userData.key = 'mobula_ray';
+    scene.add(group);
+
+    if (preview) {
+      rays[0].wingL.rotation.z = -0.18;
+      rays[0].wingR.rotation.z = 0.18;
+      return { key: 'mobula_ray', getPosition: () => group.position, update() {} };
+    }
+
+    const cx = opts.cx || 65, cz = opts.cz || -38, rad = opts.r || 42, baseY = opts.y || -18;
+    let ang = Math.random() * 6.28;
+    let prevY = baseY;
+    const _a = new T.Vector3(), _b = new T.Vector3();
+
+    return {
+      key: 'mobula_ray',
+      isPorpoising: () => group.position.y > -0.2,
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 680) { group.visible = false; return; }
+        group.visible = true;
+        ang += ((opts.speed || 4.2) / rad) * dt;
+        const x = cx + Math.cos(ang) * rad;
+        const z = cz + Math.sin(ang) * rad;
+        const x2 = cx + Math.cos(ang + 0.06) * rad;
+        const z2 = cz + Math.sin(ang + 0.06) * rad;
+        const y = Math.max((biome ? biome.getHeight(x, z) : -35) + 3.2, baseY + Math.sin(time * 0.48) * 5.2);
+        const y2 = Math.max((biome ? biome.getHeight(x2, z2) : -35) + 3.2, baseY + Math.sin((time + 0.06) * 0.48) * 5.2);
+        _a.set(x, y, z);
+        _b.set(x2, y2, z2);
+        group.position.copy(_a);
+        group.lookAt(_b);
+        for (let i = 0; i < rays.length; i++) {
+          const r = rays[i];
+          r.root.position.set(r.ox, r.oy + Math.sin(time * 1.4 + i) * 0.25, r.oz);
+          const fl = Math.sin(time * 3.1 + r.phase) * 0.36;
+          r.wingL.rotation.z = fl;
+          r.wingR.rotation.z = -fl;
+        }
+        if (((prevY < 0 && y >= 0) || (prevY >= 0 && y < 0)) && emitSplash) emitSplash(_a, 0.42);
+        prevY = y;
+      }
+    };
+  }
+
+  function makeDarwinsArch(scene, biome, opts) {
+    opts = opts || {};
+    const ax = opts.x || 0, az = opts.z || 0;
+    const preview = !!opts.preview;
+    const group = new T.Group();
+    const parts = [];
+
+    const cBasalt = new T.Color(0x1f1e22);
+    const cTuff = new T.Color(0x3a3734);
+    const cZone = new T.Color(0x526444);
+
+    // Монументальная сводчатая вулканическая арка Дарвина из базальтовых сегментов (свободный проход под сводом)
+    const spanX = 48;
+    const nSeg = 18;
+    for (let i = 0; i <= nSeg; i++) {
+      const u = i / nSeg;
+      const a = u * Math.PI;
+      const sx = -Math.cos(a) * (spanX * 0.5);
+      const sy = -22.5 + Math.sin(a) * 28.5; // от -22.5 м до +6.0 м над водой
+      const thick = 3.8 + (1 - Math.sin(a)) * 2.6 + Math.sin(i * 1.9) * 0.5;
+      const seg = new T.DodecahedronGeometry(thick, 1);
+      seg.scale(1.15, 1.32, 1.38);
+      const sp = seg.attributes.position;
+      for (let v = 0; v < sp.count; v++) {
+        const vx = sp.getX(v), vy = sp.getY(v), vz = sp.getZ(v);
+        const rug = 1 + 0.16 * Math.sin(vx * 1.2 + vy * 0.9) * Math.cos(vz * 1.1);
+        sp.setXYZ(v, vx * rug, vy * rug, vz * rug);
+      }
+      seg.computeVertexNormals();
+      OC.geoPrep(seg);
+      OC.paint(seg, (px, py, pz, col) => {
+        const wy = py + sy;
+        col.copy(cBasalt).lerp(cTuff, wy > -2.5 ? 0.55 : 0.18);
+        if (wy > -3.5 && wy < 1.2) col.lerp(cZone, 0.32);
+      });
+      OC.xform(seg, { r: [i * 0.25, i * 0.4, 0], p: [sx, sy, Math.sin(i * 0.9) * 1.1] });
+      parts.push(seg);
+    }
+
+    const archGeo = OC.mergeGeometries(parts);
+    const archMesh = new T.Mesh(archGeo, creatureMat);
+    group.add(archMesh);
+    group.userData.key = 'darwins_arch';
+    if (!preview) group.position.set(ax, 0, az);
+    else group.scale.setScalar(0.08);
+    scene.add(group);
+
+    return {
+      key: 'darwins_arch',
+      getPosition: () => group.position,
+      update() {}
+    };
+  }
+
+  function makeFumaroleVents(scene, biome, opts) {
+    opts = opts || {};
+    const vx = opts.x || -140, vz = opts.z || -80;
+    const vy = opts.y !== undefined ? opts.y : (biome ? biome.getHeight(vx, vz) : -12) + 0.8;
+    const N = 95;
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(N * 3);
+    const ph = new Float32Array(N);
+    const rng = OC.mulberry32(Math.abs(Math.round(vx * 17 + vz * 31)) + 77);
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = (rng() - 0.5) * 4.5;
+      pos[i * 3 + 1] = rng() * 14.0;
+      pos[i * 3 + 2] = (rng() - 0.5) * 4.5;
+      ph[i] = rng() * 6.28;
+    }
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    const mat = new T.PointsMaterial({
+      color: 0xdff8ff,
+      size: 0.42,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false
+    });
+    const pts = new T.Points(geo, mat);
+    pts.position.set(vx, vy, vz);
+    pts.userData.key = 'volcanic_fumarole';
+    scene.add(pts);
+
+    return {
+      key: 'volcanic_fumarole',
+      getPosition: () => pts.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(vx - camPos.x, vz - camPos.z) > 480) { pts.visible = false; return; }
+        pts.visible = true;
+        const arr = geo.attributes.position.array;
+        for (let i = 0; i < N; i++) {
+          let y = arr[i * 3 + 1] + dt * (2.6 + (i % 5) * 0.45);
+          if (y > 14.0 || vy + y > -0.4) y = 0.05;
+          arr[i * 3 + 1] = y;
+          arr[i * 3] += Math.sin(time * 2.5 + ph[i]) * dt * 0.22;
+        }
+        geo.attributes.position.needsUpdate = true;
+      }
+    };
+  }
+
   /* ---------- Сборка фауны по экологическому плану биома (biome.faunaPlan) ---------- */
   function disposeFaunaGroup(scene) {
     if (!faunaGroup) return;
@@ -5146,6 +5776,51 @@ window.OC = window.OC || {};
         sonarTargets.push(bro);
       }
 
+      for (const sf of (plan.sunfishes || [])) {
+        const sfo = makeOceanSunfish(faunaGroup, biome, sf);
+        agents.push(sfo);
+        sonarTargets.push(sfo);
+      }
+
+      for (const ig of (plan.marineIguanas || [])) {
+        const igo = makeMarineIguana(faunaGroup, biome, ig);
+        agents.push(igo);
+        sonarTargets.push(igo);
+      }
+
+      for (const pg of (plan.penguins || [])) {
+        const pgo = makeGalapagosPenguin(faunaGroup, biome, pg, emitSplash);
+        agents.push(pgo);
+        surfaceJumpers.push(pgo);
+        sonarTargets.push(pgo);
+      }
+
+      for (const oc of (plan.orcas || [])) {
+        const oco = makeOrca(faunaGroup, biome, oc, emitSplash);
+        agents.push(oco);
+        predatorAgents.push(oco);
+        surfaceJumpers.push(oco);
+        sonarTargets.push(oco);
+      }
+
+      for (const mb of (plan.mobulas || [])) {
+        const mbo = makeMobulaRay(faunaGroup, biome, mb, emitSplash);
+        agents.push(mbo);
+        surfaceJumpers.push(mbo);
+        sonarTargets.push(mbo);
+      }
+
+      for (const da of (plan.darwinsArches || [])) {
+        const dao = makeDarwinsArch(faunaGroup, biome, da);
+        agents.push(dao);
+        sonarTargets.push(dao);
+      }
+
+      for (const fm of (plan.fumaroles || [])) {
+        const fmo = makeFumaroleVents(faunaGroup, biome, fm);
+        agents.push(fmo);
+      }
+
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
@@ -5289,7 +5964,7 @@ window.OC = window.OC || {};
           }
           if (!ev) {
             for (let i = 0; i < surfaceJumpers.length; i++) {
-              if (surfaceJumpers[i].isPorpoising()) {
+              if (surfaceJumpers[i].isPorpoising && surfaceJumpers[i].isPorpoising()) {
                 const p = surfaceJumpers[i].getPosition();
                 if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 190) { ev = 'porpoising'; break; }
               }
@@ -5472,6 +6147,8 @@ window.OC = window.OC || {};
               c.setHex(0x3a3248).lerp(new T.Color(0x8cd2d8), Math.sin(x * 0.42 + z * 0.42) * 0.32 + 0.35);
             } else if (bId === 'cenote_caves') {
               c.setHex(0x8e836e).lerp(new T.Color(0xcab999), Math.sin(x * 0.44 + z * 0.4) * 0.38 + 0.4);
+            } else if (bId === 'galapagos_upwelling') {
+              c.setHex(0x232228).lerp(new T.Color(0x4c5840), Math.sin(x * 0.4 + z * 0.4) * 0.3 + 0.3);
             } else {
               c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
             }
@@ -5494,7 +6171,7 @@ window.OC = window.OC || {};
           makeTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, size: 1 });
         } else if (key === 'dugong') {
           makeDugong(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
-        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland') {
+        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark') {
           makeShark(tmpGroup, dummyBiome, {
             cx: 0, cz: 0, y: 0, r: 10, speed: 2,
             speciesKey: key, whaleShark: key === 'shark_whale'
@@ -5527,11 +6204,11 @@ window.OC = window.OC || {};
           makeGoldenJelly(tmpGroup, { cx: 0, cz: 0, y: 0, scale: 1 });
         } else if (key === 'research_vessel') {
           const bId = biome ? biome.id : 'great_barrier_reef';
-          const vVariant = bId === 'arctic_sea' ? 'polar' : bId === 'kelp_forest' ? 'coastal' : bId === 'wreck_atoll' ? 'expedition' : 'tropical';
+          const vVariant = bId === 'arctic_sea' ? 'polar' : bId === 'kelp_forest' ? 'coastal' : bId === 'wreck_atoll' ? 'expedition' : (bId === 'galapagos_upwelling' ? 'galapagos' : 'tropical');
           makeResearchVessel(tmpGroup, dummyBiome, { x: 0, z: 0, yaw: 0, variant: vVariant, preview: true });
         } else if (key === 'seabird') {
           const bId = biome ? biome.id : 'great_barrier_reef';
-          const sVariant = bId === 'arctic_sea' ? 'arctic' : bId === 'kelp_forest' ? 'albatross' : 'tropical';
+          const sVariant = bId === 'arctic_sea' ? 'arctic' : bId === 'kelp_forest' ? 'albatross' : (bId === 'galapagos_upwelling' ? 'booby' : 'tropical');
           makeSeabirdFlock(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, singlePreview: true, variant: sVariant });
         } else if (key === 'dolphin') {
           const bId = biome ? biome.id : 'great_barrier_reef';
@@ -5561,6 +6238,18 @@ window.OC = window.OC || {};
           makeCaveRemipede(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'blind_brotula') {
           makeBlindBrotula(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'ocean_sunfish') {
+          makeOceanSunfish(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'marine_iguana') {
+          makeMarineIguana(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'galapagos_penguin') {
+          makeGalapagosPenguin(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'orca') {
+          makeOrca(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'mobula_ray') {
+          makeMobulaRay(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'darwins_arch') {
+          makeDarwinsArch(tmpGroup, dummyBiome, { preview: true });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;

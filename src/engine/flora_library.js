@@ -1705,6 +1705,131 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
 
+  /* ---- 46. Вулканическая CO2-фумарола (Рока Редонда) ---- */
+  function buildVolcanicFumarole(rng) {
+    const list = [];
+    const cBasalt = COL(0x1f1e24);
+    const cRust = COL(0x523726);
+    const cSulfur = COL(0xdcb428);
+
+    const nCones = 2 + Math.floor(rng() * 2);
+    for (let i = 0; i < nCones; i++) {
+      const h = i === 0 ? OC.lerp(1.4, 2.3, rng()) : OC.lerp(0.7, 1.3, rng());
+      const rBot = i === 0 ? OC.lerp(0.75, 1.05, rng()) : OC.lerp(0.38, 0.58, rng());
+      const rTop = rBot * 0.34;
+      const ox = i === 0 ? 0 : Math.cos(i * 2.2) * 0.65;
+      const oz = i === 0 ? 0 : Math.sin(i * 2.2) * 0.65;
+      const vent = new T.CylinderGeometry(rTop, rBot, h, 8, 4, true);
+      const vp = vent.attributes.position;
+      for (let k = 0; k < vp.count; k++) {
+        const vx = vp.getX(k), vy = vp.getY(k), vz = vp.getZ(k);
+        const rug = 1 + 0.22 * Math.sin(Math.atan2(vz, vx) * 4 + vy * 3.1);
+        vp.setXYZ(k, vx * rug, vy, vz * rug);
+      }
+      OC.geoPrep(vent);
+      vent.computeVertexNormals();
+      OC.paint(vent, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBasalt).lerp(cRust, OC.smoothstep(0.35, 0.78, u)).lerp(cSulfur, OC.smoothstep(0.76, 1.0, u));
+      });
+      OC.xform(vent, { p: [ox, h * 0.45, oz] });
+      OC.withSway(vent, () => 0);
+      list.push(vent);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 47. Неоново-оранжевый коралл-чашечка (Tubastraea coccinea) ---- */
+  function buildTubastraeaCoral(rng) {
+    const list = [];
+    const cBase = COL(0x7c2a12);
+    const cOrange = COL(0xf46818);
+    const cGold = COL(0xffc938);
+
+    const mound = OC.geoPrep(new T.SphereGeometry(0.42, 8, 6));
+    mound.scale(1.15, 0.62, 1.15);
+    OC.paint(mound, cBase);
+    OC.xform(mound, { p: [0, 0.14, 0] });
+    OC.withSway(mound, () => 0);
+    list.push(mound);
+
+    const nCups = 9;
+    for (let i = 0; i < nCups; i++) {
+      const a = (i / nCups) * Math.PI * 2 + rng() * 0.4;
+      const r = i === 0 ? 0.04 : OC.lerp(0.18, 0.36, rng());
+      const cupH = OC.lerp(0.18, 0.34, rng());
+      const cup = OC.geoPrep(new T.CylinderGeometry(0.11, 0.055, cupH, 7));
+      OC.paint(cup, (x, y, z, col) => {
+        const u = OC.clamp((y + cupH * 0.5) / cupH, 0, 1);
+        col.copy(cBase).lerp(cOrange, OC.smoothstep(0.15, 0.72, u)).lerp(cGold, OC.smoothstep(0.76, 1.0, u));
+      });
+      const tilt = i === 0 ? 0 : 0.48;
+      OC.xform(cup, { r: [Math.sin(a) * tilt, 0, -Math.cos(a) * tilt], p: [Math.cos(a) * r, 0.28, Math.sin(a) * r] });
+      OC.withSway(cup, () => 0);
+      list.push(cup);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 48. Вулканический морской жёлудь (Megabalanus galapaganus) ---- */
+  function buildGalapagosBarnacle(rng) {
+    const list = [];
+    const cShell = COL(0xdfd3c8);
+    const cRidge = COL(0x9b5a68);
+    const cDark = COL(0x3a2a30);
+
+    const nShells = 6;
+    for (let i = 0; i < nShells; i++) {
+      const a = i === 0 ? 0 : (i / (nShells - 1)) * Math.PI * 2 + rng() * 0.35;
+      const dist = i === 0 ? 0 : OC.lerp(0.24, 0.42, rng());
+      const h = i === 0 ? OC.lerp(0.55, 0.82, rng()) : OC.lerp(0.28, 0.52, rng());
+      const rB = i === 0 ? 0.28 : OC.lerp(0.14, 0.22, rng());
+      const cone = OC.geoPrep(new T.CylinderGeometry(rB * 0.46, rB, h, 7));
+      OC.paint(cone, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        const rib = Math.sin(Math.atan2(z, x) * 6.0);
+        col.copy(cShell).lerp(cRidge, rib > 0.2 ? 0.55 : 0.15).lerp(cDark, u > 0.86 ? 0.75 : 0);
+      });
+      OC.xform(cone, { r: [(rng() - 0.5) * 0.22, rng() * 2, (rng() - 0.5) * 0.22], p: [Math.cos(a) * dist, h * 0.44, Math.sin(a) * dist] });
+      OC.withSway(cone, () => 0);
+      list.push(cone);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 49. Лавовый ковёр морского салата Ульва (Ulva lobata) ---- */
+  function buildUlvaTurf(rng) {
+    const list = [];
+    const cGreen = COL(0x3cb846);
+    const cBright = COL(0x76e054);
+    const cRedTurf = COL(0x8c243a);
+    const isRed = rng() < 0.28;
+
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + rng() * 0.4;
+      const dist = OC.lerp(0.06, 0.36, rng());
+      const bw = OC.lerp(0.24, 0.42, rng());
+      const bh = OC.lerp(0.38, 0.72, rng());
+      const leaf = OC.geoPrep(new T.PlaneGeometry(bw, bh, 3, 4));
+      const lp = leaf.attributes.position;
+      for (let k = 0; k < lp.count; k++) {
+        const lx = lp.getX(k), ly = lp.getY(k);
+        const ruffle = Math.sin(ly * 7.5 + i * 1.3) * 0.08 + Math.cos(lx * 8.0) * 0.05;
+        lp.setZ(k, ruffle);
+      }
+      leaf.computeVertexNormals();
+      OC.paint(leaf, (x, y, z, col) => {
+        const u = OC.clamp((y + bh * 0.5) / bh, 0, 1);
+        if (isRed) col.copy(cRedTurf).offsetHSL(0, 0, u * 0.14);
+        else col.copy(cGreen).lerp(cBright, u);
+      });
+      OC.xform(leaf, { r: [0.32 * (rng() - 0.3), a, 0.25], p: [Math.cos(a) * dist, bh * 0.44, Math.sin(a) * dist] });
+      OC.withSway(leaf, (x, y) => Math.max(0, y) * 0.65);
+      list.push(leaf);
+    }
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   let previewCache = null;
 
@@ -1951,6 +2076,22 @@ window.OC = window.OC || {};
         cenote_vine: {
           mat: matSoft, maxInstances: 320, cullDist: 520,
           geos: [buildCenoteVine(rng), buildCenoteVine(rng)]
+        },
+        volcanic_fumarole: {
+          mat: matChimney, maxInstances: 260, cullDist: 560,
+          geos: [buildVolcanicFumarole(rng), buildVolcanicFumarole(rng)]
+        },
+        tubastraea_coral: {
+          mat: matCoralRigid, maxInstances: 1000, cullDist: 440,
+          geos: [buildTubastraeaCoral(rng), buildTubastraeaCoral(rng)]
+        },
+        galapagos_barnacle: {
+          mat: matClam, maxInstances: 900, cullDist: 400,
+          geos: [buildGalapagosBarnacle(rng), buildGalapagosBarnacle(rng)]
+        },
+        ulva_turf: {
+          mat: matPlant, maxInstances: 1400, cullDist: 420,
+          geos: [buildUlvaTurf(rng), buildUlvaTurf(rng)]
         }
       };
 

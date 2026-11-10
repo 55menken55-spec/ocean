@@ -338,6 +338,44 @@ window.OC = window.OC || {};
       landmarkId: 'el_pit_depth',
       goal: 1,
       progress: (ctx) => (ctx.depthM >= 38 && ctx.hasPhoto(['blind_brotula', 'blind_tetra', 'cave_remipede'])) ? 1 : 0
+    },
+
+    // 9. Галапагосский апвеллинг и Арка Дарвина (Восточная Пацифика, 0–132 м)
+    {
+      id: 'gal_atlas_6',
+      biomeId: 'galapagos_upwelling',
+      title: 'Дарвиновский натуралист',
+      desc: 'Откройте 6 эндемиков, вулканических объектов или пелагических хищников Галапагосов в Атласе.',
+      landmarkId: 'darwins_arch',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'gal_iguana_penguin',
+      biomeId: 'galapagos_upwelling',
+      title: 'Дракон и пингвин экватора',
+      desc: 'Исследуйте Лавовую бухту (lava_shallows) и сфотографируйте (P) морскую игуану, галапагосского пингвина или фумаролу.',
+      landmarkId: 'lava_cove',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('lava_shallows') && ctx.hasPhoto(['marine_iguana', 'galapagos_penguin', 'volcanic_fumarole']) ? 1 : 0
+    },
+    {
+      id: 'gal_sunfish_mobula',
+      biomeId: 'galapagos_upwelling',
+      title: 'Гиганты течения Кромвеля',
+      desc: 'Посетите Стену апвеллинга (upwelling_wall) и сфотографируйте (P) луну-рыбу Mola mola, ската мобула или китовую акулу.',
+      landmarkId: 'sunfish_cleaning',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('upwelling_wall') && ctx.hasPhoto(['ocean_sunfish', 'mobula_ray', 'shark_whale']) ? 1 : 0
+    },
+    {
+      id: 'gal_orca_arch',
+      biomeId: 'galapagos_upwelling',
+      title: 'Косатки и Арка Дарвина',
+      desc: 'Отсканируйте сонаром (G) или снимите (P) косатку, галапагосскую акулу, акулу-молота или Арку Дарвина.',
+      landmarkId: 'wolf_orca_shelf',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['orca', 'galapagos_shark', 'shark_hammerhead', 'darwins_arch']) ? 1 : 0
     }
   ];
 
