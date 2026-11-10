@@ -46,9 +46,15 @@ window.OC = window.OC || {};
   const teleDepth = document.getElementById('tele-depth');
   const teleTemp = document.getElementById('tele-temp');
   const teleHeading = document.getElementById('tele-heading');
+  const teleWeatherSep = document.getElementById('tele-weather-sep');
+  const teleWeatherWrap = document.getElementById('tele-weather-wrap');
+  const teleWeather = document.getElementById('tele-weather');
   const teleWpSep = document.getElementById('tele-wp-sep');
   const teleWpWrap = document.getElementById('tele-wp-wrap');
   const teleWp = document.getElementById('tele-wp');
+  const weatherBtnsEl = document.getElementById('weather-btns');
+  const weatherGroupEl = document.getElementById('weather-group');
+  const lensCanvas = document.getElementById('lens-fx');
 
   const camHud = document.getElementById('cam-hud');
   const camTargetEl = document.getElementById('cam-target');
@@ -89,8 +95,63 @@ window.OC = window.OC || {};
   let journalTab = 'missions';
   let lastEvalCtx = { zoneId: '', depthM: 0, currentKnots: 0, dayW: 1.0, flashOn: false };
   let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
+  let lensDirty = false;
   const _fwd = new T.Vector3();
   const _zeroNdc = new T.Vector2(0, 0);
+
+  // Капли воды на стекле маски при выныривании или шторме (fixed pool, без GC)
+  const LENS_DROPS = (() => {
+    const rng = OC.mulberry32(4242);
+    const arr = [];
+    for (let i = 0; i < 34; i++) {
+      arr.push({
+        x: rng(),
+        y: rng(),
+        r: OC.lerp(4.5, 13.5, rng()),
+        vy: OC.lerp(0.014, 0.048, rng()),
+        drift: OC.lerp(-0.005, 0.005, rng())
+      });
+    }
+    return arr;
+  })();
+
+  function updateLensDroplets(dt, camPos, wState, biome) {
+    if (!lensCanvas) return;
+    const ctx = lensCanvas.getContext('2d');
+    if (!ctx) return;
+    const strength = (biome && biome.noSurface) ? 0 : (wState ? wState.droplets : 0);
+    if (strength <= 0.02 || camPos.y < -0.1) {
+      if (lensDirty) {
+        ctx.clearRect(0, 0, lensCanvas.width, lensCanvas.height);
+        lensDirty = false;
+      }
+      return;
+    }
+    lensDirty = true;
+    const w = lensCanvas.width, h = lensCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+    for (let i = 0; i < LENS_DROPS.length; i++) {
+      const d = LENS_DROPS[i];
+      d.y += d.vy * dt * (0.65 + strength * 0.9);
+      d.x += d.drift * dt;
+      if (d.y > 1.05) { d.y = -0.05; d.x = ((d.x + 0.37) % 1 + 1) % 1; }
+      const cx = d.x * w;
+      const cy = d.y * h;
+      const rr = d.r * (0.8 + strength * 0.35);
+      const a = Math.min(0.45, strength * 0.42);
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(205, 240, 255, ' + (a * 0.28).toFixed(3) + ')';
+      ctx.fill();
+      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = 'rgba(235, 250, 255, ' + (a * 0.65).toFixed(3) + ')';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx - rr * 0.3, cy - rr * 0.3, Math.max(1.2, rr * 0.26), 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, ' + (a * 0.9).toFixed(3) + ')';
+      ctx.fill();
+    }
+  }
 
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const raycaster = new T.Raycaster();
@@ -618,6 +679,29 @@ window.OC = window.OC || {};
     renderBiomeUI();
     renderZoneChips();
 
+    /* Кнопки управления погодой (Авто / Штиль / Зыбь / Шторм) */
+    const syncWeatherButtons = () => {
+      if (!weatherBtnsEl || !OC.Weather) return;
+      const m = OC.Weather.getMode();
+      weatherBtnsEl.querySelectorAll('button[data-w]').forEach((b) => {
+        b.classList.toggle('on', b.getAttribute('data-w') === m);
+      });
+      if (weatherGroupEl && activeBiome) {
+        weatherGroupEl.style.opacity = activeBiome.noSurface ? '0.45' : '1';
+      }
+    };
+    if (weatherBtnsEl && OC.Weather) {
+      weatherBtnsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-w]');
+        if (!btn) return;
+        const m = btn.getAttribute('data-w');
+        OC.Weather.setMode(m);
+        syncWeatherButtons();
+        toast('Погода: ' + OC.Weather.getLabel(activeBiome));
+      });
+      syncWeatherButtons();
+    }
+
     /* Кнопки выбора качества графики */
     if (qualityBtnsEl) {
       const renderQualityButtons = () => {
@@ -691,6 +775,15 @@ window.OC = window.OC || {};
         hudHidden = !hudHidden;
         hudEls.forEach((el) => el.classList.toggle('hud-hidden', hudHidden));
       }
+      if (e.code === 'KeyU' && OC.Weather) {
+        if (activeBiome && activeBiome.noSurface) {
+          toast('Погода на поверхности недоступна на глубине 2500 м');
+        } else {
+          OC.Weather.cycleMode();
+          if (uiHandles && uiHandles.syncWeatherButtons) uiHandles.syncWeatherButtons();
+          toast('Погода: ' + OC.Weather.getLabel(activeBiome));
+        }
+      }
       if (e.code === 'Escape') {
         if (OC.Atlas.isOpen()) OC.Atlas.toggle();
         else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
@@ -703,7 +796,7 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes, syncFlash, syncCamMode, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncWeatherButtons, renderBiomeUI, renderZoneChips };
   }
 
   function switchBiome(id) {
@@ -741,6 +834,7 @@ window.OC = window.OC || {};
     if (uiHandles) {
       uiHandles.renderBiomeUI();
       uiHandles.renderZoneChips();
+      if (uiHandles.syncWeatherButtons) uiHandles.syncWeatherButtons();
     }
     if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
     toast(next.noSurface
@@ -755,6 +849,11 @@ window.OC = window.OC || {};
       if (savedQ && OC.Quality.presets && OC.Quality.presets[savedQ]) OC.Quality.set(savedQ);
 
       activeBiome = OC.Biomes.getActive();
+      if (OC.Weather && OC.Weather.onThunder) {
+        OC.Weather.onThunder(() => {
+          if (OC.sound && OC.sound.thunder) OC.sound.thunder();
+        });
+      }
       setBar(0.25);
       const init = OC.initWorld(canvas);
       const renderer = init.renderer;
@@ -819,7 +918,12 @@ window.OC = window.OC || {};
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      if (lensCanvas) {
+        lensCanvas.width = w;
+        lensCanvas.height = h;
+      }
       if (activeFauna) activeFauna.setScale(h / 900);
+      if (OC.setWorldParticleScale) OC.setWorldParticleScale(h / 900);
     }
     window.addEventListener('resize', resize);
     resize();
@@ -841,6 +945,8 @@ window.OC = window.OC || {};
       const camSpeed = OC.Navigation.getSpeed();
       const flashOn = OC.isFlashlightOn();
       if (activeFauna) activeFauna.update(dt, time, camPos, camSpeed, flashOn);
+      const wState = OC.Weather ? OC.Weather.getState() : { stormMix: 0, droplets: 0 };
+      updateLensDroplets(rawDt, camPos, wState, activeBiome);
 
       hudTimer += rawDt;
       if (hudTimer > 0.14 && activeBiome) {
@@ -862,6 +968,16 @@ window.OC = window.OC || {};
         if (teleDepth) teleDepth.textContent = (!biome.noSurface && camPos.y > 0.1) ? ('+' + camPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
         if (teleTemp) teleTemp.textContent = tempC + ' °C';
         if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
+        if (teleWeatherWrap && teleWeatherSep && teleWeather && OC.Weather) {
+          if (biome.noSurface) {
+            teleWeatherSep.classList.add('tele-wp-hide');
+            teleWeatherWrap.classList.add('tele-wp-hide');
+          } else {
+            teleWeatherSep.classList.remove('tele-wp-hide');
+            teleWeatherWrap.classList.remove('tele-wp-hide');
+            teleWeather.textContent = OC.Weather.getLabel(biome);
+          }
+        }
 
         // Навигационный маячок в телеметрии + авто-прибытие
         if (OC.Expedition) {
@@ -905,7 +1021,7 @@ window.OC = window.OC || {};
           }
         }
 
-        OC.sound.update(depthM, zone.id, dayW, biome.id);
+        OC.sound.update(depthM, zone.id, dayW, biome.id, wState.stormMix || 0);
         OC.Minimap.update(camPos, OC.Navigation.getYaw());
 
         if (subMode) {

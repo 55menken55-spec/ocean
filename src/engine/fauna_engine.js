@@ -2044,6 +2044,100 @@ window.OC = window.OC || {};
     return mat;
   }
 
+  /* ---------- Биолюминесцентный след ночесветок (Noctiluca) при движении дайвера ---------- */
+  function makeBiolumTrail(scene, tex, noSurface) {
+    const N = 180;
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(N * 3);
+    const born = new Float32Array(N);
+    const sz = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      born[i] = -999;
+      sz[i] = 1.6 + (i % 5) * 0.45;
+    }
+    const posAttr = new T.BufferAttribute(pos, 3);
+    const bornAttr = new T.BufferAttribute(born, 1);
+    posAttr.setUsage(T.DynamicDrawUsage);
+    bornAttr.setUsage(T.DynamicDrawUsage);
+    geo.setAttribute('position', posAttr);
+    geo.setAttribute('aBorn', bornAttr);
+    geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
+
+    const mat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: true,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        {
+          uTex: { value: tex },
+          uTime: OC.uTime,
+          uScale: { value: 1.0 }
+        }
+      ]),
+      vertexShader: `
+        attribute float aBorn, aSize;
+        uniform float uTime, uScale;
+        varying float vAlpha;
+        #include <fog_pars_vertex>
+        void main(){
+          float age = uTime - aBorn;
+          float alive = step(0.0, age) * step(age, 2.5);
+          vec3 p = position + vec3(sin(uTime * 1.4 + position.z) * 0.18, age * 0.22, cos(uTime * 1.2 + position.x) * 0.18);
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = alive * aSize * uScale * (145.0 / max(1.0, -mvPosition.z));
+          gl_Position = projectionMatrix * mvPosition;
+          vAlpha = alive * smoothstep(0.0, 0.14, age) * (1.0 - smoothstep(0.45, 2.5, age));
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        varying float vAlpha;
+        #include <fog_pars_fragment>
+        void main(){
+          if (vAlpha < 0.01) discard;
+          vec4 tx = texture2D(uTex, gl_PointCoord);
+          if (tx.a < 0.02) discard;
+          gl_FragColor = vec4(0.24, 0.96, 1.0, tx.a * vAlpha * 0.92);
+          #include <fog_fragment>
+        }`
+    });
+
+    const pts = new T.Points(geo, mat);
+    pts.frustumCulled = false;
+    pts.userData.key = 'plankton';
+    scene.add(pts);
+
+    let cursor = 0;
+    let spawnAcc = 0;
+    return {
+      mat,
+      update(dt, time, camPos, camSpeed, bioGlow, flashOn) {
+        if ((bioGlow > 0.28 || flashOn) && (camSpeed > 1.8) && (noSurface || camPos.y < -0.35)) {
+          spawnAcc += dt * Math.min(4.0, camSpeed * 0.35);
+          let dirty = false;
+          while (spawnAcc >= 0.055) {
+            spawnAcc -= 0.055;
+            const i = cursor;
+            cursor = (cursor + 1) % N;
+            const a = cursor * 2.39996;
+            const r = 1.4 + ((cursor * 17) % 10) * 0.36;
+            pos[i * 3] = camPos.x + Math.cos(a) * r;
+            pos[i * 3 + 1] = camPos.y + Math.sin(a * 1.3) * 1.6 - 0.35;
+            pos[i * 3 + 2] = camPos.z + Math.sin(a) * r;
+            born[i] = time;
+            dirty = true;
+          }
+          if (dirty) {
+            posAttr.needsUpdate = true;
+            bornAttr.needsUpdate = true;
+          }
+        }
+      },
+      setScale(s) {
+        mat.uniforms.uScale.value = s;
+      }
+    };
+  }
+
   /* ---------- Сборка фауны по экологическому плану биома (biome.faunaPlan) ---------- */
   function disposeFaunaGroup(scene) {
     if (!faunaGroup) return;
@@ -2217,6 +2311,7 @@ window.OC = window.OC || {};
       const bubbleMat = createCameraRelativeParticles(faunaGroup, noSurf ? 80 : Math.round(900 * pCountMult), texHard, 'bubbles', noSurf);
       const planktonMat = createCameraRelativeParticles(faunaGroup, Math.round(1500 * pCountMult), texSoft, 'plankton', noSurf);
       const snowMat = createCameraRelativeParticles(faunaGroup, Math.round((noSurf ? 1400 : 1050) * pCountMult), texSoft, 'snow', noSurf);
+      const biolumTrail = makeBiolumTrail(faunaGroup, texSoft, noSurf);
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
       const dayPlanktonCol = new T.Color(0x9be8ff);
@@ -2306,11 +2401,13 @@ window.OC = window.OC || {};
           planktonMat.uniforms.uBio.value = pal.bioGlow;
           planktonMat.uniforms.uColor.value.copy(pal.bioGlow > 0.45 ? bioPlanktonCol : dayPlanktonCol);
           snowMat.uniforms.uBio.value = flashOn ? 1.0 : 0.15;
+          biolumTrail.update(dt, time, camPos, camSpeed || 0, pal.bioGlow || 0, !!flashOn);
         },
         setScale(s) {
           bubbleMat.uniforms.uScale.value = s;
           planktonMat.uniforms.uScale.value = s;
           snowMat.uniforms.uScale.value = s;
+          biolumTrail.setScale(s);
         },
         /* Активное сонарное сканирование вперёд по курсу (рельеф + крупная фауна/стаи) */
         scanForward(origin, dir, maxRange) {

@@ -100,17 +100,19 @@ window.OC = window.OC || {};
     g.linearRampToValueAtTime(S.muted ? 0 : target, now + (time || 0.8));
   };
 
-  S.update = function (depth, zoneId, dayW, biomeId) {
+  S.update = function (depth, zoneId, dayW, biomeId, stormMix) {
     S.currentDepth = depth;
     S.currentZoneId = zoneId || 'crest';
     if (biomeId) S.currentBiomeId = biomeId;
     if (typeof dayW === 'number') S.currentDayW = dayW;
+    const sm = typeof stormMix === 'number' ? stormMix : 0;
     if (!S.ctx || S.muted) return;
     const now = S.ctx.currentTime;
-    const targetFreq = OC.clamp(320 - depth * 2.1, 95, 340);
+    const surfBoost = sm * OC.clamp(1 - Math.max(0, depth) / 22, 0, 1);
+    const targetFreq = OC.clamp(320 - depth * 2.1 + surfBoost * 240, 95, 580);
     if (S.deepFilter) S.deepFilter.frequency.setTargetAtTime(targetFreq, now, 0.4);
     if (S.reefGain) {
-      const flowTarget = (zoneId === 'crest' || zoneId === 'slope_hole') ? 0.055 : 0.032;
+      const flowTarget = ((zoneId === 'crest' || zoneId === 'slope_hole') ? 0.055 : 0.032) + surfBoost * 0.095;
       S.reefGain.gain.setTargetAtTime(flowTarget, now, 0.5);
     }
   };
@@ -381,6 +383,34 @@ window.OC = window.OC || {};
       o.connect(g); g.connect(S.master);
       o.start(t); o.stop(t + 0.45);
     });
+  };
+
+  S.thunder = function () {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 2.6;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      last = (last + 0.04 * (Math.random() * 2 - 1)) / 1.04;
+      d[i] = last * 3.5;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(185, now);
+    lp.frequency.exponentialRampToValueAtTime(62, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.14, now + 0.16);
+    g.gain.exponentialRampToValueAtTime(0.075, now + 0.85);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(g); g.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.05);
   };
 
   S.toggle = function () {

@@ -43,15 +43,21 @@ window.OC = window.OC || {};
   };
 
   let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget, flashBeam, flashBeamMat;
-  let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane, raysGroup, rayMats = [];
+  let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane, raysGroup, rayMats = [], rayMeshes = [];
+  let precipPts, precipMat;
   let flashlightOn = false;
   let timeOfDay = 0.24; // приятное утро / яркий день
 
   const sunDir = new T.Vector3(0.4, 0.85, 0.3).normalize();
+  const _refractRayDir = new T.Vector3();
+  const _upAxis = new T.Vector3(0, 1, 0);
+  const _rayQuat = new T.Quaternion();
   const camFwd = new T.Vector3();
   const camRight = new T.Vector3();
   const _beamTint = new T.Color(0xeefaff);
   const _worldCurr = new T.Vector3();
+  const _stormCol = new T.Color(0x283848);
+  const _lightCol = new T.Color(0xdcf0ff);
 
   const causticU = {
     uTime: OC.uTime,
@@ -297,15 +303,24 @@ window.OC = window.OC || {};
     return tex;
   }
 
-  /* ---------- Солнечные лучи ---------- */
+  /* ---------- Объёмные 3D-конусы солнечных лучей (Volumetric God Rays) ---------- */
   function buildRays(count) {
-    if (raysGroup) scene.remove(raysGroup);
+    if (raysGroup) {
+      raysGroup.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      scene.remove(raysGroup);
+    }
     raysGroup = new T.Group();
     rayMats = [];
+    rayMeshes = [];
     const rng = OC.mulberry32(5522);
     for (let i = 0; i < count; i++) {
-      const w = OC.lerp(5, 16, rng());
-      const h = OC.lerp(42, 72, rng());
+      const rTop = OC.lerp(1.4, 3.6, rng());
+      const rBot = rTop * OC.lerp(2.4, 3.8, rng());
+      const h = OC.lerp(46, 76, rng());
+      const geo = new T.CylinderGeometry(rTop, rBot, h, 14, 1, true);
       const mat = new T.ShaderMaterial({
         transparent: true, depthWrite: false, blending: T.AdditiveBlending,
         side: T.DoubleSide, fog: false,
@@ -313,31 +328,117 @@ window.OC = window.OC || {};
           uIntensity: { value: 0.35 },
           uColor: { value: new T.Color(0xbfefff) },
           uTime: OC.uTime,
-          uSeed: { value: rng() * 12 }
+          uSeed: { value: rng() * 12 },
+          uWaveAmp: { value: 1.0 }
         },
         vertexShader: `
           varying vec2 vUv;
-          void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+          varying vec3 vWorldP;
+          varying vec3 vNormW;
+          void main(){
+            vUv = uv;
+            vec4 wp = modelMatrix * vec4(position, 1.0);
+            vWorldP = wp.xyz;
+            vNormW = normalize(mat3(modelMatrix) * normal);
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }`,
         fragmentShader: `
           varying vec2 vUv;
-          uniform float uIntensity; uniform vec3 uColor; uniform float uTime; uniform float uSeed;
+          varying vec3 vWorldP;
+          varying vec3 vNormW;
+          uniform float uIntensity, uTime, uSeed, uWaveAmp;
+          uniform vec3 uColor;
           void main(){
-            float edge = smoothstep(0.0, 0.48, vUv.x) * smoothstep(1.0, 0.52, vUv.x);
-            float vert = smoothstep(0.0, 0.35, vUv.y) * smoothstep(1.0, 0.65, vUv.y);
-            float streak = 0.6 + 0.4 * sin(vUv.y * 12.0 + uTime * 0.42 + uSeed * 5.0);
-            float flick = 0.78 + 0.22 * sin(uTime * 0.26 + uSeed);
-            float a = edge * vert * streak * flick * uIntensity * 0.32;
+            vec3 toCam = normalize(cameraPosition - vWorldP);
+            float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.42);
+            float vert = smoothstep(0.0, 0.38, vUv.y) * smoothstep(1.0, 0.68, vUv.y);
+            float shimmer = 0.58 + 0.42 * sin(vUv.x * 18.85 + uTime * (0.65 + uWaveAmp * 0.45) + uSeed * 5.0);
+            float flick = 0.76 + 0.24 * sin(uTime * 0.32 + uSeed + vUv.y * 5.0);
+            float a = rim * vert * shimmer * flick * uIntensity * 0.26;
+            if (a < 0.002) discard;
             gl_FragColor = vec4(uColor, a);
           }`
       });
       rayMats.push(mat);
-      const m = new T.Mesh(new T.PlaneGeometry(w, h), mat);
-      m.position.set(OC.lerp(-140, 140, rng()), -h * 0.5 - 1.5, OC.lerp(-140, 140, rng()));
+      const m = new T.Mesh(geo, mat);
+      m.position.set(OC.lerp(-145, 145, rng()), -h * 0.48 - 1.2, OC.lerp(-145, 145, rng()));
       m.rotation.y = rng() * Math.PI * 2;
-      m.rotation.z = OC.lerp(-0.18, 0.18, rng());
       raysGroup.add(m);
+      rayMeshes.push(m);
     }
     scene.add(raysGroup);
+  }
+
+  /* ---------- Надводные GPU-осадки: тропический ливень или арктическая метель ---------- */
+  function buildPrecip(count) {
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    const ph = new Float32Array(count);
+    const sz = new Float32Array(count);
+    const rng = OC.mulberry32(91827);
+    for (let i = 0; i < count; i++) {
+      pos[i * 3] = (rng() - 0.5) * 140;
+      pos[i * 3 + 1] = rng() * 72;
+      pos[i * 3 + 2] = (rng() - 0.5) * 140;
+      ph[i] = rng() * 6.283;
+      sz[i] = OC.lerp(1.4, 3.6, rng());
+    }
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aPhase', new T.BufferAttribute(ph, 1));
+    geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
+
+    const tex = OC.circleTexture(64, false);
+    precipMat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false,
+      uniforms: {
+        uTex: { value: tex },
+        uTime: OC.uTime,
+        uCamPos: { value: new T.Vector3() },
+        uPrecip: { value: 0.0 },
+        uSnowMode: { value: 0.0 },
+        uScale: { value: 1.0 }
+      },
+      vertexShader: `
+        attribute float aPhase, aSize;
+        uniform float uTime, uPrecip, uSnowMode, uScale;
+        uniform vec3 uCamPos;
+        varying float vAlpha;
+        void main(){
+          vec3 box = vec3(140.0, 72.0, 140.0);
+          float fallSpd = mix(36.0, 7.2, uSnowMode);
+          vec3 p = position;
+          p.y -= uTime * fallSpd * (0.85 + 0.3 * fract(aPhase));
+          p.x += uTime * mix(6.5, 4.2, uSnowMode) + sin(uTime * 1.4 + aPhase) * mix(0.2, 2.4, uSnowMode);
+          p.z += cos(uTime * 1.1 + aPhase) * mix(0.2, 2.1, uSnowMode);
+          vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
+          vec3 worldP = uCamPos + rel;
+          float aboveWater = step(0.15, worldP.y);
+          vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
+          gl_PointSize = aboveWater * aSize * uScale * mix(95.0, 165.0, uSnowMode) / max(1.5, -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+          vAlpha = aboveWater * uPrecip * mix(0.46, 0.72, uSnowMode);
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        uniform float uSnowMode;
+        varying float vAlpha;
+        void main(){
+          if (vAlpha < 0.01) discard;
+          vec2 uv = gl_PointCoord;
+          if (uSnowMode < 0.5) {
+            // Вытянутая наклонная капля дождя
+            uv.x = (uv.x - 0.5) * 3.4 + 0.5;
+          }
+          vec4 tx = texture2D(uTex, clamp(uv, 0.0, 1.0));
+          if (tx.a < 0.04) discard;
+          vec3 col = mix(vec3(0.76, 0.88, 0.98), vec3(0.96, 0.99, 1.0), uSnowMode);
+          gl_FragColor = vec4(col, tx.a * vAlpha);
+        }`
+    });
+    precipPts = new T.Points(geo, precipMat);
+    precipPts.frustumCulled = false;
+    precipPts.visible = false;
+    scene.add(precipPts);
   }
 
   /* ---------- Инициализация сцены ---------- */
@@ -434,6 +535,8 @@ window.OC = window.OC || {};
         uAboveMix: { value: 0 },
         uAurora: { value: 0 },
         uDayW: { value: 1 },
+        uStorm: { value: 0 },
+        uLightning: { value: 0 },
         uTime: OC.uTime
       },
       vertexShader: `
@@ -444,7 +547,7 @@ window.OC = window.OC || {};
         }`,
       fragmentShader: `
         uniform vec3 uTop, uMid, uBot, uAboveTop, uAboveHoriz, uSunCol;
-        uniform float uSunI, uAboveMix, uAurora, uDayW, uTime;
+        uniform float uSunI, uAboveMix, uAurora, uDayW, uStorm, uLightning, uTime;
         uniform vec3 uSunDir;
         varying vec3 vDir;
         void main(){
@@ -457,15 +560,25 @@ window.OC = window.OC || {};
           uwCol += uTop * st * 0.04 * smoothstep(0.55, 1.0, h);
 
           vec3 skyCol = mix(uAboveHoriz, uAboveTop, smoothstep(0.0, 0.65, max(0.0, d.y)));
-          // Мягкие пассатные / полярные облака у горизонта над водой
-          float clMask = smoothstep(0.02, 0.14, d.y) * smoothstep(0.55, 0.12, d.y) * uAboveMix;
-          float clPatt = 0.5 + 0.5 * sin(ang * 9.0 + uTime * 0.03) * cos(d.y * 26.0 - ang * 3.0);
-          float clouds = smoothstep(0.56, 0.88, clPatt) * clMask;
-          skyCol = mix(skyCol, mix(uSunCol, vec3(1.0), 0.55), clouds * 0.42);
+          // Мягкие пассатные или грозовые тучи над водой
+          float clMask = smoothstep(0.01, 0.14, d.y) * smoothstep(0.95 - uStorm * 0.25, 0.12, d.y) * uAboveMix;
+          float clPatt = 0.5 + 0.5 * sin(ang * 9.0 + uTime * (0.03 + uStorm * 0.09)) * cos(d.y * 26.0 - ang * 3.0);
+          float clThresh = mix(0.56, 0.22, uStorm);
+          float clouds = smoothstep(clThresh, 0.88, clPatt) * clMask;
+          vec3 cloudBright = mix(mix(uSunCol, vec3(1.0), 0.55), vec3(0.20, 0.26, 0.34), uStorm);
+          skyCol = mix(skyCol, vec3(0.14, 0.20, 0.28), uStorm * 0.62 * uAboveMix);
+          skyCol = mix(skyCol, cloudBright, clouds * mix(0.42, 0.86, uStorm));
+
+          // Вспышки молний внутри штормовых облаков
+          if (uLightning > 0.01) {
+            vec3 boltCol = vec3(0.75, 0.88, 1.0) * uLightning * (0.45 + 0.85 * clouds);
+            skyCol += boltCol * uAboveMix;
+            uwCol += boltCol * 0.32;
+          }
 
           // Северное сияние (Aurora Borealis) для арктического биома в сумерках и полярной ночью
           if (uAurora > 0.01 && d.y > 0.01) {
-            float nightVis = (1.0 - smoothstep(0.25, 0.82, uDayW)) * uAurora;
+            float nightVis = (1.0 - smoothstep(0.25, 0.82, uDayW)) * uAurora * (1.0 - uStorm * 0.55);
             float ribbon1 = sin(ang * 3.2 + sin(d.y * 5.0 + uTime * 0.22) * 1.4 + uTime * 0.12);
             float ribbon2 = sin(ang * 5.7 - cos(d.y * 7.0 - uTime * 0.18) * 1.1 - uTime * 0.09);
             float curtain = pow(max(0.0, ribbon1 * 0.62 + ribbon2 * 0.38), 2.2);
@@ -479,7 +592,7 @@ window.OC = window.OC || {};
 
           float sunDot = max(dot(d, normalize(uSunDir)), 0.0);
           float s = pow(sunDot, mix(24.0, 96.0, uAboveMix));
-          col += uSunCol * s * uSunI * mix(0.85, 1.35, uAboveMix);
+          col += uSunCol * s * uSunI * mix(0.85, 1.35, uAboveMix) * (1.0 - uStorm * 0.82);
           gl_FragColor = vec4(col, 1.0);
         }`
     });
@@ -516,23 +629,32 @@ window.OC = window.OC || {};
         uSunCol: { value: new T.Color(0xfff2d2) },
         uSunDir: { value: sunDir.clone() },
         uDayW: { value: 1.0 },
-        uCamY: { value: -6.0 }
+        uCamY: { value: -6.0 },
+        uWaveAmp: { value: 1.0 },
+        uStorm: { value: 0.0 },
+        uLightning: { value: 0.0 }
       },
       vertexShader: `
         varying vec3 vWorld;
-        uniform float uTime;
+        varying float vCrest;
+        uniform float uTime, uWaveAmp;
         void main(){
           vec4 wp = modelMatrix * vec4(position, 1.0);
-          wp.y += sin(wp.x * 0.075 + uTime * 1.15) * 0.16
-                + cos(wp.z * 0.088 - uTime * 0.92) * 0.14
-                + sin((wp.x + wp.z) * 0.14 + uTime * 1.7) * 0.06;
+          float w1 = sin(wp.x * 0.075 + uTime * 1.25) * 0.24;
+          float w2 = cos(wp.z * 0.088 - uTime * 0.98) * 0.21;
+          float w3 = sin((wp.x * 0.68 + wp.z * 0.74) * 0.12 + uTime * 1.85) * 0.11;
+          float w4 = cos((wp.x * 0.55 - wp.z * 0.82) * 0.22 - uTime * 2.25) * 0.06;
+          float wave = (w1 + w2 + w3 + w4) * uWaveAmp;
+          wp.y += wave;
+          vCrest = clamp(wave / max(0.35, 0.55 * uWaveAmp), 0.0, 1.0);
           vWorld = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
         }`,
       fragmentShader: `
         varying vec3 vWorld;
+        varying float vCrest;
         uniform sampler2D uTex, uFoamTex;
-        uniform float uTime, uDayW, uCamY, uWorldSpan;
+        uniform float uTime, uDayW, uCamY, uWorldSpan, uStorm, uLightning;
         uniform vec3 uWaterCol, uSkyCol, uSunCol, uSunDir;
         void main(){
           vec2 cuv = vWorld.xz * 0.016;
@@ -549,52 +671,57 @@ window.OC = window.OC || {};
 
           float foamNoise = smoothstep(0.32, 0.86, r1 * 0.55 + r2 * 0.62);
           float surge = 0.55 + 0.45 * sin(vWorld.x * 0.18 - uTime * 1.85 + r1 * 3.0);
-          float foam = clamp((crestSurf * 0.72 * surge + shoreSurf * 1.15) * foamNoise, 0.0, 0.92);
+          float whitecap = smoothstep(0.42, 0.92, vCrest) * uStorm * 0.95;
+          float foam = clamp((crestSurf * 0.72 * surge + shoreSurf * 1.15 + whitecap) * foamNoise, 0.0, 0.95);
 
           vec3 toEye = normalize(cameraPosition - vWorld);
           float dist = length(cameraPosition - vWorld);
           float fade = smoothstep(1350.0, 120.0, dist);
 
           // Волновая нормаль для бликов
-          vec3 n = normalize(vec3((r1 - 0.5) * 0.28, 1.0, (r2 - 0.5) * 0.28));
+          vec3 n = normalize(vec3((r1 - 0.5) * (0.28 + uStorm * 0.24), 1.0, (r2 - 0.5) * (0.28 + uStorm * 0.24)));
           vec3 sunH = normalize(normalize(uSunDir) + toEye);
-          float spec = pow(max(dot(n, sunH), 0.0), 48.0) * uDayW;
+          float spec = pow(max(dot(n, sunH), 0.0), 48.0) * uDayW * (1.0 - uStorm * 0.65);
           vec3 foamCol = mix(vec3(0.45, 0.72, 0.85), vec3(0.95, 0.99, 1.0), 0.25 + 0.75 * uDayW);
 
           // Оттенок воды меняется от бирюзового мелководья к глубокому кобальту Кораллового моря
           vec3 deepCol = mix(uWaterCol, vec3(0.03, 0.22, 0.45) * (0.25 + 0.75 * uDayW), depthT * 0.82);
 
           if (uCamY < 0.0) {
-            // Вид снизу: Окно Снеллиуса (~48.6 град => cos ~ 0.66) + буруны прибоя над гребнем
+            // Вид снизу: Окно Снеллиуса (~48.6 град => cos ~ 0.66) + хроматическая радужная кайма + буруны прибоя
             float cosA = abs(dot(toEye, n));
             float snell = smoothstep(0.58, 0.78, cosA);
+            float prismBand = smoothstep(0.54, 0.67, cosA) * (1.0 - smoothstep(0.67, 0.82, cosA));
+            vec3 prismCol = vec3(0.28, 0.88, 1.0) * prismBand * 0.45 * uDayW;
             vec3 reflectCol = deepCol * (0.28 + rip * 0.45);
             vec3 windowCol = mix(deepCol, uSkyCol, 0.75) * (0.55 + rip * 0.35) + uSunCol * spec * 1.1;
-            vec3 col = mix(reflectCol, windowCol, snell);
-            col = mix(col, foamCol * 0.82, foam * 0.55);
+            vec3 col = mix(reflectCol, windowCol, snell) + prismCol;
+            col = mix(col, foamCol * 0.82, foam * 0.58);
             float alpha = mix(0.32 + rip * 0.24, 0.62 + rip * 0.2, snell) * fade * (0.35 + 0.65 * uDayW);
-            alpha = clamp(alpha + foam * 0.24 * fade, 0.0, 0.92);
+            alpha = clamp(alpha + foam * 0.26 * fade, 0.0, 0.94);
             gl_FragColor = vec4(col, alpha);
           } else {
-            // Вид сверху: Френель + просвет бирюзовых лагун + прибой на гребне и у островка
+            // Вид сверху: Френель + просвет бирюзовых лагун + штормовые барашки + отблеск молнии
             float fresnel = pow(1.0 - max(dot(toEye, n), 0.0), 3.0);
             vec3 shallowTint = mix(vec3(0.28, 0.86, 0.88), deepCol, depthT) * (0.22 + 0.78 * uDayW);
-            vec3 col = mix(shallowTint, uSkyCol, clamp(fresnel * 0.82 + 0.12, 0.0, 1.0));
-            col += uSunCol * spec * 1.35;
+            vec3 skyRefl = mix(uSkyCol, vec3(0.18, 0.25, 0.34), uStorm * 0.75);
+            vec3 col = mix(shallowTint, skyRefl, clamp(fresnel * 0.82 + 0.12, 0.0, 1.0));
+            col += uSunCol * spec * 1.35 + vec3(0.68, 0.86, 1.0) * uLightning * 0.65 * fresnel;
             col = mix(col, foamCol, foam);
-            float alpha = mix(0.46 + (1.0 - depthT) * 0.08, 0.88, fresnel) * fade;
-            alpha = clamp(alpha + foam * 0.45 * fade, 0.0, 0.96);
+            float alpha = mix(0.46 + (1.0 - depthT) * 0.08, 0.90, fresnel) * fade;
+            alpha = clamp(alpha + foam * 0.45 * fade, 0.0, 0.97);
             gl_FragColor = vec4(col, alpha);
           }
         }`
     });
-    surfacePlane = new T.Mesh(new T.PlaneGeometry(2800, 2800, 64, 64), surfaceMat);
+    surfacePlane = new T.Mesh(new T.PlaneGeometry(2800, 2800, 96, 96), surfaceMat);
     surfacePlane.rotation.x = -Math.PI / 2;
     surfacePlane.position.y = 0;
     surfacePlane.frustumCulled = false;
     scene.add(surfacePlane);
 
     buildRays(q.rayCount);
+    buildPrecip(Math.round(1450 * q.particlesScale));
 
     OC.Quality.onChange((preset) => {
       if (renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioMax));
@@ -634,6 +761,9 @@ window.OC = window.OC || {};
   OC.getScene = () => scene;
   OC.getCamera = () => camera;
   OC.getRenderer = () => renderer;
+  OC.setWorldParticleScale = (s) => {
+    if (precipMat) precipMat.uniforms.uScale.value = s;
+  };
   OC.refreshWorldForBiome = function (biome) {
     if (!surfaceMat || !biome) return;
     if (surfaceMat.uniforms.uFoamTex.value) surfaceMat.uniforms.uFoamTex.value.dispose();
@@ -649,6 +779,7 @@ window.OC = window.OC || {};
     updateBasePalette(timeOfDay);
 
     const biome = OC.Biomes.getActive();
+    const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
     const opt = biome
       ? biome.getOpticalProfile(camPos.x, camPos.y, camPos.z, pal.dayW)
       : {
@@ -661,10 +792,19 @@ window.OC = window.OC || {};
           bioGlow: 1 - pal.dayW
         };
 
+    const stormAtten = 1.0 - wState.stormMix * 0.42;
+    const shallowTurb = (biome && biome.noSurface) ? 0.0 : wState.turbidity * OC.smoothstep(-22.0, -0.5, camPos.y);
+
     pal.fogCol.copy(opt.fogColor);
-    pal.fogDen = opt.fogDensity;
+    if (wState.stormMix > 0.02 && !(biome && biome.noSurface)) {
+      pal.fogCol.lerp(_stormCol, wState.stormMix * (opt.aboveWater ? 0.52 : 0.24));
+    }
+    if (wState.lightning > 0.02) {
+      pal.fogCol.lerp(_lightCol, wState.lightning * (opt.aboveWater ? 0.45 : 0.16));
+    }
+    pal.fogDen = opt.fogDensity + shallowTurb * 0.0045;
     pal.bioGlow = opt.bioGlow;
-    pal.sunAtten = opt.sunAtten;
+    pal.sunAtten = opt.sunAtten * stormAtten;
     if (opt.aboveTop) pal.aboveTop.copy(opt.aboveTop);
     if (opt.waterColor) pal.water.copy(opt.waterColor);
     if (opt.skyTop) pal.skyTop.copy(opt.skyTop);
@@ -673,16 +813,16 @@ window.OC = window.OC || {};
     if (opt.fillAColor) pal.fillA.copy(opt.fillAColor);
     if (opt.fillBColor) pal.fillB.copy(opt.fillBColor);
 
-    scene.fog.color.copy(opt.fogColor);
-    scene.fog.density = opt.fogDensity;
-    renderer.toneMappingExposure = pal.exposure * (opt.aboveWater ? 1.02 : OC.lerp(0.82, 1.06, opt.sunAtten));
+    scene.fog.color.copy(pal.fogCol);
+    scene.fog.density = pal.fogDen;
+    renderer.toneMappingExposure = pal.exposure * (opt.aboveWater ? (1.02 - wState.stormMix * 0.14) : OC.lerp(0.82, 1.06, pal.sunAtten));
 
     hemi.color.copy(pal.hemiSky);
     hemi.groundColor.copy(pal.hemiGround);
-    hemi.intensity = pal.hemiI * (biome && biome.noSurface ? 0.14 : (0.35 + 0.65 * opt.sunAtten));
+    hemi.intensity = pal.hemiI * (biome && biome.noSurface ? 0.14 : (0.35 + 0.65 * pal.sunAtten));
 
     sun.color.copy(pal.sunCol);
-    sun.intensity = pal.sunI * (biome && biome.noSurface ? 0.03 : (0.22 + 0.78 * opt.sunAtten));
+    sun.intensity = pal.sunI * (biome && biome.noSurface ? 0.03 : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
     const sunElev = (biome && biome.hasAurora) ? Math.max(0.10, Math.sin(ang) * 0.42 + 0.18) : Math.max(0.18, Math.sin(ang) * 0.85 + 0.28);
@@ -733,10 +873,12 @@ window.OC = window.OC || {};
     skyMat.uniforms.uAboveMix.value = aboveMix;
     skyMat.uniforms.uAurora.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
     skyMat.uniforms.uDayW.value = pal.dayW;
+    skyMat.uniforms.uStorm.value = wState.stormMix;
+    skyMat.uniforms.uLightning.value = wState.lightning;
     skySphere.position.copy(camPos);
 
     /* каустика и наклон кораллов по течению */
-    causticU.uCausticI.value = opt.causticStrength;
+    causticU.uCausticI.value = opt.causticStrength * (1.0 - wState.stormMix * 0.55);
     causticU.uCausticCol.value.copy(pal.water);
     if (biome && biome.getCurrentAt) {
       biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
@@ -755,16 +897,35 @@ window.OC = window.OC || {};
       surfaceMat.uniforms.uSunDir.value.copy(sunDir);
       surfaceMat.uniforms.uDayW.value = pal.dayW;
       surfaceMat.uniforms.uCamY.value = camPos.y;
+      surfaceMat.uniforms.uWaveAmp.value = wState.waveAmp;
+      surfaceMat.uniforms.uStorm.value = wState.stormMix;
+      surfaceMat.uniforms.uLightning.value = wState.lightning;
     }
 
-    /* солнечные лучи в верхних слоях */
-    raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && opt.rayStrength > 0.02;
+    /* объёмные 3D-конусы солнечных лучей, ориентированные по преломлённому солнцу */
+    const rayIntensity = opt.rayStrength * (1.0 - wState.stormMix * 0.65);
+    raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && rayIntensity > 0.02;
     if (raysGroup.visible) {
       raysGroup.position.x = Math.round(camPos.x / 60) * 60;
       raysGroup.position.z = Math.round(camPos.z / 60) * 60;
+      // Закон Снеллиуса сжимает наклон луча в воде (~0.75 от горизонтального отклонения)
+      _refractRayDir.set(sunDir.x * 0.68, Math.max(0.45, sunDir.y), sunDir.z * 0.68).normalize();
+      _rayQuat.setFromUnitVectors(_upAxis, _refractRayDir);
+      for (let i = 0; i < rayMeshes.length; i++) rayMeshes[i].quaternion.copy(_rayQuat);
       for (const m of rayMats) {
-        m.uniforms.uIntensity.value = opt.rayStrength * (0.45 + 0.55 * Math.abs(Math.sin(time * 0.14 + m.uniforms.uSeed.value)));
+        m.uniforms.uIntensity.value = rayIntensity * (0.45 + 0.55 * Math.abs(Math.sin(time * 0.14 + m.uniforms.uSeed.value)));
+        m.uniforms.uWaveAmp.value = wState.waveAmp;
         m.uniforms.uColor.value.copy(pal.water);
+      }
+    }
+
+    /* надводные осадки (штормовой дождь / арктический снегопад) */
+    if (precipPts && precipMat) {
+      precipPts.visible = !(biome && biome.noSurface) && wState.precip > 0.03 && camPos.y > -12.0;
+      if (precipPts.visible) {
+        precipMat.uniforms.uCamPos.value.copy(camPos);
+        precipMat.uniforms.uPrecip.value = wState.precip;
+        precipMat.uniforms.uSnowMode.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
       }
     }
   };

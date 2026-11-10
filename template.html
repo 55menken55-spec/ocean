@@ -267,6 +267,7 @@
 </head>
 <body>
 <canvas id="scene"></canvas>
+<canvas id="lens-fx" style="position:fixed;inset:0;z-index:2;pointer-events:none"></canvas>
 <div class="vignette"></div>
 
 <header class="brand hud-hideable">
@@ -284,6 +285,8 @@
   <div class="tele-item"><span>Вода</span><b id="tele-temp">27.0 °C</b></div>
   <div class="tele-sep"></div>
   <div class="tele-item"><span>Курс</span><b id="tele-heading">С 000°</b></div>
+  <div class="tele-sep" id="tele-weather-sep"></div>
+  <div class="tele-item" id="tele-weather-wrap"><span>Погода</span><b id="tele-weather">Штиль</b></div>
   <div class="tele-sep tele-wp-hide" id="tele-wp-sep"></div>
   <div class="tele-item tele-wp-hide" id="tele-wp-wrap"><span>Маяк</span><b id="tele-wp">—</b></div>
 </div>
@@ -337,6 +340,16 @@
     </div>
   </div>
 
+  <div class="group" id="weather-group">
+    <h2>Погода и волнение (U)</h2>
+    <div class="row" id="weather-btns">
+      <button class="btn on" data-w="auto">Авто</button>
+      <button class="btn" data-w="calm">Штиль</button>
+      <button class="btn" data-w="breeze">Зыбь</button>
+      <button class="btn" data-w="storm">Шторм</button>
+    </div>
+  </div>
+
   <div class="group">
     <h2>Графика и оптимизация (LOD)</h2>
     <div class="row" id="quality-btns">
@@ -363,7 +376,8 @@
       <kbd>Мышь</kbd> обзор · <kbd>Клик</kbd> карточка вида<br>
       <kbd>F</kbd> прожектор · <kbd>B</kbd> батискаф · <kbd>G</kbd> сонар<br>
       <kbd>P</kbd> камера (<kbd>Enter</kbd> снять) · <kbd>J</kbd> миссии<br>
-      <kbd>V</kbd> орбита · <kbd>K</kbd> атлас · <kbd>M</kbd> звук · <kbd>H</kbd> HUD
+      <kbd>V</kbd> орбита · <kbd>U</kbd> погода · <kbd>K</kbd> атлас<br>
+      <kbd>M</kbd> звук · <kbd>H</kbd> скрыть HUD
     </div>
   </div>
 </aside>
