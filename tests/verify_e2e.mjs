@@ -386,9 +386,9 @@ stepFrames(2);
 assert(OC.Hydrophone.isOpen(), 'Backquote (~) hotkey must open Hydrophone FFT');
 assert(OC.Minimap.getCoverage() > 0, 'Minimap Fog of War must show initial charted %');
 
-console.log('3) Profiling 9 biomes × 100 continuous frames (900 frames + 3D Multibeam Sonar scans)...');
+console.log('3) Profiling 10 biomes × 100 continuous frames (1000 frames + 3D Multibeam Sonar scans)...');
 const biomeList = OC.Biomes.list();
-assert.equal(biomeList.length, 9, 'All 9 biomes must be registered in production bundle');
+assert.equal(biomeList.length, 10, 'All 10 biomes must be registered in production bundle');
 
 const perfTable = [];
 for (const b of biomeList) {
@@ -416,4 +416,4 @@ for (const row of perfTable) {
 assert.equal(pageErrors.length, 0, `Production bundle logged runtime errors:\n${pageErrors.join('\n')}`);
 assert.equal(glErrors.length, 0, `WebGL shader compilation errors:\n${glErrors.join('\n')}`);
 assert(compiledShaders.length >= 10, `Expected >= 10 compiled GLSL shaders captured by WebGL spy, got ${compiledShaders.length}`);
-console.log(`ALL E2E PRODUCTION BUNDLE CHECKS PASSED! (${compiledShaders.length} GLSL shaders validated, 0 runtime errors across 900 frames).`);
+console.log(`ALL E2E PRODUCTION BUNDLE CHECKS PASSED! (${compiledShaders.length} GLSL shaders validated, 0 runtime errors across 1000 frames).`);

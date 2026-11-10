@@ -18,6 +18,7 @@ const SRC_ORDER = [
   'src/biomes/brine_pool.js',
   'src/biomes/cenote_caves.js',
   'src/biomes/galapagos_upwelling.js',
+  'src/biomes/amazon_igapo.js',
   'src/engine/weather.js',
   'src/engine/eco_lab.js',
   'src/engine/world.js',
@@ -366,7 +367,7 @@ console.log('   Option 2 ocean currents, particle/sway advection, #sub-current H
 
 // G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea, Wreck Atoll, Mariana Trench, Brine Pool, Cenote Caves & Galapagos Upwelling) & clean switching
 const allBiomes = OC.Biomes.list();
-assert(allBiomes.length === 9, `Expected 9 registered ocean biomes, got ${allBiomes.length}`);
+assert(allBiomes.length === 10, `Expected 10 registered ocean biomes, got ${allBiomes.length}`);
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
 assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
@@ -488,9 +489,9 @@ for (const qId of ['low', 'medium', 'high', 'ultra']) {
 }
 console.log('   Multi-biome hot-switching & runtime quality preset switching (low -> ultra) verified.');
 
-// H) Verify Direction 1 + Arctic + Wreck Atoll + Mariana Trench + Brine Pool + Cenote Caves + Galapagos Missions (Camera, 36 Scientific Missions, Minimap Waypoints, Persistence)
+// H) Verify Direction 1 + All 10 Biome Missions (Camera, 40 Scientific Missions, Minimap Waypoints, Persistence)
 assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-assert.equal(OC.Expedition.MISSIONS.length, 36, `Expected 36 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+assert.equal(OC.Expedition.MISSIONS.length, 40, `Expected 40 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
 for (const b of OC.Biomes.list()) {
   const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
   assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
@@ -790,7 +791,7 @@ OC.Globe.init({
 });
 
 const beacons = OC.Globe.getBeacons();
-assert.equal(beacons.length, 9, '3D Globe must expose 9 expedition beacons');
+assert.equal(beacons.length, 10, '3D Globe must expose 10 expedition beacons');
 let totalTourStages = 0;
 for (const b of OC.Biomes.list()) {
   assert(b.globe && Number.isFinite(b.globe.lat) && Number.isFinite(b.globe.lon), `Biome ${b.id} missing globe coordinates`);
@@ -804,7 +805,7 @@ for (const b of OC.Biomes.list()) {
   const sum = OC.Expedition.getBiomeSummary(b);
   assert(sum.speciesTotal === Object.keys(b.encyclopedia).length && sum.missionsTotal === 4, `getBiomeSummary mismatch for ${b.id}`);
 }
-assert(totalTourStages === 47, `Expected 47 total guided tour stages across 9 biomes, got ${totalTourStages}`);
+assert(totalTourStages === 52, `Expected 52 total guided tour stages across 10 biomes, got ${totalTourStages}`);
 
 for (const bc of beacons) {
   const rad = Math.hypot(bc.x, bc.y, bc.z);
@@ -1446,4 +1447,26 @@ assert(!ciSrc.includes('\t'), '.github/workflows/ci.yml must not contain raw tab
 assert(ciSrc.includes('build-and-vm-verify') && ciSrc.includes('browser-webgl-e2e') && ciSrc.includes('e2e_playwright.mjs') && ciSrc.includes('verify_e2e.mjs'), 'ci.yml must run build check, verify.mjs, verify_e2e.mjs and browser-webgl-e2e');
 assert(pwSrc.includes('swiftshader') && pwSrc.includes('readPixels') && pwSrc.includes('OC_PERF_SUMMARY_MD'), 'e2e_playwright.mjs must verify WebGL SwiftShader pixels & export perf summary');
 console.log('   Interactive Onboarding Bar, Quick-Help (? / F1), Frame Telemetry & GitHub Actions WebGL CI verified.');
+
+// AA) Verify 10th Biome: Amazonia Flooded Forest Igapo (Rio Negro & Encontro das Aguas)
+const amzBiome = OC.Biomes.setActive('amazon_igapo');
+assert(amzBiome && !amzBiome.noSurface && amzBiome.minimapTheme === 'amazon', 'amazon_igapo biome must configure surface & amazon minimap theme');
+assert(amzBiome.zones.length === 5 && amzBiome.landmarks.length === 5 && amzBiome.tourLegs.length === 5, 'amazon_igapo must expose 5 zones, 5 landmarks and 5 tourLegs');
+const optBlack = amzBiome.getOpticalProfile(-40, -4, 40, 1.0);
+const optWhite = amzBiome.getOpticalProfile(360, -4, 0, 1.0);
+assert(optBlack.fogColor.r > optBlack.fogColor.b && optWhite.fogDensity > optBlack.fogDensity, 'amazon_igapo must contrast tannin Rio Negro blackwater vs turbid Solimoes whitewater confluence');
+const amzPrevList = ['pink_dolphin', 'arapaima', 'electric_eel', 'river_stingray', 'piranha', 'neon_tetra', 'angelfish', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag'];
+for (const k of amzPrevList) {
+  assert(amzBiome.encyclopedia[k], `amazon_igapo encyclopedia missing key ${k}`);
+  const pm = OC.FaunaEngine.createPreviewMesh(k, amzBiome);
+  assert(pm && pm.children.length > 0, `amazon_igapo preview mesh failed for ${k}`);
+  assert(OC.sound.getVoiceLabel(k).length > 4, `amazon_igapo voice label missing for ${k}`);
+  OC.sound.playSpeciesVoice(k);
+}
+const ctdAmz = OC.ROV.runCtdCast(amzBiome, new T.Vector3(15, -10, 2), OC.EcoLab.getState());
+assert(ctdAmz && ctdAmz.surfaceTemp > 26 && ctdAmz.maxDepthM <= 30, `Amazon CTD cast mismatch: ${JSON.stringify(ctdAmz)}`);
+const resAmz = OC.Expedition.evaluateMissions(amzBiome, { zoneId: 'whitewater_confluence', depthM: 6, currentKnots: 0.9, dayW: 0.9, flashOn: false });
+assert(resAmz.list.find((m) => m.id === 'amz_confluence').done, 'amz_confluence mission must complete inside whitewater_confluence zone');
+OC.Biomes.setActive('great_barrier_reef');
+console.log(`   10th Biome "Амазония: Лес Игапо" (Rio Negro blackwater, Encontro das Aguas, Pink Dolphin, Arapaima, Electric Eel, Victoria amazonica, 40 missions) verified.`);
 console.log('ALL VERIFICATION CHECKS PASSED!');

@@ -88,6 +88,12 @@ window.OC = window.OC || {};
     'Пелагиаль Вольфа': 'wolf_orca_shelf',
     'Небо над Аркой Дарвина': 'darwins_arch',
     'Пролив у Вольфа': 'wolf_orca_shelf',
+    'Затопленный лес': 'igapo_roots',
+    'Заводь кувшинок': 'victoria_lagoon',
+    'Чёрная вода': 'rio_negro_channel',
+    'Слияние вод': 'whitewater_confluence',
+    'Роща сейб': 'cathedral_canopy',
+    'Русло и пойма': 'rio_negro_channel',
     'Все зоны': 'crest'
   };
 

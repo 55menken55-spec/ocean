@@ -92,7 +92,10 @@ window.OC = window.OC || {};
     if (key === 'whale_humpback') return { mode: 'whale', minHz: 85, maxHz: 380, label: 'Песня горбатого кита' };
     if (key === 'orca') return { mode: 'orca', minHz: 580, maxHz: 2350, label: 'Позывные стаи косаток' };
     if (key === 'beluga' || key === 'narwhal') return { mode: 'whistle', minHz: 950, maxHz: 3150, label: key === 'beluga' ? 'Трели белухи' : 'Эхолокация нарвала' };
-    if (key === 'dolphin') return { mode: 'clicks', minHz: 1350, maxHz: 3550, label: 'Эхолокация дельфинов' };
+    if (key === 'dolphin' || key === 'pink_dolphin') return { mode: 'clicks', minHz: 1150, maxHz: 3450, label: key === 'pink_dolphin' ? 'Эхолокация речного дельфина боуто' : 'Эхолокация дельфинов' };
+    if (key === 'electric_eel') return { mode: 'eel', minHz: 260, maxHz: 920, label: 'Разряд электрического угря' };
+    if (key === 'piranha') return { mode: 'pulse', minHz: 110, maxHz: 340, label: 'Барабанный стук стаи пираний' };
+    if (key === 'arapaima' || key === 'river_stingray') return { mode: 'swim', minHz: 80, maxHz: 360, label: key === 'arapaima' ? 'Глоток воздуха арапаимы' : 'Скольжение ската моторо' };
     if (key === 'galapagos_penguin' || key === 'sea_lion' || key === 'dugong') return { mode: 'pulse', minHz: 320, maxHz: 1450, label: key === 'galapagos_penguin' ? 'Треск погони пингвина' : 'Подводный клич' };
     if (key === 'vent_chimney' || key === 'volcanic_fumarole' || key === 'serpentinite_vent' || key === 'methane_hydrate' || key === 'brine_pool_lake' || key === 'halocline_layer') {
       return { mode: 'rumble', minHz: 40, maxHz: 260, label: key === 'volcanic_fumarole' ? 'Кипение фумарол' : 'Гул сипа / термоисточника' };
@@ -143,6 +146,10 @@ window.OC = window.OC || {};
     } else if (p.mode === 'drip') {
       const drop = Math.pow(Math.max(0, Math.sin(t * 3.4)), 8);
       addGaussianBand(720 + 180 * drop, 70, 0.48 * a * drop);
+    } else if (p.mode === 'eel') {
+      const zap = Math.pow(Math.max(0, Math.sin(t * 2.2)), 10);
+      addGaussianBand(380, 95, 0.36 * a + 0.65 * a * zap);
+      addGaussianBand(760, 125, 0.58 * a * zap);
     } else if (p.mode === 'swim') {
       addGaussianBand(160, 75, 0.38 * a * (0.7 + 0.3 * Math.sin(t * 4.0)));
     } else {

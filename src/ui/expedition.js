@@ -376,6 +376,43 @@ window.OC = window.OC || {};
       landmarkId: 'wolf_orca_shelf',
       goal: 1,
       progress: (ctx) => ctx.hasPhotoOrPing(['orca', 'galapagos_shark', 'shark_hammerhead', 'darwins_arch']) ? 1 : 0
+    },
+    // --- Амазония: Лес Игапо ---
+    {
+      id: 'amz_discoveries',
+      biomeId: 'amazon_igapo',
+      title: 'Натуралист Амазонии',
+      desc: 'Изучите 6 разных видов флоры, фауны или объектов затопленного леса Рио-Негру.',
+      landmarkId: 'igapo_roots',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'amz_boto_echo',
+      biomeId: 'amazon_igapo',
+      title: 'Розовый дельфин Боуто',
+      desc: 'Отсканируйте сонаром (G) или сфотографируйте (P) розового речного дельфина в русле Рио-Негру.',
+      landmarkId: 'rio_negro_channel',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['pink_dolphin']) ? 1 : 0
+    },
+    {
+      id: 'amz_confluence',
+      biomeId: 'amazon_igapo',
+      title: 'Encontro das Águas',
+      desc: 'Побудьте в зоне слияния Рио-Негру и Амазонки (whitewater_confluence) и изучите границу течений.',
+      landmarkId: 'whitewater_confluence',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('whitewater_confluence') ? 1 : 0
+    },
+    {
+      id: 'amz_giants',
+      biomeId: 'amazon_igapo',
+      title: 'Гиганты и тайны сельвы',
+      desc: 'Отсканируйте (G) или снимите (P) гигантскую арапайму, электрического угря, ската моторо или кувшинку Викторию.',
+      landmarkId: 'victoria_lagoon',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['arapaima', 'electric_eel', 'river_stingray', 'victoria_lily']) ? 1 : 0
     }
   ];
 

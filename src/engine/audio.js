@@ -470,6 +470,11 @@ window.OC = window.OC || {};
     if (key === 'galapagos_penguin') return 'Подводный треск погони пингвина';
     if (key === 'marine_iguana') return 'Лавовый прибой и соскабливание ульвы';
     if (key === 'ocean_sunfish' || key === 'mobula_ray' || key === 'galapagos_shark' || key === 'darwins_arch') return 'Резонанс апвеллинга и Арки Дарвина';
+    if (key === 'pink_dolphin') return 'Эхолокация речного дельфина боуто';
+    if (key === 'electric_eel') return 'Биоэлектрический импульс угря';
+    if (key === 'piranha') return 'Барабанный стук стаи пираний';
+    if (key === 'arapaima' || key === 'river_stingray') return key === 'arapaima' ? 'Глоток воздуха гигантской арапаимы' : 'Скольжение ската моторо';
+    if (key === 'neon_tetra' || key === 'angelfish' || key === 'igapo_tree' || key === 'victoria_lily') return 'Тропическая речная биоакустика Игапо';
     if (key === 'volcanic_fumarole') return 'Пузырьковая вулканическая фумарола';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
     if (key === 'fish_parrot') return 'Хруст кораллов';
@@ -828,7 +833,51 @@ window.OC = window.OC || {};
           o.connect(f); f.connect(g); g.connect(out);
           o.start(t); o.stop(t + 0.06);
         }
-      } else if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle' || key === 'ocean_sunfish' || key === 'mobula_ray' || key === 'galapagos_shark' || key === 'darwins_arch' || key === 'marine_iguana') {
+      } else if (key === 'pink_dolphin') {
+        // Тёплый эхолокационный стрекот и мягкие низкие свисты боуто среди корней
+        for (let i = 0; i < 6; i++) {
+          const t = now + i * 0.085;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(1650 - i * 80, t);
+          o.frequency.exponentialRampToValueAtTime(520, t + 0.04);
+          g.gain.setValueAtTime(0.08, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.055);
+        }
+      } else if (key === 'electric_eel') {
+        // Биоэлектрический разряд угря (серия 380 Гц импульсов)
+        for (let i = 0; i < 5; i++) {
+          const t = now + i * 0.065;
+          const o = ctx.createOscillator();
+          const bp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(380, t);
+          o.frequency.exponentialRampToValueAtTime(760, t + 0.045);
+          bp.type = 'bandpass'; bp.frequency.value = 620; bp.Q.value = 2.0;
+          g.gain.setValueAtTime(0.085, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
+          o.connect(bp); bp.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.06);
+        }
+      } else if (key === 'piranha') {
+        // Характерное «ворчание» плавательного пузыря стаи пираний
+        for (let i = 0; i < 4; i++) {
+          const t = now + i * 0.14;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(155, t);
+          o.frequency.exponentialRampToValueAtTime(88, t + 0.09);
+          g.gain.setValueAtTime(0.09, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.12);
+        }
+      } else if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle' || key === 'ocean_sunfish' || key === 'mobula_ray' || key === 'galapagos_shark' || key === 'darwins_arch' || key === 'marine_iguana' || key === 'arapaima' || key === 'river_stingray') {
         const o = ctx.createOscillator();
         const lp = ctx.createBiquadFilter();
         const g = ctx.createGain();

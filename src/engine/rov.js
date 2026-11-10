@@ -21,7 +21,7 @@ window.OC = window.OC || {};
   const KARST_SPECIES = new Set(['stalactite', 'stalagmite']);
   const VOLCANIC_SPECIES = new Set(['galapagos_barnacle', 'darwins_arch']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag']);
 
   let sceneRef = null;
   let rovGroup = null;
@@ -606,7 +606,7 @@ window.OC = window.OC || {};
       out.label = floorEnc ? floorEnc[0] : 'Донный осадок';
       out.latin = floorEnc ? floorEnc[1] : 'Керн морского дна';
       out.dist = Math.max(1.0, clearance);
-      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : 0xe8d9b5);
+      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : 0xe8d9b5));
       return out;
     }
 
@@ -760,6 +760,9 @@ window.OC = window.OC || {};
       } else if (biome.id === 'galapagos_upwelling') {
         // Холодный глубинный апвеллинг Кромвеля: резкий экваториальный термоклин
         Tval -= OC.smoothstep(14, 52, d) * 5.8;
+      } else if (biome.id === 'amazon_igapo') {
+        // Пресноводная пойма Амазонии: слабый прогрев у поверхности и постепенное снижение на дне канала
+        Tval -= OC.smoothstep(2, 26, d) * 1.9;
       } else if (!biome.noSurface && !biome.hasAurora) {
         const thermoDrop = OC.smoothstep(18, 65, d) * 3.8;
         Tval -= thermoDrop;
