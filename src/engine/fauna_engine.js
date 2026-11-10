@@ -166,6 +166,32 @@ window.OC = window.OC || {};
 
     const anchor = new T.Vector3(ax0, ay0, az0);
     const matArr = mesh.instanceMatrix.array;
+    const isHostAnemone = !!opts.hostAnemone;
+    let anemoneHostFloor = biome.getHeight(cx, cz);
+
+    // Если это семья рыб-клоунов, ставим реальную актинию-хозяина прямо на дно в центре территории
+    if (isHostAnemone) {
+      const anemG = new T.Group();
+      const baseM = new T.Mesh(new T.CylinderGeometry(1.05, 1.35, 0.55, 10), creatureMat);
+      OC.geoPrep(baseM.geometry);
+      OC.paint(baseM.geometry, 0xb84086);
+      baseM.position.y = 0.25;
+      anemG.add(baseM);
+      for (let ti = 0; ti < 10; ti++) {
+        const ta = (ti / 10) * Math.PI * 2;
+        const tGeo = new T.ConeGeometry(0.16, 1.15, 5);
+        OC.geoPrep(tGeo);
+        OC.paint(tGeo, (x, y, z, c) => c.set(y > 0.2 ? 0xff7ae0 : 0xa03888));
+        const tm = new T.Mesh(tGeo, creatureMat);
+        tm.position.set(Math.cos(ta) * 0.58, 0.78, Math.sin(ta) * 0.58);
+        tm.rotation.z = -Math.cos(ta) * 0.36;
+        tm.rotation.x = Math.sin(ta) * 0.36;
+        anemG.add(tm);
+      }
+      anemG.position.set(cx, anemoneHostFloor - 0.1, cz);
+      anemG.userData.key = 'anemone';
+      scene.add(anemG);
+    }
 
     return {
       mesh,
@@ -216,13 +242,20 @@ window.OC = window.OC || {};
         }
 
         t += stepDt;
-        const effRadius = radius * radiusMult;
-        ang += (speed * activity / Math.max(12, effRadius)) * angDir * stepDt;
+        let hideInAnemone = false;
+        if (isHostAnemone) {
+          const dCamHost = Math.hypot(cx - camPos.x, cz - camPos.z);
+          if (dCamHost < 15 && (camSpeed > 5.5 || flashOn)) hideInAnemone = true;
+        }
+        const effRadius = isHostAnemone ? (hideInAnemone ? 1.2 : 4.2) : radius * radiusMult;
+        ang += (speed * activity / Math.max(8, effRadius)) * angDir * stepDt;
         const r = effRadius + Math.sin(t * 0.16) * (effRadius * 0.18);
         const ax = cx + Math.cos(ang) * r;
         const az = cz + Math.sin(ang) * r;
-        const floorC = biome.getHeight(ax, az);
-        const ay = OC.clamp(yDepth + depthShift + Math.sin(t * 0.25) * yAmp, floorC + 2.2, -1.4);
+        const floorC = isHostAnemone ? anemoneHostFloor : biome.getHeight(ax, az);
+        const ay = isHostAnemone
+          ? OC.clamp(hideInAnemone ? floorC + 0.95 : floorC + 2.25 + Math.sin(t * 0.6) * 0.55, floorC + 0.75, -1.2)
+          : OC.clamp(yDepth + depthShift + Math.sin(t * 0.25) * yAmp, floorC + 2.2, -1.4);
         anchor.set(ax, ay, az);
 
         // Определяем, активна ли рядом станция чистки
@@ -775,16 +808,19 @@ window.OC = window.OC || {};
         }
         t += dt;
         ang += (spd / opts.r) * dt;
-        const rr = opts.r + Math.sin(t * 0.2) * 14;
-        const ax = opts.cx + Math.cos(ang) * rr, az = opts.cz + Math.sin(ang) * rr;
-        const bx = opts.cx + Math.cos(ang + 0.1) * rr, bz = opts.cz + Math.sin(ang + 0.1) * rr;
+        // Фигура-восьмёрка вдоль стенки обрыва + выраженный крен в виражах
+        const rr = opts.r + Math.sin(t * 0.22) * 18;
+        const ax = opts.cx + Math.cos(ang) * rr * 0.78;
+        const az = opts.cz + Math.sin(ang) * rr + Math.sin(ang * 2.0) * 14;
+        const bx = opts.cx + Math.cos(ang + 0.12) * rr * 0.78;
+        const bz = opts.cz + Math.sin(ang + 0.12) * rr + Math.sin((ang + 0.12) * 2.0) * 14;
         const ay = Math.max(opts.y + Math.sin(t * 0.3) * 6, biome.getHeight(ax, az) + 5);
         const by = Math.max(opts.y + Math.sin(t * 0.3 + 0.3) * 6, biome.getHeight(bx, bz) + 5);
         a.set(ax, Math.min(-2.5, ay), az);
         b.set(bx, Math.min(-2.5, by), bz);
         group.position.copy(a);
         group.lookAt(b);
-        group.rotateZ(Math.sin(t * 0.3) * 0.16);
+        group.rotateZ(Math.cos(ang) * 0.22 + Math.sin(t * 0.3) * 0.12);
         const flap = Math.sin(time * 1.25);
         wingL.rotation.z = flap * 0.32;
         wingR.rotation.z = -flap * 0.32;
@@ -830,7 +866,23 @@ window.OC = window.OC || {};
     scene.add(group);
 
     let ang = Math.random() * 6.28, t = Math.random() * 70;
+    let breathPhase = Math.random() * 34;
     const a = new T.Vector3(), b = new T.Vector3();
+
+    function turtlePos(angVal, tVal, bPhase, out) {
+      const rr = opts.r + Math.sin(tVal * 0.19) * 10;
+      const x = opts.cx + Math.cos(angVal) * rr;
+      const z = opts.cz + Math.sin(angVal) * rr + Math.sin(angVal * 2.0) * 8;
+      // Периодическое всплытие на поверхность за воздухом (цикл ~34 с)
+      const cyc = bPhase % 34.0;
+      let surfW = 0;
+      if (cyc > 26.0 && cyc < 33.5) {
+        surfW = Math.sin(((cyc - 26.0) / 7.5) * Math.PI);
+      }
+      const grazeY = Math.max(opts.y + Math.sin(tVal * 0.3) * 3.5, biome.getHeight(x, z) + 2.2);
+      const y = Math.min(-0.45, OC.lerp(grazeY, -0.5, surfW));
+      return out.set(x, y, z);
+    }
 
     return {
       key: 'turtle',
@@ -839,16 +891,12 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
-        const spd = OC.lerp(1.4, 2.1, dayW);
+        const spd = OC.lerp(1.4, 2.2, dayW);
         t += dt;
+        breathPhase += dt;
         ang += (spd / opts.r) * dt;
-        const rr = opts.r + Math.sin(t * 0.19) * 10;
-        const ax = opts.cx + Math.cos(ang) * rr, az = opts.cz + Math.sin(ang) * rr;
-        const bx = opts.cx + Math.cos(ang + 0.14) * rr, bz = opts.cz + Math.sin(ang + 0.14) * rr;
-        const ay = Math.max(opts.y + Math.sin(t * 0.3) * 3.5, biome.getHeight(ax, az) + 2.2);
-        const by = Math.max(opts.y + Math.sin(t * 0.3 + 0.3) * 3.5, biome.getHeight(bx, bz) + 2.2);
-        a.set(ax, Math.min(-1.4, ay), az);
-        b.set(bx, Math.min(-1.4, by), bz);
+        turtlePos(ang, t, breathPhase, a);
+        turtlePos(ang + 0.14, t + 0.4, breathPhase + 0.4, b);
         group.position.copy(a);
         group.lookAt(b);
         const stroke = Math.sin(time * 1.15);
@@ -1009,6 +1057,7 @@ window.OC = window.OC || {};
     let ang = Math.random() * 6.28, t = Math.random() * 100;
     const dir = Math.random() < 0.5 ? 1 : -1;
     const a = new T.Vector3(), b = new T.Vector3();
+    let inspectBlend = 0;
 
     return {
       key: isWhale ? 'shark_whale' : 'shark_reef',
@@ -1018,14 +1067,27 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 760) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
+        const flashOn = ctx ? ctx.flashOn : false;
         const nightBoost = isWhale ? 1.0 : OC.lerp(1.22, 1.0, dayW);
         t += dt;
         ang += ((opts.speed * nightBoost) / opts.r) * dir * dt;
-        const rr = opts.r + Math.sin(t * 0.18) * 14;
-        const ax = opts.cx + Math.cos(ang) * rr, az = opts.cz + Math.sin(ang) * rr;
-        const bx = opts.cx + Math.cos(ang + 0.1 * dir) * rr, bz = opts.cz + Math.sin(ang + 0.1 * dir) * rr;
-        const ay = Math.max(opts.y + Math.sin(t * 0.24) * 5, biome.getHeight(ax, az) + 4);
-        const by = Math.max(opts.y + Math.sin(t * 0.24 + 0.2) * 5, biome.getHeight(bx, bz) + 4);
+
+        // Патрулирование по вытянутой восьмёрке вдоль рельефа + любопытный осмотр дайвера на 18 м
+        const dCam = Math.hypot(camPos.x - opts.cx, camPos.z - opts.cz);
+        const wantInspect = !isWhale && dCam < opts.r + 36 && camPos.y < -3.0;
+        inspectBlend += ((wantInspect ? (flashOn ? 0.55 : 0.35) : 0) - inspectBlend) * Math.min(1, dt * 1.2);
+
+        const patCx = OC.lerp(opts.cx, camPos.x, inspectBlend);
+        const patCz = OC.lerp(opts.cz, camPos.z, inspectBlend);
+        const patR = OC.lerp(opts.r + Math.sin(t * 0.18) * 14, 18.0, inspectBlend);
+
+        const ax = patCx + Math.cos(ang) * patR * 0.85;
+        const az = patCz + Math.sin(ang) * patR + Math.sin(ang * 2.0) * (isWhale ? 16 : 10) * (1 - inspectBlend);
+        const bx = patCx + Math.cos(ang + 0.1 * dir) * patR * 0.85;
+        const bz = patCz + Math.sin(ang + 0.1 * dir) * patR + Math.sin((ang + 0.1 * dir) * 2.0) * (isWhale ? 16 : 10) * (1 - inspectBlend);
+        const baseY = OC.lerp(opts.y + Math.sin(t * 0.24) * 5, Math.min(-4, camPos.y + 1.5), inspectBlend);
+        const ay = Math.max(baseY, biome.getHeight(ax, az) + 4);
+        const by = Math.max(baseY + Math.sin(t * 0.24 + 0.2) * 1.5, biome.getHeight(bx, bz) + 4);
         a.set(ax, Math.min(-2.5, ay), az);
         b.set(bx, Math.min(-2.5, by), bz);
         group.position.copy(a);
@@ -1087,6 +1149,20 @@ window.OC = window.OC || {};
     let ang = 0.6, t = 0;
     const a = new T.Vector3(), b = new T.Vector3();
 
+    function whalePos(angVal, tVal, out) {
+      // Длинный эллиптический ход вдоль внешней стены + периодическое всплытие на поверхность
+      const ax = opts.cx + Math.cos(angVal) * opts.r * 0.65;
+      const az = opts.cz + Math.sin(angVal) * opts.r * 1.45;
+      const cyc = tVal % 58.0;
+      let breathRise = 0;
+      if (cyc > 44.0 && cyc < 56.0) {
+        breathRise = Math.sin(((cyc - 44.0) / 12.0) * Math.PI);
+      }
+      const deepY = Math.max(opts.y + Math.sin(tVal * 0.14) * 10, biome.getHeight(ax, az) + 12);
+      const y = Math.min(-3.4, OC.lerp(deepY, -3.8, breathRise));
+      return out.set(ax, y, az);
+    }
+
     return {
       key: 'whale_humpback',
       getPosition: () => group.position,
@@ -1095,12 +1171,8 @@ window.OC = window.OC || {};
         group.visible = true;
         t += dt;
         ang += (opts.speed / opts.r) * dt;
-        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
-        const bx = opts.cx + Math.cos(ang + 0.08) * opts.r, bz = opts.cz + Math.sin(ang + 0.08) * opts.r;
-        const ay = Math.max(opts.y + Math.sin(t * 0.14) * 10, biome.getHeight(ax, az) + 10);
-        const by = Math.max(opts.y + Math.sin(t * 0.14 + 0.2) * 10, biome.getHeight(bx, bz) + 10);
-        a.set(ax, Math.min(-6.0, ay), az);
-        b.set(bx, Math.min(-6.0, by), bz);
+        whalePos(ang, t, a);
+        whalePos(ang + 0.08, t + 1.2, b);
         group.position.copy(a);
         group.lookAt(b);
         tailPivot.rotation.x = Math.sin(time * 0.95) * 0.34;
@@ -1139,7 +1211,7 @@ window.OC = window.OC || {};
     scene.add(group);
 
     let t = Math.random() * 50;
-    const baseY = biome.getHeight(opts.x, opts.z) + 0.55;
+    let spook = 0;
     return {
       key: 'octopus',
       getPosition: () => group.position,
@@ -1147,11 +1219,19 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.x - camPos.x, opts.z - camPos.z) > 400) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
-        t += dt * OC.lerp(1.25, 0.9, dayW);
-        group.position.set(opts.x + Math.sin(t * 0.4) * 1.8, baseY + Math.abs(Math.sin(t * 0.9)) * 0.9, opts.z + Math.cos(t * 0.35) * 1.8);
-        group.rotation.y = t * 0.3;
+        const camSpeed = ctx ? ctx.camSpeed : 0;
+        const dCam = Math.hypot(group.position.x - camPos.x, group.position.z - camPos.z);
+        if (dCam < 8.5 && camSpeed > 4.0) spook = Math.min(1, spook + dt * 3.0);
+        else spook = Math.max(0, spook - dt * 0.6);
+
+        t += dt * OC.lerp(1.25, 0.9, dayW) * (1 + spook * 1.8);
+        const wx = opts.x + Math.sin(t * 0.42) * 3.4 + Math.cos(t * 0.19) * 1.5;
+        const wz = opts.z + Math.cos(t * 0.36) * 3.4 + Math.sin(t * 0.23) * 1.5;
+        const wy = biome.getHeight(wx, wz) + 0.55 + Math.abs(Math.sin(t * (0.9 + spook))) * (0.7 + spook * 1.1);
+        group.position.set(wx, wy, wz);
+        group.rotation.y = t * (0.3 + spook * 0.4);
         for (let i = 0; i < arms.length; i++) {
-          arms[i].rotation.z = Math.sin(time * 2.5 + i) * 0.12;
+          arms[i].rotation.z = Math.sin(time * (2.5 + spook * 4.0) + i) * (0.12 + spook * 0.14);
         }
       }
     };
@@ -1176,7 +1256,7 @@ window.OC = window.OC || {};
     scene.add(group);
 
     const baseY = biome.getHeight(opts.x, opts.z) + 0.65;
-    let ang = Math.random() * 6.28, t = Math.random() * 50;
+    let ang = Math.random() * 6.28, t = Math.random() * 50, retract = 0;
     return {
       key: 'moray',
       isNocturnalPredator: true,
@@ -1185,40 +1265,61 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.x - camPos.x, opts.z - camPos.z) > 400) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
+        const camSpeed = ctx ? ctx.camSpeed : 0;
+        const flashOn = ctx ? ctx.flashOn : false;
+        const dCam = Math.hypot(opts.x - camPos.x, opts.z - camPos.z);
+        const threat = dCam < 9.5 && (camSpeed > 3.5 || flashOn || dCam < 5.5);
+        retract += ((threat ? 1 : 0) - retract) * Math.min(1, dt * 3.5);
+
         const act = OC.lerp(1.5, 0.72, dayW);
-        const orbitR = OC.lerp(5.2, 3.0, dayW);
+        const orbitR = OC.lerp(5.2, 2.2, dayW) * (1 - retract * 0.85);
         t += dt * act;
         ang += 0.28 * act * dt;
-        group.position.set(opts.x + Math.cos(ang) * orbitR, baseY, opts.z + Math.sin(ang) * orbitR);
+        group.position.set(opts.x + Math.cos(ang) * orbitR, baseY - retract * 0.48, opts.z + Math.sin(ang) * orbitR);
         group.rotation.y = -ang;
         for (let i = 0; i < segMeshes.length; i++) {
-          segMeshes[i].position.x = Math.sin(time * 3.5 - i * 0.55) * 0.18;
+          segMeshes[i].position.x = Math.sin(time * 3.5 - i * 0.55) * 0.18 * (1 - retract * 0.5);
         }
       }
     };
   }
 
-  /* ---------- Бесконечные пузыри и биолюминесцентный планктон вокруг камеры ---------- */
-  function createCameraRelativeParticles(scene, n, tex, isPlankton) {
+  /* ---------- Бесконечные пузыри, биолюминесцентный планктон и глубинный «морской снег» ---------- */
+  function createCameraRelativeParticles(scene, n, tex, mode) {
+    const kind = mode === true ? 'plankton' : (mode === false ? 'bubbles' : mode);
+    const isPlankton = kind === 'plankton';
+    const isSnow = kind === 'snow';
     const geo = new T.BufferGeometry();
     const pos = new Float32Array(n * 3);
     const ph = new Float32Array(n);
     const sz = new Float32Array(n);
     const spd = new Float32Array(n);
-    const rng = OC.mulberry32(isPlankton ? 8812 : 4409);
+    const rng = OC.mulberry32(isPlankton ? 8812 : (isSnow ? 6147 : 4409));
 
     for (let i = 0; i < n; i++) {
       pos[i * 3] = (rng() - 0.5) * 180;
       pos[i * 3 + 1] = (rng() - 0.5) * 110;
       pos[i * 3 + 2] = (rng() - 0.5) * 180;
       ph[i] = rng() * 100;
-      sz[i] = isPlankton ? OC.lerp(0.35, 1.35, rng()) : OC.lerp(0.45, 1.4, rng());
-      spd[i] = isPlankton ? OC.lerp(0.2, 0.7, rng()) : OC.lerp(1.6, 4.4, rng());
+      sz[i] = isPlankton ? OC.lerp(0.35, 1.35, rng()) : (isSnow ? OC.lerp(0.55, 1.65, rng()) : OC.lerp(0.45, 1.4, rng()));
+      spd[i] = isPlankton ? OC.lerp(0.2, 0.7, rng()) : (isSnow ? OC.lerp(0.25, 0.72, rng()) : OC.lerp(1.6, 4.4, rng()));
     }
     geo.setAttribute('position', new T.BufferAttribute(pos, 3));
     geo.setAttribute('aPhase', new T.BufferAttribute(ph, 1));
     geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
     geo.setAttribute('aSpeed', new T.BufferAttribute(spd, 1));
+
+    const motionGLSL = isPlankton
+      ? `p.x += sin(uTime * 0.16 + aPhase) * 3.5;
+         p.y += cos(uTime * 0.21 + aPhase * 1.3) * 2.2;
+         p.z += cos(uTime * 0.14 + aPhase * 0.7) * 3.5;`
+      : (isSnow
+        ? `p.y -= uTime * aSpeed;
+           p.x += sin(uTime * 0.32 + aPhase) * 2.2;
+           p.z += cos(uTime * 0.27 + aPhase * 1.2) * 2.2;`
+        : `p.y += uTime * aSpeed;
+           p.x += sin(uTime * 0.75 + aPhase) * 1.1;
+           p.z += cos(uTime * 0.6 + aPhase) * 1.1;`);
 
     const mat = new T.ShaderMaterial({
       transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: true,
@@ -1228,7 +1329,8 @@ window.OC = window.OC || {};
           uTex: { value: tex },
           uTime: OC.uTime,
           uCamPos: { value: new T.Vector3() },
-          uColor: { value: new T.Color(isPlankton ? 0x7ef2ff : 0xc6f2ff) },
+          uFlowOffset: { value: new T.Vector3() },
+          uColor: { value: new T.Color(isPlankton ? 0x7ef2ff : (isSnow ? 0xd9edf7 : 0xc6f2ff)) },
           uBio: { value: 0.4 },
           uScale: { value: 1.0 }
         }
@@ -1236,30 +1338,24 @@ window.OC = window.OC || {};
       vertexShader: `
         attribute float aPhase, aSize, aSpeed;
         uniform float uTime, uScale, uBio;
-        uniform vec3 uCamPos;
+        uniform vec3 uCamPos, uFlowOffset;
         varying float vAlpha;
         #include <fog_pars_vertex>
         void main(){
           vec3 box = vec3(180.0, 110.0, 180.0);
-          vec3 p = position;
-          ${isPlankton
-            ? `p.x += sin(uTime * 0.16 + aPhase) * 3.5;
-               p.y += cos(uTime * 0.21 + aPhase * 1.3) * 2.2;
-               p.z += cos(uTime * 0.14 + aPhase * 0.7) * 3.5;`
-            : `p.y += uTime * aSpeed;
-               p.x += sin(uTime * 0.75 + aPhase) * 1.1;
-               p.z += cos(uTime * 0.6 + aPhase) * 1.1;`}
+          vec3 p = position + uFlowOffset;
+          ${motionGLSL}
           vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
           vec3 worldP = uCamPos + rel;
           // Не вылетаем над поверхностью моря (Y = 0)
           float belowWater = step(worldP.y, -0.35);
           vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
-          gl_PointSize = belowWater * aSize * uScale * (${isPlankton ? '135.0' : '115.0'} / max(1.0, -mvPosition.z));
+          gl_PointSize = belowWater * aSize * uScale * (${isPlankton ? '135.0' : (isSnow ? '105.0' : '115.0')} / max(1.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
           float blink = ${isPlankton
             ? '0.35 + 0.65 * pow(0.5 + 0.5 * sin(uTime * (0.7 + fract(aPhase) * 1.3) + aPhase), 2.0)'
-            : '0.85'};
-          vAlpha = belowWater * blink * ${isPlankton ? '(0.28 + uBio * 0.72)' : '0.52'};
+            : (isSnow ? '(0.28 + 0.72 * smoothstep(-6.0, -28.0, worldP.y))' : '0.85')};
+          vAlpha = belowWater * blink * ${isPlankton ? '(0.28 + uBio * 0.72)' : (isSnow ? '(0.36 + uBio * 0.35)' : '0.52')};
           #include <fog_vertex>
         }`,
       fragmentShader: `
@@ -1276,7 +1372,7 @@ window.OC = window.OC || {};
 
     const pts = new T.Points(geo, mat);
     pts.frustumCulled = false;
-    pts.userData.key = isPlankton ? 'plankton' : 'bubbles';
+    pts.userData.key = isPlankton ? 'plankton' : (isSnow ? 'marine_snow' : 'bubbles');
     scene.add(pts);
     return mat;
   }
@@ -1379,12 +1475,13 @@ window.OC = window.OC || {};
         sonarTargets.push(w);
       }
 
-      // ---- Пузыри и планктон (бесконечные вокруг камеры) ----
+      // ---- Пузыри, планктон и глубинный морской снег (вокруг камеры) ----
       const pCountMult = OC.Quality.get().particlesScale;
       const texSoft = OC.circleTexture(64, false);
       const texHard = OC.circleTexture(64, true);
-      const bubbleMat = createCameraRelativeParticles(scene, Math.round(900 * pCountMult), texHard, false);
-      const planktonMat = createCameraRelativeParticles(scene, Math.round(1500 * pCountMult), texSoft, true);
+      const bubbleMat = createCameraRelativeParticles(scene, Math.round(900 * pCountMult), texHard, 'bubbles');
+      const planktonMat = createCameraRelativeParticles(scene, Math.round(1500 * pCountMult), texSoft, 'plankton');
+      const snowMat = createCameraRelativeParticles(scene, Math.round(1050 * pCountMult), texSoft, 'snow');
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
       const dayPlanktonCol = new T.Color(0x9be8ff);
@@ -1400,6 +1497,8 @@ window.OC = window.OC || {};
       };
       const _scanSample = new T.Vector3();
       const _toTarget = new T.Vector3();
+      const _currFlow = new T.Vector3();
+      const _flowAccum = new T.Vector3();
 
       function refreshFaunaCounts() {
         let total = 0;
@@ -1451,12 +1550,28 @@ window.OC = window.OC || {};
 
           bubbleMat.uniforms.uCamPos.value.copy(camPos);
           planktonMat.uniforms.uCamPos.value.copy(camPos);
+          snowMat.uniforms.uCamPos.value.copy(camPos);
+
+          // Плавная адвекция планктона, пузырей и морского снега по локальному течению
+          if (biome.getCurrentAt && camPos.y < 1.5) {
+            biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _currFlow);
+            _flowAccum.addScaledVector(_currFlow, dt * 1.35);
+            _flowAccum.x = ((_flowAccum.x % 180) + 180) % 180;
+            _flowAccum.y = ((_flowAccum.y % 110) + 110) % 110;
+            _flowAccum.z = ((_flowAccum.z % 180) + 180) % 180;
+            bubbleMat.uniforms.uFlowOffset.value.copy(_flowAccum);
+            planktonMat.uniforms.uFlowOffset.value.copy(_flowAccum);
+            snowMat.uniforms.uFlowOffset.value.copy(_flowAccum);
+          }
+
           planktonMat.uniforms.uBio.value = pal.bioGlow;
           planktonMat.uniforms.uColor.value.copy(pal.bioGlow > 0.45 ? bioPlanktonCol : dayPlanktonCol);
+          snowMat.uniforms.uBio.value = flashOn ? 1.0 : 0.15;
         },
         setScale(s) {
           bubbleMat.uniforms.uScale.value = s;
           planktonMat.uniforms.uScale.value = s;
+          snowMat.uniforms.uScale.value = s;
         },
         /* Активное сонарное сканирование вперёд по курсу (рельеф + крупная фауна/стаи) */
         scanForward(origin, dir, maxRange) {

@@ -192,6 +192,10 @@ function checkMaterialShader(opts, label) {
   assert(!sh.vertexShader.includes('#include <project_vertex>'), `${label} vertex left unreplaced project_vertex`);
   if (opts.swayAmp > 0) assert(sh.vertexShader.includes('attribute float aSway;'), `${label} missing aSway`);
   if (opts.fishSwim) assert(sh.vertexShader.includes('attribute vec2 aSwim;'), `${label} missing aSwim`);
+  if (opts.isTerrain) {
+    assert(sh.fragmentShader.includes('detFade'), 'terrain fragment missing procedural micro-detail detFade');
+    assert(sh.fragmentShader.includes('strata'), 'terrain fragment missing limestone strata detail');
+  }
   assert(sh.fragmentShader.includes('#include <fog_fragment>'), `${label} fragment must preserve fog_fragment after caustics`);
   assert(sh.fragmentShader.indexOf('uCausticTex') < sh.fragmentShader.indexOf('#include <fog_fragment>'), `${label} caustics must run before fog`);
 }
@@ -211,9 +215,29 @@ OC.Terrain.init(scene, biome, spawnVec);
 OC.FloraStreamer.init(scene, biome, spawnVec);
 const fauna = OC.FaunaEngine.init(scene, biome);
 
+// Verify all 22 FloraLibrary prototypes have finite bounding spheres & encyclopedia entries
+const floraProtos = OC.FloraLibrary.create();
+for (const spKey of ['island_palm', 'coral_crust', 'crinoid']) {
+  assert(floraProtos[spKey], `FloraLibrary missing new species ${spKey}`);
+  assert(biome.encyclopedia[spKey], `Encyclopedia missing new species ${spKey}`);
+}
+for (const spKey in floraProtos) {
+  for (let vi = 0; vi < floraProtos[spKey].geos.length; vi++) {
+    const g = floraProtos[spKey].geos[vi];
+    g.computeBoundingSphere();
+    assert(Number.isFinite(g.boundingSphere.radius) && g.boundingSphere.radius > 0, `Invalid NaN/zero boundingSphere for ${spKey}[${vi}]`);
+  }
+}
+
+// Verify world.js water foam + volumetric beam + marine snow contracts exist
+const worldSrc = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8');
+assert(worldSrc.includes('uFoamTex') && worldSrc.includes('flashBeamMat'), 'world.js missing uFoamTex surf foam or flashBeamMat cone');
+const faunaSrc = fs.readFileSync(path.join(ROOT, 'src/engine/fauna_engine.js'), 'utf8');
+assert(faunaSrc.includes('marine_snow'), 'fauna_engine.js missing marine_snow deep particle layer');
+
 // Verify all placed fauna objects have encyclopedia keys
 scene.traverse((obj) => {
-  if (obj.userData && obj.userData.key && obj.userData.key !== 'bubbles' && obj.userData.key !== 'plankton') {
+  if (obj.userData && obj.userData.key && obj.userData.key !== 'bubbles' && obj.userData.key !== 'plankton' && obj.userData.key !== 'marine_snow') {
     assert(biome.encyclopedia[obj.userData.key], `Fauna/Flora object key "${obj.userData.key}" missing from encyclopedia!`);
   }
 });
@@ -278,7 +302,23 @@ for (const dayVal of [0.05, 0.5, 0.95]) {
 }
 console.log('   Stage 2 Boids, faunaPlan, fish_lantern, Navigation, Sonar scanForward, Audio & Minimap verified.');
 
-// F) Verify runtime quality switching
+// F) Option 2 verification: Tidal currents, upwelling, flow advection, uCurrent coral sway & smart megafauna
+assert(typeof biome.getCurrentAt === 'function', 'biome.getCurrentAt current vector field required');
+assert(typeof OC.Navigation.getCurrent === 'function', 'Navigation.getCurrent required');
+const passLm = biome.landmarks.find((l) => l.id === 'pass');
+const lagoonLm = biome.landmarks.find((l) => l.id === 'bommies');
+const cPass = biome.getCurrentAt(passLm.x, -10, passLm.z, 1.5, new T.Vector3());
+const cLagoon = biome.getCurrentAt(lagoonLm.x, -8, lagoonLm.z, 1.5, new T.Vector3());
+assert(cPass.length() > cLagoon.length() * 2.0 && cPass.length() > 1.0, `Reef Pass current (${cPass.length().toFixed(2)}) must exceed sheltered lagoon (${cLagoon.length().toFixed(2)})`);
+assert(worldSrc.includes('uCurrent') && faunaSrc.includes('uFlowOffset'), 'world.js uCurrent coral lean & fauna_engine.js uFlowOffset advection required');
+assert(biome.faunaPlan.schools.some((s) => s.key === 'fish_orange' && s.hostAnemone), 'Clownfish school must anchor to hostAnemone');
+assert(faunaSrc.includes('breathPhase') && faunaSrc.includes('inspectBlend') && faunaSrc.includes('retract'), 'Megafauna smart AI (turtle breath, shark inspect, moray retract) missing');
+const subHtml = fs.readFileSync(path.join(ROOT, 'template.html'), 'utf8');
+assert(subHtml.includes('id="sub-current"'), 'template.html missing #sub-current HUD readout');
+checkMaterialShader({ causticStrength: 0.78, swayAmp: 0.42 }, 'coralSoftCurrent');
+console.log('   Option 2 ocean currents, particle/sway advection, #sub-current HUD & smart megafauna verified.');
+
+// G) Verify runtime quality switching
 for (const qId of ['low', 'medium', 'high', 'ultra']) {
   OC.Quality.set(qId);
   OC.Terrain.update(camera.position);

@@ -322,6 +322,8 @@
     <div class="tele-sep"></div>
     <div class="sub-cell"><span>Ход</span><b id="sub-speed">0.0 уз</b></div>
     <div class="tele-sep"></div>
+    <div class="sub-cell"><span>Течение</span><b id="sub-current">0.0 уз</b></div>
+    <div class="tele-sep"></div>
     <div class="sub-cell"><span>Среда</span><b id="sub-phase">День</b></div>
   </div>
 </div>
@@ -1131,6 +1133,66 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---- Векторные приливные и прибойные течения шельфа (м/с) ---- */
+  function getCurrentAt(x, y, z, time, out) {
+    out = out || new T.Vector3();
+    if (y > 0.1) return out.set(0, 0, 0);
+
+    const u = x - shelfOffset(z);
+    const floor = getHeight(x, z);
+    const clearance = Math.max(0, y - floor);
+    // У самого дна в расщелинах течение затихает (пограничный слой)
+    const shelter = OC.smoothstep(0.4, 4.2, clearance);
+    const t = time || 0;
+
+    let vx = 0, vy = 0, vz = 0;
+
+    // 1. Приливная струя Рифового прохода (сильный поток через канал)
+    if (u > -10 && u < 580) {
+      const pz = passCenterZ(x);
+      const dz = Math.abs(z - pz);
+      if (dz < 88) {
+        const across = OC.smoothstep(88, 18, dz);
+        const along = OC.smoothstep(-10, 80, u) * OC.smoothstep(580, 450, u);
+        const tidePhase = Math.sin(t * 0.045); // медленный прилив/отлив
+        const dir = tidePhase >= 0 ? -1 : 1;
+        const mag = (1.15 + 1.15 * Math.abs(tidePhase)) * across * along;
+        // Касательная канала passCenterZ(x)
+        const dpz = passCenterZ(x + 4) - passCenterZ(x - 4);
+        const tx = 8, tz = dpz;
+        const tlen = Math.hypot(tx, tz) || 1;
+        vx += (tx / tlen) * dir * mag;
+        vz += (tz / tlen) * dir * mag;
+      }
+    }
+
+    // 2. Волновой накат над гребнем и spur-and-groove (направлен на запад к лагуне)
+    if (u > 25 && u < 310 && y > -16) {
+      const crestMask = OC.smoothstep(25, 75, u) * OC.smoothstep(310, 210, u);
+      const depthFade = OC.smoothstep(-16, -2.5, y);
+      const surge = 0.55 + 0.35 * Math.sin(t * 0.85 + x * 0.045);
+      vx -= surge * crestMask * depthFade;
+      vy += Math.sin(t * 0.85 + x * 0.045) * 0.14 * crestMask * depthFade;
+    }
+
+    // 3. Восточно-Австралийское течение и апвеллинг вдоль внешней стены барьера
+    if (u > 500) {
+      const wallMask = OC.smoothstep(500, 620, u);
+      const upMask = OC.smoothstep(500, 580, u) * OC.smoothstep(840, 650, u);
+      vz += 0.62 * wallMask;
+      vx -= 0.12 * wallMask;
+      vy += 0.22 * upMask * OC.smoothstep(-110, -25, y);
+    }
+
+    // 4. Лёгкий фоновый дрейф в лагуне
+    if (u >= -450 && u <= 30) {
+      vx += Math.sin(t * 0.12 + z * 0.01) * 0.14;
+      vz += 0.18 + Math.cos(t * 0.1 + x * 0.01) * 0.1;
+    }
+
+    return out.set(vx * shelter, vy * shelter, vz * shelter);
+  }
+
   /* ---- Размещение флоры в чанке (детерминированное, зонально-реалистичное) ---- */
   function generateChunkFlora(cx, cz, chunkSize, density, rng) {
     const x0 = cx * chunkSize;
@@ -1149,7 +1211,7 @@ window.OC = window.OC || {};
         const u = x - shelfOffset(z);
         const dHole = Math.hypot(x - BLUE_HOLE_X, z - BLUE_HOLE_Z);
 
-        // Выше уровня моря + 0.35 м (сухой пляж островка) — не ставим кораллы; только мангры на кромке
+        // Выше уровня моря + 0.35 м (сухой островок или мангровый берег)
         if (y > 0.35) {
           if (u < -760 && y < 1.35 && rng() < 0.42) {
             out.push({
@@ -1159,6 +1221,28 @@ window.OC = window.OC || {};
               scale: OC.lerp(0.85, 1.45, rng()),
               tint: 0xffffff
             });
+          } else if (u >= -760 && y > 0.55 && rng() < 0.85) {
+            out.push({
+              species: 'island_palm',
+              x, y: y - 0.22, z,
+              ry: rng() * 6.28,
+              scale: OC.lerp(0.72, 1.28, rng()),
+              tint: rng() < 0.5 ? 0xf6fff2 : 0xe4f5dc
+            });
+            if (y > 1.25 && rng() < 0.6) {
+              const px2 = x + (rng() - 0.5) * 6.0;
+              const pz2 = z + (rng() - 0.5) * 6.0;
+              const py2 = getHeight(px2, pz2);
+              if (py2 > 0.5) {
+                out.push({
+                  species: 'island_palm',
+                  x: px2, y: py2 - 0.22, z: pz2,
+                  ry: rng() * 6.28,
+                  scale: OC.lerp(0.62, 1.12, rng()),
+                  tint: 0xecfbe2
+                });
+              }
+            }
           }
           continue;
         }
@@ -1225,6 +1309,18 @@ window.OC = window.OC || {};
               scale: OC.lerp(0.75, 1.35, rng()),
               tint: 0xffffff
             });
+            // Нижний ярус коркового коралла / криноидеи на бомми
+            if (rng() < 0.52) {
+              out.push({
+                species: rng() < 0.72 ? 'coral_crust' : 'crinoid',
+                x: x + (rng() - 0.5) * 4.5,
+                y: y - 0.12,
+                z: z + (rng() - 0.5) * 4.5,
+                ry: rng() * 6.28,
+                scale: OC.lerp(0.75, 1.25, rng()),
+                tint: 0xffffff
+              });
+            }
           } else {
             // Песчаное дно лагуны: трава, ежи, звёзды, тридакны, раковины
             const r = rng();
@@ -1276,6 +1372,20 @@ window.OC = window.OC || {};
             scale: OC.lerp(0.82, 1.48, rng()),
             tint: 0xffffff
           });
+          // Плотное покрытие гребня вторым ярусом (корковые кораллы, криноидеи, мелкие ветви)
+          if (rng() < 0.72) {
+            const subR = rng();
+            const subSp = subR < 0.62 ? 'coral_crust' : (subR < 0.84 ? 'crinoid' : 'coral_staghorn');
+            out.push({
+              species: subSp,
+              x: x + (rng() - 0.5) * 4.8,
+              y: y - 0.12,
+              z: z + (rng() - 0.5) * 4.8,
+              ry: rng() * 6.28,
+              scale: OC.lerp(0.7, 1.25, rng()),
+              tint: 0xffffff
+            });
+          }
           continue;
         }
 
@@ -1296,11 +1406,12 @@ window.OC = window.OC || {};
           }
           const r = rng();
           let sp = 'coral_fan';
-          if (r < 0.24) sp = 'coral_fan';
-          else if (r < 0.42) sp = 'sponge_tube';
-          else if (r < 0.58) sp = 'sponge_barrel';
-          else if (r < 0.74) sp = 'coral_plate';
-          else if (r < 0.86) sp = 'coral_soft';
+          if (r < 0.22) sp = 'coral_fan';
+          else if (r < 0.38) sp = 'sponge_tube';
+          else if (r < 0.52) sp = 'sponge_barrel';
+          else if (r < 0.66) sp = 'coral_plate';
+          else if (r < 0.78) sp = 'coral_soft';
+          else if (r < 0.88) sp = 'crinoid';
           else if (r < 0.94) sp = 'kelp';
           else sp = 'coral_brain';
           out.push({
@@ -1473,6 +1584,7 @@ window.OC = window.OC || {};
     // География
     floor: ['Морское дно и рельеф рифа', 'Bathymetry / Benthos', 'Геология', 'Все зоны', '0–168 м', 'Карбонатные пески, известняковые плиты, контрфорсы прибоя (spur-and-groove) и отвесный склон шельфа Кораллового моря.'],
     mangrove: ['Красные мангры', 'Rhizophora stylosa', 'Флора', 'Мангровые отмели', '0–3 м', 'Деревья с арочными ходульными корнями, фильтрующие сток суши и дающие укрытие малькам рифовых рыб и крабов.'],
+    island_palm: ['Пальмы кораллового острова', 'Cocos nucifera', 'Флора', 'Коралловый островок', '+1–10 м', 'Тропические кокосовые пальмы и прибрежные кустарники песчаного островка (Sand Cay), удерживающие коралловый песок корнями от ветровой и волновой эрозии.'],
     seagrass: ['Морская трава', 'Zostera / Halophila', 'Флора', 'Луга морской травы', '3–14 м', 'Единственные цветковые растения, полностью адаптированные к морской воде. Основная пища дюгоней и зелёных черепах.'],
     kelp: ['Саргассовые и бурые водоросли', 'Sargassum / Laminariales', 'Флора', 'Внешний склон', '15–42 м', 'Крупные бурые водоросли прохладных течений внешнего склона с газовыми пузырьками-поплавками.'],
 
@@ -1482,9 +1594,11 @@ window.OC = window.OC || {};
     coral_brain: ['Мозговой коралл', 'Platygyra / Diploria', 'Кораллы', 'Лагуна и Гребень', '3–25 м', 'Прочные сферические колонии с лабиринтовыми бороздами; выдерживают сильные штормовые волны и живут столетиями.'],
     coral_bommie: ['Массивный коралл Поритес (Бомми)', 'Porites lutea', 'Кораллы', 'Внутренняя лагуна', '4–22 м', 'Колоссальные известняковые башни («бомми»), формирующиеся тысячелетиями из миллионов крошечных полипов.'],
     coral_plate: ['Листовой коралл Монтипора', 'Montipora / Turbinaria', 'Кораллы', 'Склон и Стена', '22–65 м', 'Черепитчатые пластины на крутых склонах, адаптированные к слабому рассеянному свету больших глубин.'],
+    coral_crust: ['Корковый коралл и литотамний', 'Montipora / Porolithon', 'Кораллы', 'Гребень и Бомми', '1–22 м', 'Стелющиеся корковые кораллы и известковые водоросли, цементирующие каркас рифа и заполняющие пространство между крупными колониями.'],
     coral_fan: ['Веерная горгонария', 'Gorgonia / Melithaea', 'Кораллы', 'Склон и Проход', '14–55 м', 'Ажурные мягкие кораллы-веера, разворачивающиеся поперёк течения для фильтрации зоопланктона.'],
     coral_soft: ['Мягкий коралл Дендронефтия', 'Dendronephthya', 'Кораллы', 'Склон и Обрыв', '25–90 м', 'Яркие пастельно-розовые и фиолетовые кусты без жёсткого известкового скелета; надуваются водой в сильном течении.'],
     coral_black: ['Чёрный коралл', 'Antipatharia', 'Кораллы', 'Голубая дыра и Бездна', '38–145 м', 'Глубоководные веерные и кнутообразные кораллы сумеречной зоны без зооксантелл, растущие всего по несколько миллиметров в год.'],
+    crinoid: ['Морская лилия (Криноидея)', 'Comanthina schlegeli', 'Беспозвоночные', 'Гребень и Склон', '3–55 м', 'Древнее иглокожее с венчиком перистых лучей; цепляется за вершины кораллов и губок, процеживая планктон из течения.'],
     sponge_tube: ['Трубчатая губка', 'Aplysina fistularis', 'Беспозвоночные', 'Склон и Стена', '15–60 м', 'Колонии вертикальных пористых трубок, непрерывно прокачивающих и очищающих тысячи литров морской воды в сутки.'],
     sponge_barrel: ['Гигантская бочковидная губка', 'Xestospongia testudinaria', 'Беспозвоночные', 'Внешний склон', '20–85 м', '«Красное дерево рифа» — ребристые бочки до 2 м в высоту, способные прожить более тысячи лет.'],
     anemone: ['Величественная актиния', 'Heteractis magnifica', 'Беспозвоночные', 'Лагуна и Гребень', '2–18 м', 'Хищный полип со стрекательными щупальцами. Надёжный дом для рыб-клоунов, обладающих иммунной слизью.'],
@@ -1569,9 +1683,9 @@ window.OC = window.OC || {};
         geoOpts: { len: 0.85, height: 0.4, width: 0.16, colA: 0x38d8c8, colB: 0xb8fff6, finCol: 0x6ce8dc } },
       { key: 'fish_chromis', n: 48, cx: bom0.x, cz: bom0.z, radius: 20, yDepth: -6.5, spread: 7, speed: 4.2, scale: 0.65, diel: 'diurnal', shyness: 1.15, cleaner: true,
         geoOpts: { len: 0.85, height: 0.4, width: 0.16, colA: 0x38d8c8, colB: 0xb8fff6, finCol: 0x6ce8dc } },
-      { key: 'fish_orange', n: 16, cx: -20 + shelfOffset(45), cz: 45, radius: 12, yDepth: -7.5, spread: 4.5, speed: 3.4, scale: 0.85, diel: 'diurnal', curious: 0.45,
+      { key: 'fish_orange', n: 16, cx: -20 + shelfOffset(45), cz: 45, radius: 9, yDepth: -7.5, spread: 3.6, speed: 3.4, scale: 0.85, diel: 'diurnal', curious: 0.55, hostAnemone: true,
         geoOpts: { len: 0.95, height: 0.52, width: 0.22, colA: 0xff5a1f, colB: 0xffffff, finCol: 0xff8a30, stripes: 1.0 } },
-      { key: 'fish_orange', n: 14, cx: CAY_X + 88, cz: CAY_Z + 40, radius: 10, yDepth: -3.5, spread: 4, speed: 3.2, scale: 0.85, diel: 'diurnal', curious: 0.45,
+      { key: 'fish_orange', n: 14, cx: CAY_X + 88, cz: CAY_Z + 40, radius: 8, yDepth: -3.5, spread: 3.4, speed: 3.2, scale: 0.85, diel: 'diurnal', curious: 0.55, hostAnemone: true,
         geoOpts: { len: 0.95, height: 0.52, width: 0.22, colA: 0xff5a1f, colB: 0xffffff, finCol: 0xff8a30, stripes: 1.0 } },
       { key: 'fish_butterfly', n: 18, cx: 110 + shelfOffset(50), cz: 50, radius: 26, yDepth: -5.5, spread: 9, speed: 4.2, scale: 0.9, diel: 'diurnal', curious: 0.65, cleaner: true,
         geoOpts: { len: 1.0, height: 0.85, width: 0.16, colA: 0xffe44d, colB: 0x1a1a22, finCol: 0xffffff, stripes: 1.0 } },
@@ -1689,6 +1803,7 @@ window.OC = window.OC || {};
     getZoneAt,
     getTerrainColor,
     getOpticalProfile,
+    getCurrentAt,
     generateChunkFlora,
     faunaPlan: FAUNA_PLAN,
     encyclopedia: ENCYCLOPEDIA
@@ -1740,19 +1855,23 @@ window.OC = window.OC || {};
     dayW: 1, bioGlow: 0, sunAtten: 1
   };
 
-  let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget;
+  let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget, flashBeam, flashBeamMat;
   let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane, raysGroup, rayMats = [];
   let flashlightOn = false;
   let timeOfDay = 0.24; // приятное утро / яркий день
 
   const sunDir = new T.Vector3(0.4, 0.85, 0.3).normalize();
   const camFwd = new T.Vector3();
+  const camRight = new T.Vector3();
+  const _beamTint = new T.Color(0xeefaff);
+  const _worldCurr = new T.Vector3();
 
   const causticU = {
     uTime: OC.uTime,
     uCausticTex: { value: null },
     uCausticI: { value: 0.9 },
-    uCausticCol: { value: new T.Color(0xc2f5ff) }
+    uCausticCol: { value: new T.Color(0xc2f5ff) },
+    uCurrent: { value: new T.Vector2(0, 0) }
   };
   OC.causticUniforms = causticU;
 
@@ -1777,11 +1896,12 @@ window.OC = window.OC || {};
       sh.uniforms.uCausticTex = causticU.uCausticTex;
       sh.uniforms.uCausticI = causticU.uCausticI;
       sh.uniforms.uCausticCol = causticU.uCausticCol;
+      sh.uniforms.uCurrent = causticU.uCurrent;
       sh.uniforms.uCStrength = { value: cStr };
       sh.uniforms.uSwayAmp = { value: swayAmp };
 
       let vPre = 'varying vec3 vCWorld;\nvarying vec3 vCNormal;\nuniform float uTime;\n';
-      if (swayAmp > 0) vPre += 'attribute float aSway;\nuniform float uSwayAmp;\n';
+      if (swayAmp > 0) vPre += 'attribute float aSway;\nuniform float uSwayAmp;\nuniform vec2 uCurrent;\n';
       if (fishSwim) vPre += 'attribute vec2 aSwim;\n';
 
       let vBegin = '#include <begin_vertex>\n';
@@ -1796,8 +1916,9 @@ window.OC = window.OC || {};
           float ocPh = ocInstOrigin.x * 0.14 + ocInstOrigin.z * 0.11 + transformed.x * 0.25 + transformed.z * 0.22;
           float ocW1 = sin(uTime * 1.18 + ocPh);
           float ocW2 = cos(uTime * 0.86 + ocPh * 1.37);
-          transformed.x += ocW1 * uSwayAmp * aSway * 1.75;
-          transformed.z += ocW2 * uSwayAmp * aSway * 1.25;
+          float ocUnderW = smoothstep(0.25, -0.25, ocInstOrigin.y);
+          transformed.x += (ocW1 * 1.75 + uCurrent.x * 0.42 * ocUnderW) * uSwayAmp * aSway;
+          transformed.z += (ocW2 * 1.25 + uCurrent.y * 0.42 * ocUnderW) * uSwayAmp * aSway;
           transformed.y += sin(uTime * 1.65 + ocPh * 1.9) * uSwayAmp * aSway * 0.16;
         `;
       }
@@ -1845,9 +1966,28 @@ window.OC = window.OC || {};
       let fInject = '';
       if (isTerrain) {
         fInject += `
+          float detDist = length(cameraPosition - vCWorld);
+          float detFade = 1.0 - smoothstep(16.0, 95.0, detDist);
+          float slopeW = smoothstep(0.84, 0.42, clamp(vCNormal.y, 0.0, 1.0));
+          float flatW = 1.0 - slopeW;
+
+          // Микро-рябь песка и зернистость карбонатного грунта вблизи
           float sandRip = sin(vCWorld.x * 2.2 + vCWorld.z * 1.3 + sin(vCWorld.z * 0.6) * 1.4);
-          float shallowMask = smoothstep(-32.0, -4.0, vCWorld.y) * smoothstep(0.6, -0.4, vCWorld.y);
-          gl_FragColor.rgb *= 1.0 + sandRip * 0.032 * shallowMask * clamp(vCNormal.y, 0.0, 1.0);
+          float grain = sin(vCWorld.x * 11.7 + vCWorld.z * 7.3) * cos(vCWorld.z * 10.9 - vCWorld.x * 6.1);
+          float shallowMask = smoothstep(-36.0, -4.0, vCWorld.y) * smoothstep(0.7, -0.35, vCWorld.y);
+
+          // Слоистость известняка и каверны на крутых стенах (бомми, Голубая дыра, обрыв)
+          float strata = sin(vCWorld.y * 3.4 + sin(vCWorld.x * 0.38 + vCWorld.z * 0.34) * 2.1);
+          float crag = sin(vCWorld.x * 3.1 - vCWorld.z * 2.7) * cos(vCWorld.y * 2.4 + vCWorld.x * 1.3);
+
+          // Мокрый песок у самой кромки прибоя (-0.25 .. +0.5 м)
+          float wetShore = smoothstep(-0.3, 0.05, vCWorld.y) * smoothstep(0.6, 0.08, vCWorld.y);
+
+          gl_FragColor.rgb *= 1.0
+            + sandRip * 0.042 * shallowMask * flatW
+            + grain * 0.048 * detFade * flatW
+            + (strata * 0.085 + crag * 0.055) * detFade * slopeW
+            - wetShore * 0.16;
         `;
       }
       if (cStr > 0) {
@@ -1940,6 +2080,36 @@ window.OC = window.OC || {};
     return tex;
   }
 
+  /* ---------- Текстура мелководья и зоны прибойной пены из батиметрии ---------- */
+  function buildBathymetryFoamTex(biome) {
+    const S = 160;
+    const data = new Uint8Array(S * S * 4);
+    const R = biome ? (biome.worldRadius || 1200) : 1200;
+    for (let iz = 0; iz < S; iz++) {
+      const wz = ((iz / (S - 1)) * 2 - 1) * R;
+      for (let ix = 0; ix < S; ix++) {
+        const wx = ((ix / (S - 1)) * 2 - 1) * R;
+        const h = biome ? biome.getHeight(wx, wz) : -12;
+        const depthNorm = OC.clamp(-h / 45.0, 0, 1);
+        // Пена прибоя над очень мелким гребнем (-3.6 .. +0.25 м) и берегом
+        const crestFoam = OC.smoothstep(-3.9, -1.5, h) * OC.smoothstep(0.55, -0.3, h);
+        const shoreFoam = OC.smoothstep(-0.9, 0.05, h) * OC.smoothstep(0.45, 0.0, h);
+        const idx = (iz * S + ix) * 4;
+        data[idx] = Math.round(depthNorm * 255);
+        data[idx + 1] = Math.round(crestFoam * 255);
+        data[idx + 2] = Math.round(shoreFoam * 255);
+        data[idx + 3] = 255;
+      }
+    }
+    const tex = new T.DataTexture(data, S, S, T.RGBAFormat);
+    tex.magFilter = T.LinearFilter;
+    tex.minFilter = T.LinearFilter;
+    tex.wrapS = T.ClampToEdgeWrapping;
+    tex.wrapT = T.ClampToEdgeWrapping;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
   /* ---------- Солнечные лучи ---------- */
   function buildRays(count) {
     if (raysGroup) scene.remove(raysGroup);
@@ -2009,12 +2179,56 @@ window.OC = window.OC || {};
     fillB = new T.PointLight(0xffa064, 0.22, 300, 1.5);
     scene.add(fillB);
 
-    /* --- прожектор дайвера / батискафа (F) --- */
-    flashlight = new T.SpotLight(0xfff3df, 0.0, 130, 0.52, 0.72, 1.25);
+    /* --- прожектор дайвера / батискафа (F) и объёмный конус света --- */
+    flashlight = new T.SpotLight(0xfff3df, 0.0, 155, 0.54, 0.72, 1.18);
     flashTarget = new T.Object3D();
     scene.add(flashlight);
     scene.add(flashTarget);
     flashlight.target = flashTarget;
+
+    const beamGeo = new T.ConeGeometry(14.5, 68, 28, 1, true);
+    beamGeo.translate(0, -34, 0);
+    beamGeo.rotateX(-Math.PI / 2);
+    flashBeamMat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false,
+      uniforms: {
+        uIntensity: { value: 0.0 },
+        uColor: { value: new T.Color(0xcdf4ff) },
+        uTime: OC.uTime
+      },
+      vertexShader: `
+        varying vec3 vWorldP;
+        varying vec3 vNormW;
+        varying float vDist;
+        void main(){
+          vDist = position.z;
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldP = wp.xyz;
+          vNormW = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }`,
+      fragmentShader: `
+        varying vec3 vWorldP;
+        varying vec3 vNormW;
+        varying float vDist;
+        uniform float uIntensity, uTime;
+        uniform vec3 uColor;
+        void main(){
+          if (uIntensity < 0.01) discard;
+          vec3 toCam = normalize(cameraPosition - vWorldP);
+          float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.75);
+          float axial = smoothstep(1.2, 8.5, vDist) * smoothstep(68.0, 10.0, vDist);
+          float dust = 0.86 + 0.14 * sin(vWorldP.x * 0.45 + uTime * 0.9) * cos(vWorldP.z * 0.42 - uTime * 0.7);
+          float belowW = smoothstep(0.1, -0.4, vWorldP.y);
+          float a = rim * axial * dust * belowW * uIntensity * 0.145;
+          if (a < 0.002) discard;
+          gl_FragColor = vec4(uColor, a);
+        }`
+    });
+    flashBeam = new T.Mesh(beamGeo, flashBeamMat);
+    flashBeam.frustumCulled = false;
+    flashBeam.visible = false;
+    scene.add(flashBeam);
 
     /* --- подводный и надводный купол неба --- */
     const skyGeo = new T.SphereGeometry(1600, 32, 24);
@@ -2053,6 +2267,11 @@ window.OC = window.OC || {};
           uwCol += uTop * st * 0.04 * smoothstep(0.55, 1.0, h);
 
           vec3 skyCol = mix(uAboveHoriz, uAboveTop, smoothstep(0.0, 0.65, max(0.0, d.y)));
+          // Мягкие тропические пассатные облака у горизонта над водой
+          float clMask = smoothstep(0.02, 0.14, d.y) * smoothstep(0.55, 0.12, d.y) * uAboveMix;
+          float clPatt = 0.5 + 0.5 * sin(ang * 9.0 + uTime * 0.03) * cos(d.y * 26.0 - ang * 3.0);
+          float clouds = smoothstep(0.56, 0.88, clPatt) * clMask;
+          skyCol = mix(skyCol, mix(uSunCol, vec3(1.0), 0.55), clouds * 0.42);
           vec3 col = mix(uwCol, skyCol, uAboveMix);
 
           float sunDot = max(dot(d, normalize(uSunDir)), 0.0);
@@ -2078,12 +2297,16 @@ window.OC = window.OC || {};
     const ct = causticTexture(54);
     causticU.uCausticTex.value = ct;
 
-    /* --- водная поверхность (Y = 0) с окном Снеллиуса и волнами --- */
+    /* --- водная поверхность (Y = 0) с окном Снеллиуса, волнами и пеной прибоя --- */
     const rp = rippleTexture();
+    const activeBiome = OC.Biomes.getActive();
+    const foamTex = buildBathymetryFoamTex(activeBiome);
     surfaceMat = new T.ShaderMaterial({
       transparent: true, depthWrite: false, side: T.DoubleSide, fog: false,
       uniforms: {
         uTex: { value: rp },
+        uFoamTex: { value: foamTex },
+        uWorldSpan: { value: (activeBiome ? activeBiome.worldRadius : 1200) * 2.0 },
         uTime: OC.uTime,
         uWaterCol: { value: new T.Color(0x6edcf5) },
         uSkyCol: { value: new T.Color(0x88d8ff) },
@@ -2097,14 +2320,16 @@ window.OC = window.OC || {};
         uniform float uTime;
         void main(){
           vec4 wp = modelMatrix * vec4(position, 1.0);
-          wp.y += sin(wp.x * 0.08 + uTime * 1.1) * 0.14 + cos(wp.z * 0.09 - uTime * 0.9) * 0.12;
+          wp.y += sin(wp.x * 0.075 + uTime * 1.15) * 0.16
+                + cos(wp.z * 0.088 - uTime * 0.92) * 0.14
+                + sin((wp.x + wp.z) * 0.14 + uTime * 1.7) * 0.06;
           vWorld = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
         }`,
       fragmentShader: `
         varying vec3 vWorld;
-        uniform sampler2D uTex;
-        uniform float uTime, uDayW, uCamY;
+        uniform sampler2D uTex, uFoamTex;
+        uniform float uTime, uDayW, uCamY, uWorldSpan;
         uniform vec3 uWaterCol, uSkyCol, uSunCol, uSunDir;
         void main(){
           vec2 cuv = vWorld.xz * 0.016;
@@ -2112,31 +2337,51 @@ window.OC = window.OC || {};
           float r2 = texture2D(uTex, cuv * 1.65 - vec2(uTime * 0.012, uTime * 0.016)).r;
           float rip = r1 * 0.65 + r2 * 0.45;
 
+          // Выборка глубины и мелководной пены прибоя по координатам карты
+          vec2 mapUv = clamp(vWorld.xz / uWorldSpan + 0.5, 0.002, 0.998);
+          vec4 bathy = texture2D(uFoamTex, mapUv);
+          float depthT = bathy.r;
+          float crestSurf = bathy.g;
+          float shoreSurf = bathy.b;
+
+          float foamNoise = smoothstep(0.32, 0.86, r1 * 0.55 + r2 * 0.62);
+          float surge = 0.55 + 0.45 * sin(vWorld.x * 0.18 - uTime * 1.85 + r1 * 3.0);
+          float foam = clamp((crestSurf * 0.72 * surge + shoreSurf * 1.15) * foamNoise, 0.0, 0.92);
+
           vec3 toEye = normalize(cameraPosition - vWorld);
           float dist = length(cameraPosition - vWorld);
           float fade = smoothstep(1350.0, 120.0, dist);
 
           // Волновая нормаль для бликов
-          vec3 n = normalize(vec3((r1 - 0.5) * 0.25, 1.0, (r2 - 0.5) * 0.25));
+          vec3 n = normalize(vec3((r1 - 0.5) * 0.28, 1.0, (r2 - 0.5) * 0.28));
           vec3 sunH = normalize(normalize(uSunDir) + toEye);
-          float spec = pow(max(dot(n, sunH), 0.0), 42.0) * uDayW;
+          float spec = pow(max(dot(n, sunH), 0.0), 48.0) * uDayW;
+          vec3 foamCol = mix(vec3(0.45, 0.72, 0.85), vec3(0.95, 0.99, 1.0), 0.25 + 0.75 * uDayW);
+
+          // Оттенок воды меняется от бирюзового мелководья к глубокому кобальту Кораллового моря
+          vec3 deepCol = mix(uWaterCol, vec3(0.03, 0.22, 0.45) * (0.25 + 0.75 * uDayW), depthT * 0.82);
 
           if (uCamY < 0.0) {
-            // Вид снизу: Окно Снеллиуса (~48.6 град => cos ~ 0.66)
+            // Вид снизу: Окно Снеллиуса (~48.6 град => cos ~ 0.66) + буруны прибоя над гребнем
             float cosA = abs(dot(toEye, n));
             float snell = smoothstep(0.58, 0.78, cosA);
-            vec3 reflectCol = uWaterCol * (0.28 + rip * 0.45);
-            vec3 windowCol = mix(uWaterCol, uSkyCol, 0.75) * (0.55 + rip * 0.35) + uSunCol * spec * 1.1;
+            vec3 reflectCol = deepCol * (0.28 + rip * 0.45);
+            vec3 windowCol = mix(deepCol, uSkyCol, 0.75) * (0.55 + rip * 0.35) + uSunCol * spec * 1.1;
             vec3 col = mix(reflectCol, windowCol, snell);
+            col = mix(col, foamCol * 0.82, foam * 0.55);
             float alpha = mix(0.32 + rip * 0.24, 0.62 + rip * 0.2, snell) * fade * (0.35 + 0.65 * uDayW);
-            gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.88));
+            alpha = clamp(alpha + foam * 0.24 * fade, 0.0, 0.92);
+            gl_FragColor = vec4(col, alpha);
           } else {
-            // Вид сверху над поверхностью
+            // Вид сверху: Френель + просвет бирюзовых лагун + прибой на гребне и у островка
             float fresnel = pow(1.0 - max(dot(toEye, n), 0.0), 3.0);
-            vec3 col = mix(uWaterCol * 0.75, uSkyCol, clamp(fresnel * 0.85 + 0.15, 0.0, 1.0));
-            col += uSunCol * spec * 1.25;
-            float alpha = mix(0.42, 0.86, fresnel) * fade;
-            gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.9));
+            vec3 shallowTint = mix(vec3(0.28, 0.86, 0.88), deepCol, depthT) * (0.22 + 0.78 * uDayW);
+            vec3 col = mix(shallowTint, uSkyCol, clamp(fresnel * 0.82 + 0.12, 0.0, 1.0));
+            col += uSunCol * spec * 1.35;
+            col = mix(col, foamCol, foam);
+            float alpha = mix(0.46 + (1.0 - depthT) * 0.08, 0.88, fresnel) * fade;
+            alpha = clamp(alpha + foam * 0.45 * fade, 0.0, 0.96);
+            gl_FragColor = vec4(col, alpha);
           }
         }`
     });
@@ -2235,12 +2480,24 @@ window.OC = window.OC || {};
     fillB.color.copy(pal.fillB);
     fillB.intensity = pal.fillBI * (0.3 + 0.7 * opt.sunAtten);
 
-    /* прожектор дайвера */
-    const targetFlashI = flashlightOn ? 3.4 : 0.0;
+    /* прожектор дайвера и объёмный луч в воде */
+    const targetFlashI = flashlightOn ? 4.2 : 0.0;
     flashlight.intensity = OC.lerp(flashlight.intensity, targetFlashI, Math.min(1, dt * 10));
     flashlight.position.copy(camPos);
     camera.getWorldDirection(camFwd);
-    flashTarget.position.copy(camPos).addScaledVector(camFwd, 30);
+    flashTarget.position.copy(camPos).addScaledVector(camFwd, 32);
+
+    if (flashBeam && flashBeamMat) {
+      const beamStrength = (flashlight.intensity / 4.2) * OC.lerp(1.15, 0.42, pal.dayW * opt.sunAtten);
+      flashBeam.visible = beamStrength > 0.02 && camPos.y < 1.5;
+      if (flashBeam.visible) {
+        camRight.crossVectors(camFwd, camera.up).normalize();
+        flashBeam.position.copy(camPos).addScaledVector(camera.up, -0.55).addScaledVector(camRight, 0.25);
+        flashBeam.lookAt(flashTarget.position);
+        flashBeamMat.uniforms.uIntensity.value = beamStrength;
+        flashBeamMat.uniforms.uColor.value.copy(pal.water).lerp(_beamTint, 0.68);
+      }
+    }
 
     /* купол неба */
     const aboveMix = OC.smoothstep(-0.3, 0.5, camPos.y);
@@ -2255,9 +2512,13 @@ window.OC = window.OC || {};
     skyMat.uniforms.uAboveMix.value = aboveMix;
     skySphere.position.copy(camPos);
 
-    /* каустика */
+    /* каустика и наклон кораллов по течению */
     causticU.uCausticI.value = opt.causticStrength;
     causticU.uCausticCol.value.copy(pal.water);
+    if (biome && biome.getCurrentAt) {
+      biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
+      causticU.uCurrent.value.set(_worldCurr.x, _worldCurr.z);
+    }
 
     /* поверхность воды привязана к сетке вокруг камеры, чтобы волны не «плыли» */
     const snap = 44;
@@ -3188,6 +3449,159 @@ window.OC = window.OC || {};
     return g;
   }
 
+  /* ---- 19. Корковый коралл и известковый рифовый подлесок (Montipora / Porolithon) ---- */
+  function buildCrustCoral(hue, rng) {
+    const list = [];
+    const c1 = COL().setHSL(hue, 0.56, 0.36);
+    const c2 = COL().setHSL((hue + 0.06) % 1, 0.78, 0.58);
+    const lobes = 4 + Math.floor(rng() * 2);
+    for (let i = 0; i < lobes; i++) {
+      const a = (i / lobes) * Math.PI * 2 + rng() * 0.5;
+      const d = i === 0 ? 0 : OC.lerp(0.65, 1.35, rng());
+      const rx = OC.lerp(0.85, 1.45, rng());
+      const ry = OC.lerp(0.18, 0.36, rng());
+      const g = new T.CylinderGeometry(rx, rx * 0.82, ry, 10, 1);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const vx = p.getX(k), vy = p.getY(k), vz = p.getZ(k);
+        const w = 1 + 0.14 * Math.sin(Math.atan2(vz, vx) * 4 + i);
+        p.setXYZ(k, vx * w, vy + (vy > 0 ? Math.sin(vx * 2.1 + vz * 2.3) * 0.06 : 0), vz * w);
+      }
+      OC.geoPrep(g);
+      g.computeVertexNormals();
+      OC.paint(g, (x, y, z, c) => {
+        const r = Math.hypot(x, z) / Math.max(0.5, rx);
+        c.copy(c1).lerp(c2, OC.smoothstep(0.35, 1.0, r));
+      });
+      OC.withSway(g, () => 0);
+      OC.xform(g, {
+        r: [(rng() - 0.5) * 0.18, rng() * 6.28, (rng() - 0.5) * 0.18],
+        p: [Math.cos(a) * d, ry * 0.42 + i * 0.03, Math.sin(a) * d]
+      });
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 20. Морская лилия-криноидея (Comanthina schlegeli) ---- */
+  function buildCrinoid(hue, rng) {
+    const list = [];
+    const c1 = COL().setHSL(hue, 0.78, 0.42);
+    const c2 = COL().setHSL((hue + 0.06) % 1, 0.94, 0.66);
+
+    const calyx = new T.SphereGeometry(0.24, 7, 5);
+    OC.geoPrep(calyx);
+    OC.paint(calyx, c1);
+    OC.withSway(calyx, () => 0);
+    calyx.translate(0, 0.14, 0);
+    list.push(calyx);
+
+    const arms = 12;
+    for (let i = 0; i < arms; i++) {
+      const a = (i / arms) * Math.PI * 2 + (rng() - 0.5) * 0.25;
+      const len = OC.lerp(0.95, 1.45, rng());
+      const pts = [];
+      for (let s = 0; s <= 5; s++) {
+        const t = s / 5;
+        const rad = 0.12 + t * len * 0.72;
+        const arch = Math.sin(t * Math.PI * 0.72) * len * 0.85;
+        pts.push(new T.Vector3(Math.cos(a) * rad, 0.18 + arch, Math.sin(a) * rad));
+      }
+      const arm = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 7, 0.035, 4, false);
+      OC.geoPrep(arm);
+      OC.paint(arm, (x, y, z, c) => c.copy(c1).lerp(c2, OC.clamp(y / 1.2, 0, 1)));
+      OC.withSway(arm, (x, y, z) => OC.clamp((y - 0.12) / 1.2, 0, 1));
+      list.push(arm);
+
+      // Перистая веточка на середине луча
+      const frond = new T.ConeGeometry(0.14, len * 0.72, 3);
+      OC.geoPrep(frond);
+      frond.scale(0.16, 1, 1);
+      OC.paint(frond, c2);
+      OC.withSway(frond, () => 0.75);
+      OC.xform(frond, {
+        r: [0, -a, -0.78],
+        p: [Math.cos(a) * len * 0.48, 0.62, Math.sin(a) * len * 0.48]
+      });
+      list.push(frond);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 21. Кокосовая пальма и панданус кораллового островка (Sand Cay) ---- */
+  function buildIslandPalm(rng) {
+    const list = [];
+    const barkA = COL(0x70563f);
+    const barkB = COL(0x9a7d5c);
+    const leafA = COL(0x287834);
+    const leafB = COL(0x5eb348);
+
+    const leanX = (rng() - 0.5) * 1.8;
+    const leanZ = (rng() - 0.5) * 1.8;
+    const topH = OC.lerp(6.8, 9.2, rng());
+    const trunkPts = [];
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6;
+      trunkPts.push(new T.Vector3(leanX * t * t, t * topH, leanZ * t * t));
+    }
+    const trunk = new T.TubeGeometry(new T.CatmullRomCurve3(trunkPts), 10, 0.24, 6, false);
+    const tp = trunk.attributes.position;
+    for (let i = 0; i < tp.count; i++) {
+      const y = tp.getY(i);
+      const t = OC.clamp(y / topH, 0, 1);
+      const tap = 1.35 - t * 0.72;
+      const cx = leanX * t * t, cz = leanZ * t * t;
+      tp.setX(i, cx + (tp.getX(i) - cx) * tap);
+      tp.setZ(i, cz + (tp.getZ(i) - cz) * tap);
+    }
+    OC.geoPrep(trunk);
+    trunk.computeVertexNormals();
+    OC.paint(trunk, (x, y, z, c) => {
+      const ring = Math.sin(y * 6.5) * 0.5 + 0.5;
+      c.copy(barkA).lerp(barkB, ring * 0.6);
+    });
+    OC.withSway(trunk, (x, y, z) => OC.clamp(y / topH, 0, 1) * 0.28);
+    list.push(trunk);
+
+    // Кокосы у кроны
+    const crownX = leanX, crownY = topH, crownZ = leanZ;
+    for (let cIdx = 0; cIdx < 3; cIdx++) {
+      const ca = (cIdx / 3) * Math.PI * 2 + rng();
+      const nut = new T.SphereGeometry(0.24, 6, 5);
+      OC.geoPrep(nut);
+      OC.paint(nut, 0x5c3e24);
+      OC.withSway(nut, () => 0.28);
+      OC.xform(nut, { p: [crownX + Math.cos(ca) * 0.35, crownY - 0.25, crownZ + Math.sin(ca) * 0.35] });
+      list.push(nut);
+    }
+
+    // 9 дугообразных перистых листьев
+    const fronds = 9;
+    for (let i = 0; i < fronds; i++) {
+      const a = (i / fronds) * Math.PI * 2 + (rng() - 0.5) * 0.22;
+      const len = OC.lerp(2.7, 3.8, rng());
+      const droop = OC.lerp(0.65, 1.35, rng());
+      const blade = new T.PlaneGeometry(0.95, len, 2, 6);
+      const bp = blade.attributes.position;
+      for (let k = 0; k < bp.count; k++) {
+        const bx = bp.getX(k);
+        const by = bp.getY(k) + len * 0.5; // 0 .. len
+        const u = OC.clamp(by / len, 0, 1);
+        const width = Math.sin(Math.pow(u, 0.72) * Math.PI) * 1.15;
+        const archY = Math.sin(u * Math.PI * 0.62) * 1.05 - u * u * droop;
+        bp.setXYZ(k, bx * width, archY, by);
+      }
+      OC.geoPrep(blade);
+      blade.computeVertexNormals();
+      OC.paint(blade, (x, y, z, c) => c.copy(leafA).lerp(leafB, OC.clamp(z / len, 0, 1)));
+      OC.withSway(blade, (x, y, z) => 0.32 + OC.clamp(z / len, 0, 1) * 0.68);
+      OC.xform(blade, { r: [0, a, 0], p: [crownX, crownY, crownZ] });
+      list.push(blade);
+    }
+
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   OC.FloraLibrary = {
     create() {
@@ -3209,81 +3623,97 @@ window.OC = window.OC || {};
         vertexColors: true, roughness: 0.78, metalness: 0.0, side: T.DoubleSide
       }), { causticStrength: 0.88, swayAmp: 0.85 });
 
+      const matFoliage = OC.enhanceMaterial(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.72, metalness: 0.0, side: T.DoubleSide
+      }), { causticStrength: 0.0, swayAmp: 0.48 });
+
       const prototypes = {
         coral_staghorn: {
-          mat: matRigid, maxInstances: 1500, cullDist: 580,
-          geos: [buildStaghorn(0.94, rng), buildStaghorn(0.55, rng), buildStaghorn(0.76, rng)]
+          mat: matRigid, maxInstances: 2000, cullDist: 580,
+          geos: [buildStaghorn(0.94, rng), buildStaghorn(0.55, rng), buildStaghorn(0.76, rng), buildStaghorn(0.11, rng)]
         },
         coral_table: {
-          mat: matRigid, maxInstances: 1300, cullDist: 640,
-          geos: [buildTable(0.09, rng), buildTable(0.44, rng), buildTable(0.86, rng)]
+          mat: matRigid, maxInstances: 1700, cullDist: 640,
+          geos: [buildTable(0.09, rng), buildTable(0.44, rng), buildTable(0.86, rng), buildTable(0.96, rng)]
         },
         coral_brain: {
-          mat: matRigid, maxInstances: 1400, cullDist: 560,
+          mat: matRigid, maxInstances: 1600, cullDist: 560,
           geos: [buildBrain(0.14, rng), buildBrain(0.24, rng), buildBrain(0.95, rng)]
         },
         coral_bommie: {
-          mat: matRigid, maxInstances: 480, cullDist: 700,
+          mat: matRigid, maxInstances: 520, cullDist: 700,
           geos: [buildBommie(0.11, rng), buildBommie(0.48, rng)]
         },
         coral_plate: {
-          mat: matRigid, maxInstances: 950, cullDist: 580,
+          mat: matRigid, maxInstances: 1050, cullDist: 580,
           geos: [buildPlateCoral(0.08, rng), buildPlateCoral(0.82, rng)]
         },
+        coral_crust: {
+          mat: matRigid, maxInstances: 2400, cullDist: 340,
+          geos: [buildCrustCoral(0.94, rng), buildCrustCoral(0.09, rng), buildCrustCoral(0.76, rng)]
+        },
         coral_fan: {
-          mat: matSoft, maxInstances: 900, cullDist: 540,
+          mat: matSoft, maxInstances: 980, cullDist: 540,
           geos: [buildSeaFan(0.88, rng), buildSeaFan(0.02, rng), buildSeaFan(0.74, rng)]
         },
         coral_soft: {
-          mat: matSoft, maxInstances: 750, cullDist: 500,
-          geos: [buildSoftCoral(0.91, rng), buildSoftCoral(0.78, rng)]
+          mat: matSoft, maxInstances: 980, cullDist: 500,
+          geos: [buildSoftCoral(0.91, rng), buildSoftCoral(0.78, rng), buildSoftCoral(0.07, rng)]
         },
         coral_black: {
-          mat: matSoft, maxInstances: 600, cullDist: 500,
+          mat: matSoft, maxInstances: 650, cullDist: 500,
           geos: [buildBlackCoral(rng), buildBlackCoral(rng)]
         },
+        crinoid: {
+          mat: matSoft, maxInstances: 1100, cullDist: 300,
+          geos: [buildCrinoid(0.11, rng), buildCrinoid(0.96, rng), buildCrinoid(0.78, rng)]
+        },
         sponge_tube: {
-          mat: matRigid, maxInstances: 650, cullDist: 500,
+          mat: matRigid, maxInstances: 700, cullDist: 500,
           geos: [buildTubeSponge(0.05, 0.13, rng), buildTubeSponge(0.78, 0.88, rng)]
         },
         sponge_barrel: {
-          mat: matRigid, maxInstances: 600, cullDist: 560,
+          mat: matRigid, maxInstances: 650, cullDist: 560,
           geos: [buildBarrelSponge(0.06, rng), buildBarrelSponge(0.84, rng)]
         },
         anemone: {
-          mat: matSoft, maxInstances: 680, cullDist: 440,
-          geos: [buildAnemone(0.74, 0.92, rng), buildAnemone(0.58, 0.50, rng)]
+          mat: matSoft, maxInstances: 900, cullDist: 440,
+          geos: [buildAnemone(0.74, 0.92, rng), buildAnemone(0.58, 0.50, rng), buildAnemone(0.95, 0.08, rng)]
         },
         giant_clam: {
-          mat: matClam, maxInstances: 700, cullDist: 460,
+          mat: matClam, maxInstances: 760, cullDist: 460,
           geos: [buildGiantClam(0.56, rng), buildGiantClam(0.78, rng)]
         },
         seagrass: {
-          mat: matPlant, maxInstances: 2400, cullDist: 450,
+          mat: matPlant, maxInstances: 2600, cullDist: 450,
           geos: [buildSeagrass(0.24, rng), buildSeagrass(0.28, rng)]
         },
         kelp: {
-          mat: matPlant, maxInstances: 480, cullDist: 540,
+          mat: matPlant, maxInstances: 520, cullDist: 540,
           geos: [buildKelp(0.14, rng), buildKelp(0.18, rng)]
         },
         mangrove: {
-          mat: matSoft, maxInstances: 1100, cullDist: 780,
+          mat: matSoft, maxInstances: 1150, cullDist: 780,
           geos: [buildMangrove(rng), buildMangrove(rng)]
         },
+        island_palm: {
+          mat: matFoliage, maxInstances: 180, cullDist: 950,
+          geos: [buildIslandPalm(rng), buildIslandPalm(rng)]
+        },
         urchin: {
-          mat: matRigid, maxInstances: 600, cullDist: 280,
+          mat: matRigid, maxInstances: 650, cullDist: 280,
           geos: [buildUrchin()]
         },
         starfish_blue: {
-          mat: matRigid, maxInstances: 450, cullDist: 280,
+          mat: matRigid, maxInstances: 480, cullDist: 280,
           geos: [buildStarfish(5, 0.58, false)]
         },
         starfish_cots: {
-          mat: matRigid, maxInstances: 450, cullDist: 300,
+          mat: matRigid, maxInstances: 480, cullDist: 300,
           geos: [buildStarfish(11, 0.94, true)]
         },
         shell_triton: {
-          mat: matClam, maxInstances: 400, cullDist: 280,
+          mat: matClam, maxInstances: 440, cullDist: 280,
           geos: [buildTritonShell()]
         }
       };
@@ -3706,6 +4136,32 @@ window.OC = window.OC || {};
 
     const anchor = new T.Vector3(ax0, ay0, az0);
     const matArr = mesh.instanceMatrix.array;
+    const isHostAnemone = !!opts.hostAnemone;
+    let anemoneHostFloor = biome.getHeight(cx, cz);
+
+    // Если это семья рыб-клоунов, ставим реальную актинию-хозяина прямо на дно в центре территории
+    if (isHostAnemone) {
+      const anemG = new T.Group();
+      const baseM = new T.Mesh(new T.CylinderGeometry(1.05, 1.35, 0.55, 10), creatureMat);
+      OC.geoPrep(baseM.geometry);
+      OC.paint(baseM.geometry, 0xb84086);
+      baseM.position.y = 0.25;
+      anemG.add(baseM);
+      for (let ti = 0; ti < 10; ti++) {
+        const ta = (ti / 10) * Math.PI * 2;
+        const tGeo = new T.ConeGeometry(0.16, 1.15, 5);
+        OC.geoPrep(tGeo);
+        OC.paint(tGeo, (x, y, z, c) => c.set(y > 0.2 ? 0xff7ae0 : 0xa03888));
+        const tm = new T.Mesh(tGeo, creatureMat);
+        tm.position.set(Math.cos(ta) * 0.58, 0.78, Math.sin(ta) * 0.58);
+        tm.rotation.z = -Math.cos(ta) * 0.36;
+        tm.rotation.x = Math.sin(ta) * 0.36;
+        anemG.add(tm);
+      }
+      anemG.position.set(cx, anemoneHostFloor - 0.1, cz);
+      anemG.userData.key = 'anemone';
+      scene.add(anemG);
+    }
 
     return {
       mesh,
@@ -3756,13 +4212,20 @@ window.OC = window.OC || {};
         }
 
         t += stepDt;
-        const effRadius = radius * radiusMult;
-        ang += (speed * activity / Math.max(12, effRadius)) * angDir * stepDt;
+        let hideInAnemone = false;
+        if (isHostAnemone) {
+          const dCamHost = Math.hypot(cx - camPos.x, cz - camPos.z);
+          if (dCamHost < 15 && (camSpeed > 5.5 || flashOn)) hideInAnemone = true;
+        }
+        const effRadius = isHostAnemone ? (hideInAnemone ? 1.2 : 4.2) : radius * radiusMult;
+        ang += (speed * activity / Math.max(8, effRadius)) * angDir * stepDt;
         const r = effRadius + Math.sin(t * 0.16) * (effRadius * 0.18);
         const ax = cx + Math.cos(ang) * r;
         const az = cz + Math.sin(ang) * r;
-        const floorC = biome.getHeight(ax, az);
-        const ay = OC.clamp(yDepth + depthShift + Math.sin(t * 0.25) * yAmp, floorC + 2.2, -1.4);
+        const floorC = isHostAnemone ? anemoneHostFloor : biome.getHeight(ax, az);
+        const ay = isHostAnemone
+          ? OC.clamp(hideInAnemone ? floorC + 0.95 : floorC + 2.25 + Math.sin(t * 0.6) * 0.55, floorC + 0.75, -1.2)
+          : OC.clamp(yDepth + depthShift + Math.sin(t * 0.25) * yAmp, floorC + 2.2, -1.4);
         anchor.set(ax, ay, az);
 
         // Определяем, активна ли рядом станция чистки
@@ -4315,16 +4778,19 @@ window.OC = window.OC || {};
         }
         t += dt;
         ang += (spd / opts.r) * dt;
-        const rr = opts.r + Math.sin(t * 0.2) * 14;
-        const ax = opts.cx + Math.cos(ang) * rr, az = opts.cz + Math.sin(ang) * rr;
-        const bx = opts.cx + Math.cos(ang + 0.1) * rr, bz = opts.cz + Math.sin(ang + 0.1) * rr;
+        // Фигура-восьмёрка вдоль стенки обрыва + выраженный крен в виражах
+        const rr = opts.r + Math.sin(t * 0.22) * 18;
+        const ax = opts.cx + Math.cos(ang) * rr * 0.78;
+        const az = opts.cz + Math.sin(ang) * rr + Math.sin(ang * 2.0) * 14;
+        const bx = opts.cx + Math.cos(ang + 0.12) * rr * 0.78;
+        const bz = opts.cz + Math.sin(ang + 0.12) * rr + Math.sin((ang + 0.12) * 2.0) * 14;
         const ay = Math.max(opts.y + Math.sin(t * 0.3) * 6, biome.getHeight(ax, az) + 5);
         const by = Math.max(opts.y + Math.sin(t * 0.3 + 0.3) * 6, biome.getHeight(bx, bz) + 5);
         a.set(ax, Math.min(-2.5, ay), az);
         b.set(bx, Math.min(-2.5, by), bz);
         group.position.copy(a);
         group.lookAt(b);
-        group.rotateZ(Math.sin(t * 0.3) * 0.16);
+        group.rotateZ(Math.cos(ang) * 0.22 + Math.sin(t * 0.3) * 0.12);
         const flap = Math.sin(time * 1.25);
         wingL.rotation.z = flap * 0.32;
         wingR.rotation.z = -flap * 0.32;
@@ -4370,7 +4836,23 @@ window.OC = window.OC || {};
     scene.add(group);
 
     let ang = Math.random() * 6.28, t = Math.random() * 70;
+    let breathPhase = Math.random() * 34;
     const a = new T.Vector3(), b = new T.Vector3();
+
+    function turtlePos(angVal, tVal, bPhase, out) {
+      const rr = opts.r + Math.sin(tVal * 0.19) * 10;
+      const x = opts.cx + Math.cos(angVal) * rr;
+      const z = opts.cz + Math.sin(angVal) * rr + Math.sin(angVal * 2.0) * 8;
+      // Периодическое всплытие на поверхность за воздухом (цикл ~34 с)
+      const cyc = bPhase % 34.0;
+      let surfW = 0;
+      if (cyc > 26.0 && cyc < 33.5) {
+        surfW = Math.sin(((cyc - 26.0) / 7.5) * Math.PI);
+      }
+      const grazeY = Math.max(opts.y + Math.sin(tVal * 0.3) * 3.5, biome.getHeight(x, z) + 2.2);
+      const y = Math.min(-0.45, OC.lerp(grazeY, -0.5, surfW));
+      return out.set(x, y, z);
+    }
 
     return {
       key: 'turtle',
@@ -4379,16 +4861,12 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
-        const spd = OC.lerp(1.4, 2.1, dayW);
+        const spd = OC.lerp(1.4, 2.2, dayW);
         t += dt;
+        breathPhase += dt;
         ang += (spd / opts.r) * dt;
-        const rr = opts.r + Math.sin(t * 0.19) * 10;
-        const ax = opts.cx + Math.cos(ang) * rr, az = opts.cz + Math.sin(ang) * rr;
-        const bx = opts.cx + Math.cos(ang + 0.14) * rr, bz = opts.cz + Math.sin(ang + 0.14) * rr;
-        const ay = Math.max(opts.y + Math.sin(t * 0.3) * 3.5, biome.getHeight(ax, az) + 2.2);
-        const by = Math.max(opts.y + Math.sin(t * 0.3 + 0.3) * 3.5, biome.getHeight(bx, bz) + 2.2);
-        a.set(ax, Math.min(-1.4, ay), az);
-        b.set(bx, Math.min(-1.4, by), bz);
+        turtlePos(ang, t, breathPhase, a);
+        turtlePos(ang + 0.14, t + 0.4, breathPhase + 0.4, b);
         group.position.copy(a);
         group.lookAt(b);
         const stroke = Math.sin(time * 1.15);
@@ -4549,6 +5027,7 @@ window.OC = window.OC || {};
     let ang = Math.random() * 6.28, t = Math.random() * 100;
     const dir = Math.random() < 0.5 ? 1 : -1;
     const a = new T.Vector3(), b = new T.Vector3();
+    let inspectBlend = 0;
 
     return {
       key: isWhale ? 'shark_whale' : 'shark_reef',
@@ -4558,14 +5037,27 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 760) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
+        const flashOn = ctx ? ctx.flashOn : false;
         const nightBoost = isWhale ? 1.0 : OC.lerp(1.22, 1.0, dayW);
         t += dt;
         ang += ((opts.speed * nightBoost) / opts.r) * dir * dt;
-        const rr = opts.r + Math.sin(t * 0.18) * 14;
-        const ax = opts.cx + Math.cos(ang) * rr, az = opts.cz + Math.sin(ang) * rr;
-        const bx = opts.cx + Math.cos(ang + 0.1 * dir) * rr, bz = opts.cz + Math.sin(ang + 0.1 * dir) * rr;
-        const ay = Math.max(opts.y + Math.sin(t * 0.24) * 5, biome.getHeight(ax, az) + 4);
-        const by = Math.max(opts.y + Math.sin(t * 0.24 + 0.2) * 5, biome.getHeight(bx, bz) + 4);
+
+        // Патрулирование по вытянутой восьмёрке вдоль рельефа + любопытный осмотр дайвера на 18 м
+        const dCam = Math.hypot(camPos.x - opts.cx, camPos.z - opts.cz);
+        const wantInspect = !isWhale && dCam < opts.r + 36 && camPos.y < -3.0;
+        inspectBlend += ((wantInspect ? (flashOn ? 0.55 : 0.35) : 0) - inspectBlend) * Math.min(1, dt * 1.2);
+
+        const patCx = OC.lerp(opts.cx, camPos.x, inspectBlend);
+        const patCz = OC.lerp(opts.cz, camPos.z, inspectBlend);
+        const patR = OC.lerp(opts.r + Math.sin(t * 0.18) * 14, 18.0, inspectBlend);
+
+        const ax = patCx + Math.cos(ang) * patR * 0.85;
+        const az = patCz + Math.sin(ang) * patR + Math.sin(ang * 2.0) * (isWhale ? 16 : 10) * (1 - inspectBlend);
+        const bx = patCx + Math.cos(ang + 0.1 * dir) * patR * 0.85;
+        const bz = patCz + Math.sin(ang + 0.1 * dir) * patR + Math.sin((ang + 0.1 * dir) * 2.0) * (isWhale ? 16 : 10) * (1 - inspectBlend);
+        const baseY = OC.lerp(opts.y + Math.sin(t * 0.24) * 5, Math.min(-4, camPos.y + 1.5), inspectBlend);
+        const ay = Math.max(baseY, biome.getHeight(ax, az) + 4);
+        const by = Math.max(baseY + Math.sin(t * 0.24 + 0.2) * 1.5, biome.getHeight(bx, bz) + 4);
         a.set(ax, Math.min(-2.5, ay), az);
         b.set(bx, Math.min(-2.5, by), bz);
         group.position.copy(a);
@@ -4627,6 +5119,20 @@ window.OC = window.OC || {};
     let ang = 0.6, t = 0;
     const a = new T.Vector3(), b = new T.Vector3();
 
+    function whalePos(angVal, tVal, out) {
+      // Длинный эллиптический ход вдоль внешней стены + периодическое всплытие на поверхность
+      const ax = opts.cx + Math.cos(angVal) * opts.r * 0.65;
+      const az = opts.cz + Math.sin(angVal) * opts.r * 1.45;
+      const cyc = tVal % 58.0;
+      let breathRise = 0;
+      if (cyc > 44.0 && cyc < 56.0) {
+        breathRise = Math.sin(((cyc - 44.0) / 12.0) * Math.PI);
+      }
+      const deepY = Math.max(opts.y + Math.sin(tVal * 0.14) * 10, biome.getHeight(ax, az) + 12);
+      const y = Math.min(-3.4, OC.lerp(deepY, -3.8, breathRise));
+      return out.set(ax, y, az);
+    }
+
     return {
       key: 'whale_humpback',
       getPosition: () => group.position,
@@ -4635,12 +5141,8 @@ window.OC = window.OC || {};
         group.visible = true;
         t += dt;
         ang += (opts.speed / opts.r) * dt;
-        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
-        const bx = opts.cx + Math.cos(ang + 0.08) * opts.r, bz = opts.cz + Math.sin(ang + 0.08) * opts.r;
-        const ay = Math.max(opts.y + Math.sin(t * 0.14) * 10, biome.getHeight(ax, az) + 10);
-        const by = Math.max(opts.y + Math.sin(t * 0.14 + 0.2) * 10, biome.getHeight(bx, bz) + 10);
-        a.set(ax, Math.min(-6.0, ay), az);
-        b.set(bx, Math.min(-6.0, by), bz);
+        whalePos(ang, t, a);
+        whalePos(ang + 0.08, t + 1.2, b);
         group.position.copy(a);
         group.lookAt(b);
         tailPivot.rotation.x = Math.sin(time * 0.95) * 0.34;
@@ -4679,7 +5181,7 @@ window.OC = window.OC || {};
     scene.add(group);
 
     let t = Math.random() * 50;
-    const baseY = biome.getHeight(opts.x, opts.z) + 0.55;
+    let spook = 0;
     return {
       key: 'octopus',
       getPosition: () => group.position,
@@ -4687,11 +5189,19 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.x - camPos.x, opts.z - camPos.z) > 400) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
-        t += dt * OC.lerp(1.25, 0.9, dayW);
-        group.position.set(opts.x + Math.sin(t * 0.4) * 1.8, baseY + Math.abs(Math.sin(t * 0.9)) * 0.9, opts.z + Math.cos(t * 0.35) * 1.8);
-        group.rotation.y = t * 0.3;
+        const camSpeed = ctx ? ctx.camSpeed : 0;
+        const dCam = Math.hypot(group.position.x - camPos.x, group.position.z - camPos.z);
+        if (dCam < 8.5 && camSpeed > 4.0) spook = Math.min(1, spook + dt * 3.0);
+        else spook = Math.max(0, spook - dt * 0.6);
+
+        t += dt * OC.lerp(1.25, 0.9, dayW) * (1 + spook * 1.8);
+        const wx = opts.x + Math.sin(t * 0.42) * 3.4 + Math.cos(t * 0.19) * 1.5;
+        const wz = opts.z + Math.cos(t * 0.36) * 3.4 + Math.sin(t * 0.23) * 1.5;
+        const wy = biome.getHeight(wx, wz) + 0.55 + Math.abs(Math.sin(t * (0.9 + spook))) * (0.7 + spook * 1.1);
+        group.position.set(wx, wy, wz);
+        group.rotation.y = t * (0.3 + spook * 0.4);
         for (let i = 0; i < arms.length; i++) {
-          arms[i].rotation.z = Math.sin(time * 2.5 + i) * 0.12;
+          arms[i].rotation.z = Math.sin(time * (2.5 + spook * 4.0) + i) * (0.12 + spook * 0.14);
         }
       }
     };
@@ -4716,7 +5226,7 @@ window.OC = window.OC || {};
     scene.add(group);
 
     const baseY = biome.getHeight(opts.x, opts.z) + 0.65;
-    let ang = Math.random() * 6.28, t = Math.random() * 50;
+    let ang = Math.random() * 6.28, t = Math.random() * 50, retract = 0;
     return {
       key: 'moray',
       isNocturnalPredator: true,
@@ -4725,40 +5235,61 @@ window.OC = window.OC || {};
         if (Math.hypot(opts.x - camPos.x, opts.z - camPos.z) > 400) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
+        const camSpeed = ctx ? ctx.camSpeed : 0;
+        const flashOn = ctx ? ctx.flashOn : false;
+        const dCam = Math.hypot(opts.x - camPos.x, opts.z - camPos.z);
+        const threat = dCam < 9.5 && (camSpeed > 3.5 || flashOn || dCam < 5.5);
+        retract += ((threat ? 1 : 0) - retract) * Math.min(1, dt * 3.5);
+
         const act = OC.lerp(1.5, 0.72, dayW);
-        const orbitR = OC.lerp(5.2, 3.0, dayW);
+        const orbitR = OC.lerp(5.2, 2.2, dayW) * (1 - retract * 0.85);
         t += dt * act;
         ang += 0.28 * act * dt;
-        group.position.set(opts.x + Math.cos(ang) * orbitR, baseY, opts.z + Math.sin(ang) * orbitR);
+        group.position.set(opts.x + Math.cos(ang) * orbitR, baseY - retract * 0.48, opts.z + Math.sin(ang) * orbitR);
         group.rotation.y = -ang;
         for (let i = 0; i < segMeshes.length; i++) {
-          segMeshes[i].position.x = Math.sin(time * 3.5 - i * 0.55) * 0.18;
+          segMeshes[i].position.x = Math.sin(time * 3.5 - i * 0.55) * 0.18 * (1 - retract * 0.5);
         }
       }
     };
   }
 
-  /* ---------- Бесконечные пузыри и биолюминесцентный планктон вокруг камеры ---------- */
-  function createCameraRelativeParticles(scene, n, tex, isPlankton) {
+  /* ---------- Бесконечные пузыри, биолюминесцентный планктон и глубинный «морской снег» ---------- */
+  function createCameraRelativeParticles(scene, n, tex, mode) {
+    const kind = mode === true ? 'plankton' : (mode === false ? 'bubbles' : mode);
+    const isPlankton = kind === 'plankton';
+    const isSnow = kind === 'snow';
     const geo = new T.BufferGeometry();
     const pos = new Float32Array(n * 3);
     const ph = new Float32Array(n);
     const sz = new Float32Array(n);
     const spd = new Float32Array(n);
-    const rng = OC.mulberry32(isPlankton ? 8812 : 4409);
+    const rng = OC.mulberry32(isPlankton ? 8812 : (isSnow ? 6147 : 4409));
 
     for (let i = 0; i < n; i++) {
       pos[i * 3] = (rng() - 0.5) * 180;
       pos[i * 3 + 1] = (rng() - 0.5) * 110;
       pos[i * 3 + 2] = (rng() - 0.5) * 180;
       ph[i] = rng() * 100;
-      sz[i] = isPlankton ? OC.lerp(0.35, 1.35, rng()) : OC.lerp(0.45, 1.4, rng());
-      spd[i] = isPlankton ? OC.lerp(0.2, 0.7, rng()) : OC.lerp(1.6, 4.4, rng());
+      sz[i] = isPlankton ? OC.lerp(0.35, 1.35, rng()) : (isSnow ? OC.lerp(0.55, 1.65, rng()) : OC.lerp(0.45, 1.4, rng()));
+      spd[i] = isPlankton ? OC.lerp(0.2, 0.7, rng()) : (isSnow ? OC.lerp(0.25, 0.72, rng()) : OC.lerp(1.6, 4.4, rng()));
     }
     geo.setAttribute('position', new T.BufferAttribute(pos, 3));
     geo.setAttribute('aPhase', new T.BufferAttribute(ph, 1));
     geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
     geo.setAttribute('aSpeed', new T.BufferAttribute(spd, 1));
+
+    const motionGLSL = isPlankton
+      ? `p.x += sin(uTime * 0.16 + aPhase) * 3.5;
+         p.y += cos(uTime * 0.21 + aPhase * 1.3) * 2.2;
+         p.z += cos(uTime * 0.14 + aPhase * 0.7) * 3.5;`
+      : (isSnow
+        ? `p.y -= uTime * aSpeed;
+           p.x += sin(uTime * 0.32 + aPhase) * 2.2;
+           p.z += cos(uTime * 0.27 + aPhase * 1.2) * 2.2;`
+        : `p.y += uTime * aSpeed;
+           p.x += sin(uTime * 0.75 + aPhase) * 1.1;
+           p.z += cos(uTime * 0.6 + aPhase) * 1.1;`);
 
     const mat = new T.ShaderMaterial({
       transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: true,
@@ -4768,7 +5299,8 @@ window.OC = window.OC || {};
           uTex: { value: tex },
           uTime: OC.uTime,
           uCamPos: { value: new T.Vector3() },
-          uColor: { value: new T.Color(isPlankton ? 0x7ef2ff : 0xc6f2ff) },
+          uFlowOffset: { value: new T.Vector3() },
+          uColor: { value: new T.Color(isPlankton ? 0x7ef2ff : (isSnow ? 0xd9edf7 : 0xc6f2ff)) },
           uBio: { value: 0.4 },
           uScale: { value: 1.0 }
         }
@@ -4776,30 +5308,24 @@ window.OC = window.OC || {};
       vertexShader: `
         attribute float aPhase, aSize, aSpeed;
         uniform float uTime, uScale, uBio;
-        uniform vec3 uCamPos;
+        uniform vec3 uCamPos, uFlowOffset;
         varying float vAlpha;
         #include <fog_pars_vertex>
         void main(){
           vec3 box = vec3(180.0, 110.0, 180.0);
-          vec3 p = position;
-          ${isPlankton
-            ? `p.x += sin(uTime * 0.16 + aPhase) * 3.5;
-               p.y += cos(uTime * 0.21 + aPhase * 1.3) * 2.2;
-               p.z += cos(uTime * 0.14 + aPhase * 0.7) * 3.5;`
-            : `p.y += uTime * aSpeed;
-               p.x += sin(uTime * 0.75 + aPhase) * 1.1;
-               p.z += cos(uTime * 0.6 + aPhase) * 1.1;`}
+          vec3 p = position + uFlowOffset;
+          ${motionGLSL}
           vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
           vec3 worldP = uCamPos + rel;
           // Не вылетаем над поверхностью моря (Y = 0)
           float belowWater = step(worldP.y, -0.35);
           vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
-          gl_PointSize = belowWater * aSize * uScale * (${isPlankton ? '135.0' : '115.0'} / max(1.0, -mvPosition.z));
+          gl_PointSize = belowWater * aSize * uScale * (${isPlankton ? '135.0' : (isSnow ? '105.0' : '115.0')} / max(1.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
           float blink = ${isPlankton
             ? '0.35 + 0.65 * pow(0.5 + 0.5 * sin(uTime * (0.7 + fract(aPhase) * 1.3) + aPhase), 2.0)'
-            : '0.85'};
-          vAlpha = belowWater * blink * ${isPlankton ? '(0.28 + uBio * 0.72)' : '0.52'};
+            : (isSnow ? '(0.28 + 0.72 * smoothstep(-6.0, -28.0, worldP.y))' : '0.85')};
+          vAlpha = belowWater * blink * ${isPlankton ? '(0.28 + uBio * 0.72)' : (isSnow ? '(0.36 + uBio * 0.35)' : '0.52')};
           #include <fog_vertex>
         }`,
       fragmentShader: `
@@ -4816,7 +5342,7 @@ window.OC = window.OC || {};
 
     const pts = new T.Points(geo, mat);
     pts.frustumCulled = false;
-    pts.userData.key = isPlankton ? 'plankton' : 'bubbles';
+    pts.userData.key = isPlankton ? 'plankton' : (isSnow ? 'marine_snow' : 'bubbles');
     scene.add(pts);
     return mat;
   }
@@ -4919,12 +5445,13 @@ window.OC = window.OC || {};
         sonarTargets.push(w);
       }
 
-      // ---- Пузыри и планктон (бесконечные вокруг камеры) ----
+      // ---- Пузыри, планктон и глубинный морской снег (вокруг камеры) ----
       const pCountMult = OC.Quality.get().particlesScale;
       const texSoft = OC.circleTexture(64, false);
       const texHard = OC.circleTexture(64, true);
-      const bubbleMat = createCameraRelativeParticles(scene, Math.round(900 * pCountMult), texHard, false);
-      const planktonMat = createCameraRelativeParticles(scene, Math.round(1500 * pCountMult), texSoft, true);
+      const bubbleMat = createCameraRelativeParticles(scene, Math.round(900 * pCountMult), texHard, 'bubbles');
+      const planktonMat = createCameraRelativeParticles(scene, Math.round(1500 * pCountMult), texSoft, 'plankton');
+      const snowMat = createCameraRelativeParticles(scene, Math.round(1050 * pCountMult), texSoft, 'snow');
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
       const dayPlanktonCol = new T.Color(0x9be8ff);
@@ -4940,6 +5467,8 @@ window.OC = window.OC || {};
       };
       const _scanSample = new T.Vector3();
       const _toTarget = new T.Vector3();
+      const _currFlow = new T.Vector3();
+      const _flowAccum = new T.Vector3();
 
       function refreshFaunaCounts() {
         let total = 0;
@@ -4991,12 +5520,28 @@ window.OC = window.OC || {};
 
           bubbleMat.uniforms.uCamPos.value.copy(camPos);
           planktonMat.uniforms.uCamPos.value.copy(camPos);
+          snowMat.uniforms.uCamPos.value.copy(camPos);
+
+          // Плавная адвекция планктона, пузырей и морского снега по локальному течению
+          if (biome.getCurrentAt && camPos.y < 1.5) {
+            biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _currFlow);
+            _flowAccum.addScaledVector(_currFlow, dt * 1.35);
+            _flowAccum.x = ((_flowAccum.x % 180) + 180) % 180;
+            _flowAccum.y = ((_flowAccum.y % 110) + 110) % 110;
+            _flowAccum.z = ((_flowAccum.z % 180) + 180) % 180;
+            bubbleMat.uniforms.uFlowOffset.value.copy(_flowAccum);
+            planktonMat.uniforms.uFlowOffset.value.copy(_flowAccum);
+            snowMat.uniforms.uFlowOffset.value.copy(_flowAccum);
+          }
+
           planktonMat.uniforms.uBio.value = pal.bioGlow;
           planktonMat.uniforms.uColor.value.copy(pal.bioGlow > 0.45 ? bioPlanktonCol : dayPlanktonCol);
+          snowMat.uniforms.uBio.value = flashOn ? 1.0 : 0.15;
         },
         setScale(s) {
           bubbleMat.uniforms.uScale.value = s;
           planktonMat.uniforms.uScale.value = s;
+          snowMat.uniforms.uScale.value = s;
         },
         /* Активное сонарное сканирование вперёд по курсу (рельеф + крупная фауна/стаи) */
         scanForward(origin, dir, maxRange) {
@@ -5368,6 +5913,7 @@ window.OC = window.OC || {};
   const _right = new T.Vector3();
   const _move = new T.Vector3();
   const _lookAt = new T.Vector3();
+  const _curr = new T.Vector3();
 
   const state = {
     mode: 'swim', // 'swim' | 'orbit' | 'tour'
@@ -5559,6 +6105,7 @@ window.OC = window.OC || {};
     getPitch: () => state.pitch,
     getVelocity: () => state.vel,
     getSpeed: () => state.vel.length(),
+    getCurrent: () => _curr,
     getForward(out) {
       out = out || new T.Vector3();
       return out.set(
@@ -5713,6 +6260,15 @@ window.OC = window.OC || {};
           _move.normalize();
           state.vel.addScaledVector(_move, accel * dt);
         }
+
+        // Приливные и прибойные течения океана (сносят батискаф в Проходе и над Гребнем)
+        if (!reduced && state.pos.y < -0.25 && biomeRef && biomeRef.getCurrentAt) {
+          biomeRef.getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
+          state.vel.addScaledVector(_curr, 1.45 * dt);
+        } else {
+          _curr.set(0, 0, 0);
+        }
+
         // Водное сопротивление / инерция
         const damp = Math.exp(-3.4 * dt);
         state.vel.multiplyScalar(damp);
@@ -5934,6 +6490,7 @@ window.OC = window.OC || {};
     'Мангровые отмели': 'mangroves',
     'Луга морской травы': 'seagrass',
     'Внутренняя лагуна': 'bommies',
+    'Коралловый островок': 'sand_cay',
     'Лагуна и Трава': 'seagrass',
     'Лагуна и Гребень': 'crest',
     'Гребень и Лагуна': 'crest',
@@ -6085,6 +6642,7 @@ window.OC = window.OC || {};
   const subPressure = document.getElementById('sub-pressure');
   const subClearance = document.getElementById('sub-clearance');
   const subSpeedEl = document.getElementById('sub-speed');
+  const subCurrentEl = document.getElementById('sub-current');
   const subPhaseEl = document.getElementById('sub-phase');
   const sonarBox = document.getElementById('sonar-box');
   const sonarCanvas = document.getElementById('sonar-canvas');
@@ -6167,7 +6725,7 @@ window.OC = window.OC || {};
       let o = h.object;
       while (o && !o.userData.key) o = o.parent;
       const key = o && o.userData.key ? o.userData.key : null;
-      if (!key || key === 'bubbles' || key === 'plankton') continue;
+      if (!key || key === 'bubbles' || key === 'plankton' || key === 'marine_snow') continue;
       showInfo(key, cx, cy, biome);
       return;
     }
@@ -6621,6 +7179,12 @@ window.OC = window.OC || {};
             subClearance.classList.toggle('warn', clearance < 3.5);
           }
           if (subSpeedEl) subSpeedEl.textContent = knots + ' уз';
+          if (subCurrentEl) {
+            const curr = OC.Navigation.getCurrent ? OC.Navigation.getCurrent() : null;
+            const cKnots = curr ? curr.length() * 1.94384 : 0;
+            subCurrentEl.textContent = cKnots.toFixed(1) + ' уз';
+            subCurrentEl.classList.toggle('warn', cKnots > 1.8);
+          }
           if (subPhaseEl) subPhaseEl.textContent = dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День');
           drawEchosounder(camPos, OC.Navigation.getYaw(), biome, fauna, time);
         }

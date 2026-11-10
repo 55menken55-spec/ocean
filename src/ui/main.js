@@ -29,6 +29,7 @@ window.OC = window.OC || {};
   const subPressure = document.getElementById('sub-pressure');
   const subClearance = document.getElementById('sub-clearance');
   const subSpeedEl = document.getElementById('sub-speed');
+  const subCurrentEl = document.getElementById('sub-current');
   const subPhaseEl = document.getElementById('sub-phase');
   const sonarBox = document.getElementById('sonar-box');
   const sonarCanvas = document.getElementById('sonar-canvas');
@@ -111,7 +112,7 @@ window.OC = window.OC || {};
       let o = h.object;
       while (o && !o.userData.key) o = o.parent;
       const key = o && o.userData.key ? o.userData.key : null;
-      if (!key || key === 'bubbles' || key === 'plankton') continue;
+      if (!key || key === 'bubbles' || key === 'plankton' || key === 'marine_snow') continue;
       showInfo(key, cx, cy, biome);
       return;
     }
@@ -565,6 +566,12 @@ window.OC = window.OC || {};
             subClearance.classList.toggle('warn', clearance < 3.5);
           }
           if (subSpeedEl) subSpeedEl.textContent = knots + ' уз';
+          if (subCurrentEl) {
+            const curr = OC.Navigation.getCurrent ? OC.Navigation.getCurrent() : null;
+            const cKnots = curr ? curr.length() * 1.94384 : 0;
+            subCurrentEl.textContent = cKnots.toFixed(1) + ' уз';
+            subCurrentEl.classList.toggle('warn', cKnots > 1.8);
+          }
           if (subPhaseEl) subPhaseEl.textContent = dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День');
           drawEchosounder(camPos, OC.Navigation.getYaw(), biome, fauna, time);
         }

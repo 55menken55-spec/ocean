@@ -360,6 +360,66 @@ window.OC = window.OC || {};
     };
   }
 
+  /* ---- Векторные приливные и прибойные течения шельфа (м/с) ---- */
+  function getCurrentAt(x, y, z, time, out) {
+    out = out || new T.Vector3();
+    if (y > 0.1) return out.set(0, 0, 0);
+
+    const u = x - shelfOffset(z);
+    const floor = getHeight(x, z);
+    const clearance = Math.max(0, y - floor);
+    // У самого дна в расщелинах течение затихает (пограничный слой)
+    const shelter = OC.smoothstep(0.4, 4.2, clearance);
+    const t = time || 0;
+
+    let vx = 0, vy = 0, vz = 0;
+
+    // 1. Приливная струя Рифового прохода (сильный поток через канал)
+    if (u > -10 && u < 580) {
+      const pz = passCenterZ(x);
+      const dz = Math.abs(z - pz);
+      if (dz < 88) {
+        const across = OC.smoothstep(88, 18, dz);
+        const along = OC.smoothstep(-10, 80, u) * OC.smoothstep(580, 450, u);
+        const tidePhase = Math.sin(t * 0.045); // медленный прилив/отлив
+        const dir = tidePhase >= 0 ? -1 : 1;
+        const mag = (1.15 + 1.15 * Math.abs(tidePhase)) * across * along;
+        // Касательная канала passCenterZ(x)
+        const dpz = passCenterZ(x + 4) - passCenterZ(x - 4);
+        const tx = 8, tz = dpz;
+        const tlen = Math.hypot(tx, tz) || 1;
+        vx += (tx / tlen) * dir * mag;
+        vz += (tz / tlen) * dir * mag;
+      }
+    }
+
+    // 2. Волновой накат над гребнем и spur-and-groove (направлен на запад к лагуне)
+    if (u > 25 && u < 310 && y > -16) {
+      const crestMask = OC.smoothstep(25, 75, u) * OC.smoothstep(310, 210, u);
+      const depthFade = OC.smoothstep(-16, -2.5, y);
+      const surge = 0.55 + 0.35 * Math.sin(t * 0.85 + x * 0.045);
+      vx -= surge * crestMask * depthFade;
+      vy += Math.sin(t * 0.85 + x * 0.045) * 0.14 * crestMask * depthFade;
+    }
+
+    // 3. Восточно-Австралийское течение и апвеллинг вдоль внешней стены барьера
+    if (u > 500) {
+      const wallMask = OC.smoothstep(500, 620, u);
+      const upMask = OC.smoothstep(500, 580, u) * OC.smoothstep(840, 650, u);
+      vz += 0.62 * wallMask;
+      vx -= 0.12 * wallMask;
+      vy += 0.22 * upMask * OC.smoothstep(-110, -25, y);
+    }
+
+    // 4. Лёгкий фоновый дрейф в лагуне
+    if (u >= -450 && u <= 30) {
+      vx += Math.sin(t * 0.12 + z * 0.01) * 0.14;
+      vz += 0.18 + Math.cos(t * 0.1 + x * 0.01) * 0.1;
+    }
+
+    return out.set(vx * shelter, vy * shelter, vz * shelter);
+  }
+
   /* ---- Размещение флоры в чанке (детерминированное, зонально-реалистичное) ---- */
   function generateChunkFlora(cx, cz, chunkSize, density, rng) {
     const x0 = cx * chunkSize;
@@ -378,7 +438,7 @@ window.OC = window.OC || {};
         const u = x - shelfOffset(z);
         const dHole = Math.hypot(x - BLUE_HOLE_X, z - BLUE_HOLE_Z);
 
-        // Выше уровня моря + 0.35 м (сухой пляж островка) — не ставим кораллы; только мангры на кромке
+        // Выше уровня моря + 0.35 м (сухой островок или мангровый берег)
         if (y > 0.35) {
           if (u < -760 && y < 1.35 && rng() < 0.42) {
             out.push({
@@ -388,6 +448,28 @@ window.OC = window.OC || {};
               scale: OC.lerp(0.85, 1.45, rng()),
               tint: 0xffffff
             });
+          } else if (u >= -760 && y > 0.55 && rng() < 0.85) {
+            out.push({
+              species: 'island_palm',
+              x, y: y - 0.22, z,
+              ry: rng() * 6.28,
+              scale: OC.lerp(0.72, 1.28, rng()),
+              tint: rng() < 0.5 ? 0xf6fff2 : 0xe4f5dc
+            });
+            if (y > 1.25 && rng() < 0.6) {
+              const px2 = x + (rng() - 0.5) * 6.0;
+              const pz2 = z + (rng() - 0.5) * 6.0;
+              const py2 = getHeight(px2, pz2);
+              if (py2 > 0.5) {
+                out.push({
+                  species: 'island_palm',
+                  x: px2, y: py2 - 0.22, z: pz2,
+                  ry: rng() * 6.28,
+                  scale: OC.lerp(0.62, 1.12, rng()),
+                  tint: 0xecfbe2
+                });
+              }
+            }
           }
           continue;
         }
@@ -454,6 +536,18 @@ window.OC = window.OC || {};
               scale: OC.lerp(0.75, 1.35, rng()),
               tint: 0xffffff
             });
+            // Нижний ярус коркового коралла / криноидеи на бомми
+            if (rng() < 0.52) {
+              out.push({
+                species: rng() < 0.72 ? 'coral_crust' : 'crinoid',
+                x: x + (rng() - 0.5) * 4.5,
+                y: y - 0.12,
+                z: z + (rng() - 0.5) * 4.5,
+                ry: rng() * 6.28,
+                scale: OC.lerp(0.75, 1.25, rng()),
+                tint: 0xffffff
+              });
+            }
           } else {
             // Песчаное дно лагуны: трава, ежи, звёзды, тридакны, раковины
             const r = rng();
@@ -505,6 +599,20 @@ window.OC = window.OC || {};
             scale: OC.lerp(0.82, 1.48, rng()),
             tint: 0xffffff
           });
+          // Плотное покрытие гребня вторым ярусом (корковые кораллы, криноидеи, мелкие ветви)
+          if (rng() < 0.72) {
+            const subR = rng();
+            const subSp = subR < 0.62 ? 'coral_crust' : (subR < 0.84 ? 'crinoid' : 'coral_staghorn');
+            out.push({
+              species: subSp,
+              x: x + (rng() - 0.5) * 4.8,
+              y: y - 0.12,
+              z: z + (rng() - 0.5) * 4.8,
+              ry: rng() * 6.28,
+              scale: OC.lerp(0.7, 1.25, rng()),
+              tint: 0xffffff
+            });
+          }
           continue;
         }
 
@@ -525,11 +633,12 @@ window.OC = window.OC || {};
           }
           const r = rng();
           let sp = 'coral_fan';
-          if (r < 0.24) sp = 'coral_fan';
-          else if (r < 0.42) sp = 'sponge_tube';
-          else if (r < 0.58) sp = 'sponge_barrel';
-          else if (r < 0.74) sp = 'coral_plate';
-          else if (r < 0.86) sp = 'coral_soft';
+          if (r < 0.22) sp = 'coral_fan';
+          else if (r < 0.38) sp = 'sponge_tube';
+          else if (r < 0.52) sp = 'sponge_barrel';
+          else if (r < 0.66) sp = 'coral_plate';
+          else if (r < 0.78) sp = 'coral_soft';
+          else if (r < 0.88) sp = 'crinoid';
           else if (r < 0.94) sp = 'kelp';
           else sp = 'coral_brain';
           out.push({
@@ -702,6 +811,7 @@ window.OC = window.OC || {};
     // География
     floor: ['Морское дно и рельеф рифа', 'Bathymetry / Benthos', 'Геология', 'Все зоны', '0–168 м', 'Карбонатные пески, известняковые плиты, контрфорсы прибоя (spur-and-groove) и отвесный склон шельфа Кораллового моря.'],
     mangrove: ['Красные мангры', 'Rhizophora stylosa', 'Флора', 'Мангровые отмели', '0–3 м', 'Деревья с арочными ходульными корнями, фильтрующие сток суши и дающие укрытие малькам рифовых рыб и крабов.'],
+    island_palm: ['Пальмы кораллового острова', 'Cocos nucifera', 'Флора', 'Коралловый островок', '+1–10 м', 'Тропические кокосовые пальмы и прибрежные кустарники песчаного островка (Sand Cay), удерживающие коралловый песок корнями от ветровой и волновой эрозии.'],
     seagrass: ['Морская трава', 'Zostera / Halophila', 'Флора', 'Луга морской травы', '3–14 м', 'Единственные цветковые растения, полностью адаптированные к морской воде. Основная пища дюгоней и зелёных черепах.'],
     kelp: ['Саргассовые и бурые водоросли', 'Sargassum / Laminariales', 'Флора', 'Внешний склон', '15–42 м', 'Крупные бурые водоросли прохладных течений внешнего склона с газовыми пузырьками-поплавками.'],
 
@@ -711,9 +821,11 @@ window.OC = window.OC || {};
     coral_brain: ['Мозговой коралл', 'Platygyra / Diploria', 'Кораллы', 'Лагуна и Гребень', '3–25 м', 'Прочные сферические колонии с лабиринтовыми бороздами; выдерживают сильные штормовые волны и живут столетиями.'],
     coral_bommie: ['Массивный коралл Поритес (Бомми)', 'Porites lutea', 'Кораллы', 'Внутренняя лагуна', '4–22 м', 'Колоссальные известняковые башни («бомми»), формирующиеся тысячелетиями из миллионов крошечных полипов.'],
     coral_plate: ['Листовой коралл Монтипора', 'Montipora / Turbinaria', 'Кораллы', 'Склон и Стена', '22–65 м', 'Черепитчатые пластины на крутых склонах, адаптированные к слабому рассеянному свету больших глубин.'],
+    coral_crust: ['Корковый коралл и литотамний', 'Montipora / Porolithon', 'Кораллы', 'Гребень и Бомми', '1–22 м', 'Стелющиеся корковые кораллы и известковые водоросли, цементирующие каркас рифа и заполняющие пространство между крупными колониями.'],
     coral_fan: ['Веерная горгонария', 'Gorgonia / Melithaea', 'Кораллы', 'Склон и Проход', '14–55 м', 'Ажурные мягкие кораллы-веера, разворачивающиеся поперёк течения для фильтрации зоопланктона.'],
     coral_soft: ['Мягкий коралл Дендронефтия', 'Dendronephthya', 'Кораллы', 'Склон и Обрыв', '25–90 м', 'Яркие пастельно-розовые и фиолетовые кусты без жёсткого известкового скелета; надуваются водой в сильном течении.'],
     coral_black: ['Чёрный коралл', 'Antipatharia', 'Кораллы', 'Голубая дыра и Бездна', '38–145 м', 'Глубоководные веерные и кнутообразные кораллы сумеречной зоны без зооксантелл, растущие всего по несколько миллиметров в год.'],
+    crinoid: ['Морская лилия (Криноидея)', 'Comanthina schlegeli', 'Беспозвоночные', 'Гребень и Склон', '3–55 м', 'Древнее иглокожее с венчиком перистых лучей; цепляется за вершины кораллов и губок, процеживая планктон из течения.'],
     sponge_tube: ['Трубчатая губка', 'Aplysina fistularis', 'Беспозвоночные', 'Склон и Стена', '15–60 м', 'Колонии вертикальных пористых трубок, непрерывно прокачивающих и очищающих тысячи литров морской воды в сутки.'],
     sponge_barrel: ['Гигантская бочковидная губка', 'Xestospongia testudinaria', 'Беспозвоночные', 'Внешний склон', '20–85 м', '«Красное дерево рифа» — ребристые бочки до 2 м в высоту, способные прожить более тысячи лет.'],
     anemone: ['Величественная актиния', 'Heteractis magnifica', 'Беспозвоночные', 'Лагуна и Гребень', '2–18 м', 'Хищный полип со стрекательными щупальцами. Надёжный дом для рыб-клоунов, обладающих иммунной слизью.'],
@@ -798,9 +910,9 @@ window.OC = window.OC || {};
         geoOpts: { len: 0.85, height: 0.4, width: 0.16, colA: 0x38d8c8, colB: 0xb8fff6, finCol: 0x6ce8dc } },
       { key: 'fish_chromis', n: 48, cx: bom0.x, cz: bom0.z, radius: 20, yDepth: -6.5, spread: 7, speed: 4.2, scale: 0.65, diel: 'diurnal', shyness: 1.15, cleaner: true,
         geoOpts: { len: 0.85, height: 0.4, width: 0.16, colA: 0x38d8c8, colB: 0xb8fff6, finCol: 0x6ce8dc } },
-      { key: 'fish_orange', n: 16, cx: -20 + shelfOffset(45), cz: 45, radius: 12, yDepth: -7.5, spread: 4.5, speed: 3.4, scale: 0.85, diel: 'diurnal', curious: 0.45,
+      { key: 'fish_orange', n: 16, cx: -20 + shelfOffset(45), cz: 45, radius: 9, yDepth: -7.5, spread: 3.6, speed: 3.4, scale: 0.85, diel: 'diurnal', curious: 0.55, hostAnemone: true,
         geoOpts: { len: 0.95, height: 0.52, width: 0.22, colA: 0xff5a1f, colB: 0xffffff, finCol: 0xff8a30, stripes: 1.0 } },
-      { key: 'fish_orange', n: 14, cx: CAY_X + 88, cz: CAY_Z + 40, radius: 10, yDepth: -3.5, spread: 4, speed: 3.2, scale: 0.85, diel: 'diurnal', curious: 0.45,
+      { key: 'fish_orange', n: 14, cx: CAY_X + 88, cz: CAY_Z + 40, radius: 8, yDepth: -3.5, spread: 3.4, speed: 3.2, scale: 0.85, diel: 'diurnal', curious: 0.55, hostAnemone: true,
         geoOpts: { len: 0.95, height: 0.52, width: 0.22, colA: 0xff5a1f, colB: 0xffffff, finCol: 0xff8a30, stripes: 1.0 } },
       { key: 'fish_butterfly', n: 18, cx: 110 + shelfOffset(50), cz: 50, radius: 26, yDepth: -5.5, spread: 9, speed: 4.2, scale: 0.9, diel: 'diurnal', curious: 0.65, cleaner: true,
         geoOpts: { len: 1.0, height: 0.85, width: 0.16, colA: 0xffe44d, colB: 0x1a1a22, finCol: 0xffffff, stripes: 1.0 } },
@@ -918,6 +1030,7 @@ window.OC = window.OC || {};
     getZoneAt,
     getTerrainColor,
     getOpticalProfile,
+    getCurrentAt,
     generateChunkFlora,
     faunaPlan: FAUNA_PLAN,
     encyclopedia: ENCYCLOPEDIA

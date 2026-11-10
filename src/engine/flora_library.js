@@ -640,6 +640,159 @@ window.OC = window.OC || {};
     return g;
   }
 
+  /* ---- 19. Корковый коралл и известковый рифовый подлесок (Montipora / Porolithon) ---- */
+  function buildCrustCoral(hue, rng) {
+    const list = [];
+    const c1 = COL().setHSL(hue, 0.56, 0.36);
+    const c2 = COL().setHSL((hue + 0.06) % 1, 0.78, 0.58);
+    const lobes = 4 + Math.floor(rng() * 2);
+    for (let i = 0; i < lobes; i++) {
+      const a = (i / lobes) * Math.PI * 2 + rng() * 0.5;
+      const d = i === 0 ? 0 : OC.lerp(0.65, 1.35, rng());
+      const rx = OC.lerp(0.85, 1.45, rng());
+      const ry = OC.lerp(0.18, 0.36, rng());
+      const g = new T.CylinderGeometry(rx, rx * 0.82, ry, 10, 1);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const vx = p.getX(k), vy = p.getY(k), vz = p.getZ(k);
+        const w = 1 + 0.14 * Math.sin(Math.atan2(vz, vx) * 4 + i);
+        p.setXYZ(k, vx * w, vy + (vy > 0 ? Math.sin(vx * 2.1 + vz * 2.3) * 0.06 : 0), vz * w);
+      }
+      OC.geoPrep(g);
+      g.computeVertexNormals();
+      OC.paint(g, (x, y, z, c) => {
+        const r = Math.hypot(x, z) / Math.max(0.5, rx);
+        c.copy(c1).lerp(c2, OC.smoothstep(0.35, 1.0, r));
+      });
+      OC.withSway(g, () => 0);
+      OC.xform(g, {
+        r: [(rng() - 0.5) * 0.18, rng() * 6.28, (rng() - 0.5) * 0.18],
+        p: [Math.cos(a) * d, ry * 0.42 + i * 0.03, Math.sin(a) * d]
+      });
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 20. Морская лилия-криноидея (Comanthina schlegeli) ---- */
+  function buildCrinoid(hue, rng) {
+    const list = [];
+    const c1 = COL().setHSL(hue, 0.78, 0.42);
+    const c2 = COL().setHSL((hue + 0.06) % 1, 0.94, 0.66);
+
+    const calyx = new T.SphereGeometry(0.24, 7, 5);
+    OC.geoPrep(calyx);
+    OC.paint(calyx, c1);
+    OC.withSway(calyx, () => 0);
+    calyx.translate(0, 0.14, 0);
+    list.push(calyx);
+
+    const arms = 12;
+    for (let i = 0; i < arms; i++) {
+      const a = (i / arms) * Math.PI * 2 + (rng() - 0.5) * 0.25;
+      const len = OC.lerp(0.95, 1.45, rng());
+      const pts = [];
+      for (let s = 0; s <= 5; s++) {
+        const t = s / 5;
+        const rad = 0.12 + t * len * 0.72;
+        const arch = Math.sin(t * Math.PI * 0.72) * len * 0.85;
+        pts.push(new T.Vector3(Math.cos(a) * rad, 0.18 + arch, Math.sin(a) * rad));
+      }
+      const arm = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 7, 0.035, 4, false);
+      OC.geoPrep(arm);
+      OC.paint(arm, (x, y, z, c) => c.copy(c1).lerp(c2, OC.clamp(y / 1.2, 0, 1)));
+      OC.withSway(arm, (x, y, z) => OC.clamp((y - 0.12) / 1.2, 0, 1));
+      list.push(arm);
+
+      // Перистая веточка на середине луча
+      const frond = new T.ConeGeometry(0.14, len * 0.72, 3);
+      OC.geoPrep(frond);
+      frond.scale(0.16, 1, 1);
+      OC.paint(frond, c2);
+      OC.withSway(frond, () => 0.75);
+      OC.xform(frond, {
+        r: [0, -a, -0.78],
+        p: [Math.cos(a) * len * 0.48, 0.62, Math.sin(a) * len * 0.48]
+      });
+      list.push(frond);
+    }
+    return OC.mergeGeometries(list);
+  }
+
+  /* ---- 21. Кокосовая пальма и панданус кораллового островка (Sand Cay) ---- */
+  function buildIslandPalm(rng) {
+    const list = [];
+    const barkA = COL(0x70563f);
+    const barkB = COL(0x9a7d5c);
+    const leafA = COL(0x287834);
+    const leafB = COL(0x5eb348);
+
+    const leanX = (rng() - 0.5) * 1.8;
+    const leanZ = (rng() - 0.5) * 1.8;
+    const topH = OC.lerp(6.8, 9.2, rng());
+    const trunkPts = [];
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6;
+      trunkPts.push(new T.Vector3(leanX * t * t, t * topH, leanZ * t * t));
+    }
+    const trunk = new T.TubeGeometry(new T.CatmullRomCurve3(trunkPts), 10, 0.24, 6, false);
+    const tp = trunk.attributes.position;
+    for (let i = 0; i < tp.count; i++) {
+      const y = tp.getY(i);
+      const t = OC.clamp(y / topH, 0, 1);
+      const tap = 1.35 - t * 0.72;
+      const cx = leanX * t * t, cz = leanZ * t * t;
+      tp.setX(i, cx + (tp.getX(i) - cx) * tap);
+      tp.setZ(i, cz + (tp.getZ(i) - cz) * tap);
+    }
+    OC.geoPrep(trunk);
+    trunk.computeVertexNormals();
+    OC.paint(trunk, (x, y, z, c) => {
+      const ring = Math.sin(y * 6.5) * 0.5 + 0.5;
+      c.copy(barkA).lerp(barkB, ring * 0.6);
+    });
+    OC.withSway(trunk, (x, y, z) => OC.clamp(y / topH, 0, 1) * 0.28);
+    list.push(trunk);
+
+    // Кокосы у кроны
+    const crownX = leanX, crownY = topH, crownZ = leanZ;
+    for (let cIdx = 0; cIdx < 3; cIdx++) {
+      const ca = (cIdx / 3) * Math.PI * 2 + rng();
+      const nut = new T.SphereGeometry(0.24, 6, 5);
+      OC.geoPrep(nut);
+      OC.paint(nut, 0x5c3e24);
+      OC.withSway(nut, () => 0.28);
+      OC.xform(nut, { p: [crownX + Math.cos(ca) * 0.35, crownY - 0.25, crownZ + Math.sin(ca) * 0.35] });
+      list.push(nut);
+    }
+
+    // 9 дугообразных перистых листьев
+    const fronds = 9;
+    for (let i = 0; i < fronds; i++) {
+      const a = (i / fronds) * Math.PI * 2 + (rng() - 0.5) * 0.22;
+      const len = OC.lerp(2.7, 3.8, rng());
+      const droop = OC.lerp(0.65, 1.35, rng());
+      const blade = new T.PlaneGeometry(0.95, len, 2, 6);
+      const bp = blade.attributes.position;
+      for (let k = 0; k < bp.count; k++) {
+        const bx = bp.getX(k);
+        const by = bp.getY(k) + len * 0.5; // 0 .. len
+        const u = OC.clamp(by / len, 0, 1);
+        const width = Math.sin(Math.pow(u, 0.72) * Math.PI) * 1.15;
+        const archY = Math.sin(u * Math.PI * 0.62) * 1.05 - u * u * droop;
+        bp.setXYZ(k, bx * width, archY, by);
+      }
+      OC.geoPrep(blade);
+      blade.computeVertexNormals();
+      OC.paint(blade, (x, y, z, c) => c.copy(leafA).lerp(leafB, OC.clamp(z / len, 0, 1)));
+      OC.withSway(blade, (x, y, z) => 0.32 + OC.clamp(z / len, 0, 1) * 0.68);
+      OC.xform(blade, { r: [0, a, 0], p: [crownX, crownY, crownZ] });
+      list.push(blade);
+    }
+
+    return OC.mergeGeometries(list);
+  }
+
   /* ---------- Реестр прототипов ---------- */
   OC.FloraLibrary = {
     create() {
@@ -661,81 +814,97 @@ window.OC = window.OC || {};
         vertexColors: true, roughness: 0.78, metalness: 0.0, side: T.DoubleSide
       }), { causticStrength: 0.88, swayAmp: 0.85 });
 
+      const matFoliage = OC.enhanceMaterial(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.72, metalness: 0.0, side: T.DoubleSide
+      }), { causticStrength: 0.0, swayAmp: 0.48 });
+
       const prototypes = {
         coral_staghorn: {
-          mat: matRigid, maxInstances: 1500, cullDist: 580,
-          geos: [buildStaghorn(0.94, rng), buildStaghorn(0.55, rng), buildStaghorn(0.76, rng)]
+          mat: matRigid, maxInstances: 2000, cullDist: 580,
+          geos: [buildStaghorn(0.94, rng), buildStaghorn(0.55, rng), buildStaghorn(0.76, rng), buildStaghorn(0.11, rng)]
         },
         coral_table: {
-          mat: matRigid, maxInstances: 1300, cullDist: 640,
-          geos: [buildTable(0.09, rng), buildTable(0.44, rng), buildTable(0.86, rng)]
+          mat: matRigid, maxInstances: 1700, cullDist: 640,
+          geos: [buildTable(0.09, rng), buildTable(0.44, rng), buildTable(0.86, rng), buildTable(0.96, rng)]
         },
         coral_brain: {
-          mat: matRigid, maxInstances: 1400, cullDist: 560,
+          mat: matRigid, maxInstances: 1600, cullDist: 560,
           geos: [buildBrain(0.14, rng), buildBrain(0.24, rng), buildBrain(0.95, rng)]
         },
         coral_bommie: {
-          mat: matRigid, maxInstances: 480, cullDist: 700,
+          mat: matRigid, maxInstances: 520, cullDist: 700,
           geos: [buildBommie(0.11, rng), buildBommie(0.48, rng)]
         },
         coral_plate: {
-          mat: matRigid, maxInstances: 950, cullDist: 580,
+          mat: matRigid, maxInstances: 1050, cullDist: 580,
           geos: [buildPlateCoral(0.08, rng), buildPlateCoral(0.82, rng)]
         },
+        coral_crust: {
+          mat: matRigid, maxInstances: 2400, cullDist: 340,
+          geos: [buildCrustCoral(0.94, rng), buildCrustCoral(0.09, rng), buildCrustCoral(0.76, rng)]
+        },
         coral_fan: {
-          mat: matSoft, maxInstances: 900, cullDist: 540,
+          mat: matSoft, maxInstances: 980, cullDist: 540,
           geos: [buildSeaFan(0.88, rng), buildSeaFan(0.02, rng), buildSeaFan(0.74, rng)]
         },
         coral_soft: {
-          mat: matSoft, maxInstances: 750, cullDist: 500,
-          geos: [buildSoftCoral(0.91, rng), buildSoftCoral(0.78, rng)]
+          mat: matSoft, maxInstances: 980, cullDist: 500,
+          geos: [buildSoftCoral(0.91, rng), buildSoftCoral(0.78, rng), buildSoftCoral(0.07, rng)]
         },
         coral_black: {
-          mat: matSoft, maxInstances: 600, cullDist: 500,
+          mat: matSoft, maxInstances: 650, cullDist: 500,
           geos: [buildBlackCoral(rng), buildBlackCoral(rng)]
         },
+        crinoid: {
+          mat: matSoft, maxInstances: 1100, cullDist: 300,
+          geos: [buildCrinoid(0.11, rng), buildCrinoid(0.96, rng), buildCrinoid(0.78, rng)]
+        },
         sponge_tube: {
-          mat: matRigid, maxInstances: 650, cullDist: 500,
+          mat: matRigid, maxInstances: 700, cullDist: 500,
           geos: [buildTubeSponge(0.05, 0.13, rng), buildTubeSponge(0.78, 0.88, rng)]
         },
         sponge_barrel: {
-          mat: matRigid, maxInstances: 600, cullDist: 560,
+          mat: matRigid, maxInstances: 650, cullDist: 560,
           geos: [buildBarrelSponge(0.06, rng), buildBarrelSponge(0.84, rng)]
         },
         anemone: {
-          mat: matSoft, maxInstances: 680, cullDist: 440,
-          geos: [buildAnemone(0.74, 0.92, rng), buildAnemone(0.58, 0.50, rng)]
+          mat: matSoft, maxInstances: 900, cullDist: 440,
+          geos: [buildAnemone(0.74, 0.92, rng), buildAnemone(0.58, 0.50, rng), buildAnemone(0.95, 0.08, rng)]
         },
         giant_clam: {
-          mat: matClam, maxInstances: 700, cullDist: 460,
+          mat: matClam, maxInstances: 760, cullDist: 460,
           geos: [buildGiantClam(0.56, rng), buildGiantClam(0.78, rng)]
         },
         seagrass: {
-          mat: matPlant, maxInstances: 2400, cullDist: 450,
+          mat: matPlant, maxInstances: 2600, cullDist: 450,
           geos: [buildSeagrass(0.24, rng), buildSeagrass(0.28, rng)]
         },
         kelp: {
-          mat: matPlant, maxInstances: 480, cullDist: 540,
+          mat: matPlant, maxInstances: 520, cullDist: 540,
           geos: [buildKelp(0.14, rng), buildKelp(0.18, rng)]
         },
         mangrove: {
-          mat: matSoft, maxInstances: 1100, cullDist: 780,
+          mat: matSoft, maxInstances: 1150, cullDist: 780,
           geos: [buildMangrove(rng), buildMangrove(rng)]
         },
+        island_palm: {
+          mat: matFoliage, maxInstances: 180, cullDist: 950,
+          geos: [buildIslandPalm(rng), buildIslandPalm(rng)]
+        },
         urchin: {
-          mat: matRigid, maxInstances: 600, cullDist: 280,
+          mat: matRigid, maxInstances: 650, cullDist: 280,
           geos: [buildUrchin()]
         },
         starfish_blue: {
-          mat: matRigid, maxInstances: 450, cullDist: 280,
+          mat: matRigid, maxInstances: 480, cullDist: 280,
           geos: [buildStarfish(5, 0.58, false)]
         },
         starfish_cots: {
-          mat: matRigid, maxInstances: 450, cullDist: 300,
+          mat: matRigid, maxInstances: 480, cullDist: 300,
           geos: [buildStarfish(11, 0.94, true)]
         },
         shell_triton: {
-          mat: matClam, maxInstances: 400, cullDist: 280,
+          mat: matClam, maxInstances: 440, cullDist: 280,
           geos: [buildTritonShell()]
         }
       };

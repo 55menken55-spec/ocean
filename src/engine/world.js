@@ -42,19 +42,23 @@ window.OC = window.OC || {};
     dayW: 1, bioGlow: 0, sunAtten: 1
   };
 
-  let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget;
+  let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget, flashBeam, flashBeamMat;
   let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane, raysGroup, rayMats = [];
   let flashlightOn = false;
   let timeOfDay = 0.24; // приятное утро / яркий день
 
   const sunDir = new T.Vector3(0.4, 0.85, 0.3).normalize();
   const camFwd = new T.Vector3();
+  const camRight = new T.Vector3();
+  const _beamTint = new T.Color(0xeefaff);
+  const _worldCurr = new T.Vector3();
 
   const causticU = {
     uTime: OC.uTime,
     uCausticTex: { value: null },
     uCausticI: { value: 0.9 },
-    uCausticCol: { value: new T.Color(0xc2f5ff) }
+    uCausticCol: { value: new T.Color(0xc2f5ff) },
+    uCurrent: { value: new T.Vector2(0, 0) }
   };
   OC.causticUniforms = causticU;
 
@@ -79,11 +83,12 @@ window.OC = window.OC || {};
       sh.uniforms.uCausticTex = causticU.uCausticTex;
       sh.uniforms.uCausticI = causticU.uCausticI;
       sh.uniforms.uCausticCol = causticU.uCausticCol;
+      sh.uniforms.uCurrent = causticU.uCurrent;
       sh.uniforms.uCStrength = { value: cStr };
       sh.uniforms.uSwayAmp = { value: swayAmp };
 
       let vPre = 'varying vec3 vCWorld;\nvarying vec3 vCNormal;\nuniform float uTime;\n';
-      if (swayAmp > 0) vPre += 'attribute float aSway;\nuniform float uSwayAmp;\n';
+      if (swayAmp > 0) vPre += 'attribute float aSway;\nuniform float uSwayAmp;\nuniform vec2 uCurrent;\n';
       if (fishSwim) vPre += 'attribute vec2 aSwim;\n';
 
       let vBegin = '#include <begin_vertex>\n';
@@ -98,8 +103,9 @@ window.OC = window.OC || {};
           float ocPh = ocInstOrigin.x * 0.14 + ocInstOrigin.z * 0.11 + transformed.x * 0.25 + transformed.z * 0.22;
           float ocW1 = sin(uTime * 1.18 + ocPh);
           float ocW2 = cos(uTime * 0.86 + ocPh * 1.37);
-          transformed.x += ocW1 * uSwayAmp * aSway * 1.75;
-          transformed.z += ocW2 * uSwayAmp * aSway * 1.25;
+          float ocUnderW = smoothstep(0.25, -0.25, ocInstOrigin.y);
+          transformed.x += (ocW1 * 1.75 + uCurrent.x * 0.42 * ocUnderW) * uSwayAmp * aSway;
+          transformed.z += (ocW2 * 1.25 + uCurrent.y * 0.42 * ocUnderW) * uSwayAmp * aSway;
           transformed.y += sin(uTime * 1.65 + ocPh * 1.9) * uSwayAmp * aSway * 0.16;
         `;
       }
@@ -147,9 +153,28 @@ window.OC = window.OC || {};
       let fInject = '';
       if (isTerrain) {
         fInject += `
+          float detDist = length(cameraPosition - vCWorld);
+          float detFade = 1.0 - smoothstep(16.0, 95.0, detDist);
+          float slopeW = smoothstep(0.84, 0.42, clamp(vCNormal.y, 0.0, 1.0));
+          float flatW = 1.0 - slopeW;
+
+          // Микро-рябь песка и зернистость карбонатного грунта вблизи
           float sandRip = sin(vCWorld.x * 2.2 + vCWorld.z * 1.3 + sin(vCWorld.z * 0.6) * 1.4);
-          float shallowMask = smoothstep(-32.0, -4.0, vCWorld.y) * smoothstep(0.6, -0.4, vCWorld.y);
-          gl_FragColor.rgb *= 1.0 + sandRip * 0.032 * shallowMask * clamp(vCNormal.y, 0.0, 1.0);
+          float grain = sin(vCWorld.x * 11.7 + vCWorld.z * 7.3) * cos(vCWorld.z * 10.9 - vCWorld.x * 6.1);
+          float shallowMask = smoothstep(-36.0, -4.0, vCWorld.y) * smoothstep(0.7, -0.35, vCWorld.y);
+
+          // Слоистость известняка и каверны на крутых стенах (бомми, Голубая дыра, обрыв)
+          float strata = sin(vCWorld.y * 3.4 + sin(vCWorld.x * 0.38 + vCWorld.z * 0.34) * 2.1);
+          float crag = sin(vCWorld.x * 3.1 - vCWorld.z * 2.7) * cos(vCWorld.y * 2.4 + vCWorld.x * 1.3);
+
+          // Мокрый песок у самой кромки прибоя (-0.25 .. +0.5 м)
+          float wetShore = smoothstep(-0.3, 0.05, vCWorld.y) * smoothstep(0.6, 0.08, vCWorld.y);
+
+          gl_FragColor.rgb *= 1.0
+            + sandRip * 0.042 * shallowMask * flatW
+            + grain * 0.048 * detFade * flatW
+            + (strata * 0.085 + crag * 0.055) * detFade * slopeW
+            - wetShore * 0.16;
         `;
       }
       if (cStr > 0) {
@@ -242,6 +267,36 @@ window.OC = window.OC || {};
     return tex;
   }
 
+  /* ---------- Текстура мелководья и зоны прибойной пены из батиметрии ---------- */
+  function buildBathymetryFoamTex(biome) {
+    const S = 160;
+    const data = new Uint8Array(S * S * 4);
+    const R = biome ? (biome.worldRadius || 1200) : 1200;
+    for (let iz = 0; iz < S; iz++) {
+      const wz = ((iz / (S - 1)) * 2 - 1) * R;
+      for (let ix = 0; ix < S; ix++) {
+        const wx = ((ix / (S - 1)) * 2 - 1) * R;
+        const h = biome ? biome.getHeight(wx, wz) : -12;
+        const depthNorm = OC.clamp(-h / 45.0, 0, 1);
+        // Пена прибоя над очень мелким гребнем (-3.6 .. +0.25 м) и берегом
+        const crestFoam = OC.smoothstep(-3.9, -1.5, h) * OC.smoothstep(0.55, -0.3, h);
+        const shoreFoam = OC.smoothstep(-0.9, 0.05, h) * OC.smoothstep(0.45, 0.0, h);
+        const idx = (iz * S + ix) * 4;
+        data[idx] = Math.round(depthNorm * 255);
+        data[idx + 1] = Math.round(crestFoam * 255);
+        data[idx + 2] = Math.round(shoreFoam * 255);
+        data[idx + 3] = 255;
+      }
+    }
+    const tex = new T.DataTexture(data, S, S, T.RGBAFormat);
+    tex.magFilter = T.LinearFilter;
+    tex.minFilter = T.LinearFilter;
+    tex.wrapS = T.ClampToEdgeWrapping;
+    tex.wrapT = T.ClampToEdgeWrapping;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
   /* ---------- Солнечные лучи ---------- */
   function buildRays(count) {
     if (raysGroup) scene.remove(raysGroup);
@@ -311,12 +366,56 @@ window.OC = window.OC || {};
     fillB = new T.PointLight(0xffa064, 0.22, 300, 1.5);
     scene.add(fillB);
 
-    /* --- прожектор дайвера / батискафа (F) --- */
-    flashlight = new T.SpotLight(0xfff3df, 0.0, 130, 0.52, 0.72, 1.25);
+    /* --- прожектор дайвера / батискафа (F) и объёмный конус света --- */
+    flashlight = new T.SpotLight(0xfff3df, 0.0, 155, 0.54, 0.72, 1.18);
     flashTarget = new T.Object3D();
     scene.add(flashlight);
     scene.add(flashTarget);
     flashlight.target = flashTarget;
+
+    const beamGeo = new T.ConeGeometry(14.5, 68, 28, 1, true);
+    beamGeo.translate(0, -34, 0);
+    beamGeo.rotateX(-Math.PI / 2);
+    flashBeamMat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false,
+      uniforms: {
+        uIntensity: { value: 0.0 },
+        uColor: { value: new T.Color(0xcdf4ff) },
+        uTime: OC.uTime
+      },
+      vertexShader: `
+        varying vec3 vWorldP;
+        varying vec3 vNormW;
+        varying float vDist;
+        void main(){
+          vDist = position.z;
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldP = wp.xyz;
+          vNormW = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }`,
+      fragmentShader: `
+        varying vec3 vWorldP;
+        varying vec3 vNormW;
+        varying float vDist;
+        uniform float uIntensity, uTime;
+        uniform vec3 uColor;
+        void main(){
+          if (uIntensity < 0.01) discard;
+          vec3 toCam = normalize(cameraPosition - vWorldP);
+          float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.75);
+          float axial = smoothstep(1.2, 8.5, vDist) * smoothstep(68.0, 10.0, vDist);
+          float dust = 0.86 + 0.14 * sin(vWorldP.x * 0.45 + uTime * 0.9) * cos(vWorldP.z * 0.42 - uTime * 0.7);
+          float belowW = smoothstep(0.1, -0.4, vWorldP.y);
+          float a = rim * axial * dust * belowW * uIntensity * 0.145;
+          if (a < 0.002) discard;
+          gl_FragColor = vec4(uColor, a);
+        }`
+    });
+    flashBeam = new T.Mesh(beamGeo, flashBeamMat);
+    flashBeam.frustumCulled = false;
+    flashBeam.visible = false;
+    scene.add(flashBeam);
 
     /* --- подводный и надводный купол неба --- */
     const skyGeo = new T.SphereGeometry(1600, 32, 24);
@@ -355,6 +454,11 @@ window.OC = window.OC || {};
           uwCol += uTop * st * 0.04 * smoothstep(0.55, 1.0, h);
 
           vec3 skyCol = mix(uAboveHoriz, uAboveTop, smoothstep(0.0, 0.65, max(0.0, d.y)));
+          // Мягкие тропические пассатные облака у горизонта над водой
+          float clMask = smoothstep(0.02, 0.14, d.y) * smoothstep(0.55, 0.12, d.y) * uAboveMix;
+          float clPatt = 0.5 + 0.5 * sin(ang * 9.0 + uTime * 0.03) * cos(d.y * 26.0 - ang * 3.0);
+          float clouds = smoothstep(0.56, 0.88, clPatt) * clMask;
+          skyCol = mix(skyCol, mix(uSunCol, vec3(1.0), 0.55), clouds * 0.42);
           vec3 col = mix(uwCol, skyCol, uAboveMix);
 
           float sunDot = max(dot(d, normalize(uSunDir)), 0.0);
@@ -380,12 +484,16 @@ window.OC = window.OC || {};
     const ct = causticTexture(54);
     causticU.uCausticTex.value = ct;
 
-    /* --- водная поверхность (Y = 0) с окном Снеллиуса и волнами --- */
+    /* --- водная поверхность (Y = 0) с окном Снеллиуса, волнами и пеной прибоя --- */
     const rp = rippleTexture();
+    const activeBiome = OC.Biomes.getActive();
+    const foamTex = buildBathymetryFoamTex(activeBiome);
     surfaceMat = new T.ShaderMaterial({
       transparent: true, depthWrite: false, side: T.DoubleSide, fog: false,
       uniforms: {
         uTex: { value: rp },
+        uFoamTex: { value: foamTex },
+        uWorldSpan: { value: (activeBiome ? activeBiome.worldRadius : 1200) * 2.0 },
         uTime: OC.uTime,
         uWaterCol: { value: new T.Color(0x6edcf5) },
         uSkyCol: { value: new T.Color(0x88d8ff) },
@@ -399,14 +507,16 @@ window.OC = window.OC || {};
         uniform float uTime;
         void main(){
           vec4 wp = modelMatrix * vec4(position, 1.0);
-          wp.y += sin(wp.x * 0.08 + uTime * 1.1) * 0.14 + cos(wp.z * 0.09 - uTime * 0.9) * 0.12;
+          wp.y += sin(wp.x * 0.075 + uTime * 1.15) * 0.16
+                + cos(wp.z * 0.088 - uTime * 0.92) * 0.14
+                + sin((wp.x + wp.z) * 0.14 + uTime * 1.7) * 0.06;
           vWorld = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
         }`,
       fragmentShader: `
         varying vec3 vWorld;
-        uniform sampler2D uTex;
-        uniform float uTime, uDayW, uCamY;
+        uniform sampler2D uTex, uFoamTex;
+        uniform float uTime, uDayW, uCamY, uWorldSpan;
         uniform vec3 uWaterCol, uSkyCol, uSunCol, uSunDir;
         void main(){
           vec2 cuv = vWorld.xz * 0.016;
@@ -414,31 +524,51 @@ window.OC = window.OC || {};
           float r2 = texture2D(uTex, cuv * 1.65 - vec2(uTime * 0.012, uTime * 0.016)).r;
           float rip = r1 * 0.65 + r2 * 0.45;
 
+          // Выборка глубины и мелководной пены прибоя по координатам карты
+          vec2 mapUv = clamp(vWorld.xz / uWorldSpan + 0.5, 0.002, 0.998);
+          vec4 bathy = texture2D(uFoamTex, mapUv);
+          float depthT = bathy.r;
+          float crestSurf = bathy.g;
+          float shoreSurf = bathy.b;
+
+          float foamNoise = smoothstep(0.32, 0.86, r1 * 0.55 + r2 * 0.62);
+          float surge = 0.55 + 0.45 * sin(vWorld.x * 0.18 - uTime * 1.85 + r1 * 3.0);
+          float foam = clamp((crestSurf * 0.72 * surge + shoreSurf * 1.15) * foamNoise, 0.0, 0.92);
+
           vec3 toEye = normalize(cameraPosition - vWorld);
           float dist = length(cameraPosition - vWorld);
           float fade = smoothstep(1350.0, 120.0, dist);
 
           // Волновая нормаль для бликов
-          vec3 n = normalize(vec3((r1 - 0.5) * 0.25, 1.0, (r2 - 0.5) * 0.25));
+          vec3 n = normalize(vec3((r1 - 0.5) * 0.28, 1.0, (r2 - 0.5) * 0.28));
           vec3 sunH = normalize(normalize(uSunDir) + toEye);
-          float spec = pow(max(dot(n, sunH), 0.0), 42.0) * uDayW;
+          float spec = pow(max(dot(n, sunH), 0.0), 48.0) * uDayW;
+          vec3 foamCol = mix(vec3(0.45, 0.72, 0.85), vec3(0.95, 0.99, 1.0), 0.25 + 0.75 * uDayW);
+
+          // Оттенок воды меняется от бирюзового мелководья к глубокому кобальту Кораллового моря
+          vec3 deepCol = mix(uWaterCol, vec3(0.03, 0.22, 0.45) * (0.25 + 0.75 * uDayW), depthT * 0.82);
 
           if (uCamY < 0.0) {
-            // Вид снизу: Окно Снеллиуса (~48.6 град => cos ~ 0.66)
+            // Вид снизу: Окно Снеллиуса (~48.6 град => cos ~ 0.66) + буруны прибоя над гребнем
             float cosA = abs(dot(toEye, n));
             float snell = smoothstep(0.58, 0.78, cosA);
-            vec3 reflectCol = uWaterCol * (0.28 + rip * 0.45);
-            vec3 windowCol = mix(uWaterCol, uSkyCol, 0.75) * (0.55 + rip * 0.35) + uSunCol * spec * 1.1;
+            vec3 reflectCol = deepCol * (0.28 + rip * 0.45);
+            vec3 windowCol = mix(deepCol, uSkyCol, 0.75) * (0.55 + rip * 0.35) + uSunCol * spec * 1.1;
             vec3 col = mix(reflectCol, windowCol, snell);
+            col = mix(col, foamCol * 0.82, foam * 0.55);
             float alpha = mix(0.32 + rip * 0.24, 0.62 + rip * 0.2, snell) * fade * (0.35 + 0.65 * uDayW);
-            gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.88));
+            alpha = clamp(alpha + foam * 0.24 * fade, 0.0, 0.92);
+            gl_FragColor = vec4(col, alpha);
           } else {
-            // Вид сверху над поверхностью
+            // Вид сверху: Френель + просвет бирюзовых лагун + прибой на гребне и у островка
             float fresnel = pow(1.0 - max(dot(toEye, n), 0.0), 3.0);
-            vec3 col = mix(uWaterCol * 0.75, uSkyCol, clamp(fresnel * 0.85 + 0.15, 0.0, 1.0));
-            col += uSunCol * spec * 1.25;
-            float alpha = mix(0.42, 0.86, fresnel) * fade;
-            gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.9));
+            vec3 shallowTint = mix(vec3(0.28, 0.86, 0.88), deepCol, depthT) * (0.22 + 0.78 * uDayW);
+            vec3 col = mix(shallowTint, uSkyCol, clamp(fresnel * 0.82 + 0.12, 0.0, 1.0));
+            col += uSunCol * spec * 1.35;
+            col = mix(col, foamCol, foam);
+            float alpha = mix(0.46 + (1.0 - depthT) * 0.08, 0.88, fresnel) * fade;
+            alpha = clamp(alpha + foam * 0.45 * fade, 0.0, 0.96);
+            gl_FragColor = vec4(col, alpha);
           }
         }`
     });
@@ -537,12 +667,24 @@ window.OC = window.OC || {};
     fillB.color.copy(pal.fillB);
     fillB.intensity = pal.fillBI * (0.3 + 0.7 * opt.sunAtten);
 
-    /* прожектор дайвера */
-    const targetFlashI = flashlightOn ? 3.4 : 0.0;
+    /* прожектор дайвера и объёмный луч в воде */
+    const targetFlashI = flashlightOn ? 4.2 : 0.0;
     flashlight.intensity = OC.lerp(flashlight.intensity, targetFlashI, Math.min(1, dt * 10));
     flashlight.position.copy(camPos);
     camera.getWorldDirection(camFwd);
-    flashTarget.position.copy(camPos).addScaledVector(camFwd, 30);
+    flashTarget.position.copy(camPos).addScaledVector(camFwd, 32);
+
+    if (flashBeam && flashBeamMat) {
+      const beamStrength = (flashlight.intensity / 4.2) * OC.lerp(1.15, 0.42, pal.dayW * opt.sunAtten);
+      flashBeam.visible = beamStrength > 0.02 && camPos.y < 1.5;
+      if (flashBeam.visible) {
+        camRight.crossVectors(camFwd, camera.up).normalize();
+        flashBeam.position.copy(camPos).addScaledVector(camera.up, -0.55).addScaledVector(camRight, 0.25);
+        flashBeam.lookAt(flashTarget.position);
+        flashBeamMat.uniforms.uIntensity.value = beamStrength;
+        flashBeamMat.uniforms.uColor.value.copy(pal.water).lerp(_beamTint, 0.68);
+      }
+    }
 
     /* купол неба */
     const aboveMix = OC.smoothstep(-0.3, 0.5, camPos.y);
@@ -557,9 +699,13 @@ window.OC = window.OC || {};
     skyMat.uniforms.uAboveMix.value = aboveMix;
     skySphere.position.copy(camPos);
 
-    /* каустика */
+    /* каустика и наклон кораллов по течению */
     causticU.uCausticI.value = opt.causticStrength;
     causticU.uCausticCol.value.copy(pal.water);
+    if (biome && biome.getCurrentAt) {
+      biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
+      causticU.uCurrent.value.set(_worldCurr.x, _worldCurr.z);
+    }
 
     /* поверхность воды привязана к сетке вокруг камеры, чтобы волны не «плыли» */
     const snap = 44;

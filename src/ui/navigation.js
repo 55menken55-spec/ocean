@@ -9,6 +9,7 @@ window.OC = window.OC || {};
   const _right = new T.Vector3();
   const _move = new T.Vector3();
   const _lookAt = new T.Vector3();
+  const _curr = new T.Vector3();
 
   const state = {
     mode: 'swim', // 'swim' | 'orbit' | 'tour'
@@ -200,6 +201,7 @@ window.OC = window.OC || {};
     getPitch: () => state.pitch,
     getVelocity: () => state.vel,
     getSpeed: () => state.vel.length(),
+    getCurrent: () => _curr,
     getForward(out) {
       out = out || new T.Vector3();
       return out.set(
@@ -354,6 +356,15 @@ window.OC = window.OC || {};
           _move.normalize();
           state.vel.addScaledVector(_move, accel * dt);
         }
+
+        // Приливные и прибойные течения океана (сносят батискаф в Проходе и над Гребнем)
+        if (!reduced && state.pos.y < -0.25 && biomeRef && biomeRef.getCurrentAt) {
+          biomeRef.getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
+          state.vel.addScaledVector(_curr, 1.45 * dt);
+        } else {
+          _curr.set(0, 0, 0);
+        }
+
         // Водное сопротивление / инерция
         const damp = Math.exp(-3.4 * dt);
         state.vel.multiplyScalar(damp);
