@@ -107,6 +107,42 @@
   .status{position:fixed;right:20px;bottom:14px;z-index:20;font-size:10.5px;letter-spacing:.14em;
     color:rgba(155,195,215,.72);text-transform:uppercase;pointer-events:none;display:flex;gap:12px}
 
+  /* ---------- Режим батискафа и Эхолот ---------- */
+  .sub-hud{position:fixed;inset:0;z-index:16;pointer-events:none;transition:opacity .35s}
+  .sub-hud.hidden{opacity:0}
+  .sub-frame{position:fixed;inset:14px;border-radius:26px;border:1px solid rgba(88,224,255,.16);
+    box-shadow:inset 0 0 64px rgba(12,68,98,.26)}
+  .sub-reticle{position:fixed;left:50%;top:50%;width:184px;height:184px;transform:translate(-50%,-50%);
+    border-radius:50%;border:1px dashed rgba(88,224,255,.28)}
+  .sub-reticle::before,.sub-reticle::after{content:"";position:absolute;background:rgba(88,224,255,.45)}
+  .sub-reticle::before{left:-14px;right:-14px;top:50%;height:1px;mask:linear-gradient(90deg,#000 18%,transparent 30%,transparent 70%,#000 82%)}
+  .sub-reticle::after{top:-14px;bottom:-14px;left:50%;width:1px;mask:linear-gradient(180deg,#000 18%,transparent 30%,transparent 70%,#000 82%)}
+  .sub-horizon{position:fixed;left:50%;top:50%;width:92px;height:2px;margin-left:-46px;margin-top:-1px;
+    background:linear-gradient(90deg,transparent,rgba(91,232,176,.85) 28%,transparent 44%,transparent 56%,rgba(91,232,176,.85) 72%,transparent);
+    transition:transform .12s linear}
+  .sub-strip{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;gap:14px;align-items:center;
+    padding:8px 18px;border-radius:14px;background:rgba(4,18,32,.72);border:1px solid rgba(88,224,255,.28);
+    backdrop-filter:blur(12px);font-size:11.5px;white-space:nowrap;box-shadow:0 12px 32px rgba(0,0,0,.4)}
+  .sub-cell{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .sub-cell span{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .sub-cell b{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--accent)}
+  .sub-cell b.warn{color:var(--accent2)}
+
+  .sonar-box{position:fixed;right:20px;bottom:42px;z-index:22;width:266px;padding:10px;border-radius:16px;
+    background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
+    box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none;transition:opacity .3s, transform .3s}
+  .sonar-box.hidden{opacity:0;transform:translateY(14px);pointer-events:none}
+  .sonar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;
+    font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  .sonar-head b{color:var(--ok);font-weight:600;max-width:162px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #sonar-canvas{display:block;width:246px;height:102px;border-radius:10px;border:1px solid rgba(140,225,255,.18);
+    background:rgba(2,13,24,.92)}
+
+  @media (max-width:960px){
+    .sonar-box{display:none}
+    .sub-strip{bottom:64px;gap:10px;padding:6px 12px}
+  }
+
   /* ---------- Карточка существа ---------- */
   .popup{position:fixed;z-index:45;width:292px;padding:14px 16px;border-radius:16px;
     background:var(--glass-strong);border:1px solid rgba(88,224,255,.36);backdrop-filter:blur(16px);
@@ -204,6 +240,8 @@
 </div>
 
 <div class="topright hud-hideable">
+  <button class="icon-btn" id="btn-sub" title="Режим батискафа и эхолот (B)" aria-label="Батискаф">&#9678;</button>
+  <button class="icon-btn" id="btn-sonar" title="Импульс сонара (G)" aria-label="Сонар">&#128225;</button>
   <button class="icon-btn" id="btn-flash" title="Прожектор батискафа (F)" aria-label="Прожектор">&#128294;</button>
   <button class="icon-btn" id="btn-sound" title="Звук океана (M)" aria-label="Звук">&#9835;</button>
   <button class="icon-btn" id="btn-atlas" title="Атлас рифа (K)" aria-label="Атлас">&#128214;</button>
@@ -267,10 +305,31 @@
       <kbd>W A S D</kbd> плыть · <kbd>Shift</kbd> ускорение<br>
       <kbd>Space/E</kbd> всплыть · <kbd>Q/C</kbd> глубже<br>
       <kbd>Мышь</kbd> обзор · <kbd>Клик</kbd> карточка вида<br>
-      <kbd>F</kbd> прожектор · <kbd>V</kbd> орбита · <kbd>K</kbd> атлас · <kbd>M</kbd> звук · <kbd>H</kbd> HUD
+      <kbd>F</kbd> прожектор · <kbd>B</kbd> батискаф · <kbd>G</kbd> сонар<br>
+      <kbd>V</kbd> орбита · <kbd>K</kbd> атлас · <kbd>M</kbd> звук · <kbd>H</kbd> HUD
     </div>
   </div>
 </aside>
+
+<div class="sub-hud hidden hud-hideable" id="sub-hud">
+  <div class="sub-frame"></div>
+  <div class="sub-reticle"></div>
+  <div class="sub-horizon" id="sub-horizon"></div>
+  <div class="sub-strip">
+    <div class="sub-cell"><span>Давление</span><b id="sub-pressure">1.74 атм</b></div>
+    <div class="tele-sep"></div>
+    <div class="sub-cell"><span>Клиренс</span><b id="sub-clearance">8.2 м</b></div>
+    <div class="tele-sep"></div>
+    <div class="sub-cell"><span>Ход</span><b id="sub-speed">0.0 уз</b></div>
+    <div class="tele-sep"></div>
+    <div class="sub-cell"><span>Среда</span><b id="sub-phase">День</b></div>
+  </div>
+</div>
+
+<div class="sonar-box hidden hud-hideable" id="sonar-box">
+  <div class="sonar-head"><span>Эхолот 140 м</span><b id="sonar-readout">Сканер · Чисто</b></div>
+  <canvas id="sonar-canvas" width="246" height="102" title="Профиль дна по курсу (G — активный импульс)"></canvas>
+</div>
 
 <div class="minimap-box hud-hideable">
   <canvas id="minimap" title="Кликните по карте или жёлтой точке для перехода"></canvas>

@@ -34,6 +34,9 @@ const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 assert(!html.includes('/*__THREE__*/'), 'index.html must replace __THREE__ placeholder');
 assert(!html.includes('/*__SRC__*/'), 'index.html must replace __SRC__ placeholder');
 assert(html.length > 500000, 'index.html seems unexpectedly small');
+for (const domId of ['id="sub-hud"', 'id="sonar-box"', 'id="sonar-canvas"', 'id="btn-sub"', 'id="btn-sonar"']) {
+  assert(html.includes(domId), `index.html missing Stage 2 element ${domId}`);
+}
 
 console.log('3) Executing full engine integration & shader verification in VM...');
 function makeStubEl(id) {
@@ -83,6 +86,7 @@ function makeStubEl(id) {
       strokeStyle: '',
       lineWidth: 1,
       filter: '',
+      setLineDash: () => {},
     }),
   };
 }
@@ -111,6 +115,7 @@ const sandbox = {
   Float32Array,
   Uint16Array,
   Uint32Array,
+  Int32Array,
   Uint8ClampedArray,
   Set,
   Map,
@@ -235,7 +240,45 @@ for (const lm of biome.landmarks) {
 }
 console.log('   End-to-end streaming simulation passed across all', biome.landmarks.length, 'Great Barrier Reef landmarks.');
 
-// E) Verify runtime quality switching
+// E) Stage 2 verification: faunaPlan, nocturnal fish_lantern, Boids, Navigation vectors, Sonar scan, Audio & Minimap
+assert(biome.faunaPlan && Array.isArray(biome.faunaPlan.schools) && biome.faunaPlan.schools.length >= 16, 'biome.faunaPlan.schools must have >= 16 schools');
+assert(Array.isArray(biome.faunaPlan.cleaningStations) && biome.faunaPlan.cleaningStations.length >= 2, 'biome.faunaPlan.cleaningStations must exist');
+assert(biome.encyclopedia.fish_lantern, 'fish_lantern species must be registered in encyclopedia');
+assert(biome.faunaPlan.schools.some((s) => s.key === 'fish_lantern' && s.biolum), 'faunaPlan must contain bioluminescent fish_lantern school');
+
+// Navigation vectors & speed
+assert(typeof OC.Navigation.getPitch === 'function', 'Navigation.getPitch required');
+assert(typeof OC.Navigation.getSpeed === 'function', 'Navigation.getSpeed required');
+assert(typeof OC.Navigation.getVelocity === 'function', 'Navigation.getVelocity required');
+const fwd = OC.Navigation.getForward(new T.Vector3());
+assert(Math.abs(fwd.length() - 1) < 1e-4, 'Navigation.getForward must return unit vector');
+
+// Sonar scanForward against seabed & open water
+const blueHoleLm = biome.landmarks.find((l) => l.id === 'blue_hole');
+const originTest = new T.Vector3(blueHoleLm.x, -10, blueHoleLm.z);
+const downDir = new T.Vector3(0, -1, 0);
+const hitBottom = fauna.scanForward(originTest, downDir, 140);
+assert(hitBottom.hit && hitBottom.kind === 'terrain' && hitBottom.range > 5 && hitBottom.range < 140, 'scanForward must hit seafloor looking downward');
+const upDir = new T.Vector3(0, 1, 0);
+const hitSky = fauna.scanForward(originTest, upDir, 140);
+assert(hitSky.kind === 'none', 'scanForward looking straight up must report none');
+
+// Nocturnal vs diurnal fauna AI updates + flashlight & diver speed reaction + minimap/audio triggers
+OC.Minimap.triggerPing(blueHoleLm.x, blueHoleLm.z);
+OC.sound.sonarPing(hitBottom.range, hitBottom.hit);
+for (const dayVal of [0.05, 0.5, 0.95]) {
+  OC.getPalette().dayW = dayVal;
+  OC.getPalette().bioGlow = 1 - dayVal;
+  for (let s = 0; s < 10; s++) {
+    OC.uTime.value += 0.05;
+    fauna.update(0.05, OC.uTime.value, originTest, s % 2 === 0 ? 11.5 : 1.0, dayVal < 0.3);
+    OC.sound.update(55, 'blue_hole', dayVal);
+    OC.Minimap.update(originTest, OC.Navigation.getYaw());
+  }
+}
+console.log('   Stage 2 Boids, faunaPlan, fish_lantern, Navigation, Sonar scanForward, Audio & Minimap verified.');
+
+// F) Verify runtime quality switching
 for (const qId of ['low', 'medium', 'high', 'ultra']) {
   OC.Quality.set(qId);
   OC.Terrain.update(camera.position);

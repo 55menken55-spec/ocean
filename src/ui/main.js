@@ -9,6 +9,8 @@ window.OC = window.OC || {};
   const hudEls = document.querySelectorAll('.hud-hideable');
   const panel = document.getElementById('panel');
   const btnPanel = document.getElementById('btn-panel');
+  const btnSub = document.getElementById('btn-sub');
+  const btnSonar = document.getElementById('btn-sonar');
   const btnSound = document.getElementById('btn-sound');
   const btnFlash = document.getElementById('btn-flash');
   const btnAtlas = document.getElementById('btn-atlas');
@@ -21,6 +23,16 @@ window.OC = window.OC || {};
   const timeLabel = document.getElementById('time-label');
   const zoneChipsEl = document.getElementById('zone-chips');
   const qualityBtnsEl = document.getElementById('quality-btns');
+
+  const subHud = document.getElementById('sub-hud');
+  const subHorizon = document.getElementById('sub-horizon');
+  const subPressure = document.getElementById('sub-pressure');
+  const subClearance = document.getElementById('sub-clearance');
+  const subSpeedEl = document.getElementById('sub-speed');
+  const subPhaseEl = document.getElementById('sub-phase');
+  const sonarBox = document.getElementById('sonar-box');
+  const sonarCanvas = document.getElementById('sonar-canvas');
+  const sonarReadout = document.getElementById('sonar-readout');
 
   const teleZone = document.getElementById('tele-zone');
   const teleDepth = document.getElementById('tele-depth');
@@ -40,8 +52,11 @@ window.OC = window.OC || {};
 
   let autoCycle = true;
   let hudHidden = false;
+  let subMode = false;
   let toastTimer = 0;
   let pickedTime = 0;
+  let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
+  const _fwd = new T.Vector3();
 
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const raycaster = new T.Raycaster();
@@ -102,7 +117,95 @@ window.OC = window.OC || {};
     }
   }
 
-  function bindUI(biome) {
+  function drawEchosounder(camPos, yaw, biome, fauna, time) {
+    if (!sonarCanvas || !subMode) return;
+    const ctx = sonarCanvas.getContext('2d');
+    if (!ctx) return;
+    const w = sonarCanvas.width, h = sonarCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Сетка глубин и дистанции (0..140 м вперёд)
+    ctx.fillStyle = 'rgba(2,14,26,0.92)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(88,224,255,0.12)';
+    ctx.lineWidth = 1;
+    for (let gx = 49; gx < w; gx += 49) {
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+    }
+    for (let gy = 25; gy < h; gy += 25) {
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+    }
+
+    const fwdX = -Math.sin(yaw), fwdZ = -Math.cos(yaw);
+    const maxRange = 140;
+    const steps = 28;
+    const maxDepthVis = Math.max(45, Math.min(180, -camPos.y + 42));
+    const yToPx = (yVal) => {
+      const depth = Math.max(0, -yVal);
+      return 6 + (depth / maxDepthVis) * (h - 12);
+    };
+
+    // Линия поверхности воды
+    ctx.strokeStyle = 'rgba(130,225,255,0.32)';
+    ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(w, 6); ctx.stroke();
+
+    // Профиль рельефа по курсу
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let i = 0; i <= steps; i++) {
+      const dist = (i / steps) * maxRange;
+      const sx = camPos.x + fwdX * dist;
+      const sz = camPos.z + fwdZ * dist;
+      const fl = biome.getHeight(sx, sz);
+      const px = (i / steps) * w;
+      const py = Math.min(h - 2, Math.max(6, yToPx(fl)));
+      ctx.lineTo(px, py);
+    }
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(30, 125, 165, 0.34)';
+    ctx.fill();
+
+    ctx.strokeStyle = '#58e0ff';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const dist = (i / steps) * maxRange;
+      const fl = biome.getHeight(camPos.x + fwdX * dist, camPos.z + fwdZ * dist);
+      const px = (i / steps) * w;
+      const py = Math.min(h - 2, Math.max(6, yToPx(fl)));
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // Позиция батискафа и луч вперёд
+    const subPy = Math.min(h - 6, Math.max(6, yToPx(camPos.y)));
+    ctx.strokeStyle = 'rgba(91, 232, 176, 0.45)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(8, subPy); ctx.lineTo(w - 6, subPy); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#5be8b0';
+    ctx.beginPath(); ctx.arc(8, subPy, 3.5, 0, Math.PI * 2); ctx.fill();
+
+    // Импульс сонара, если недавно запущен
+    const pingAge = time - sonarPingState.t;
+    if (pingAge >= 0 && pingAge < 2.6) {
+      const waveX = Math.min(w, (pingAge / 1.1) * w);
+      ctx.strokeStyle = 'rgba(130, 250, 255, ' + (1 - pingAge / 2.6).toFixed(2) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(waveX, 0); ctx.lineTo(waveX, h); ctx.stroke();
+
+      if (sonarPingState.hit) {
+        const tx = Math.min(w - 6, Math.max(12, (sonarPingState.range / maxRange) * w));
+        ctx.fillStyle = sonarPingState.kind === 'fauna' ? '#ffb574' : '#5be8b0';
+        ctx.beginPath(); ctx.arc(tx, subPy, 4.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  function bindUI(biome, fauna) {
     if (window.innerWidth < 1100 && panel) panel.classList.add('closed');
     if (btnPanel && panel) {
       btnPanel.classList.toggle('open', !panel.classList.contains('closed'));
@@ -147,6 +250,57 @@ window.OC = window.OC || {};
       btnAtlas.addEventListener('click', (e) => {
         e.stopPropagation();
         OC.Atlas.toggle();
+      });
+    }
+
+    const syncSubMode = (on) => {
+      subMode = on;
+      if (btnSub) {
+        btnSub.classList.toggle('on', on);
+        btnSub.setAttribute('aria-pressed', on);
+      }
+      if (subHud) subHud.classList.toggle('hidden', !on);
+      if (sonarBox) sonarBox.classList.toggle('hidden', !on);
+    };
+    syncSubMode(false);
+    if (btnSub) {
+      btnSub.addEventListener('click', (e) => {
+        e.stopPropagation();
+        syncSubMode(!subMode);
+        toast(subMode ? 'Режим батискафа: эхолот и приборы включены' : 'Режим свободного дайвера');
+      });
+    }
+
+    const fireSonarPing = () => {
+      const cam = OC.getCamera();
+      if (!cam || !fauna) return;
+      OC.Navigation.getForward(_fwd);
+      const res = fauna.scanForward(cam.position, _fwd, 140);
+      sonarPingState = {
+        t: OC.uTime.value,
+        range: res.range,
+        kind: res.kind,
+        label: res.label,
+        hit: res.hit
+      };
+      OC.Minimap.triggerPing(cam.position.x, cam.position.z);
+      OC.sound.sonarPing(res.range, res.hit);
+      if (sonarReadout) {
+        sonarReadout.textContent = res.hit
+          ? (res.range.toFixed(0) + ' м · ' + res.label)
+          : '140 м · Чистая вода';
+      }
+      if (btnSonar) {
+        btnSonar.classList.add('on');
+        setTimeout(() => btnSonar.classList.remove('on'), 650);
+      }
+      toast(res.hit ? ('Сонар: ' + res.range.toFixed(0) + ' м — ' + res.label) : 'Сонар: впереди чисто (140 м)');
+    };
+
+    if (btnSonar) {
+      btnSonar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fireSonarPing();
       });
     }
 
@@ -261,6 +415,11 @@ window.OC = window.OC || {};
         syncFlash(on);
         toast(on ? 'Прожектор включён' : 'Прожектор выключен');
       }
+      if (e.code === 'KeyB') {
+        syncSubMode(!subMode);
+        toast(subMode ? 'Режим батискафа: эхолот и приборы включены' : 'Режим свободного дайвера');
+      }
+      if (e.code === 'KeyG') { fireSonarPing(); }
       if (e.code === 'KeyV') {
         const next = OC.Navigation.getMode() === 'orbit' ? 'swim' : 'orbit';
         OC.Navigation.setMode(next);
@@ -324,7 +483,7 @@ window.OC = window.OC || {};
         toast('Курс на зону: ' + lm.name);
       });
 
-      uiRefs = bindUI(biome);
+      uiRefs = bindUI(biome, fauna);
       uiRefs.syncModes(OC.Navigation.getMode());
 
       setBar(1.0);
@@ -372,7 +531,9 @@ window.OC = window.OC || {};
       OC.updateWorld(dt, time, camPos, autoCycle);
       OC.Terrain.update(camPos);
       OC.FloraStreamer.update(camPos);
-      fauna.update(dt, time, camPos);
+      const camSpeed = OC.Navigation.getSpeed();
+      const flashOn = OC.isFlashlightOn();
+      fauna.update(dt, time, camPos, camSpeed, flashOn);
 
       hudTimer += rawDt;
       if (hudTimer > 0.14) {
@@ -380,14 +541,33 @@ window.OC = window.OC || {};
         const zone = biome.getZoneAt(camPos.x, camPos.y, camPos.z);
         const depthM = Math.max(0, -camPos.y);
         const tempC = (zone.tempC - Math.max(0, depthM - 15) * 0.065).toFixed(1);
+        const pal = OC.getPalette();
+        const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
 
         if (teleZone) teleZone.textContent = zone.shortName;
         if (teleDepth) teleDepth.textContent = camPos.y > 0.1 ? ('+' + camPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
         if (teleTemp) teleTemp.textContent = tempC + ' °C';
         if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
 
-        OC.sound.update(depthM, zone.id);
+        OC.sound.update(depthM, zone.id, dayW);
         OC.Minimap.update(camPos, OC.Navigation.getYaw());
+
+        if (subMode) {
+          const flHere = biome.getHeight(camPos.x, camPos.z);
+          const clearance = Math.max(0, camPos.y - flHere);
+          const atm = (1 + depthM / 10.08).toFixed(2);
+          const knots = (camSpeed * 1.94384).toFixed(1);
+          const pitchDeg = OC.Navigation.getPitch() * 180 / Math.PI;
+          if (subHorizon) subHorizon.style.transform = 'translateY(' + OC.clamp(-pitchDeg * 1.1, -36, 36).toFixed(1) + 'px)';
+          if (subPressure) subPressure.textContent = atm + ' атм';
+          if (subClearance) {
+            subClearance.textContent = clearance.toFixed(1) + ' м';
+            subClearance.classList.toggle('warn', clearance < 3.5);
+          }
+          if (subSpeedEl) subSpeedEl.textContent = knots + ' уз';
+          if (subPhaseEl) subPhaseEl.textContent = dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День');
+          drawEchosounder(camPos, OC.Navigation.getYaw(), biome, fauna, time);
+        }
 
         const t = OC.getTimeOfDay();
         if (autoCycle && timeSlider) timeSlider.value = Math.round(t * 100);

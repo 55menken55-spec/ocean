@@ -7,6 +7,7 @@ window.OC = window.OC || {};
   let ctx = null;
   let bgImage = null;
   let biomeRef = null;
+  let pingState = null; // { x, z, startMs }
   const SIZE = 184;
 
   function depthToRGB(y, uZoneColor) {
@@ -102,10 +103,33 @@ window.OC = window.OC || {};
       });
     },
 
+    triggerPing(x, z) {
+      pingState = { x, z, startMs: Date.now() };
+    },
+
     update(camPos, yaw) {
       if (!ctx || !bgImage || !biomeRef) return;
       ctx.clearRect(0, 0, SIZE, SIZE);
       ctx.drawImage(bgImage, 0, 0);
+
+      // Активный импульс сонара на карте
+      if (pingState) {
+        const age = (Date.now() - pingState.startMs) / 1000;
+        if (age > 2.2) {
+          pingState = null;
+        } else {
+          const [px, pz] = worldToMap(pingState.x, pingState.z);
+          const prog = age / 2.2;
+          const r = 4 + prog * 46;
+          ctx.save();
+          ctx.strokeStyle = 'rgba(88,224,255,' + ((1 - prog) * 0.85).toFixed(2) + ')';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.arc(px, pz, r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
 
       // Ориентиры
       for (const lm of biomeRef.landmarks) {

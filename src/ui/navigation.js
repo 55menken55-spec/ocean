@@ -197,6 +197,17 @@ window.OC = window.OC || {};
     getMode: () => state.mode,
     getPosition: () => state.pos,
     getYaw: () => state.yaw,
+    getPitch: () => state.pitch,
+    getVelocity: () => state.vel,
+    getSpeed: () => state.vel.length(),
+    getForward(out) {
+      out = out || new T.Vector3();
+      return out.set(
+        Math.sin(state.yaw) * Math.cos(state.pitch),
+        Math.sin(state.pitch),
+        Math.cos(state.yaw) * Math.cos(state.pitch)
+      ).normalize();
+    },
 
     resetToSpawn() {
       const sp = biomeRef.spawn;

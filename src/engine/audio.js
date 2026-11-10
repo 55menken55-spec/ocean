@@ -5,7 +5,7 @@ window.OC = window.OC || {};
   const S = {
     ctx: null, master: null, muted: false, started: false,
     timers: [], deepFilter: null, reefGain: null, abyssGain: null,
-    currentZoneId: 'crest', currentDepth: 8
+    currentZoneId: 'crest', currentDepth: 8, currentDayW: 1.0
   };
 
   function rnd(a, b) { return a + Math.random() * (b - a); }
@@ -84,6 +84,7 @@ window.OC = window.OC || {};
       S.scheduleBubble();
       S.scheduleShrimp();
       S.scheduleWhale();
+      S.scheduleCreak();
       return true;
     } catch (e) {
       return false;
@@ -99,13 +100,18 @@ window.OC = window.OC || {};
     g.linearRampToValueAtTime(S.muted ? 0 : target, now + (time || 0.8));
   };
 
-  S.update = function (depth, zoneId) {
+  S.update = function (depth, zoneId, dayW) {
     S.currentDepth = depth;
     S.currentZoneId = zoneId || 'crest';
+    if (typeof dayW === 'number') S.currentDayW = dayW;
     if (!S.ctx || S.muted) return;
     const now = S.ctx.currentTime;
     const targetFreq = OC.clamp(320 - depth * 2.1, 95, 340);
     if (S.deepFilter) S.deepFilter.frequency.setTargetAtTime(targetFreq, now, 0.4);
+    if (S.reefGain) {
+      const flowTarget = (zoneId === 'crest' || zoneId === 'slope_hole') ? 0.055 : 0.032;
+      S.reefGain.gain.setTargetAtTime(flowTarget, now, 0.5);
+    }
   };
 
   S.scheduleBubble = function () {
@@ -140,15 +146,16 @@ window.OC = window.OC || {};
     }
   };
 
-  /* Биологический треск рачков-щелкунов на мелководных кораллах */
+  /* Биологический треск рачков-щелкунов на мелководных кораллах (громче в сумерки/ночью) */
   S.scheduleShrimp = function () {
     if (!S.ctx) return;
+    const nightBoost = S.currentDayW < 0.45 ? 0.65 : 1.0;
     const t = setTimeout(() => {
       if (!S.muted && S.ctx && S.ctx.state === 'running' && S.currentDepth < 24 && S.currentZoneId !== 'dropoff') {
         S.shrimpSnap();
       }
       S.scheduleShrimp();
-    }, rnd(240, 1100));
+    }, rnd(220, 1050) * nightBoost);
     S.timers.push(t);
   };
 
@@ -161,12 +168,79 @@ window.OC = window.OC || {};
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(rnd(2200, 3800), now);
     osc.frequency.exponentialRampToValueAtTime(900, now + 0.018);
-    g.gain.setValueAtTime(0.009, now);
+    const amp = S.currentDayW < 0.45 ? 0.013 : 0.009;
+    g.gain.setValueAtTime(amp, now);
     g.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
     osc.connect(g);
     if (pan) { pan.pan.value = rnd(-0.9, 0.9); g.connect(pan); pan.connect(S.master); }
     else g.connect(S.master);
     osc.start(now); osc.stop(now + 0.03);
+  };
+
+  /* Глубоководный скрип корпуса батискафа под высоким давлением (> 48 м) */
+  S.scheduleCreak = function () {
+    if (!S.ctx) return;
+    const t = setTimeout(() => {
+      if (!S.muted && S.ctx && S.ctx.state === 'running' && S.currentDepth > 48) {
+        S.hullCreak();
+      }
+      S.scheduleCreak();
+    }, rnd(9000, 22000));
+    S.timers.push(t);
+  };
+
+  S.hullCreak = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const bp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(rnd(72, 96), now);
+    osc.frequency.exponentialRampToValueAtTime(rnd(52, 66), now + 0.55);
+    bp.type = 'bandpass';
+    bp.frequency.value = rnd(140, 210);
+    bp.Q.value = 5.5;
+    const depthMix = OC.clamp((S.currentDepth - 48) / 80, 0.25, 1.0);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.022 * depthMix, now + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+    osc.connect(bp); bp.connect(g); g.connect(S.master);
+    osc.start(now); osc.stop(now + 0.66);
+  };
+
+  /* Активный сонар-пинг батискафа + задержка отражённого эха (1480 м/с) */
+  S.sonarPing = function (rangeMeters, hasEcho) {
+    if (S.muted) return false;
+    if (!S.ctx && !S.ensure()) return false;
+    if (S.ctx.state === 'suspended') S.ctx.resume();
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+
+    function fireTone(startTime, freq, peakGain, dur, lpFreq) {
+      const osc = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, startTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.985, startTime + dur);
+      filter.type = lpFreq ? 'lowpass' : 'bandpass';
+      filter.frequency.value = lpFreq || freq;
+      filter.Q.value = lpFreq ? 0.8 : 7.0;
+      g.gain.setValueAtTime(0.0001, startTime);
+      g.gain.linearRampToValueAtTime(peakGain, startTime + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, startTime + dur);
+      osc.connect(filter); filter.connect(g); g.connect(S.master);
+      osc.start(startTime); osc.stop(startTime + dur + 0.03);
+    }
+
+    fireTone(now, 1340, 0.075, 0.26, 0);
+    if (hasEcho && rangeMeters > 3 && rangeMeters < 180) {
+      const delay = OC.clamp((2 * rangeMeters) / 1480, 0.04, 0.35);
+      const atten = OC.clamp(1.0 - rangeMeters / 210, 0.18, 0.85);
+      fireTone(now + delay, 1315, 0.038 * atten, 0.32, 980);
+    }
+    return true;
   };
 
   S.scheduleWhale = function () {
