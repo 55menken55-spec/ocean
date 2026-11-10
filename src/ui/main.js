@@ -174,7 +174,8 @@ window.OC = window.OC || {};
     cleaning: 'Наблюдение: симбиоз — чистильщики обслуживают гиганта',
     porpoising: 'Наблюдение: морские млекопитающие выпрыгивают у поверхности',
     coral_spawn: 'Ночное явление: массовый нерест кораллов — гаметы поднимаются к поверхности!',
-    dvm: 'Суточная вертикальная миграция (DVM): глубоководный планктон поднимается наверх!'
+    dvm: 'Суточная вертикальная миграция (DVM): глубоководный планктон поднимается наверх!',
+    silt_out: 'Донная муть (Silt-out): движители подняли облако осадка со дна!'
   };
   const _fwd = new T.Vector3();
   const _zeroNdc = new T.Vector2(0, 0);
@@ -743,6 +744,10 @@ window.OC = window.OC || {};
       OC.Navigation.getForward(_fwd);
       const labSt = OC.EcoLab ? OC.EcoLab.getState() : null;
       const smp = OC.ROV.grabSample(activeBiome, pos, _fwd, labSt);
+      if (activeFauna && activeFauna.notifySiltKick) {
+        const fl = activeBiome.getHeight(pos.x, pos.z);
+        if (pos.y - fl < 6.0) activeFauna.notifySiltKick(pos, 1.0);
+      }
       renderRovSamples();
       if (smp) {
         toast('Проба взята: ' + smp.title + ' (' + smp.category + (smp.isNewAtlas ? ' · Атлас!' : '') + ')');
@@ -1820,22 +1825,21 @@ window.OC = window.OC || {};
           if (subPhaseEl) {
             const inCaveCeiling = !!(biome.getCeilingHeight && biome.getCeilingHeight(craftPos.x, craftPos.z) < 25.0);
             const fInfo = OC.faunaInfo || {};
-            subPhaseEl.textContent = inBrineNow
-              ? 'Галоклин · Рассол 230‰'
-              : (inHaloNow
-                ? 'Галоклин сенота · Облако H₂S'
-                : (inCaveCeiling
-                  ? 'Карстовая пещера · Свод'
-                  : (biome.noSurface
-                    ? (biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
-                      : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м'))
-                    : (fInfo.coralSpawnIntensity > 0.35
-                      ? 'Ночь · Нерест кораллов'
-                      : (fInfo.dvmPhase === 'dusk_ascent'
-                        ? 'Сумерки · Миграция DVM'
-                        : (biome.hasAurora
-                          ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
-                          : (dayW < 0.35 ? 'Ночь · Био + DVM' : (dayW < 0.7 ? 'Сумерки' : 'День'))))))));
+            let phaseLabel = dayW < 0.35 ? 'Ночь · Био + DVM' : (dayW < 0.7 ? 'Сумерки' : 'День');
+            if (fInfo.siltTurbidity && fInfo.siltTurbidity > 0.35) phaseLabel = 'Взвесь грунта · Silt-out';
+            else if (inBrineNow) phaseLabel = 'Галоклин · Рассол 230‰';
+            else if (inHaloNow) phaseLabel = 'Галоклин сенота · Облако H₂S';
+            else if (fInfo.thermoclineActive) phaseLabel = 'Термоклин · Оптическая дымка';
+            else if (inCaveCeiling) phaseLabel = 'Карстовая пещера · Свод';
+            else if (biome.noSurface) {
+              phaseLabel = biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
+                : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м');
+            } else if (fInfo.coralSpawnIntensity > 0.35) phaseLabel = 'Ночь · Нерест кораллов';
+            else if (fInfo.dvmPhase === 'dusk_ascent') phaseLabel = 'Сумерки · Миграция DVM';
+            else if (biome.hasAurora) {
+              phaseLabel = dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день');
+            }
+            subPhaseEl.textContent = phaseLabel;
           }
           drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }

@@ -900,7 +900,8 @@ window.OC = window.OC || {};
       pal.fogCol.lerp(_algalCol, algalMix);
     }
     const labFogDelta = lab ? ((biome && biome.noSurface ? lab.turbidityAdd * 0.35 : lab.turbidityAdd) - lab.clarityBonus) : 0;
-    pal.fogDen = Math.max(0.0015, opt.fogDensity + shallowTurb * 0.0045 + labFogDelta);
+    const siltFogAdd = (OC.faunaInfo && OC.faunaInfo.siltTurbidity) ? OC.faunaInfo.siltTurbidity * 0.011 : 0;
+    pal.fogDen = Math.max(0.0015, opt.fogDensity + shallowTurb * 0.0045 + labFogDelta + siltFogAdd);
     pal.bioGlow = opt.bioGlow;
     const bloomAtten = lab ? (1.0 - lab.algalTint * 0.42) : 1.0;
     pal.sunAtten = opt.sunAtten * stormAtten * bloomAtten;
