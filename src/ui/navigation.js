@@ -10,9 +10,11 @@ window.OC = window.OC || {};
   const _move = new T.Vector3();
   const _lookAt = new T.Vector3();
   const _curr = new T.Vector3();
+  const _cinemaTarget = new T.Vector3();
+  const _gpOut = { moveX: 0, moveY: 0, vertZ: 0, boost: false };
 
   const state = {
-    mode: 'swim', // 'swim' | 'orbit' | 'tour'
+    mode: 'swim', // 'swim' | 'orbit' | 'tour' | 'cinema'
     pos: new T.Vector3(),
     vel: new T.Vector3(),
     yaw: 2.25,
@@ -27,8 +29,20 @@ window.OC = window.OC || {};
     // Авто-тур
     tourIdx: 0,
     tourT: 0,
+    // Кино-режим (круизный пролёт)
+    cinemaCenter: new T.Vector3(),
+    cinemaPhase: 0,
+    cinemaYawOffset: 0,
+    cinemaPitchOffset: 0,
     // Плавный перелёт к точке (Minimap / Landmark)
     glide: null,
+    // Виртуальный тач-джойстик и геймпад
+    virtX: 0,
+    virtY: 0,
+    virtZ: 0,
+    gamepadActive: false,
+    gamepadBoost: false,
+    prevGpBtns: [false, false, false, false, false, false, false, false, false, false],
     // Ввод
     dragging: false,
     lastX: 0,
@@ -37,7 +51,8 @@ window.OC = window.OC || {};
     pinchDist: 0,
     onPick: null,
     onModeChange: null,
-    onTourToast: null
+    onTourToast: null,
+    onGamepadAction: null
   };
 
   let biomeRef = null;
@@ -62,6 +77,18 @@ window.OC = window.OC || {};
       state.targetYaw = state.yaw;
       state.pitch = Math.asin(OC.clamp((state.pos.y - state.orbitTarget.y) / 34, -0.85, 0.85));
       state.targetPitch = state.pitch;
+    } else if (m === 'cinema') {
+      _fwd.set(
+        Math.sin(state.yaw) * Math.cos(state.pitch),
+        Math.sin(state.pitch),
+        Math.cos(state.yaw) * Math.cos(state.pitch)
+      ).normalize();
+      state.cinemaCenter.copy(state.pos).addScaledVector(_fwd, 28);
+      const fl = biomeRef ? biomeRef.getHeight(state.cinemaCenter.x, state.cinemaCenter.z) : -10;
+      state.cinemaCenter.y = Math.max(state.cinemaCenter.y, fl + 3.0);
+      state.cinemaPhase = Math.atan2(state.pos.z - state.cinemaCenter.z, state.pos.x - state.cinemaCenter.x);
+      state.cinemaYawOffset = 0;
+      state.cinemaPitchOffset = 0;
     } else if (state.mode === 'orbit' && m === 'swim') {
       // При выходе из орбиты сохраняем направление взгляда на target
       const dx = state.orbitTarget.x - state.pos.x;
@@ -87,6 +114,74 @@ window.OC = window.OC || {};
     if (state.onModeChange) state.onModeChange(m);
   }
 
+  function deadzone(v, dz) {
+    if (!v || Math.abs(v) < dz) return 0;
+    return (v - Math.sign(v) * dz) / (1 - dz);
+  }
+
+  function pollGamepad(dt, gpOut) {
+    gpOut.moveX = 0; gpOut.moveY = 0; gpOut.vertZ = 0; gpOut.boost = false;
+    if (typeof navigator === 'undefined' || !navigator.getGamepads) return false;
+    const pads = navigator.getGamepads();
+    let pad = null;
+    if (pads) {
+      for (let i = 0; i < pads.length; i++) {
+        if (pads[i] && pads[i].connected) { pad = pads[i]; break; }
+      }
+    }
+    if (!pad) {
+      state.gamepadActive = false;
+      state.gamepadBoost = false;
+      return false;
+    }
+    state.gamepadActive = true;
+    const ax = pad.axes || [];
+    const btns = pad.buttons || [];
+
+    const lx = deadzone(ax[0] || 0, 0.15);
+    const ly = deadzone(ax[1] || 0, 0.15);
+    const rx = deadzone(ax[2] || 0, 0.14);
+    const ry = deadzone(ax[3] || 0, 0.14);
+
+    if (rx || ry) {
+      if (state.mode === 'cinema') {
+        state.cinemaYawOffset -= rx * 1.3 * dt;
+        state.cinemaPitchOffset = OC.clamp(state.cinemaPitchOffset - ry * 0.95 * dt, -0.7, 0.7);
+      } else {
+        state.targetYaw -= rx * 2.1 * dt;
+        state.targetPitch = OC.clamp(state.targetPitch + (state.mode === 'orbit' ? ry : -ry) * 1.65 * dt, -1.2, 1.2);
+      }
+    }
+
+    const rTrig = btns[7] ? btns[7].value : 0;
+    const lTrig = btns[6] ? btns[6].value : 0;
+    const rBump = btns[5] && btns[5].pressed ? 1 : 0;
+    const lBump = btns[4] && btns[4].pressed ? 1 : 0;
+    gpOut.moveX = lx;
+    gpOut.moveY = -ly; // вперёд на стике = отрицательный Y
+    gpOut.vertZ = Math.max(rTrig, rBump) - Math.max(lTrig, lBump);
+    gpOut.boost = !!(btns[0] && btns[0].pressed);
+    state.gamepadBoost = gpOut.boost;
+
+    // Обработка одиночных нажатий кнопок действий (A/B/X/Y/Start)
+    const map = [
+      [0, 'photo'],
+      [1, 'sub'],
+      [2, 'sonar'],
+      [3, 'flashlight'],
+      [9, 'cinema']
+    ];
+    for (let i = 0; i < map.length; i++) {
+      const idx = map[i][0], action = map[i][1];
+      const down = !!(btns[idx] && btns[idx].pressed);
+      if (down && !state.prevGpBtns[idx] && state.onGamepadAction) {
+        state.onGamepadAction(action);
+      }
+      state.prevGpBtns[idx] = down;
+    }
+    return true;
+  }
+
   function clampPosition(p) {
     const bound = (biomeRef.worldRadius || 1200) - 30;
     p.x = OC.clamp(p.x, -bound, bound);
@@ -104,6 +199,7 @@ window.OC = window.OC || {};
       state.onPick = callbacks.onPick || null;
       state.onModeChange = callbacks.onModeChange || null;
       state.onTourToast = callbacks.onTourToast || null;
+      state.onGamepadAction = callbacks.onGamepadAction || null;
 
       this.resetToSpawn();
 
@@ -129,6 +225,9 @@ window.OC = window.OC || {};
         if (state.mode === 'orbit') {
           state.targetYaw -= dx * 0.0046;
           state.targetPitch = OC.clamp(state.targetPitch + dy * 0.0036, -0.78, 0.88);
+        } else if (state.mode === 'cinema') {
+          state.cinemaYawOffset -= dx * 0.0034;
+          state.cinemaPitchOffset = OC.clamp(state.cinemaPitchOffset - dy * 0.0028, -0.65, 0.65);
         } else {
           state.targetYaw -= dx * 0.0042;
           state.targetPitch = OC.clamp(state.targetPitch - dy * 0.0034, -1.25, 1.25);
@@ -212,6 +311,12 @@ window.OC = window.OC || {};
     getVelocity: () => state.vel,
     getSpeed: () => state.vel.length(),
     getCurrent: () => _curr,
+    getGamepadActive: () => state.gamepadActive,
+    setVirtualInput(vx, vy, vz) {
+      state.virtX = OC.clamp(vx || 0, -1, 1);
+      state.virtY = OC.clamp(vy || 0, -1, 1);
+      state.virtZ = OC.clamp(vz || 0, -1, 1);
+    },
     getForward(out) {
       out = out || new T.Vector3();
       return out.set(
@@ -272,7 +377,9 @@ window.OC = window.OC || {};
     },
 
     update(dt, time, camera, reduced) {
-      const kLook = Math.min(1, dt * 8.5);
+      pollGamepad(dt, _gpOut);
+      const gpOut = _gpOut;
+      const kLook = Math.min(1, dt * (state.mode === 'cinema' ? 2.6 : 8.5));
       state.yaw += (state.targetYaw - state.yaw) * kLook;
       state.pitch += (state.targetPitch - state.pitch) * kLook;
 
@@ -286,6 +393,25 @@ window.OC = window.OC || {};
         state.pitch = OC.lerp(state.glide.startPitch, state.glide.endPitch, u);
         state.targetPitch = state.pitch;
         if (state.glide.t >= state.glide.dur) state.glide = null;
+      } else if (state.mode === 'cinema') {
+        // Плавный кинематографический облёт вокруг текущей локации
+        state.cinemaPhase += dt * 0.14;
+        const radX = 32 + Math.sin(state.cinemaPhase * 0.7) * 8;
+        const radZ = 28 + Math.cos(state.cinemaPhase * 0.5) * 8;
+        const cx = state.cinemaCenter.x + Math.cos(state.cinemaPhase) * radX;
+        const cz = state.cinemaCenter.z + Math.sin(state.cinemaPhase) * radZ;
+        const baseFl = biomeRef ? biomeRef.getHeight(cx, cz) : -20;
+        const maxCamY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+        const cy = OC.clamp(state.cinemaCenter.y + Math.sin(state.cinemaPhase * 1.4) * 3.5, baseFl + 2.8, maxCamY - 0.5);
+        _cinemaTarget.set(cx, cy, cz);
+        state.pos.lerp(_cinemaTarget, Math.min(1, dt * 1.8));
+        clampPosition(state.pos);
+        const dx = state.cinemaCenter.x - state.pos.x;
+        const dy = state.cinemaCenter.y - state.pos.y;
+        const dz = state.cinemaCenter.z - state.pos.z;
+        const d = Math.hypot(dx, dy, dz) || 1;
+        state.targetYaw = Math.atan2(dx, dz) + state.cinemaYawOffset;
+        state.targetPitch = OC.clamp(Math.asin(OC.clamp(dy / d, -0.9, 0.9)) + state.cinemaPitchOffset, -1.1, 1.1);
       } else if (state.mode === 'tour') {
         const legs = biomeRef.tourLegs;
         if (legs && legs.length) {
@@ -343,8 +469,8 @@ window.OC = window.OC || {};
         camera.lookAt(state.orbitTarget);
         return;
       } else {
-        // Свободное плавание (Diver Free-Swim)
-        const boost = (keys.ShiftLeft || keys.ShiftRight) ? 2.65 : 1.0;
+        // Свободное плавание (Diver Free-Swim + Геймпад + Виртуальный тач-джойстик)
+        const boost = (keys.ShiftLeft || keys.ShiftRight || gpOut.boost) ? 2.65 : 1.0;
         const accel = state.swimSpeed * boost * 3.8;
 
         _fwd.set(
@@ -362,8 +488,15 @@ window.OC = window.OC || {};
         if (keys.KeyE || keys.Space) _move.y += 0.85;
         if (keys.KeyQ || keys.KeyC) _move.y -= 0.85;
 
+        const axFwd = OC.clamp(gpOut.moveY + state.virtY, -1, 1);
+        const axStrafe = OC.clamp(gpOut.moveX + state.virtX, -1, 1);
+        const axVert = OC.clamp(gpOut.vertZ + state.virtZ, -1, 1);
+        if (Math.abs(axFwd) > 0.01) _move.addScaledVector(_fwd, axFwd);
+        if (Math.abs(axStrafe) > 0.01) _move.addScaledVector(_right, axStrafe);
+        if (Math.abs(axVert) > 0.01) _move.y += axVert * 0.85;
+
         if (_move.lengthSq() > 0.001) {
-          _move.normalize();
+          if (_move.lengthSq() > 1.0) _move.normalize();
           state.vel.addScaledVector(_move, accel * dt);
         }
 

@@ -1826,10 +1826,15 @@ window.OC = window.OC || {};
       const rw = new T.Mesh(wingGeo, bodyMat);
       rw.position.set(0.16, 0.1, 0);
       u.add(lw, rw);
-      u.scale.setScalar(OC.lerp(0.85, 1.35, rng()));
+      u.scale.setScalar(opts.singlePreview ? 1.5 : OC.lerp(0.85, 1.35, rng()));
       u.userData.key = 'clione_angel';
       group.add(u);
-      units.push({ u, lw, rw, ph: rng() * 6.28, ox: (rng() - 0.5) * 14, oy: (rng() - 0.5) * 8, oz: (rng() - 0.5) * 14 });
+      units.push({
+        u, lw, rw, ph: rng() * 6.28,
+        ox: opts.singlePreview ? 0 : (rng() - 0.5) * 14,
+        oy: opts.singlePreview ? 0 : (rng() - 0.5) * 8,
+        oz: opts.singlePreview ? 0 : (rng() - 0.5) * 14
+      });
     }
     group.position.set(opts.cx, opts.y, opts.cz);
     group.userData.key = 'clione_angel';
@@ -2497,6 +2502,164 @@ window.OC = window.OC || {};
           return best;
         }
       };
+    },
+
+    /* Генератор изолированной 3D-модели любого вида или объекта для Атласа */
+    createPreviewMesh(key, biome) {
+      const dummyBiome = { getHeight: () => -30 };
+      const tmpGroup = new T.Group();
+      const previewMat = new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.44, metalness: 0.08, side: T.DoubleSide
+      });
+      const previewBiolumMat = new T.MeshStandardMaterial({
+        vertexColors: true,
+        emissive: new T.Color(0x2ce8ff),
+        emissiveIntensity: 0.55,
+        roughness: 0.36,
+        metalness: 0.08,
+        side: T.DoubleSide
+      });
+      const savedMat = creatureMat;
+      let built = null;
+
+      try {
+        creatureMat = previewMat;
+
+        if (key === 'floor') {
+          const g = new T.PlaneGeometry(14, 14, 16, 16);
+          g.rotateX(-Math.PI / 2);
+          const pos = g.attributes.position;
+          const colors = new Float32Array(pos.count * 3);
+          const c = new T.Color();
+          const bId = biome ? biome.id : 'great_barrier_reef';
+          const ox = bId === 'great_barrier_reef' ? 80 : 0;
+          const oz = 0;
+          let sumY = 0;
+          for (let i = 0; i < pos.count; i++) {
+            const wx = pos.getX(i) + ox;
+            const wz = pos.getZ(i) + oz;
+            const y = biome && biome.getHeight ? biome.getHeight(wx, wz) : Math.sin(wx * 0.4) * 0.6;
+            pos.setY(i, y);
+            sumY += y;
+          }
+          const avgY = sumY / pos.count;
+          for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+            pos.setY(i, (y - avgY) * 0.85);
+            if (bId === 'hydrothermal_vents') {
+              c.setHex(0x24262e).offsetHSL(0, 0, Math.sin(x * 0.7 + z * 0.5) * 0.05);
+            } else if (bId === 'kelp_forest') {
+              c.setHex(0x52554c).offsetHSL(0.02, 0.05, Math.cos(x * 0.5) * 0.06);
+            } else if (bId === 'arctic_sea') {
+              c.setHex(0x4b5c69).lerp(new T.Color(0x88b4cc), OC.clamp((y - avgY) * 0.25 + 0.3, 0, 0.7));
+            } else {
+              c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
+            }
+            colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+          }
+          g.setAttribute('color', new T.BufferAttribute(colors, 3));
+          g.computeVertexNormals();
+          built = new T.Mesh(g, previewMat);
+        } else if (key === 'lionfish') {
+          makeLionfish(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 8, scale: 1 });
+        } else if (key === 'moray') {
+          makeMoray(tmpGroup, dummyBiome, { x: 0, z: 0 });
+        } else if (key === 'octopus') {
+          makeOctopus(tmpGroup, dummyBiome, { x: 0, z: 0, scale: 1 });
+        } else if (key === 'ray_spotted' || key === 'ray_eagle') {
+          makeRay(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, speed: 2, eagle: key === 'ray_eagle', scale: 1 });
+        } else if (key === 'manta') {
+          makeManta(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, span: 10, size: 1 });
+        } else if (key === 'turtle') {
+          makeTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, size: 1 });
+        } else if (key === 'dugong') {
+          makeDugong(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland') {
+          makeShark(tmpGroup, dummyBiome, {
+            cx: 0, cz: 0, y: 0, r: 10, speed: 2,
+            speciesKey: key, whaleShark: key === 'shark_whale'
+          });
+        } else if (key === 'whale_humpback') {
+          makeHumpbackWhale(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 20 });
+        } else if (key === 'jelly' || key === 'jelly_deep') {
+          makeJelly(tmpGroup, { cx: 0, cz: 0, y: 0, r: 2, hue: key === 'jelly_deep' ? 0.56 : 0.85, deep: key === 'jelly_deep', scale: 1 });
+        } else if (key === 'sea_lion') {
+          makeSeaLion(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 8, scale: 1 });
+        } else if (key === 'fish_angler') {
+          makeAnglerfish(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 8, scale: 1 });
+        } else if (key === 'squid_abyssal') {
+          makeAbyssalSquid(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 8, scale: 1 });
+        } else if (key === 'octopus_dumbo') {
+          makeDumboOctopus(tmpGroup, dummyBiome, { x: 0, z: 0, scale: 1 });
+        } else if (key === 'beluga') {
+          makeBeluga(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, len: 4.8, scale: 1 });
+        } else if (key === 'narwhal') {
+          makeNarwhal(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, len: 5.0, scale: 1 });
+        } else if (key === 'jelly_arctic') {
+          makeArcticJelly(tmpGroup, { cx: 0, cz: 0, y: 0, scale: 1 });
+        } else if (key === 'clione_angel') {
+          makeClione(tmpGroup, { cx: 0, cz: 0, y: 0, n: 1, singlePreview: true });
+        } else {
+          // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
+          let fishSpec = null;
+          const allBiomes = biome ? [biome, ...OC.Biomes.list()] : OC.Biomes.list();
+          for (const b of allBiomes) {
+            const p = b && b.faunaPlan;
+            if (!p) continue;
+            const sc = (p.schools || []).find((s) => s.key === key);
+            if (sc) { fishSpec = sc; break; }
+            const sl = (p.soloFish || []).find((s) => s.key === key);
+            if (sl) { fishSpec = sl; break; }
+          }
+          if (fishSpec) {
+            const fg = makeFishGeo(fishSpec.geoOpts || {});
+            built = new T.Mesh(fg, fishSpec.biolum ? previewBiolumMat : previewMat);
+          } else if (OC.FloraLibrary && OC.FloraLibrary.getPreviewGeo) {
+            const fl = OC.FloraLibrary.getPreviewGeo(key);
+            if (fl) {
+              const fMat = new T.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: fl.roughness !== undefined ? fl.roughness : 0.72,
+                metalness: fl.metalness !== undefined ? fl.metalness : 0.05,
+                emissive: fl.emissive ? new T.Color(fl.emissive) : new T.Color(0x000000),
+                emissiveIntensity: fl.emissiveIntensity || 0,
+                side: T.DoubleSide
+              });
+              built = new T.Mesh(fl.geo, fMat);
+            }
+          }
+        }
+
+        if (!built && tmpGroup.children.length > 0) {
+          built = tmpGroup.children[0];
+          tmpGroup.remove(built);
+        }
+        if (!built) {
+          built = new T.Mesh(new T.SphereGeometry(0.8, 12, 8), previewMat);
+        }
+
+        // Обнуляем возможный сдвиг (напр. позиция группы в мировой точке) и приводим к единому масштабу 2.6 м
+        built.position.set(0, 0, 0);
+        built.rotation.set(0, 0, 0);
+        built.scale.set(1, 1, 1);
+        built.updateMatrixWorld(true);
+        const box = new T.Box3().setFromObject(built);
+        const size = new T.Vector3();
+        const center = new T.Vector3();
+        box.getSize(size);
+        box.getCenter(center);
+        const maxDim = Math.max(0.05, size.x, size.y, size.z);
+        const s = 2.65 / maxDim;
+
+        const wrapper = new T.Group();
+        built.position.sub(center);
+        wrapper.add(built);
+        wrapper.scale.setScalar(s);
+        wrapper.updateMatrixWorld(true);
+        return wrapper;
+      } finally {
+        creatureMat = savedMat;
+      }
     }
   };
 })(window.OC);

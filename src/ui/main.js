@@ -15,11 +15,13 @@ window.OC = window.OC || {};
   const btnFlash = document.getElementById('btn-flash');
   const btnAtlas = document.getElementById('btn-atlas');
   const btnCam = document.getElementById('btn-cam');
+  const btnCinema = document.getElementById('btn-cinema');
   const btnJournal = document.getElementById('btn-journal');
   const btnReset = document.getElementById('btn-reset');
   const btnSwim = document.getElementById('btn-mode-swim');
   const btnOrbit = document.getElementById('btn-mode-orbit');
   const btnTour = document.getElementById('btn-explore');
+  const btnCinemaMode = document.getElementById('btn-mode-cinema');
   const btnAuto = document.getElementById('btn-auto');
   const timeSlider = document.getElementById('time-slider');
   const timeLabel = document.getElementById('time-label');
@@ -59,11 +61,15 @@ window.OC = window.OC || {};
   const camHud = document.getElementById('cam-hud');
   const camTargetEl = document.getElementById('cam-target');
   const camFovLabel = document.getElementById('cam-fov-label');
+  const btnCamFilter = document.getElementById('btn-cam-filter');
   const camFlash = document.getElementById('cam-flash');
   const camPreview = document.getElementById('cam-preview');
   const camPreviewImg = document.getElementById('cam-preview-img');
   const camPreviewMeta = document.getElementById('cam-preview-meta');
   const camDownload = document.getElementById('cam-download');
+  const cinemaBars = document.getElementById('cinema-bars');
+  const cinemaHud = document.getElementById('cinema-hud');
+  const cinemaFiltersEl = document.getElementById('cinema-filters');
 
   const journalModal = document.getElementById('journal-modal');
   const journalTitle = document.getElementById('journal-title');
@@ -508,10 +514,69 @@ window.OC = window.OC || {};
     });
     const camSnap = document.getElementById('cam-snap');
     const triggerShutter = () => {
-      if (!OC.Expedition || !OC.Expedition.isPhotoMode()) return;
+      if (!OC.Expedition || (!OC.Expedition.isPhotoMode() && !OC.Expedition.isCinemaMode())) return;
       pendingPhotoCapture = true;
     };
     if (camSnap) camSnap.addEventListener('click', triggerShutter);
+
+    /* Цветофильтры камеры и кино-режима */
+    const syncFilterUI = () => {
+      if (!OC.Expedition || !OC.Expedition.getFilter) return;
+      const f = OC.Expedition.getFilter();
+      if (canvas) canvas.style.filter = f.css || '';
+      if (btnCamFilter) btnCamFilter.textContent = 'Фильтр: ' + f.label;
+      if (cinemaFiltersEl) {
+        cinemaFiltersEl.querySelectorAll('button[data-flt]').forEach((b) => {
+          b.classList.toggle('on', b.getAttribute('data-flt') === f.id);
+        });
+      }
+    };
+    if (cinemaFiltersEl && OC.Expedition && OC.Expedition.getFilters) {
+      cinemaFiltersEl.innerHTML = '';
+      for (const flt of OC.Expedition.getFilters()) {
+        const b = document.createElement('button');
+        b.className = 'btn';
+        b.setAttribute('data-flt', flt.id);
+        b.textContent = flt.label;
+        b.addEventListener('click', () => {
+          OC.Expedition.setFilter(flt.id);
+          syncFilterUI();
+          toast('Цветофильтр: ' + flt.label);
+        });
+        cinemaFiltersEl.appendChild(b);
+      }
+    }
+    if (btnCamFilter) {
+      btnCamFilter.addEventListener('click', () => {
+        if (!OC.Expedition) return;
+        const f = OC.Expedition.cycleFilter();
+        syncFilterUI();
+        toast('Цветофильтр: ' + f.label);
+      });
+    }
+    syncFilterUI();
+
+    /* Кинематографический режим (CineCam 2.39:1 + плавный пролёт) */
+    const setCinemaUI = (on) => {
+      if (OC.Expedition && OC.Expedition.setCinemaMode) OC.Expedition.setCinemaMode(on);
+      if (btnCinema) btnCinema.classList.toggle('on', on);
+      if (btnCinemaMode) btnCinemaMode.classList.toggle('on', on);
+      if (cinemaBars) cinemaBars.classList.toggle('active', on);
+      if (cinemaHud) cinemaHud.classList.toggle('hidden', !on);
+      hudEls.forEach((el) => el.classList.toggle('hud-hidden', on || hudHidden));
+    };
+    if (btnCinema) {
+      btnCinema.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = OC.Navigation.getMode() !== 'cinema';
+        OC.Navigation.setMode(next ? 'cinema' : 'swim');
+        toast(next ? 'Кино-режим: автопролёт и фильтры (N / X)' : 'Возврат к свободному плаванию');
+      });
+    }
+    const cSnapBtn = document.getElementById('cinema-snap');
+    if (cSnapBtn) cSnapBtn.addEventListener('click', triggerShutter);
+    const cCloseBtn = document.getElementById('cinema-close');
+    if (cCloseBtn) cCloseBtn.addEventListener('click', () => OC.Navigation.setMode('swim'));
     const camOpenJournal = document.getElementById('cam-open-journal');
     if (camOpenJournal) camOpenJournal.addEventListener('click', () => {
       syncCamMode(false);
@@ -552,6 +617,7 @@ window.OC = window.OC || {};
         btnTour.classList.toggle('on', mode === 'tour');
         btnTour.innerHTML = mode === 'tour' ? '&#10005; Стоп тур' : '&#9654; Тур по рифу';
       }
+      if (typeof setCinemaUI === 'function') setCinemaUI(mode === 'cinema');
     }
 
     if (btnSwim) btnSwim.addEventListener('click', () => { OC.Navigation.setMode('swim'); toast('Режим свободного плавания (WASD + мышь)'); });
@@ -560,6 +626,13 @@ window.OC = window.OC || {};
       btnTour.addEventListener('click', () => {
         const next = OC.Navigation.getMode() === 'tour' ? 'swim' : 'tour';
         OC.Navigation.setMode(next);
+      });
+    }
+    if (btnCinemaMode) {
+      btnCinemaMode.addEventListener('click', () => {
+        const next = OC.Navigation.getMode() === 'cinema' ? 'swim' : 'cinema';
+        OC.Navigation.setMode(next);
+        toast(next === 'cinema' ? 'Кино-режим: автопролёт и фильтры (N / X)' : 'Свободное плавание');
       });
     }
     if (btnReset) {
@@ -722,11 +795,59 @@ window.OC = window.OC || {};
       renderQualityButtons();
     }
 
-    /* Мобильные кнопки движения */
-    const mFwd = document.getElementById('m-fwd');
-    const mBack = document.getElementById('m-back');
-    if (mFwd) mFwd.addEventListener('click', () => OC.Navigation.nudgeForward(16));
-    if (mBack) mBack.addEventListener('click', () => OC.Navigation.nudgeForward(-14));
+    /* Виртуальный тач-джойстик и вертикальные кнопки */
+    const touchStick = document.getElementById('touch-stick');
+    const touchKnob = document.getElementById('touch-knob');
+    const mUp = document.getElementById('m-up');
+    const mDown = document.getElementById('m-down');
+    let stickPtrId = null;
+    let virtVert = 0;
+
+    if (touchStick && OC.Navigation.setVirtualInput) {
+      const resetStick = () => {
+        stickPtrId = null;
+        if (touchKnob) touchKnob.style.transform = 'translate(0px, 0px)';
+        OC.Navigation.setVirtualInput(0, 0, virtVert);
+      };
+      const updateStick = (clientX, clientY) => {
+        const rect = touchStick.getBoundingClientRect();
+        const cx = rect.left + rect.width * 0.5;
+        const cy = rect.top + rect.height * 0.5;
+        const maxR = Math.max(24, rect.width * 0.38);
+        let dx = clientX - cx;
+        let dy = clientY - cy;
+        const len = Math.hypot(dx, dy);
+        if (len > maxR) { dx = (dx / len) * maxR; dy = (dy / len) * maxR; }
+        if (touchKnob) touchKnob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+        OC.Navigation.setVirtualInput(dx / maxR, -dy / maxR, virtVert);
+      };
+      touchStick.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        stickPtrId = e.pointerId;
+        try { touchStick.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+        updateStick(e.clientX, e.clientY);
+      });
+      touchStick.addEventListener('pointermove', (e) => {
+        if (stickPtrId !== e.pointerId) return;
+        updateStick(e.clientX, e.clientY);
+      });
+      touchStick.addEventListener('pointerup', (e) => { if (stickPtrId === e.pointerId) resetStick(); });
+      touchStick.addEventListener('pointercancel', resetStick);
+    }
+    const bindVertBtn = (btn, val) => {
+      if (!btn || !OC.Navigation.setVirtualInput) return;
+      const setV = (v) => { virtVert = v; OC.Navigation.setVirtualInput(0, 0, virtVert); };
+      btn.addEventListener('pointerdown', (e) => { e.stopPropagation(); setV(val); });
+      btn.addEventListener('pointerup', () => setV(0));
+      btn.addEventListener('pointercancel', () => setV(0));
+    };
+    bindVertBtn(mUp, 1);
+    bindVertBtn(mDown, -1);
+
+    window.addEventListener('gamepadconnected', (e) => {
+      const id = e && e.gamepad ? e.gamepad.id.slice(0, 32) : 'Контроллер';
+      toast('Геймпад подключён: ' + id);
+    });
 
     /* Горячие клавиши */
     window.addEventListener('keydown', (e) => {
@@ -771,6 +892,16 @@ window.OC = window.OC || {};
         const fov = OC.Expedition.adjustZoom(5);
         if (camFovLabel) camFovLabel.textContent = Math.round(fov) + '°';
       }
+      if (e.code === 'KeyN') {
+        const next = OC.Navigation.getMode() === 'cinema' ? 'swim' : 'cinema';
+        OC.Navigation.setMode(next);
+        toast(next === 'cinema' ? 'Кино-режим: автопролёт и фильтры (N / X)' : 'Свободное плавание');
+      }
+      if (e.code === 'KeyX' && OC.Expedition && OC.Expedition.cycleFilter) {
+        const f = OC.Expedition.cycleFilter();
+        syncFilterUI();
+        toast('Цветофильтр: ' + f.label);
+      }
       if (e.code === 'KeyH') {
         hudHidden = !hudHidden;
         hudEls.forEach((el) => el.classList.toggle('hud-hidden', hudHidden));
@@ -788,6 +919,7 @@ window.OC = window.OC || {};
         if (OC.Atlas.isOpen()) OC.Atlas.toggle();
         else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
         else if (OC.Expedition && OC.Expedition.isPhotoMode()) syncCamMode(false);
+        else if (OC.Navigation.getMode() === 'cinema') OC.Navigation.setMode('swim');
       }
     });
 
@@ -796,7 +928,7 @@ window.OC = window.OC || {};
       setTimeout(() => hero.classList.add('fade'), 13000);
     }
 
-    return { syncModes, syncFlash, syncCamMode, syncWeatherButtons, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncSubMode, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
   }
 
   function switchBiome(id) {
@@ -874,7 +1006,25 @@ window.OC = window.OC || {};
       OC.Navigation.init(canvas, activeBiome, {
         onPick: (cx, cy) => pickAt(cx, cy, activeBiome),
         onModeChange: (m) => { if (uiHandles) uiHandles.syncModes(m); },
-        onTourToast: (title) => toast('Тур: ' + title)
+        onTourToast: (title) => toast('Тур: ' + title),
+        onGamepadAction: (action) => {
+          if (!uiHandles) return;
+          if (action === 'flashlight') {
+            const on = OC.toggleFlashlight();
+            uiHandles.syncFlash(on);
+            toast(on ? 'Прожектор включён' : 'Прожектор выключен');
+          } else if (action === 'sonar') {
+            uiHandles.fireSonarPing();
+          } else if (action === 'sub') {
+            uiHandles.syncSubMode(!subMode);
+            toast(subMode ? 'Режим батискафа включён' : 'Режим свободного дайвера');
+          } else if (action === 'cinema') {
+            const next = OC.Navigation.getMode() === 'cinema' ? 'swim' : 'cinema';
+            OC.Navigation.setMode(next);
+          } else if (action === 'photo' && OC.Expedition && (OC.Expedition.isPhotoMode() || OC.Expedition.isCinemaMode())) {
+            uiHandles.triggerShutter();
+          }
+        }
       });
 
       OC.Minimap.init(document.getElementById('minimap'), activeBiome, (x, y, z, yaw, pitch, label) => {

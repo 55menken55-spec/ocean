@@ -1199,35 +1199,38 @@ window.OC = window.OC || {};
   }
 
   /* ---------- Реестр прототипов ---------- */
-  OC.FloraLibrary = {
-    create() {
-      const rng = OC.mulberry32(99107);
+  let previewCache = null;
 
-      const matRigid = OC.enhanceMaterial(new T.MeshStandardMaterial({
+  OC.FloraLibrary = {
+    create(skipEnhance) {
+      const rng = OC.mulberry32(99107);
+      const enh = (!skipEnhance && OC.enhanceMaterial) ? OC.enhanceMaterial : ((m) => m);
+
+      const matRigid = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.85, metalness: 0.02, side: T.DoubleSide
       }), { causticStrength: 0.92, swayAmp: 0 });
 
-      const matChimney = OC.enhanceMaterial(new T.MeshStandardMaterial({
+      const matChimney = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.72, metalness: 0.28, side: T.DoubleSide
       }), { causticStrength: 0.0, swayAmp: 0 });
 
-      const matClam = OC.enhanceMaterial(new T.MeshStandardMaterial({
+      const matClam = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.42, metalness: 0.12, side: T.DoubleSide
       }), { causticStrength: 1.0, swayAmp: 0 });
 
-      const matSoft = OC.enhanceMaterial(new T.MeshStandardMaterial({
+      const matSoft = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.82, metalness: 0.0, side: T.DoubleSide
       }), { causticStrength: 0.78, swayAmp: 0.42 });
 
-      const matPlant = OC.enhanceMaterial(new T.MeshStandardMaterial({
+      const matPlant = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.78, metalness: 0.0, side: T.DoubleSide
       }), { causticStrength: 0.88, swayAmp: 0.85 });
 
-      const matFoliage = OC.enhanceMaterial(new T.MeshStandardMaterial({
+      const matFoliage = enh(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.72, metalness: 0.0, side: T.DoubleSide
       }), { causticStrength: 0.0, swayAmp: 0.48 });
 
-      const matIce = OC.enhanceMaterial(new T.MeshStandardMaterial({
+      const matIce = enh(new T.MeshStandardMaterial({
         vertexColors: true,
         roughness: 0.34,
         metalness: 0.08,
@@ -1380,6 +1383,20 @@ window.OC = window.OC || {};
       };
 
       return prototypes;
+    },
+
+    getPreviewGeo(key) {
+      if (!previewCache) previewCache = this.create(true);
+      const p = previewCache[key];
+      if (!p || !p.geos || !p.geos.length) return null;
+      p.geos[0].userData.sharedPreview = true;
+      return {
+        geo: p.geos[0],
+        roughness: p.mat ? p.mat.roughness : 0.72,
+        metalness: p.mat ? p.mat.metalness : 0.05,
+        emissive: p.mat && p.mat.emissive ? p.mat.emissive.getHex() : 0x000000,
+        emissiveIntensity: p.mat ? (p.mat.emissiveIntensity || 0) : 0
+      };
     }
   };
 })(window.OC);

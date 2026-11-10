@@ -189,8 +189,18 @@ window.OC = window.OC || {};
     }
   ];
 
+  const FILTERS = [
+    { id: 'none', label: 'Естеств.', css: '' },
+    { id: 'natgeo', label: 'NatGeo', css: 'contrast(1.14) saturate(1.24) brightness(1.03)' },
+    { id: 'abyss', label: 'Абиссаль', css: 'contrast(1.25) saturate(0.72) hue-rotate(-8deg) brightness(0.92)' },
+    { id: 'cousteau', label: 'Кусто 16мм', css: 'sepia(0.22) contrast(1.08) saturate(1.15) brightness(1.02)' },
+    { id: 'biolum', label: 'Неон Био', css: 'contrast(1.18) saturate(1.48) hue-rotate(8deg) brightness(1.06)' }
+  ];
+
   const sessionState = {
     photoMode: false,
+    cinemaMode: false,
+    filterId: 'none',
     zoomFov: 52,
     sonarPingsByBiome: {},
     pingKeysByBiome: {},
@@ -216,6 +226,11 @@ window.OC = window.OC || {};
     return OC.clamp(Math.round(score), 42, 99);
   }
 
+  function getActiveFilterCss() {
+    const f = FILTERS.find((x) => x.id === sessionState.filterId);
+    return f ? f.css : '';
+  }
+
   function renderStampPreview(srcCanvas, stampText) {
     try {
       const w = 640;
@@ -226,7 +241,10 @@ window.OC = window.OC || {};
       c.height = h;
       const ctx = c.getContext('2d');
       if (!ctx || !ctx.drawImage) return '';
+      const fCss = getActiveFilterCss();
+      if (fCss && 'filter' in ctx) ctx.filter = fCss;
       ctx.drawImage(srcCanvas, 0, 0, w, h);
+      if ('filter' in ctx) ctx.filter = 'none';
       ctx.fillStyle = 'rgba(3, 14, 26, 0.72)';
       ctx.fillRect(0, h - 28, w, 28);
       ctx.fillStyle = '#8ef0ff';
@@ -247,7 +265,10 @@ window.OC = window.OC || {};
       c.height = h;
       const ctx = c.getContext('2d');
       if (!ctx || !ctx.drawImage) return '';
+      const fCss = getActiveFilterCss();
+      if (fCss && 'filter' in ctx) ctx.filter = fCss;
       ctx.drawImage(srcCanvas, 0, 0, w, h);
+      if ('filter' in ctx) ctx.filter = 'none';
       ctx.fillStyle = 'rgba(3, 14, 26, 0.72)';
       ctx.fillRect(0, h - 38, w, 38);
       ctx.fillStyle = '#9cf2ff';
@@ -261,6 +282,28 @@ window.OC = window.OC || {};
 
   OC.Expedition = {
     MISSIONS,
+    FILTERS,
+
+    isCinemaMode: () => sessionState.cinemaMode,
+    setCinemaMode(on) {
+      sessionState.cinemaMode = !!on;
+      return sessionState.cinemaMode;
+    },
+    getFilters: () => FILTERS,
+    getFilter() {
+      return FILTERS.find((x) => x.id === sessionState.filterId) || FILTERS[0];
+    },
+    setFilter(id) {
+      const f = FILTERS.find((x) => x.id === id);
+      if (f) sessionState.filterId = f.id;
+      return this.getFilter();
+    },
+    cycleFilter() {
+      const idx = FILTERS.findIndex((x) => x.id === sessionState.filterId);
+      const next = FILTERS[(idx + 1) % FILTERS.length];
+      sessionState.filterId = next.id;
+      return next;
+    },
 
     getSavedDiscovered(biomeId) {
       return Array.isArray(store.discovered[biomeId]) ? store.discovered[biomeId] : ['floor'];

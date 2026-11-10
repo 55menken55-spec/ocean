@@ -166,16 +166,35 @@
   .atlas-modal{position:fixed;inset:0;z-index:70;background:rgba(2,11,20,.72);backdrop-filter:blur(10px);
     display:grid;place-items:center;padding:24px;transition:opacity .28s}
   .atlas-modal.hidden{opacity:0;pointer-events:none}
-  .atlas-box{width:min(980px, 100%);max-height:86vh;display:flex;flex-direction:column;border-radius:20px;
+  .atlas-box{width:min(1020px, 100%);max-height:90vh;display:flex;flex-direction:column;border-radius:20px;
     background:var(--glass-strong);border:1px solid rgba(88,224,255,.28);box-shadow:0 28px 80px rgba(0,0,0,.65);overflow:hidden}
-  .atlas-header{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid rgba(140,225,255,.14)}
+  .atlas-header{display:flex;justify-content:space-between;align-items:center;padding:15px 22px;border-bottom:1px solid rgba(140,225,255,.14)}
   .atlas-header h3{margin:0;font-size:16px;letter-spacing:.12em;text-transform:uppercase}
   .atlas-header small{color:var(--accent);font-size:12px;margin-left:12px;font-weight:500}
-  .atlas-tabs{display:flex;gap:8px;flex-wrap:wrap;padding:12px 22px;border-bottom:1px solid rgba(140,225,255,.1);background:rgba(255,255,255,.02)}
+  .atlas-viewer{display:grid;grid-template-columns:310px 1fr;gap:18px;padding:16px 22px;border-bottom:1px solid rgba(140,225,255,.14);
+    background:radial-gradient(ellipse at 24% 50%,rgba(22,88,125,.28),rgba(4,16,30,.5) 75%)}
+  .atlas-stage{position:relative;border-radius:14px;overflow:hidden;border:1px solid rgba(88,224,255,.26);
+    background:radial-gradient(circle at 50% 45%,#0f4868,#041322 82%);height:208px;cursor:grab;user-select:none}
+  .atlas-stage:active{cursor:grabbing}
+  #atlas-3d{display:block;width:100%;height:100%}
+  .atlas-stage-light{position:absolute;right:8px;top:8px;padding:4px 9px;border-radius:999px;border:1px solid rgba(140,225,255,.32);
+    background:rgba(4,18,32,.72);color:var(--ink);font-size:11px;cursor:pointer;backdrop-filter:blur(6px)}
+  .atlas-stage-hint{position:absolute;left:10px;bottom:7px;font-size:10px;color:rgba(190,235,255,.65);pointer-events:none}
+  .atlas-info{display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+  .atlas-v-desc{font-size:12.5px;line-height:1.58;color:#cce4f2;margin:2px 0 4px}
+  .atlas-v-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .atlas-v-actions .btn{flex:0 0 auto;padding:7px 14px;font-size:12px}
+  @media (max-width:780px){
+    .atlas-viewer{grid-template-columns:1fr;gap:12px}
+    .atlas-stage{height:176px}
+  }
+  .atlas-tabs{display:flex;gap:8px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid rgba(140,225,255,.1);background:rgba(255,255,255,.02)}
   .atlas-tabs .btn{flex:0 0 auto;padding:6px 12px}
-  .atlas-grid{padding:18px 22px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:12px}
-  .atlas-card{padding:14px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.14);
-    display:flex;flex-direction:column;gap:5px}
+  .atlas-grid{padding:16px 22px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px}
+  .atlas-card{padding:13px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.14);
+    display:flex;flex-direction:column;gap:5px;cursor:pointer;transition:border-color .18s, transform .18s}
+  .atlas-card:hover{border-color:rgba(88,224,255,.45);transform:translateY(-1px)}
+  .atlas-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px rgba(88,224,255,.45), 0 10px 26px rgba(0,0,0,.35)}
   .atlas-card.found{border-color:rgba(91,232,176,.42);background:rgba(91,232,176,.06)}
   .atlas-top{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
   .atlas-badge{padding:2px 7px;border-radius:99px;background:rgba(255,255,255,.08)}
@@ -233,9 +252,29 @@
     font-size:12px;color:#e5f7ff;opacity:0;pointer-events:none;transition:.35s;box-shadow:0 10px 28px rgba(0,0,0,.45)}
   .toast.show{opacity:1;transform:translate(-50%,0)}
 
-  /* ---------- Мобильный подплыв ---------- */
-  .touch-nav{display:none;position:fixed;right:18px;bottom:42px;z-index:26;gap:8px}
-  .touch-nav .btn{padding:10px 14px;background:var(--glass);backdrop-filter:blur(10px)}
+  /* ---------- Кинематографический режим (CineCam 2.39:1 + цветофильтры) ---------- */
+  .cinema-bars{position:fixed;inset:0;z-index:18;pointer-events:none}
+  .cinema-bar-top,.cinema-bar-bot{position:fixed;left:0;right:0;height:0;background:#01060c;transition:height .45s cubic-bezier(.22,.8,.28,1)}
+  .cinema-bar-top{top:0}.cinema-bar-bot{bottom:0}
+  .cinema-bars.active .cinema-bar-top,.cinema-bars.active .cinema-bar-bot{height:min(74px, 9.5vh)}
+  .cinema-hud{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:27;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding:7px 14px;border-radius:999px;background:rgba(4,16,28,.86);border:1px solid rgba(88,224,255,.35);
+    backdrop-filter:blur(12px);box-shadow:0 12px 32px rgba(0,0,0,.55);transition:opacity .28s, transform .28s}
+  .cinema-hud.hidden{opacity:0;transform:translate(-50%, 14px);pointer-events:none}
+  .cinema-hud .btn{flex:0 0 auto;padding:5px 10px;font-size:11px}
+
+  /* ---------- Мобильный виртуальный джойстик ---------- */
+  .touch-nav{display:none;position:fixed;left:18px;right:18px;bottom:52px;z-index:26;justify-content:space-between;align-items:flex-end;pointer-events:none}
+  .touch-stick{position:relative;width:104px;height:104px;border-radius:50%;background:rgba(4,18,32,.52);
+    border:1.5px solid rgba(88,224,255,.35);backdrop-filter:blur(8px);pointer-events:auto;touch-action:none}
+  .touch-knob{position:absolute;left:50%;top:50%;width:42px;height:42px;margin:-21px 0 0 -21px;border-radius:50%;
+    background:radial-gradient(circle at 35% 35%,rgba(140,235,255,.92),rgba(58,180,225,.55));
+    box-shadow:0 4px 16px rgba(0,0,0,.45);pointer-events:none}
+  .touch-vert{display:flex;flex-direction:column;gap:8px;pointer-events:auto}
+  .touch-vert .btn{padding:11px 14px;background:var(--glass);backdrop-filter:blur(10px);min-width:52px}
+  @media (pointer:coarse){
+    .touch-nav{display:flex}
+  }
 
   /* ---------- Загрузка ---------- */
   #loading{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at 50% 60%,#0a2c44,#020c17 75%);
@@ -293,6 +332,7 @@
 
 <div class="topright hud-hideable">
   <button class="icon-btn" id="btn-cam" title="Подводная фотокамера (P)" aria-label="Фотокамера">&#128247;</button>
+  <button class="icon-btn" id="btn-cinema" title="Кинематографический режим и фильтры (N)" aria-label="Кино-режим">&#127916;</button>
   <button class="icon-btn" id="btn-journal" title="Миссии экспедиции и фотожурнал (J)" aria-label="Журнал">&#129517;</button>
   <button class="icon-btn" id="btn-sub" title="Режим батискафа и эхолот (B)" aria-label="Батискаф">&#9678;</button>
   <button class="icon-btn" id="btn-sonar" title="Импульс сонара (G)" aria-label="Сонар">&#128225;</button>
@@ -314,6 +354,7 @@
       <button class="btn on" id="btn-mode-swim">Плавание</button>
       <button class="btn" id="btn-mode-orbit">Орбита</button>
       <button class="btn" id="btn-explore">&#9654; Тур</button>
+      <button class="btn" id="btn-mode-cinema">Кино</button>
     </div>
     <div class="row" style="margin-top:6px">
       <button class="btn" id="btn-reset">&#8634; Вернуться к центру рифа</button>
@@ -376,8 +417,9 @@
       <kbd>Мышь</kbd> обзор · <kbd>Клик</kbd> карточка вида<br>
       <kbd>F</kbd> прожектор · <kbd>B</kbd> батискаф · <kbd>G</kbd> сонар<br>
       <kbd>P</kbd> камера (<kbd>Enter</kbd> снять) · <kbd>J</kbd> миссии<br>
+      <kbd>N</kbd> кино-режим · <kbd>X</kbd> цветофильтр<br>
       <kbd>V</kbd> орбита · <kbd>U</kbd> погода · <kbd>K</kbd> атлас<br>
-      <kbd>M</kbd> звук · <kbd>H</kbd> скрыть HUD
+      <kbd>M</kbd> звук · <kbd>H</kbd> скрыть HUD · Геймпад ✓
     </div>
   </div>
 </aside>
@@ -393,9 +435,21 @@
     <button class="btn" id="cam-zoom-out" title="Шире угол ([)">− Угол</button>
     <span id="cam-fov-label" style="font-size:11px;color:var(--dim);min-width:44px;text-align:center">52°</span>
     <button class="btn" id="cam-zoom-in" title="Приблизить (])">+ Зум</button>
+    <button class="btn" id="btn-cam-filter" title="Цветофильтр (X)">Фильтр: Естеств.</button>
     <button class="btn cam-snap" id="cam-snap" title="Сделать снимок (Enter)">&#128247; Снять (Enter)</button>
     <button class="btn" id="cam-close">Закрыть (P)</button>
   </div>
+</div>
+
+<div class="cinema-bars" id="cinema-bars">
+  <div class="cinema-bar-top"></div>
+  <div class="cinema-bar-bot"></div>
+</div>
+<div class="cinema-hud hidden" id="cinema-hud">
+  <span style="font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)">Кино</span>
+  <div class="row" id="cinema-filters" style="gap:5px;flex:0 0 auto"></div>
+  <button class="btn cam-snap" id="cinema-snap" title="Снимок в кино-фильтре">&#128247; Кадр</button>
+  <button class="btn" id="cinema-close">Выйти (N)</button>
 </div>
 <div class="cam-flash" id="cam-flash"></div>
 <div class="cam-preview hidden hud-hideable" id="cam-preview">
@@ -435,8 +489,13 @@
 </div>
 
 <div class="touch-nav hud-hideable">
-  <button class="btn" id="m-back">&#9664; Назад</button>
-  <button class="btn" id="m-fwd">Вперёд &#9654;</button>
+  <div class="touch-stick" id="touch-stick" aria-label="Виртуальный джойстик плавания">
+    <div class="touch-knob" id="touch-knob"></div>
+  </div>
+  <div class="touch-vert">
+    <button class="btn" id="m-up" title="Всплыть">&#9650;</button>
+    <button class="btn" id="m-down" title="Глубже">&#9660;</button>
+  </div>
 </div>
 
 <div class="hero hud-hideable">
@@ -458,6 +517,28 @@
     <div class="atlas-header">
       <div><h3 id="atlas-title">Атлас Большого Барьерного рифа</h3><small id="atlas-count">1 / 42</small></div>
       <button class="btn" id="atlas-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="atlas-viewer" id="atlas-viewer">
+      <div class="atlas-stage" id="atlas-stage">
+        <canvas id="atlas-3d" width="310" height="208"></canvas>
+        <button class="atlas-stage-light" id="atlas-light-btn" title="Сменить свет: День / Ночь Био">&#9728; День</button>
+        <div class="atlas-stage-hint">Вращайте модель мышью 360°</div>
+      </div>
+      <div class="atlas-info">
+        <div>
+          <div class="atlas-top"><span class="atlas-cat" id="atlas-v-cat">Категория</span><span class="atlas-badge" id="atlas-v-badge">Изучено</span></div>
+          <div class="atlas-name" id="atlas-v-name" style="font-size:18px;margin-top:4px">—</div>
+          <div class="atlas-latin" id="atlas-v-latin" style="font-size:12.5px">—</div>
+          <div class="atlas-v-desc" id="atlas-v-desc">Выберите карточку вида или объекта для детального 3D-осмотра и прослушивания голоса.</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:8px" id="atlas-v-zone">Среда обитания: —</div>
+          <div class="atlas-v-actions">
+            <button class="btn on" id="atlas-v-voice">&#128266; Прослушать звук</button>
+            <button class="btn" id="atlas-v-dive">&#8627; Нырнуть к виду</button>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="atlas-tabs" id="atlas-tabs">
       <button class="btn on" data-cat="Все">Все</button>

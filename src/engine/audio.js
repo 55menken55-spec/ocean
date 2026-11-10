@@ -413,6 +413,214 @@ window.OC = window.OC || {};
     src.start(now); src.stop(now + dur + 0.05);
   };
 
+  S.getVoiceLabel = function (key) {
+    if (!key) return 'Звук среды';
+    if (key === 'whale_humpback') return 'Песня горбатого кита';
+    if (key === 'beluga') return 'Трель «морской канарейки»';
+    if (key === 'narwhal') return 'Эхолокация нарвала';
+    if (key === 'sea_lion') return 'Подводный клич сивуча';
+    if (key === 'dugong') return 'Свист дюгоня';
+    if (key === 'ice_floe' || key === 'iceberg' || key === 'brinicle') return 'Треск пакового льда';
+    if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
+    if (key === 'fish_parrot') return 'Хруст кораллов';
+    if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
+    if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle') return 'Гидродинамический импульс';
+    return 'Подводный отклик';
+  };
+
+  S.playSpeciesVoice = function (key) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      if (!S.ctx) S.ctx = new AC();
+      if (S.ctx.state === 'suspended') S.ctx.resume();
+      const ctx = S.ctx;
+      const now = ctx.currentTime;
+      const out = ctx.createGain();
+      out.gain.value = 0.72;
+      out.connect(S.master && !S.muted ? S.master : ctx.destination);
+
+      if (key === 'whale_humpback') {
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 460; lp.Q.value = 1.0;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(0.11, now + 0.38);
+        g.gain.linearRampToValueAtTime(0.06, now + 1.45);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 2.35);
+        [92, 138, 224].forEach((f, i) => {
+          const o = ctx.createOscillator();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(f, now);
+          o.frequency.linearRampToValueAtTime(f * 0.76, now + 1.3);
+          o.frequency.linearRampToValueAtTime(f * 0.94, now + 2.2);
+          const og = ctx.createGain();
+          og.gain.value = i === 0 ? 1.0 : 0.45;
+          o.connect(og); og.connect(lp);
+          o.start(now); o.stop(now + 2.4);
+        });
+        lp.connect(g); g.connect(out);
+      } else if (key === 'beluga') {
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 1520; bp.Q.value = 2.2;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(0.09, now + 0.12);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 1.3);
+        [1020, 1580, 2140].forEach((f, i) => {
+          const o = ctx.createOscillator();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(f, now + i * 0.14);
+          o.frequency.exponentialRampToValueAtTime(f * (i % 2 === 0 ? 1.42 : 0.78), now + i * 0.14 + 0.55);
+          o.connect(bp);
+          o.start(now + i * 0.14); o.stop(now + 1.32);
+        });
+        bp.connect(g); g.connect(out);
+      } else if (key === 'narwhal') {
+        // Эхолокационная трель + полярный гул
+        for (let i = 0; i < 8; i++) {
+          const t = now + i * 0.09;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'triangle';
+          o.frequency.setValueAtTime(1180 - i * 45, t);
+          o.frequency.exponentialRampToValueAtTime(340, t + 0.045);
+          g.gain.setValueAtTime(0.085, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.06);
+        }
+        const hum = ctx.createOscillator();
+        const hg = ctx.createGain();
+        hum.type = 'sine';
+        hum.frequency.setValueAtTime(240, now + 0.2);
+        hum.frequency.linearRampToValueAtTime(175, now + 1.4);
+        hg.gain.setValueAtTime(0.0001, now + 0.2);
+        hg.gain.linearRampToValueAtTime(0.075, now + 0.45);
+        hg.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
+        hum.connect(hg); hg.connect(out);
+        hum.start(now + 0.2); hum.stop(now + 1.55);
+      } else if (key === 'sea_lion') {
+        for (let i = 0; i < 3; i++) {
+          const t = now + i * 0.34;
+          const o = ctx.createOscillator();
+          const f = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(195 - i * 16, t);
+          o.frequency.exponentialRampToValueAtTime(118, t + 0.24);
+          f.type = 'bandpass'; f.frequency.value = 420; f.Q.value = 1.6;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.09, t + 0.04);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+          o.connect(f); f.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.28);
+        }
+      } else if (key === 'dugong') {
+        [1420, 1860, 1620].forEach((f, i) => {
+          const t = now + i * 0.26;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * 1.18, t + 0.18);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.07, t + 0.03);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.24);
+        });
+      } else if (key === 'ice_floe' || key === 'iceberg' || key === 'brinicle') {
+        const o = ctx.createOscillator();
+        const lp = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(145, now);
+        o.frequency.exponentialRampToValueAtTime(34, now + 1.05);
+        lp.type = 'lowpass'; lp.frequency.value = 520;
+        g.gain.setValueAtTime(0.14, now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 1.15);
+        o.connect(lp); lp.connect(g); g.connect(out);
+        o.start(now); o.stop(now + 1.2);
+      } else if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') {
+        const dur = 1.2;
+        const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (i % 190 < 8 ? 1.4 : 0.35);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = key === 'vent_shrimp' ? 3200 : 620; bp.Q.value = 1.1;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(0.11, now + 0.14);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        src.connect(bp); bp.connect(g); g.connect(out);
+        src.start(now); src.stop(now + dur + 0.05);
+      } else if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') {
+        [660, 990, 1320].forEach((f, i) => {
+          const t = now + i * 0.14;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * 1.06, t + 0.55);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.055, t + 0.05);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.68);
+        });
+      } else if (key === 'fish_parrot') {
+        for (let i = 0; i < 4; i++) {
+          const t = now + i * 0.16;
+          const o = ctx.createOscillator();
+          const f = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'square';
+          o.frequency.setValueAtTime(520 + i * 65, t);
+          o.frequency.exponentialRampToValueAtTime(190, t + 0.04);
+          f.type = 'bandpass'; f.frequency.value = 950;
+          g.gain.setValueAtTime(0.06, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
+          o.connect(f); f.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.06);
+        }
+      } else if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle') {
+        const o = ctx.createOscillator();
+        const lp = ctx.createBiquadFilter();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(98, now);
+        o.frequency.exponentialRampToValueAtTime(42, now + 0.65);
+        lp.type = 'lowpass'; lp.frequency.value = 210;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(0.14, now + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+        o.connect(lp); lp.connect(g); g.connect(out);
+        o.start(now); o.stop(now + 0.75);
+      } else {
+        // Живая серия подводных пузырьков и сонарный пинг открытия
+        [440, 620, 810].forEach((f, i) => {
+          const t = now + i * 0.09;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(f, t);
+          o.frequency.exponentialRampToValueAtTime(f * 1.95, t + 0.11);
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.linearRampToValueAtTime(0.055, t + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+          o.connect(g); g.connect(out);
+          o.start(t); o.stop(t + 0.15);
+        });
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+
   S.toggle = function () {
     if (!S.ctx) { const ok = S.ensure(); if (!ok) return false; return true; }
     S.muted = !S.muted;
