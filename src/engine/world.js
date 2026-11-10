@@ -775,7 +775,7 @@ window.OC = window.OC || {};
 
   OC.getPalette = () => pal;
   OC.getTimeOfDay = () => timeOfDay;
-  OC.setTimeOfDay = (t) => { timeOfDay = ((t % 1) + 1) % 1; };
+  OC.setTimeOfDay = (t) => { timeOfDay = ((t % 1) + 1) % 1; updateBasePalette(timeOfDay); };
   OC.isFlashlightOn = () => flashlightOn;
   OC.setFlashlight = (on) => { flashlightOn = !!on; return flashlightOn; };
   OC.toggleFlashlight = () => { flashlightOn = !flashlightOn; return flashlightOn; };

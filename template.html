@@ -664,7 +664,10 @@
   <div class="group">
     <div class="lab-head" style="margin-bottom:8px">
       <h2>Отсек проб (<span id="rov-sample-count">0</span>)</h2>
-      <button class="btn" id="rov-samples-clear" style="flex:0 0 auto;padding:3px 8px;font-size:10px">Очистить</button>
+      <div class="row" style="gap:5px;flex:0 0 auto">
+        <button class="btn" id="rov-btn-museum" style="padding:3px 8px;font-size:10px" title="Открыть полный Музей проб">Музей</button>
+        <button class="btn" id="rov-samples-clear" style="padding:3px 8px;font-size:10px">Очистить</button>
+      </div>
     </div>
     <div class="rov-sample-list" id="rov-samples">
       <div style="font-size:11px;color:var(--dim);padding:6px 0">Наведите аппарат на коралл, курильщик, лёд или дно и нажмите <b>Z</b>, чтобы взять научную пробу.</div>
@@ -869,6 +872,7 @@
     <div class="atlas-tabs" id="journal-tabs">
       <button class="btn on" data-jtab="missions">Научные миссии</button>
       <button class="btn" data-jtab="photos">Фотожурнал</button>
+      <button class="btn" data-jtab="museum">Музей проб</button>
       <button class="btn" id="journal-clear-wp" style="margin-left:auto">Снять маяк</button>
     </div>
     <div class="atlas-grid" id="journal-grid"></div>

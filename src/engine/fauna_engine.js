@@ -1234,7 +1234,7 @@ window.OC = window.OC || {};
                 lungeTarget = bestP;
                 lungeTimer = 4.6;
               }
-              lungeCooldown = 16 + Math.random() * 12;
+              lungeCooldown = (dayW < 0.45 ? 10 : 16) + Math.random() * 12;
             }
           }
         }
@@ -4609,13 +4609,14 @@ window.OC = window.OC || {};
           uFlowOffset: { value: new T.Vector3() },
           uColor: { value: new T.Color(isPlankton ? 0x7ef2ff : (isSnow ? 0xd9edf7 : 0xc6f2ff)) },
           uBio: { value: 0.4 },
+          uDvmShift: { value: 0.0 },
           uScale: { value: 1.0 },
           uNoSurface: { value: noSurface ? 1.0 : 0.0 }
         }
       ]),
       vertexShader: `
         attribute float aPhase, aSize, aSpeed;
-        uniform float uTime, uScale, uBio, uNoSurface;
+        uniform float uTime, uScale, uBio, uDvmShift, uNoSurface;
         uniform vec3 uCamPos, uFlowOffset;
         varying float vAlpha;
         #include <fog_pars_vertex>
@@ -4625,6 +4626,7 @@ window.OC = window.OC || {};
           ${motionGLSL}
           vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
           vec3 worldP = uCamPos + rel;
+          worldP.y += ${isPlankton ? 'uDvmShift' : '0.0'};
           // Не вылетаем над поверхностью моря (Y = 0), кроме абиссального рифта
           float belowWater = max(uNoSurface, step(worldP.y, -0.35));
           vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
@@ -4653,6 +4655,99 @@ window.OC = window.OC || {};
     pts.userData.key = isPlankton ? 'plankton' : (isSnow ? 'marine_snow' : 'bubbles');
     scene.add(pts);
     return mat;
+  }
+
+  /* ---------- Ночной массовый нерест кораллов (поднимающиеся гаметы) ---------- */
+  function createCoralSpawningSystem(scene, n, tex) {
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const ph = new Float32Array(n);
+    const spd = new Float32Array(n);
+    const sz = new Float32Array(n);
+    const rng = OC.mulberry32(9421);
+    const c1 = new T.Color(0xff92c2);
+    const c2 = new T.Color(0xffcfa0);
+    const _c = new T.Color();
+
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = (rng() - 0.5) * 140;
+      pos[i * 3 + 1] = -28 + rng() * 27.5;
+      pos[i * 3 + 2] = (rng() - 0.5) * 140;
+      ph[i] = rng() * 62.8;
+      spd[i] = OC.lerp(0.45, 1.15, rng());
+      sz[i] = OC.lerp(0.65, 1.55, rng());
+      _c.copy(c1).lerp(c2, rng());
+      col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
+    }
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new T.BufferAttribute(col, 3));
+    geo.setAttribute('aPhase', new T.BufferAttribute(ph, 1));
+    geo.setAttribute('aSpeed', new T.BufferAttribute(spd, 1));
+    geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
+
+    const mat = new T.ShaderMaterial({
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: T.AdditiveBlending,
+      fog: true,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        {
+          uTex: { value: tex },
+          uTime: OC.uTime,
+          uCamPos: { value: new T.Vector3() },
+          uFlowOffset: { value: new T.Vector3() },
+          uIntensity: { value: 0.0 },
+          uScale: { value: 1.0 }
+        }
+      ]),
+      vertexShader: `
+        attribute float aPhase, aSpeed, aSize;
+        uniform float uTime, uIntensity, uScale;
+        uniform vec3 uCamPos, uFlowOffset;
+        varying float vAlpha;
+        varying vec3 vColor;
+        #include <fog_pars_vertex>
+        void main(){
+          vColor = color;
+          vec3 box = vec3(140.0, 30.0, 140.0);
+          vec3 p = position + uFlowOffset;
+          p.y += uTime * aSpeed;
+          p.x += sin(uTime * 0.55 + aPhase) * 1.4;
+          p.z += cos(uTime * 0.48 + aPhase) * 1.4;
+          vec2 relXZ = mod(p.xz - uCamPos.xz + box.xz * 0.5, box.xz) - box.xz * 0.5;
+          float relY = mod(p.y + 28.0, box.y) - 28.5;
+          vec3 worldP = vec3(uCamPos.x + relXZ.x, relY, uCamPos.z + relXZ.y);
+          float belowWater = step(worldP.y, -0.35);
+          vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
+          gl_PointSize = belowWater * aSize * uScale * (145.0 / max(1.0, -mvPosition.z));
+          gl_Position = projectionMatrix * mvPosition;
+          float pulse = 0.6 + 0.4 * sin(uTime * 1.8 + aPhase);
+          vAlpha = belowWater * uIntensity * pulse * smoothstep(-28.0, -21.0, worldP.y);
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        varying float vAlpha;
+        varying vec3 vColor;
+        #include <fog_pars_fragment>
+        void main(){
+          if (vAlpha < 0.01) discard;
+          vec4 tx = texture2D(uTex, gl_PointCoord);
+          if (tx.a < 0.02) discard;
+          gl_FragColor = vec4(vColor, tx.a * vAlpha * 0.85);
+          #include <fog_fragment>
+        }`
+    });
+
+    const pts = new T.Points(geo, mat);
+    pts.frustumCulled = false;
+    pts.visible = false;
+    pts.userData.key = 'coral_spawn';
+    scene.add(pts);
+    return { pts, mat };
   }
 
   /* ---------- Система водных брызг (выпрыги китов, белух и морских львов) ---------- */
@@ -5830,6 +5925,8 @@ window.OC = window.OC || {};
       const bubbleMat = createCameraRelativeParticles(faunaGroup, noSurf ? 80 : Math.round(900 * pCountMult), texHard, 'bubbles', noSurf);
       const planktonMat = createCameraRelativeParticles(faunaGroup, Math.round(1500 * pCountMult), texSoft, 'plankton', noSurf);
       const snowMat = createCameraRelativeParticles(faunaGroup, Math.round((noSurf ? 1400 : 1050) * pCountMult), texSoft, 'snow', noSurf);
+      const isCoralBiome = (biome.id === 'great_barrier_reef' || biome.id === 'wreck_atoll' || biome.id === 'galapagos_upwelling');
+      const coralSpawnSys = isCoralBiome ? createCoralSpawningSystem(faunaGroup, Math.round(340 * pCountMult), texSoft) : null;
       const biolumTrail = makeBiolumTrail(faunaGroup, texSoft, noSurf);
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
@@ -5870,7 +5967,11 @@ window.OC = window.OC || {};
         big: agents.length - schools.length,
         whale,
         vessel: primaryVessel ? primaryVessel.shipInfo : null,
-        activeEvent: null
+        activeEvent: null,
+        dvmPhase: 'day_deep',
+        dvmShiftM: -5.5,
+        coralSpawnIntensity: 0,
+        nocturnalPredators: 0
       };
       refreshFaunaCounts();
 
@@ -5907,12 +6008,15 @@ window.OC = window.OC || {};
 
           // Собираем активных хищников и косяки жертв в переиспользуемые массивы (без GC аллокаций)
           predatorsBuf.length = 0;
+          let noctCount = 0;
           for (let i = 0; i < predatorAgents.length; i++) {
             const pa = predatorAgents[i];
             if (pa.isNocturnalPredator && dayW > 0.55) continue;
+            if (pa.isNocturnalPredator) noctCount++;
             const p = pa.getPosition ? pa.getPosition() : null;
             if (p) predatorsBuf.push(p);
           }
+          OC.faunaInfo.nocturnalPredators = noctCount;
 
           preyCentersBuf.length = 0;
           for (let i = 0; i < preySchools.length; i++) {
@@ -5970,11 +6074,34 @@ window.OC = window.OC || {};
               }
             }
           }
+          // Суточный цикл экосистемы: вертикальная миграция планктона (DVM) и ночной нерест кораллов
+          const tod = OC.getTimeOfDay ? OC.getTimeOfDay() : 0.5;
+          const dvmShift = noSurf ? 0 : OC.lerp(6.5, -5.5, dayW);
+          const dvmPhase = noSurf
+            ? 'abyss_constant'
+            : (dayW > 0.68 ? 'day_deep' : (dayW < 0.26 ? 'night_surface' : (tod > 0.5 ? 'dusk_ascent' : 'dawn_descent')));
+          const coralSpawnIntensity = isCoralBiome ? OC.clamp((0.38 - dayW) / 0.28, 0, 1) : 0;
+          OC.faunaInfo.dvmPhase = dvmPhase;
+          OC.faunaInfo.dvmShiftM = Math.round(dvmShift * 10) / 10;
+          OC.faunaInfo.coralSpawnIntensity = Math.round(coralSpawnIntensity * 100) / 100;
+
+          if (!ev && coralSpawnIntensity > 0.35 && camPos.y > -34) {
+            ev = 'coral_spawn';
+          } else if (!ev && !noSurf && (dvmPhase === 'dusk_ascent' || (dvmPhase === 'night_surface' && !isCoralBiome))) {
+            ev = 'dvm';
+          }
           OC.faunaInfo.activeEvent = ev;
 
           bubbleMat.uniforms.uCamPos.value.copy(camPos);
           planktonMat.uniforms.uCamPos.value.copy(camPos);
+          planktonMat.uniforms.uDvmShift.value = dvmShift;
           snowMat.uniforms.uCamPos.value.copy(camPos);
+
+          if (coralSpawnSys) {
+            coralSpawnSys.pts.visible = coralSpawnIntensity > 0.02;
+            coralSpawnSys.mat.uniforms.uCamPos.value.copy(camPos);
+            coralSpawnSys.mat.uniforms.uIntensity.value = coralSpawnIntensity;
+          }
 
           // Плавная адвекция планктона, пузырей и морского снега по локальному течению
           if (biome.getCurrentAt && (biome.noSurface || camPos.y < 1.5)) {
@@ -5987,6 +6114,7 @@ window.OC = window.OC || {};
             bubbleMat.uniforms.uFlowOffset.value.copy(_flowAccum);
             planktonMat.uniforms.uFlowOffset.value.copy(_flowAccum);
             snowMat.uniforms.uFlowOffset.value.copy(_flowAccum);
+            if (coralSpawnSys) coralSpawnSys.mat.uniforms.uFlowOffset.value.copy(_flowAccum);
           }
 
           planktonMat.uniforms.uBio.value = pal.bioGlow;
@@ -5998,6 +6126,7 @@ window.OC = window.OC || {};
           bubbleMat.uniforms.uScale.value = s;
           planktonMat.uniforms.uScale.value = s;
           snowMat.uniforms.uScale.value = s;
+          if (coralSpawnSys) coralSpawnSys.mat.uniforms.uScale.value = s;
           biolumTrail.setScale(s);
           splashSystem.setScale(s);
         },

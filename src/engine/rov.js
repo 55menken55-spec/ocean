@@ -869,8 +869,11 @@ window.OC = window.OC || {};
       return this.setCurrentsVisible(!currentsVisible);
     },
 
-    getSamples: () => samples,
-    clearSamples() { samples.length = 0; },
+    getSamples: () => ((OC.Expedition && OC.Expedition.getSamples) ? OC.Expedition.getSamples() : samples),
+    clearSamples() {
+      samples.length = 0;
+      if (OC.Expedition && OC.Expedition.clearSamples) OC.Expedition.clearSamples();
+    },
     getLastCtdCast: () => lastCtdCast,
 
     runCtdCast(biome, pos, labState) {
@@ -971,6 +974,7 @@ window.OC = window.OC || {};
 
       samples.unshift(entry);
       if (samples.length > MAX_SAMPLES) samples.length = MAX_SAMPLES;
+      if (OC.Expedition && OC.Expedition.addSample) OC.Expedition.addSample(entry);
 
       grabTimer = grabDuration;
       if (sampleOrb && sampleOrb.material) {

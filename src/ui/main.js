@@ -147,6 +147,7 @@ window.OC = window.OC || {};
   const rovCtdPress = document.getElementById('rov-ctd-press');
   const rovSampleCount = document.getElementById('rov-sample-count');
   const rovSamplesEl = document.getElementById('rov-samples');
+  const rovBtnMuseum = document.getElementById('rov-btn-museum');
   const rovSamplesClear = document.getElementById('rov-samples-clear');
   const _rovScanOut = { kind: 'water', species: '', label: '', latin: '', dist: 0, colorHex: 0x58e0ff };
 
@@ -171,7 +172,9 @@ window.OC = window.OC || {};
     hunt: 'Наблюдение: хищник атакует косяк!',
     baitball: 'Наблюдение: стая сжалась в защитный шар (baitball)!',
     cleaning: 'Наблюдение: симбиоз — чистильщики обслуживают гиганта',
-    porpoising: 'Наблюдение: морские млекопитающие выпрыгивают у поверхности'
+    porpoising: 'Наблюдение: морские млекопитающие выпрыгивают у поверхности',
+    coral_spawn: 'Ночное явление: массовый нерест кораллов — гаметы поднимаются к поверхности!',
+    dvm: 'Суточная вертикальная миграция (DVM): глубоководный планктон поднимается наверх!'
   };
   const _fwd = new T.Vector3();
   const _zeroNdc = new T.Vector2(0, 0);
@@ -290,7 +293,11 @@ window.OC = window.OC || {};
     const res = OC.Expedition.evaluateMissions(activeBiome, lastEvalCtx);
     const sum = OC.Expedition.getAllSummary();
     if (journalTitle) journalTitle.textContent = 'Экспедиция · ' + activeBiome.name;
-    if (journalSummary) journalSummary.textContent = 'Миссий: ' + sum.missionsDone + ' / ' + sum.missionsTotal + ' · Снимков: ' + sum.photosCount;
+    if (journalSummary) {
+      journalSummary.textContent = 'Миссий: ' + sum.missionsDone + ' / ' + sum.missionsTotal +
+        ' · Снимков: ' + sum.photosCount +
+        ' · Проб в музее: ' + (sum.samplesCount || 0);
+    }
 
     journalGrid.innerHTML = '';
     if (journalTab === 'missions') {
@@ -312,6 +319,38 @@ window.OC = window.OC || {};
             OC.Expedition.setWaypoint(activeBiome.id, lm.x, lm.z, lm.name);
             toast('Маяк поставлен: ' + lm.name);
             if (journalModal) journalModal.classList.add('hidden');
+          }
+        });
+        journalGrid.appendChild(card);
+      }
+    } else if (journalTab === 'museum') {
+      const samplesList = OC.Expedition.getSamples ? OC.Expedition.getSamples() : [];
+      if (!samplesList.length) {
+        journalGrid.innerHTML = '<div style="grid-column:1/-1;color:var(--dim);font-size:13px;padding:18px 0">Музей экспедиционных проб пока пуст. Откройте панель ROV (<b>I</b>), наведите манипулятор на коралл, курильщик, гидрат, сталактит или вулканический базальт и нажмите <b>Z</b>!</div>';
+        return;
+      }
+      for (const s of samplesList) {
+        const card = document.createElement('div');
+        card.className = 'mission-card';
+        const colCss = '#' + (s.colorHex || 0x58e0ff).toString(16).padStart(6, '0');
+        const hasEnc = !!(activeBiome && activeBiome.encyclopedia && s.species && activeBiome.encyclopedia[s.species] && s.biomeId === activeBiome.id);
+        card.innerHTML =
+          '<div class="atlas-top"><span style="display:inline-flex;align-items:center;gap:6px"><i style="width:10px;height:10px;border-radius:50%;display:inline-block;background:' + colCss + ';box-shadow:0 0 8px ' + colCss + '"></i>' + s.category + ' · ' + s.biomeName + '</span><span class="atlas-badge ok">' + s.depthM + ' м</span></div>' +
+          '<div class="atlas-name">' + s.title + '</div>' +
+          '<div class="atlas-latin">' + (s.latin || s.chemNote) + '</div>' +
+          '<div class="atlas-desc">' + s.chemNote + ' · T=' + s.tempC + '°C · ' + s.pH + ' pH · O₂ ' + s.o2 + ' мг/л' + (s.bleachPct > 0 ? (' · обесцв. ' + s.bleachPct + '%') : '') + '</div>' +
+          '<div class="atlas-foot"><span>' + new Date(s.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' +
+          (hasEnc ? '<button class="atlas-go">3D-Атлас →</button>' : '<button class="atlas-go">В биом →</button>') + '</div>';
+        const btn = card.querySelector('.atlas-go');
+        btn.addEventListener('click', () => {
+          if (journalModal) journalModal.classList.add('hidden');
+          if (s.biomeId !== activeBiome.id) {
+            switchBiome(s.biomeId);
+            return;
+          }
+          if (hasEnc && OC.Atlas && OC.Atlas.selectSpecies) {
+            if (!OC.Atlas.isOpen()) OC.Atlas.toggle();
+            OC.Atlas.selectSpecies(s.species, false);
           }
         });
         journalGrid.appendChild(card);
@@ -751,6 +790,14 @@ window.OC = window.OC || {};
         OC.Navigation.flyTo(vInfo.deckPos[0], vInfo.deckPos[1], vInfo.deckPos[2], vInfo.deckYaw, -0.09);
         if (OC.sound && OC.sound.missionChime) OC.sound.missionChime();
         toast('Всплытие на поверхность к ' + vInfo.name);
+      });
+    }
+    if (rovBtnMuseum) {
+      rovBtnMuseum.addEventListener('click', (e) => {
+        e.stopPropagation();
+        journalTab = 'museum';
+        if (journalTabs) journalTabs.querySelectorAll('button[data-jtab]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-jtab') === 'museum'));
+        if (journalModal) { journalModal.classList.remove('hidden'); renderJournal(); }
       });
     }
     if (rovSamplesClear) {
@@ -1772,6 +1819,7 @@ window.OC = window.OC || {};
           }
           if (subPhaseEl) {
             const inCaveCeiling = !!(biome.getCeilingHeight && biome.getCeilingHeight(craftPos.x, craftPos.z) < 25.0);
+            const fInfo = OC.faunaInfo || {};
             subPhaseEl.textContent = inBrineNow
               ? 'Галоклин · Рассол 230‰'
               : (inHaloNow
@@ -1781,9 +1829,13 @@ window.OC = window.OC || {};
                   : (biome.noSurface
                     ? (biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
                       : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м'))
-                    : (biome.hasAurora
-                      ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
-                      : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'))))));
+                    : (fInfo.coralSpawnIntensity > 0.35
+                      ? 'Ночь · Нерест кораллов'
+                      : (fInfo.dvmPhase === 'dusk_ascent'
+                        ? 'Сумерки · Миграция DVM'
+                        : (biome.hasAurora
+                          ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
+                          : (dayW < 0.35 ? 'Ночь · Био + DVM' : (dayW < 0.7 ? 'Сумерки' : 'День'))))))));
           }
           drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }

@@ -6,7 +6,7 @@ window.OC = window.OC || {};
   const STORAGE_KEY = 'oc_ocean_expedition_v1';
 
   function loadStore() {
-    const empty = { discovered: {}, missionsDone: {}, photos: [], waypoints: {}, fogMaps: {}, quality: null };
+    const empty = { discovered: {}, missionsDone: {}, photos: [], samples: [], waypoints: {}, fogMaps: {}, quality: null };
     try {
       if (typeof localStorage === 'undefined') return empty;
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -656,8 +656,33 @@ window.OC = window.OC || {};
       return {
         missionsDone: doneTotal,
         missionsTotal: MISSIONS.length,
-        photosCount: store.photos.length
+        photosCount: store.photos.length,
+        samplesCount: Array.isArray(store.samples) ? store.samples.length : 0
       };
+    },
+
+    addSample(entry) {
+      if (!entry) return null;
+      if (!Array.isArray(store.samples)) store.samples = [];
+      const existingIdx = store.samples.findIndex((s) => s.biomeId === entry.biomeId && s.species === entry.species);
+      if (existingIdx >= 0) store.samples.splice(existingIdx, 1);
+      store.samples.unshift(entry);
+      if (store.samples.length > 36) store.samples.length = 36;
+      saveStore();
+      return entry;
+    },
+
+    getSamples(biomeId) {
+      const list = Array.isArray(store.samples) ? store.samples : [];
+      if (!biomeId) return list.slice();
+      return list.filter((s) => s.biomeId === biomeId);
+    },
+
+    clearSamples(biomeId) {
+      if (!Array.isArray(store.samples)) store.samples = [];
+      if (biomeId) store.samples = store.samples.filter((s) => s.biomeId !== biomeId);
+      else store.samples = [];
+      saveStore();
     },
 
     getBiomeSummary(biome) {

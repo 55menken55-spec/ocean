@@ -664,7 +664,10 @@
   <div class="group">
     <div class="lab-head" style="margin-bottom:8px">
       <h2>Отсек проб (<span id="rov-sample-count">0</span>)</h2>
-      <button class="btn" id="rov-samples-clear" style="flex:0 0 auto;padding:3px 8px;font-size:10px">Очистить</button>
+      <div class="row" style="gap:5px;flex:0 0 auto">
+        <button class="btn" id="rov-btn-museum" style="padding:3px 8px;font-size:10px" title="Открыть полный Музей проб">Музей</button>
+        <button class="btn" id="rov-samples-clear" style="padding:3px 8px;font-size:10px">Очистить</button>
+      </div>
     </div>
     <div class="rov-sample-list" id="rov-samples">
       <div style="font-size:11px;color:var(--dim);padding:6px 0">Наведите аппарат на коралл, курильщик, лёд или дно и нажмите <b>Z</b>, чтобы взять научную пробу.</div>
@@ -869,6 +872,7 @@
     <div class="atlas-tabs" id="journal-tabs">
       <button class="btn on" data-jtab="missions">Научные миссии</button>
       <button class="btn" data-jtab="photos">Фотожурнал</button>
+      <button class="btn" data-jtab="museum">Музей проб</button>
       <button class="btn" id="journal-clear-wp" style="margin-left:auto">Снять маяк</button>
     </div>
     <div class="atlas-grid" id="journal-grid"></div>
@@ -7903,7 +7907,7 @@ window.OC = window.OC || {};
 
   OC.getPalette = () => pal;
   OC.getTimeOfDay = () => timeOfDay;
-  OC.setTimeOfDay = (t) => { timeOfDay = ((t % 1) + 1) % 1; };
+  OC.setTimeOfDay = (t) => { timeOfDay = ((t % 1) + 1) % 1; updateBasePalette(timeOfDay); };
   OC.isFlashlightOn = () => flashlightOn;
   OC.setFlashlight = (on) => { flashlightOn = !!on; return flashlightOn; };
   OC.toggleFlashlight = () => { flashlightOn = !flashlightOn; return flashlightOn; };
@@ -12198,7 +12202,7 @@ window.OC = window.OC || {};
                 lungeTarget = bestP;
                 lungeTimer = 4.6;
               }
-              lungeCooldown = 16 + Math.random() * 12;
+              lungeCooldown = (dayW < 0.45 ? 10 : 16) + Math.random() * 12;
             }
           }
         }
@@ -15573,13 +15577,14 @@ window.OC = window.OC || {};
           uFlowOffset: { value: new T.Vector3() },
           uColor: { value: new T.Color(isPlankton ? 0x7ef2ff : (isSnow ? 0xd9edf7 : 0xc6f2ff)) },
           uBio: { value: 0.4 },
+          uDvmShift: { value: 0.0 },
           uScale: { value: 1.0 },
           uNoSurface: { value: noSurface ? 1.0 : 0.0 }
         }
       ]),
       vertexShader: `
         attribute float aPhase, aSize, aSpeed;
-        uniform float uTime, uScale, uBio, uNoSurface;
+        uniform float uTime, uScale, uBio, uDvmShift, uNoSurface;
         uniform vec3 uCamPos, uFlowOffset;
         varying float vAlpha;
         #include <fog_pars_vertex>
@@ -15589,6 +15594,7 @@ window.OC = window.OC || {};
           ${motionGLSL}
           vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
           vec3 worldP = uCamPos + rel;
+          worldP.y += ${isPlankton ? 'uDvmShift' : '0.0'};
           // Не вылетаем над поверхностью моря (Y = 0), кроме абиссального рифта
           float belowWater = max(uNoSurface, step(worldP.y, -0.35));
           vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
@@ -15617,6 +15623,99 @@ window.OC = window.OC || {};
     pts.userData.key = isPlankton ? 'plankton' : (isSnow ? 'marine_snow' : 'bubbles');
     scene.add(pts);
     return mat;
+  }
+
+  /* ---------- Ночной массовый нерест кораллов (поднимающиеся гаметы) ---------- */
+  function createCoralSpawningSystem(scene, n, tex) {
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const ph = new Float32Array(n);
+    const spd = new Float32Array(n);
+    const sz = new Float32Array(n);
+    const rng = OC.mulberry32(9421);
+    const c1 = new T.Color(0xff92c2);
+    const c2 = new T.Color(0xffcfa0);
+    const _c = new T.Color();
+
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = (rng() - 0.5) * 140;
+      pos[i * 3 + 1] = -28 + rng() * 27.5;
+      pos[i * 3 + 2] = (rng() - 0.5) * 140;
+      ph[i] = rng() * 62.8;
+      spd[i] = OC.lerp(0.45, 1.15, rng());
+      sz[i] = OC.lerp(0.65, 1.55, rng());
+      _c.copy(c1).lerp(c2, rng());
+      col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
+    }
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new T.BufferAttribute(col, 3));
+    geo.setAttribute('aPhase', new T.BufferAttribute(ph, 1));
+    geo.setAttribute('aSpeed', new T.BufferAttribute(spd, 1));
+    geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
+
+    const mat = new T.ShaderMaterial({
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: T.AdditiveBlending,
+      fog: true,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        {
+          uTex: { value: tex },
+          uTime: OC.uTime,
+          uCamPos: { value: new T.Vector3() },
+          uFlowOffset: { value: new T.Vector3() },
+          uIntensity: { value: 0.0 },
+          uScale: { value: 1.0 }
+        }
+      ]),
+      vertexShader: `
+        attribute float aPhase, aSpeed, aSize;
+        uniform float uTime, uIntensity, uScale;
+        uniform vec3 uCamPos, uFlowOffset;
+        varying float vAlpha;
+        varying vec3 vColor;
+        #include <fog_pars_vertex>
+        void main(){
+          vColor = color;
+          vec3 box = vec3(140.0, 30.0, 140.0);
+          vec3 p = position + uFlowOffset;
+          p.y += uTime * aSpeed;
+          p.x += sin(uTime * 0.55 + aPhase) * 1.4;
+          p.z += cos(uTime * 0.48 + aPhase) * 1.4;
+          vec2 relXZ = mod(p.xz - uCamPos.xz + box.xz * 0.5, box.xz) - box.xz * 0.5;
+          float relY = mod(p.y + 28.0, box.y) - 28.5;
+          vec3 worldP = vec3(uCamPos.x + relXZ.x, relY, uCamPos.z + relXZ.y);
+          float belowWater = step(worldP.y, -0.35);
+          vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
+          gl_PointSize = belowWater * aSize * uScale * (145.0 / max(1.0, -mvPosition.z));
+          gl_Position = projectionMatrix * mvPosition;
+          float pulse = 0.6 + 0.4 * sin(uTime * 1.8 + aPhase);
+          vAlpha = belowWater * uIntensity * pulse * smoothstep(-28.0, -21.0, worldP.y);
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        varying float vAlpha;
+        varying vec3 vColor;
+        #include <fog_pars_fragment>
+        void main(){
+          if (vAlpha < 0.01) discard;
+          vec4 tx = texture2D(uTex, gl_PointCoord);
+          if (tx.a < 0.02) discard;
+          gl_FragColor = vec4(vColor, tx.a * vAlpha * 0.85);
+          #include <fog_fragment>
+        }`
+    });
+
+    const pts = new T.Points(geo, mat);
+    pts.frustumCulled = false;
+    pts.visible = false;
+    pts.userData.key = 'coral_spawn';
+    scene.add(pts);
+    return { pts, mat };
   }
 
   /* ---------- Система водных брызг (выпрыги китов, белух и морских львов) ---------- */
@@ -16794,6 +16893,8 @@ window.OC = window.OC || {};
       const bubbleMat = createCameraRelativeParticles(faunaGroup, noSurf ? 80 : Math.round(900 * pCountMult), texHard, 'bubbles', noSurf);
       const planktonMat = createCameraRelativeParticles(faunaGroup, Math.round(1500 * pCountMult), texSoft, 'plankton', noSurf);
       const snowMat = createCameraRelativeParticles(faunaGroup, Math.round((noSurf ? 1400 : 1050) * pCountMult), texSoft, 'snow', noSurf);
+      const isCoralBiome = (biome.id === 'great_barrier_reef' || biome.id === 'wreck_atoll' || biome.id === 'galapagos_upwelling');
+      const coralSpawnSys = isCoralBiome ? createCoralSpawningSystem(faunaGroup, Math.round(340 * pCountMult), texSoft) : null;
       const biolumTrail = makeBiolumTrail(faunaGroup, texSoft, noSurf);
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
@@ -16834,7 +16935,11 @@ window.OC = window.OC || {};
         big: agents.length - schools.length,
         whale,
         vessel: primaryVessel ? primaryVessel.shipInfo : null,
-        activeEvent: null
+        activeEvent: null,
+        dvmPhase: 'day_deep',
+        dvmShiftM: -5.5,
+        coralSpawnIntensity: 0,
+        nocturnalPredators: 0
       };
       refreshFaunaCounts();
 
@@ -16871,12 +16976,15 @@ window.OC = window.OC || {};
 
           // Собираем активных хищников и косяки жертв в переиспользуемые массивы (без GC аллокаций)
           predatorsBuf.length = 0;
+          let noctCount = 0;
           for (let i = 0; i < predatorAgents.length; i++) {
             const pa = predatorAgents[i];
             if (pa.isNocturnalPredator && dayW > 0.55) continue;
+            if (pa.isNocturnalPredator) noctCount++;
             const p = pa.getPosition ? pa.getPosition() : null;
             if (p) predatorsBuf.push(p);
           }
+          OC.faunaInfo.nocturnalPredators = noctCount;
 
           preyCentersBuf.length = 0;
           for (let i = 0; i < preySchools.length; i++) {
@@ -16934,11 +17042,34 @@ window.OC = window.OC || {};
               }
             }
           }
+          // Суточный цикл экосистемы: вертикальная миграция планктона (DVM) и ночной нерест кораллов
+          const tod = OC.getTimeOfDay ? OC.getTimeOfDay() : 0.5;
+          const dvmShift = noSurf ? 0 : OC.lerp(6.5, -5.5, dayW);
+          const dvmPhase = noSurf
+            ? 'abyss_constant'
+            : (dayW > 0.68 ? 'day_deep' : (dayW < 0.26 ? 'night_surface' : (tod > 0.5 ? 'dusk_ascent' : 'dawn_descent')));
+          const coralSpawnIntensity = isCoralBiome ? OC.clamp((0.38 - dayW) / 0.28, 0, 1) : 0;
+          OC.faunaInfo.dvmPhase = dvmPhase;
+          OC.faunaInfo.dvmShiftM = Math.round(dvmShift * 10) / 10;
+          OC.faunaInfo.coralSpawnIntensity = Math.round(coralSpawnIntensity * 100) / 100;
+
+          if (!ev && coralSpawnIntensity > 0.35 && camPos.y > -34) {
+            ev = 'coral_spawn';
+          } else if (!ev && !noSurf && (dvmPhase === 'dusk_ascent' || (dvmPhase === 'night_surface' && !isCoralBiome))) {
+            ev = 'dvm';
+          }
           OC.faunaInfo.activeEvent = ev;
 
           bubbleMat.uniforms.uCamPos.value.copy(camPos);
           planktonMat.uniforms.uCamPos.value.copy(camPos);
+          planktonMat.uniforms.uDvmShift.value = dvmShift;
           snowMat.uniforms.uCamPos.value.copy(camPos);
+
+          if (coralSpawnSys) {
+            coralSpawnSys.pts.visible = coralSpawnIntensity > 0.02;
+            coralSpawnSys.mat.uniforms.uCamPos.value.copy(camPos);
+            coralSpawnSys.mat.uniforms.uIntensity.value = coralSpawnIntensity;
+          }
 
           // Плавная адвекция планктона, пузырей и морского снега по локальному течению
           if (biome.getCurrentAt && (biome.noSurface || camPos.y < 1.5)) {
@@ -16951,6 +17082,7 @@ window.OC = window.OC || {};
             bubbleMat.uniforms.uFlowOffset.value.copy(_flowAccum);
             planktonMat.uniforms.uFlowOffset.value.copy(_flowAccum);
             snowMat.uniforms.uFlowOffset.value.copy(_flowAccum);
+            if (coralSpawnSys) coralSpawnSys.mat.uniforms.uFlowOffset.value.copy(_flowAccum);
           }
 
           planktonMat.uniforms.uBio.value = pal.bioGlow;
@@ -16962,6 +17094,7 @@ window.OC = window.OC || {};
           bubbleMat.uniforms.uScale.value = s;
           planktonMat.uniforms.uScale.value = s;
           snowMat.uniforms.uScale.value = s;
+          if (coralSpawnSys) coralSpawnSys.mat.uniforms.uScale.value = s;
           biolumTrail.setScale(s);
           splashSystem.setScale(s);
         },
@@ -19195,8 +19328,11 @@ window.OC = window.OC || {};
       return this.setCurrentsVisible(!currentsVisible);
     },
 
-    getSamples: () => samples,
-    clearSamples() { samples.length = 0; },
+    getSamples: () => ((OC.Expedition && OC.Expedition.getSamples) ? OC.Expedition.getSamples() : samples),
+    clearSamples() {
+      samples.length = 0;
+      if (OC.Expedition && OC.Expedition.clearSamples) OC.Expedition.clearSamples();
+    },
     getLastCtdCast: () => lastCtdCast,
 
     runCtdCast(biome, pos, labState) {
@@ -19297,6 +19433,7 @@ window.OC = window.OC || {};
 
       samples.unshift(entry);
       if (samples.length > MAX_SAMPLES) samples.length = MAX_SAMPLES;
+      if (OC.Expedition && OC.Expedition.addSample) OC.Expedition.addSample(entry);
 
       grabTimer = grabDuration;
       if (sampleOrb && sampleOrb.material) {
@@ -20928,7 +21065,7 @@ window.OC = window.OC || {};
   const STORAGE_KEY = 'oc_ocean_expedition_v1';
 
   function loadStore() {
-    const empty = { discovered: {}, missionsDone: {}, photos: [], waypoints: {}, fogMaps: {}, quality: null };
+    const empty = { discovered: {}, missionsDone: {}, photos: [], samples: [], waypoints: {}, fogMaps: {}, quality: null };
     try {
       if (typeof localStorage === 'undefined') return empty;
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -21578,8 +21715,33 @@ window.OC = window.OC || {};
       return {
         missionsDone: doneTotal,
         missionsTotal: MISSIONS.length,
-        photosCount: store.photos.length
+        photosCount: store.photos.length,
+        samplesCount: Array.isArray(store.samples) ? store.samples.length : 0
       };
+    },
+
+    addSample(entry) {
+      if (!entry) return null;
+      if (!Array.isArray(store.samples)) store.samples = [];
+      const existingIdx = store.samples.findIndex((s) => s.biomeId === entry.biomeId && s.species === entry.species);
+      if (existingIdx >= 0) store.samples.splice(existingIdx, 1);
+      store.samples.unshift(entry);
+      if (store.samples.length > 36) store.samples.length = 36;
+      saveStore();
+      return entry;
+    },
+
+    getSamples(biomeId) {
+      const list = Array.isArray(store.samples) ? store.samples : [];
+      if (!biomeId) return list.slice();
+      return list.filter((s) => s.biomeId === biomeId);
+    },
+
+    clearSamples(biomeId) {
+      if (!Array.isArray(store.samples)) store.samples = [];
+      if (biomeId) store.samples = store.samples.filter((s) => s.biomeId !== biomeId);
+      else store.samples = [];
+      saveStore();
     },
 
     getBiomeSummary(biome) {
@@ -23604,6 +23766,7 @@ window.OC = window.OC || {};
   const rovCtdPress = document.getElementById('rov-ctd-press');
   const rovSampleCount = document.getElementById('rov-sample-count');
   const rovSamplesEl = document.getElementById('rov-samples');
+  const rovBtnMuseum = document.getElementById('rov-btn-museum');
   const rovSamplesClear = document.getElementById('rov-samples-clear');
   const _rovScanOut = { kind: 'water', species: '', label: '', latin: '', dist: 0, colorHex: 0x58e0ff };
 
@@ -23628,7 +23791,9 @@ window.OC = window.OC || {};
     hunt: 'Наблюдение: хищник атакует косяк!',
     baitball: 'Наблюдение: стая сжалась в защитный шар (baitball)!',
     cleaning: 'Наблюдение: симбиоз — чистильщики обслуживают гиганта',
-    porpoising: 'Наблюдение: морские млекопитающие выпрыгивают у поверхности'
+    porpoising: 'Наблюдение: морские млекопитающие выпрыгивают у поверхности',
+    coral_spawn: 'Ночное явление: массовый нерест кораллов — гаметы поднимаются к поверхности!',
+    dvm: 'Суточная вертикальная миграция (DVM): глубоководный планктон поднимается наверх!'
   };
   const _fwd = new T.Vector3();
   const _zeroNdc = new T.Vector2(0, 0);
@@ -23747,7 +23912,11 @@ window.OC = window.OC || {};
     const res = OC.Expedition.evaluateMissions(activeBiome, lastEvalCtx);
     const sum = OC.Expedition.getAllSummary();
     if (journalTitle) journalTitle.textContent = 'Экспедиция · ' + activeBiome.name;
-    if (journalSummary) journalSummary.textContent = 'Миссий: ' + sum.missionsDone + ' / ' + sum.missionsTotal + ' · Снимков: ' + sum.photosCount;
+    if (journalSummary) {
+      journalSummary.textContent = 'Миссий: ' + sum.missionsDone + ' / ' + sum.missionsTotal +
+        ' · Снимков: ' + sum.photosCount +
+        ' · Проб в музее: ' + (sum.samplesCount || 0);
+    }
 
     journalGrid.innerHTML = '';
     if (journalTab === 'missions') {
@@ -23769,6 +23938,38 @@ window.OC = window.OC || {};
             OC.Expedition.setWaypoint(activeBiome.id, lm.x, lm.z, lm.name);
             toast('Маяк поставлен: ' + lm.name);
             if (journalModal) journalModal.classList.add('hidden');
+          }
+        });
+        journalGrid.appendChild(card);
+      }
+    } else if (journalTab === 'museum') {
+      const samplesList = OC.Expedition.getSamples ? OC.Expedition.getSamples() : [];
+      if (!samplesList.length) {
+        journalGrid.innerHTML = '<div style="grid-column:1/-1;color:var(--dim);font-size:13px;padding:18px 0">Музей экспедиционных проб пока пуст. Откройте панель ROV (<b>I</b>), наведите манипулятор на коралл, курильщик, гидрат, сталактит или вулканический базальт и нажмите <b>Z</b>!</div>';
+        return;
+      }
+      for (const s of samplesList) {
+        const card = document.createElement('div');
+        card.className = 'mission-card';
+        const colCss = '#' + (s.colorHex || 0x58e0ff).toString(16).padStart(6, '0');
+        const hasEnc = !!(activeBiome && activeBiome.encyclopedia && s.species && activeBiome.encyclopedia[s.species] && s.biomeId === activeBiome.id);
+        card.innerHTML =
+          '<div class="atlas-top"><span style="display:inline-flex;align-items:center;gap:6px"><i style="width:10px;height:10px;border-radius:50%;display:inline-block;background:' + colCss + ';box-shadow:0 0 8px ' + colCss + '"></i>' + s.category + ' · ' + s.biomeName + '</span><span class="atlas-badge ok">' + s.depthM + ' м</span></div>' +
+          '<div class="atlas-name">' + s.title + '</div>' +
+          '<div class="atlas-latin">' + (s.latin || s.chemNote) + '</div>' +
+          '<div class="atlas-desc">' + s.chemNote + ' · T=' + s.tempC + '°C · ' + s.pH + ' pH · O₂ ' + s.o2 + ' мг/л' + (s.bleachPct > 0 ? (' · обесцв. ' + s.bleachPct + '%') : '') + '</div>' +
+          '<div class="atlas-foot"><span>' + new Date(s.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' +
+          (hasEnc ? '<button class="atlas-go">3D-Атлас →</button>' : '<button class="atlas-go">В биом →</button>') + '</div>';
+        const btn = card.querySelector('.atlas-go');
+        btn.addEventListener('click', () => {
+          if (journalModal) journalModal.classList.add('hidden');
+          if (s.biomeId !== activeBiome.id) {
+            switchBiome(s.biomeId);
+            return;
+          }
+          if (hasEnc && OC.Atlas && OC.Atlas.selectSpecies) {
+            if (!OC.Atlas.isOpen()) OC.Atlas.toggle();
+            OC.Atlas.selectSpecies(s.species, false);
           }
         });
         journalGrid.appendChild(card);
@@ -24208,6 +24409,14 @@ window.OC = window.OC || {};
         OC.Navigation.flyTo(vInfo.deckPos[0], vInfo.deckPos[1], vInfo.deckPos[2], vInfo.deckYaw, -0.09);
         if (OC.sound && OC.sound.missionChime) OC.sound.missionChime();
         toast('Всплытие на поверхность к ' + vInfo.name);
+      });
+    }
+    if (rovBtnMuseum) {
+      rovBtnMuseum.addEventListener('click', (e) => {
+        e.stopPropagation();
+        journalTab = 'museum';
+        if (journalTabs) journalTabs.querySelectorAll('button[data-jtab]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-jtab') === 'museum'));
+        if (journalModal) { journalModal.classList.remove('hidden'); renderJournal(); }
       });
     }
     if (rovSamplesClear) {
@@ -25229,6 +25438,7 @@ window.OC = window.OC || {};
           }
           if (subPhaseEl) {
             const inCaveCeiling = !!(biome.getCeilingHeight && biome.getCeilingHeight(craftPos.x, craftPos.z) < 25.0);
+            const fInfo = OC.faunaInfo || {};
             subPhaseEl.textContent = inBrineNow
               ? 'Галоклин · Рассол 230‰'
               : (inHaloNow
@@ -25238,9 +25448,13 @@ window.OC = window.OC || {};
                   : (biome.noSurface
                     ? (biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
                       : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м'))
-                    : (biome.hasAurora
-                      ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
-                      : (dayW < 0.35 ? 'Ночь · Био' : (dayW < 0.7 ? 'Сумерки' : 'День'))))));
+                    : (fInfo.coralSpawnIntensity > 0.35
+                      ? 'Ночь · Нерест кораллов'
+                      : (fInfo.dvmPhase === 'dusk_ascent'
+                        ? 'Сумерки · Миграция DVM'
+                        : (biome.hasAurora
+                          ? (dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день'))
+                          : (dayW < 0.35 ? 'Ночь · Био + DVM' : (dayW < 0.7 ? 'Сумерки' : 'День'))))))));
           }
           drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
         }
