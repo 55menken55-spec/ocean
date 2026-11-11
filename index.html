@@ -12995,6 +12995,7 @@ window.OC = window.OC || {};
   const lastCacheCheckPos = new T.Vector3(1e9, 1e9, 1e9);
   let lastDensity = -1;
   let dirtyRebuild = false;
+  let lastVolcDmgKey = 'none';
   let cacheComplete = false;
   let totalVisibleInstances = 0;
   let qualityHookBound = false;
@@ -13007,6 +13008,7 @@ window.OC = window.OC || {};
   const _scale = new T.Vector3();
   const _mat4 = new T.Matrix4();
   const _col = new T.Color();
+  const _volcDmgColor = new T.Color(0x5a4a3a);
 
   function chunkKey(cx, cz) {
     return cx + ',' + cz;
@@ -13102,14 +13104,20 @@ window.OC = window.OC || {};
           if (pool.cullDist <= 340 && (i & 1) === 1 && d2 > (cull * 0.58) ** 2) continue;
           if (pool.count >= pool.maxCount) continue;
 
+          // Damage от событий вулкана: tint к коричневому + сжатие по damage-фактору
+          let dmg = 0;
+          if (OC.Volcano && OC.Volcano.getDamageFactor) {
+            dmg = OC.Volcano.getDamageFactor(it.x, it.z);
+          }
           const idx = pool.count++;
           _pos.set(it.x, it.y, it.z);
           _euler.set(0, it.ry, 0);
           _quat.setFromEuler(_euler);
-          _scale.setScalar(it.scale);
+          _scale.setScalar(it.scale * (1 - dmg * 0.45));
           _mat4.compose(_pos, _quat, _scale);
           pool.mesh.setMatrixAt(idx, _mat4);
           _col.setHex(it.tint);
+          if (dmg > 0) _col.lerp(_volcDmgColor, dmg * 0.7);
           pool.mesh.setColorAt(idx, _col);
           total++;
         }
@@ -13229,6 +13237,12 @@ window.OC = window.OC || {};
     update(camPos) {
       if (!biomeRef) return;
       updateSeasonalAppearance();
+      // Damage от вулкана: если damage-state изменился, пересобрать tint (dirtyRebuild)
+      if (OC.Volcano && OC.Volcano.getDamageState) {
+        const vs = OC.Volcano.getDamageState();
+        const key = vs.active ? vs.f.toFixed(2) : 'off';
+        if (key !== lastVolcDmgKey) { lastVolcDmgKey = key; dirtyRebuild = true; }
+      }
       const q = OC.Quality.get();
       const cacheMoved = Math.hypot(camPos.x - lastCacheCheckPos.x, camPos.z - lastCacheCheckPos.z);
 
@@ -20395,6 +20409,11 @@ window.OC = window.OC || {};
   let dustAccum = 0;
   let turbAccum = 0;
   let pyroAccum = 0;
+  let debrisAccum = 0;
+  let damageState = 0;      // 0 = нет damage, 1 = damage
+  let damageValue = 0;      // текущее damage (0..1), recovery на cooling
+  let damageDirty = false;  // флаг для re-tint флоры
+  let debris = null;        // оползни: камнепады по склонам (Points, 1 draw call)
 
   const _flow = new T.Vector3();
   const _shakeTmp = { x: 0, y: 0, z: 0 };
@@ -20833,9 +20852,10 @@ window.OC = window.OC || {};
       state.intensity = 0;
     }
 
-    // Сейсмическая активность: выбросы пыли на склонах конуса
+    // Сейсмическая активность: выбросы пыли + оползни по склонам конуса
     if (state.phase === 'seismic') {
       dustAccum += dt;
+      debrisAccum += dt;
       if (dustAccum >= 1.3) {
         dustAccum = 0;
         const ang = state.rng() * 6.283;
@@ -20845,14 +20865,27 @@ window.OC = window.OC || {};
         const fx = fxRef;
         if (fx && fx.silt) fx.silt.kick({ x: px, y: biome.getHeight(px, pz) - 0.5, z: pz }, 0.3 + 0.3 * state.intensity);
       }
+      if (debrisAccum >= 2.2) {
+        debrisAccum = 0;
+        if (debris) debris.emit(state.intensity > 0.6 ? 4 : 2);
+      }
     } else if (state.phase === 'eruption') {
-      // Мутный шлейф: взлёт взвеси из кратера + регулярные kicks
+      // Мутный шлейф: взлёт взвеси из кратера + регулярные kicks + сильные оползни
       turbAccum += dt;
+      debrisAccum += dt;
       if (turbAccum >= 0.35) {
         turbAccum = 0;
         if (turb) turb.emit(9);
         if (fxRef && fxRef.silt) fxRef.silt.kick({ x: SITE.x, y: biome.getHeight(SITE.x, SITE.z) - SITE.craterD, z: SITE.z }, 0.9);
       }
+      if (debrisAccum >= 0.6) {
+        debrisAccum = 0;
+        if (debris) debris.emit(8);
+      }
+    } else if (state.phase === 'cooling') {
+      // Оползни затухают
+      debrisAccum += dt;
+      if (debrisAccum >= 1.5 && debris) { debrisAccum = 0; debris.emit(2); }
     }
 
     // Пирокластические потоки: регулярные лавины по склонам + шок-волны в начале извержения
@@ -20885,6 +20918,7 @@ window.OC = window.OC || {};
     if (turb) turb.update(dt, time, camPos);
     if (pyro) pyro.update(dt, camPos);
     if (shocks) shocks.update(dt);
+    if (debris) debris.update(dt, camPos);
 
     // Подпись фазы для HUD/телеметрии
     OC.volcanoInfo.phase = state.phase;
@@ -20984,6 +21018,156 @@ window.OC = window.OC || {};
 
   let fxRef = null;
 
+  /* Damage-зона вулкана: флора вымирает в радиусе по фазам, восстанавливается на остывании.
+     Читается в hook flora_streamer (редко, при смене damage), без allocations. */
+  function getDamageFactor(x, z) {
+    const ph = state.phase;
+    if (ph === 'idle') return 0;
+    const dx = x - SITE.x;
+    const dz = z - SITE.z;
+    const d = Math.hypot(dx, dz);
+    const R = ph === 'eruption' ? SITE.r * 0.85 : SITE.r * 1.4;
+    if (d > R) return 0;
+    const edge = OC.smoothstep(R, R * 0.5, d);
+    let f;
+    if (ph === 'eruption') f = 1.0;
+    else if (ph === 'seismic') f = (0.2 + 0.45 * state.progress) * edge;
+    else f = Math.max(0, (1 - state.progress) * 0.7) * edge; // остывание: recovery
+    return f;
+  }
+
+  /* Состояние damage для hook flora_streamer: (active, radius, factor) */
+  const _dmgTmp = { active: false, x: 0, z: 0, r: 0, f: 0 };
+  function getDamageState() {
+    const ph = state.phase;
+    if (ph === 'idle') {
+      _dmgTmp.active = false;
+      return _dmgTmp;
+    }
+    _dmgTmp.active = true;
+    _dmgTmp.x = SITE.x;
+    _dmgTmp.z = SITE.z;
+    _dmgTmp.r = ph === 'eruption' ? SITE.r * 0.85 : SITE.r * 1.4;
+    _dmgTmp.f = ph === 'eruption' ? 1.0 : (ph === 'seismic' ? 0.2 + 0.45 * state.progress : Math.max(0, (1 - state.progress) * 0.7));
+    return _dmgTmp;
+  }
+
+  /* Оползни: камнепады по склонам конуса (Points, 1 draw call, как pyroclastic) */
+  function makeDebrisFlow(scene, n, tex) {
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(n * 3);
+    const vel = new Float32Array(n * 3);
+    const life = new Float32Array(n);
+    const maxLife = new Float32Array(n);
+    const size = new Float32Array(n);
+    const alpha = new Float32Array(n);
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aSize', new T.BufferAttribute(size, 1));
+    geo.setAttribute('aAlpha', new T.BufferAttribute(alpha, 1));
+    const mat = new T.ShaderMaterial({
+      transparent: true, depthWrite: false, fog: true, blending: T.NormalBlending,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        { uTex: { value: tex }, uScale: { value: 1.0 } }
+      ]),
+      vertexShader: `
+        attribute float aSize, aAlpha;
+        uniform float uScale;
+        varying float vAlpha;
+        #include <fog_pars_vertex>
+        void main() {
+          vAlpha = aAlpha;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * uScale * (430.0 / max(1.5, -mvPosition.z));
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        varying float vAlpha;
+        #include <fog_pars_fragment>
+        void main() {
+          if (vAlpha < 0.01) discard;
+          vec4 tx = texture2D(uTex, gl_PointCoord);
+          if (tx.a < 0.02) discard;
+          gl_FragColor = vec4(vec3(0.32, 0.30, 0.29), tx.a * vAlpha * 0.7);
+          #include <fog_fragment>
+        }`
+    });
+    const pts = new T.Points(geo, mat);
+    pts.frustumCulled = false;
+    pts.visible = false;
+    scene.add(pts);
+    let cursor = 0;
+    function emit(count) {
+      for (let k = 0; k < count; k++) {
+        const i = cursor;
+        cursor = (cursor + 1) % n;
+        const ang = Math.random() * 6.28318;
+        const r = SITE.craterR + Math.random() * 26;
+        const i3 = i * 3;
+        pos[i3] = SITE.x + Math.cos(ang) * r;
+        pos[i3 + 1] = biome.getHeight(SITE.x, SITE.z) - SITE.craterD + 2 + Math.random() * 2;
+        pos[i3 + 2] = SITE.z + Math.sin(ang) * r;
+        const spd = 2.5 + Math.random() * 3.5;
+        vel[i3] = Math.cos(ang) * spd * 0.6;
+        vel[i3 + 1] = -spd * 0.8;
+        vel[i3 + 2] = Math.sin(ang) * spd * 0.6;
+        const ml = 6.0 + Math.random() * 4.0;
+        life[i] = ml;
+        maxLife[i] = ml;
+        size[i] = 2.0 + Math.random() * 3.0;
+        alpha[i] = 0.5;
+      }
+      pts.visible = true;
+    }
+    function update(dt, camPos) {
+      const camD = Math.hypot(camPos.x - SITE.x, camPos.z - SITE.z);
+      pts.visible = pts.visible && camD < 420;
+      if (!pts.visible) return 0;
+      let alive = 0;
+      for (let i = 0; i < n; i++) {
+        const l = life[i];
+        if (l <= 0) { alpha[i] = 0; continue; }
+        const nl = l - dt;
+        life[i] = nl;
+        if (nl <= 0) { alpha[i] = 0; continue; }
+        const i3 = i * 3;
+        vel[i3 + 1] -= 9.8 * dt;
+        pos[i3] += vel[i3] * dt;
+        pos[i3 + 1] += vel[i3 + 1] * dt;
+        pos[i3 + 2] += vel[i3 + 2] * dt;
+        // Скольжение по склону: притяжение к ребру конуса
+        const dx = pos[i3] - SITE.x;
+        const dz = pos[i3 + 2] - SITE.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 240) { vel[i3] *= 0.98; vel[i3 + 2] *= 0.98; }
+        // Поддержка над дном
+        const floor = biome.getHeight(pos[i3], pos[i3 + 2]) + 0.5;
+        if (pos[i3 + 1] < floor) {
+          pos[i3 + 1] = floor;
+          vel[i3 + 1] = 0;
+          vel[i3] *= 0.65;
+          vel[i3 + 2] *= 0.65;
+        }
+        size[i] += dt * 0.5;
+        const frac = nl / maxLife[i];
+        alpha[i] = Math.min(0.7, frac * 1.2) * OC.smoothstep(1.0, 0.8, frac);
+        alive++;
+      }
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.aSize.needsUpdate = true;
+      geo.attributes.aAlpha.needsUpdate = true;
+      return alive;
+    }
+    return {
+      pts,
+      emit,
+      update,
+      setScale(s) { mat.uniforms.uScale.value = s; }
+    };
+  }
+
   function init(scn, bm, fx) {
     dispose();
     scene = scn;
@@ -21013,10 +21197,12 @@ window.OC = window.OC || {};
     const nScale = q && typeof q.particlesScale === 'number' ? q.particlesScale : 1.0;
     turb = makeTurbidityPlume(scene, Math.max(80, Math.round(180 * Math.min(1.3, nScale))), fx && fx.texSoft);
 
-    // Пирокластические потоки + всплески давления
+    // Пирокластические потоки + всплески давления + оползни
     pyro = makePyroclasticFlow(scene, Math.max(80, Math.round(160 * Math.min(1.3, nScale))), fx && fx.texSoft);
     pyro.pts.visible = false;
     shocks = makeShockwaves(scene);
+    debris = makeDebrisFlow(scene, Math.max(60, Math.round(120 * Math.min(1.3, nScale))), fx && fx.texSoft);
+    debris.pts.visible = false;
 
     // Свет кратера (пульсирует во время событий)
     craterLight = new T.PointLight(0xff6a22, 0, 80, 1.6);
@@ -21028,7 +21214,7 @@ window.OC = window.OC || {};
       dispose,
       getState: () => state,
       getSite: () => SITE,
-      setScale(s) { if (turb) turb.setScale(s); if (pyro) pyro.setScale(s); }
+      setScale(s) { if (turb) turb.setScale(s); if (pyro) pyro.setScale(s); if (debris) debris.setScale(s); }
     };
   }
 
@@ -21056,6 +21242,11 @@ window.OC = window.OC || {};
         if (m.material) m.material.dispose();
       }
     }
+    if (debris && debris.pts) {
+      scene.remove(debris.pts);
+      if (debris.pts.geometry) debris.pts.geometry.dispose();
+      if (debris.pts.material) debris.pts.material.dispose();
+    }
     if (group) {
       scene.remove(group);
       group.traverse((o) => {
@@ -21070,6 +21261,7 @@ window.OC = window.OC || {};
     turb = null;
     pyro = null;
     shocks = null;
+    debris = null;
     craterLight = null;
     rimMesh = null;
     group = null;
@@ -21091,6 +21283,8 @@ window.OC = window.OC || {};
     getTremor,
     getCurrentBoost,
     getInfluence,
+    getDamageFactor,
+    getDamageState,
     isActive: () => state.phase !== 'idle',
     getSite: () => SITE,
     /* Тест- hook: принудительная фаза машины событий (tests/verify.mjs) */

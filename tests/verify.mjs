@@ -508,6 +508,25 @@ const vInfErup = OC.Volcano.getInfluence();
 assert(vInfErup.active && vInfErup.panic > 1.5 && vInfErup.strength > 12, 'Eruption must drive strong radial flee');
 OC.Volcano._forcePhase('cooling');
 assert(OC.Volcano.getInfluence().panic <= 1.2, 'Cooling must decay flee');
+// Seismic aftermath + flora damage system
+const schoolsSrc2 = groupSource('engine/flora');
+assert(schoolsSrc2.includes('getDamageFactor') && schoolsSrc2.includes('_volcDmgColor'),
+  'flora_streamer.js must apply volcano damage tint via getDamageFactor');
+OC.Volcano._forcePhase('idle');
+assert(OC.Volcano.getDamageFactor(vSite.x, vSite.z) === 0, 'Volcano damage must be 0 when idle');
+OC.Volcano._forcePhase('seismic');
+assert(OC.Volcano.getDamageFactor(vSite.x, vSite.z) >= 0.2 && OC.Volcano.getDamageFactor(vSite.x, vSite.z) < 0.6,
+  'Seismic phase must damage flora near crater (0.2..0.6)');
+OC.Volcano._forcePhase('eruption');
+assert(OC.Volcano.getDamageFactor(vSite.x, vSite.z) === 1.0, 'Eruption must fully damage flora at crater');
+const farDmg = OC.Volcano.getDamageFactor(vSite.x + 250, vSite.z);
+assert(farDmg === 0, 'Damage must be zero outside influence radius');
+OC.Volcano._forcePhase('cooling');
+assert(OC.Volcano.getDamageFactor(vSite.x, vSite.z) <= 0.7, 'Cooling must restore flora (damage decay)');
+OC.Volcano._forcePhase('idle');
+OC.Volcano.update(0.1, 0, camera.position);
+assert(OC.Volcano.getDamageFactor(vSite.x, vSite.z) === 0, 'Damage must clear after event');
+
 // Eruption FX: crater flash spike, shockwave rings, pyroclastic flow
 OC.Volcano._forcePhase('eruption');
 OC.Volcano.update(0.1, 0, camera.position);
