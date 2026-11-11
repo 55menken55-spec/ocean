@@ -272,6 +272,9 @@ const faunaSrc = [
   'src/engine/fauna/cetaceans.js',
   'src/engine/fauna/galapagos.js',
   'src/engine/fauna/amazon_river.js',
+  'src/engine/fauna/particles.js',
+  'src/engine/fauna/splash.js',
+  'src/engine/fauna/haze.js',
   'src/engine/fauna/systems.js'
 ].map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')).join('\n');
 assert(faunaSrc.includes('marine_snow'), 'fauna_engine.js missing marine_snow deep particle layer');

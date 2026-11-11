@@ -18340,11 +18340,10 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeRiverStingray = makeRiverStingray;
 })(window.OC);
 
-// === engine/fauna/systems.js ===
-/* ================= ФАУНА: ЭКОСИСТЕМНЫЕ СИСТЕМЫ ЧАСТИЦ И ЭФФЕКТОВ ================= */
-/* Пузырьки/планктон/снег, ночной нерест кораллов, брызги выпрыгивающих китов,
-   биолюминесцентный след Noctiluca, дымка термоклина/галоклина, мутьевые шлейфы
-   бентоса и струи гидратных сипов. Чистые фабрики: сцена + текстура на входе. */
+// === engine/fauna/particles.js ===
+/* ================= ЧАСТИЦЫ СРЕДЫ: ПЛАНКТОН, СНЕГ, ПУЗЫРЬКИ, НЕРЕСТ КОРАЛЛОВ ================= */
+/* Камера-относительные поля частиц (планктон, морской снег, пузырьки) и ночной
+   нерест коралловых полипов с синхронизацией по лунному циклу. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
@@ -18446,6 +18445,7 @@ window.OC = window.OC || {};
   };
 
   /* ---------- Ночной массовый нерест кораллов (поднимающиеся гаметы) ---------- */
+
   const createCoralSpawningSystem = function (scene, n, tex) {
     const geo = new T.BufferGeometry();
     const pos = new Float32Array(n * 3);
@@ -18539,6 +18539,22 @@ window.OC = window.OC || {};
   };
 
   /* ---------- Система водных брызг (выпрыги китов, белух и морских львов) ---------- */
+
+  OC._FaunaSystems = Object.assign(OC._FaunaSystems || {}, {
+    createCameraRelativeParticles,
+    createCoralSpawningSystem,
+  });
+})(window.OC);
+
+// === engine/fauna/splash.js ===
+/* ================= ВСПЛЕСКИ И БИОЛЮМИНЕСЦЕНТНЫЙ СЛЕД ================= */
+/* Брызги выпрыгивающих китов и дельфинов у поверхности и след Noctiluca —
+   светящийся шлейф за движущимся объектом. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
   const makeSplashSystem = function (scene, texHard) {
     const N = 420;
     const pos = new Float32Array(N * 3);
@@ -18651,6 +18667,7 @@ window.OC = window.OC || {};
   };
 
   /* ---------- Биолюминесцентный след ночесветок (Noctiluca) при движении дайвера ---------- */
+
   const makeBiolumTrail = function (scene, tex, noSurface) {
     const N = 180;
     const geo = new T.BufferGeometry();
@@ -18745,6 +18762,22 @@ window.OC = window.OC || {};
   };
 
   /* ---------- Видимая оптическая дымка термоклина / галоклина (Schlieren haze veil) ---------- */
+
+  OC._FaunaSystems = Object.assign(OC._FaunaSystems || {}, {
+    makeSplashSystem,
+    makeBiolumTrail,
+  });
+})(window.OC);
+
+// === engine/fauna/haze.js ===
+/* ================= ДЫМКА ТЕРМОКЛИНА, МУТЬ И ГИДРАТНЫЕ СИПЫ ================= */
+/* Объёмная дымка на границе термоклина/галоклина, взвесь бентоса и струи
+   метановых гидратов у холодных сипов. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
   const makeThermoclineHaze = function (scene, biome) {
     const id = biome ? biome.id : '';
     let thermoY = -22.0;
@@ -18835,6 +18868,7 @@ window.OC = window.OC || {};
   };
 
   /* ---------- Дно-подъёмные мутьевые шлейфы (Benthic Silt-Out Plumes) ---------- */
+
   const makeBenthicSiltSystem = function (scene, biome, texSoft) {
     const N = 240;
     const geo = new T.BufferGeometry();
@@ -18978,6 +19012,7 @@ window.OC = window.OC || {};
   };
 
   /* ---------- Шлейфы пузырьков газовых гидратов и холодных метановых сипов ---------- */
+
   const makeHydratePlumeSystem = function (scene, biome, texHard) {
     const id = biome ? biome.id : '';
     const hasHydrates = (id === 'brine_pool' || id === 'mariana_trench');
@@ -19071,16 +19106,23 @@ window.OC = window.OC || {};
     };
   };
 
-
-  OC._FaunaSystems = {
-    createCameraRelativeParticles,
-    createCoralSpawningSystem,
-    makeSplashSystem,
-    makeBiolumTrail,
+  OC._FaunaSystems = Object.assign(OC._FaunaSystems || {}, {
     makeThermoclineHaze,
     makeBenthicSiltSystem,
-    makeHydratePlumeSystem
-  };
+    makeHydratePlumeSystem,
+  });
+})(window.OC);
+
+// === engine/fauna/systems.js ===
+/* ================= ФАУНА: РЕЕСТР ЭКОСИСТЕМНЫХ СИСТЕМ ================= */
+/* Реализации разложены по группам: fauna/particles.js (планктон/снег/нерест),
+   fauna/splash.js (всплески и биолюм-след), fauna/haze.js (термоклин, муть, гидраты).
+   Здесь только сборка публичного реестра OC._FaunaSystems. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+
+  OC._FaunaSystems = OC._FaunaSystems || {};
 })(window.OC);
 
 // === engine/fauna/spawn.js ===
