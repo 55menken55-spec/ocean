@@ -516,12 +516,19 @@
     .biome-pill{flex:0 0 auto;padding:4px 9px;font-size:10px}
     .res-badge{display:none}
   }
+  @media (max-width:1500px){
+    /* 14 иконок не помещаются в один ряд вместе с брендом и телеметрией:
+       рейл переносится в два ряда, телеметрия уходит вниз по центру. */
+    .icon-rail{max-width:400px}
+    .telemetry{top:auto;bottom:14px;left:50%;transform:translateX(-50%);max-width:min(60vw, 560px)}
+    .panel{top:calc(126px + env(safe-area-inset-top, 0px))}
+    .brand{max-width:calc(100vw - 460px)}
+  }
   @media (max-width:1100px){
-    /* Средние экраны: бренд сжимается, статус уходит — угол занимает только рейл */
     .brand{max-width:150px}
     .brand p{display:none}
     .status{display:none}
-    .telemetry{max-width:44vw}
+    .telemetry{max-width:70vw}
   }
   @media (max-width:720px){
     .brand{left:14px;top:calc(10px + env(safe-area-inset-top, 0px))}
@@ -531,7 +538,7 @@
     .icon-btn{width:38px;height:38px;font-size:14px;border-radius:11px}
     .rail-toggle{width:24px;height:38px}
     .icon-group{padding:2px}
-    .panel{right:10px;top:calc(58px + env(safe-area-inset-top, 0px));width:min(300px, calc(100vw - 20px));
+    .panel{right:10px;top:calc(64px + env(safe-area-inset-top, 0px));width:min(300px, calc(100vw - 20px));
       max-height:calc(100vh - 120px)}
     .panel.lab-panel,.panel.rov-panel{left:10px;right:10px;width:auto}
     .status{display:none}
@@ -557,7 +564,7 @@
     .brand p{display:none}
     .icon-btn{width:34px;height:34px;font-size:12.5px}
     .biome-bar{margin-top:7px}
-    .telemetry{font-size:9.5px;padding:5px 10px;gap:6px}
+    .telemetry{font-size:9.5px;padding:5px 10px;gap:6px;max-width:calc(100vw - 96px)}
     .touch-actions{gap:6px}
     .touch-act{width:46px;height:46px;font-size:13px}
     .sub-horizon{width:70px;margin-left:-35px}
@@ -29592,7 +29599,12 @@ window.OC = window.OC || {};
     railEl = document.getElementById('topright');
     toggleEl = document.getElementById('btn-rail-toggle');
 
-    applyCollapsed(readCollapsed());
+    /* На узких экранах 14 иконок закрывают пол-экрана — по умолчанию прячем рейл.
+       Явный выбор пользователя (localStorage) всегда важнее. */
+    let stored = null;
+    try { stored = localStorage.getItem(COLLAPSE_KEY); } catch (e) { stored = null; }
+    const narrow = typeof window !== 'undefined' && window.innerWidth <= 720;
+    applyCollapsed(stored === null ? narrow : stored === '1');
 
     if (toggleEl) {
       toggleEl.addEventListener('click', (e) => {

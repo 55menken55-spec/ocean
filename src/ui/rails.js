@@ -69,7 +69,12 @@ window.OC = window.OC || {};
     railEl = document.getElementById('topright');
     toggleEl = document.getElementById('btn-rail-toggle');
 
-    applyCollapsed(readCollapsed());
+    /* На узких экранах 14 иконок закрывают пол-экрана — по умолчанию прячем рейл.
+       Явный выбор пользователя (localStorage) всегда важнее. */
+    let stored = null;
+    try { stored = localStorage.getItem(COLLAPSE_KEY); } catch (e) { stored = null; }
+    const narrow = typeof window !== 'undefined' && window.innerWidth <= 720;
+    applyCollapsed(stored === null ? narrow : stored === '1');
 
     if (toggleEl) {
       toggleEl.addEventListener('click', (e) => {

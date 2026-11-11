@@ -327,6 +327,8 @@ try {
       await mobilePage.setViewportSize({ width: vp.w, height: vp.h });
       await mobilePage.waitForTimeout(320);
       const bad = await mobilePage.evaluate(() => {
+        // проверяем самый плотный случай: рейл развёрнут
+        if (window.OC && window.OC.UI && window.OC.UI.Rail) window.OC.UI.Rail.setCollapsed(false, false);
         const rect = (sel) => {
           const el = document.querySelector(sel);
           if (!el) return null;
