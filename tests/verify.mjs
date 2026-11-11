@@ -432,6 +432,45 @@ assert(vItems.some((it) => it.species === 'vent_chimney') && vItems.some((it) =>
 const ventUp = ventBiome.getCurrentAt(-10, -14, 15, 1.0, new T.Vector3());
 assert(ventUp.y > 1.2, `Abyssal black smoker updraft expected > 1.2 m/s, got ${ventUp.y.toFixed(2)}`);
 
+// Verify submarine volcano prototype: rare warning events (seismic, turbidity, gas, currents)
+assert(OC.Volcano && typeof OC.Volcano.init === 'function', 'OC.Volcano prototype must be loaded');
+assert(ventBiome.encyclopedia.volcanic_fumarole && ventBiome.encyclopedia.submarine_volcano,
+  'hydrothermal_vents encyclopedia must include volcanic_fumarole & submarine_volcano');
+const vSite = OC.Volcano.SITE;
+const vCrater = ventBiome.getHeight(vSite.x, vSite.z);
+assert(vCrater < -20, `Volcano crater floor expected < -20 m, got ${vCrater}`);
+const vOn = ventBiome.getHeight(vSite.x + 40, vSite.z);
+const vOff = ventBiome.getHeight(vSite.x + 140, vSite.z);
+assert(vOn > vOff + 5, `Volcano cone must rise above the surrounding plain (${vOn} vs ${vOff})`);
+assert(ventBiome.getZoneAt(vSite.x, -20, vSite.z).id === 'volcano_seamount', 'Volcano must own a dedicated zone');
+const vLm = ventBiome.landmarks.find((l) => l.id === 'submarine_volcano');
+assert(vLm && vLm.y > ventBiome.getHeight(vLm.x, vLm.z) + 1.2, 'Volcano landmark must clear terrain');
+const vVolcItems = ventBiome.generateChunkFlora(Math.floor(vSite.x / 150), Math.floor(vSite.z / 150), 150, 1.0, OC.mulberry32(4242));
+assert(vVolcItems.some((it) => it.species === 'volcanic_fumarole'), 'hydrothermal_vents must spawn volcanic_fumarole near the volcano');
+
+// Drive the event machine: idle → seismic → eruption → cooling → idle
+const vScene = new T.Scene();
+const vCam = new T.Vector3(vSite.x, -18, vSite.z);
+const vfx = OC.Volcano.init(vScene, ventBiome, { silt: null, texSoft: OC.circleTexture(64, false), texHard: OC.circleTexture(64, true) });
+assert(vfx && OC.Volcano.getState().phase === 'idle', 'Volcano must start idle');
+OC.Volcano._forcePhase('seismic');
+OC.Volcano.update(31, 100.0, vCam); // exceed 30s herald → eruption
+assert(OC.Volcano.getState().phase === 'eruption', 'Seismic herald must transition to eruption');
+const _vCur = new T.Vector3();
+ventBiome.getCurrentAt(vSite.x, vCrater + 12, vSite.z, 1.0, _vCur);
+assert(_vCur.y > 1.5, `Volcano eruption updraft expected > 1.5 m/s, got ${_vCur.y.toFixed(2)}`);
+const vTremor = OC.Volcano.getTremor();
+assert(vTremor.active && vTremor.strength > 0.5, 'Eruption must expose acoustic tremor');
+OC.Volcano.update(15, 115.0, vCam); // exceed 14s → cooling
+assert(OC.Volcano.getState().phase === 'cooling', 'Eruption must transition to cooling');
+OC.Volcano.update(17, 132.0, vCam); // exceed 16s → idle
+assert(OC.Volcano.getState().phase === 'idle', 'Volcano must return to idle after cooling');
+const _vCur2 = new T.Vector3();
+ventBiome.getCurrentAt(vSite.x, vCrater + 12, vSite.z, 1.0, _vCur2);
+assert(Math.abs(_vCur2.y) < 0.5, 'Volcano must be quiet when idle');
+OC.Volcano.dispose();
+console.log('   Submarine volcano: terrain, zones, flora, event machine & current events verified.');
+
 // Verify Arctic Sea specifics: polar temperature < -1.0C, aurora, ice_floe/iceberg/brinicle/kelp_arctic & Ultra 5x5 capacity
 const arcticBiome = OC.Biomes.get('arctic_sea');
 assert(arcticBiome && arcticBiome.hasAurora, 'arctic_sea must configure hasAurora');
@@ -787,7 +826,7 @@ for (const b of OC.Biomes.list()) {
   const sum = OC.Expedition.getBiomeSummary(b);
   assert(sum.speciesTotal === Object.keys(b.encyclopedia).length && sum.missionsTotal === 4, `getBiomeSummary mismatch for ${b.id}`);
 }
-assert(totalTourStages === 58, `Expected 58 total guided tour stages across 11 biomes, got ${totalTourStages}`);
+assert(totalTourStages === 59, `Expected 59 total guided tour stages across 11 biomes, got ${totalTourStages}`);
 
 for (const bc of beacons) {
   const rad = Math.hypot(bc.x, bc.y, bc.z);
@@ -1630,7 +1669,7 @@ assert.equal(baikalReportData.ctdCast.oxygenProfile.length, ctdBaikal.bins.lengt
 assert.equal(baikalReportData.ctdCast.profile[0].conductivityUSCm, ctdBaikal.bins[0].conductivityUSCm, 'JSON report must retain the conductivity/TDS vertical profile');
 const parsedRep = JSON.parse(repJson.content);
 assert.equal(parsedRep.biomes.length, 11, 'JSON scientific report must contain all 11 biomes');
-assert(parsedRep.summary.missionsTotal === 44 && parsedRep.summary.speciesTotal === 230, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
+assert(parsedRep.summary.missionsTotal === 44 && parsedRep.summary.speciesTotal === 232, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
 
 assert(typeof OC.Quality.evaluateAutoLod === 'function' && typeof OC.Quality.setAutoLod === 'function' && typeof OC.Quality.getAutoLodState === 'function', 'OC.Quality must expose adaptive Auto-LOD controller');
 OC.Quality.set('high');

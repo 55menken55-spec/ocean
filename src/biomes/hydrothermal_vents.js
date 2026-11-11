@@ -51,6 +51,15 @@ window.OC = window.OC || {};
       depthLabel: '2490 – 2538 м',
       tempC: 1.8,
       description: 'Вечный мрак батипелагиали (250 атм), где охотятся удильщики с биолюминесцентной приманкой и кальмары.'
+    },
+    {
+      id: 'volcano_seamount',
+      name: 'Подводный вулкан-сеаунд',
+      shortName: 'Вулкан',
+      color: '#b8863c',
+      depthLabel: '2438 – 2478 м',
+      tempC: 3.4,
+      description: 'Спящий океанический вулкан: раз в несколько минут просыпаются редкие события — сейсмическая активность, мутный шлейф, газовые выбросы и локальные изменения течений.'
     }
   ];
 
@@ -62,6 +71,10 @@ window.OC = window.OC || {};
     { x: 25, z: -480, r: 55, peakY: -35.0 },
     { x: -30, z: 510, r: 60, peakY: -33.0 }
   ];
+
+  /* Подводный вулкан-сеаунд (редкие события с предвестниками, см. engine/volcano.js):
+     спящий конус далеко от полей курильщиков с вершинным кратером. */
+  const VOLCANO = { x: -360, z: 180, r: 92, peakY: -18.5, craterR: 15, craterD: 5.5 };
 
   function riftAxisX(z) {
     return Math.sin(z * 0.0028) * 70 + Math.cos(z * 0.0062) * 26;
@@ -115,6 +128,15 @@ window.OC = window.OC || {};
       }
     }
 
+    // Подводный вулкан-сеаунд: конус + вершинный кратер (детерминированно, без Math.random)
+    const vdV = Math.hypot(x - VOLCANO.x, z - VOLCANO.z);
+    if (vdV < VOLCANO.r * 1.25) {
+      const cone = OC.smoothstep(VOLCANO.r, 8.0, vdV);
+      h = OC.lerp(h, VOLCANO.peakY + (OC.noise2(x * 0.06, z * 0.06) - 0.5) * 2.2, cone * 0.92);
+      const crater = OC.smoothstep(VOLCANO.craterR, 3.0, vdV);
+      h -= crater * VOLCANO.craterD;
+    }
+
     return OC.clamp(h, -118.0, -12.0);
   }
 
@@ -123,6 +145,7 @@ window.OC = window.OC || {};
   }
 
   function getZoneAt(x, y, z) {
+    if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < VOLCANO.r) return ZONES[4]; // volcano_seamount
     const vd = nearestVentDist(x, z);
     if (vd < 54) return ZONES[0]; // smoker_field
     if (vd < 115) return ZONES[1]; // riftia_garden
@@ -208,6 +231,11 @@ window.OC = window.OC || {};
         }
       }
     }
+
+    // Локальные изменения течений от подводного вулкана (редкие события, см. engine/volcano.js)
+    if (OC.Volcano && OC.Volcano.getCurrentBoost) {
+      OC.Volcano.getCurrentBoost(x, y, z, out);
+    }
     return out;
   }
 
@@ -233,6 +261,24 @@ window.OC = window.OC || {};
         const pz = vf.z + Math.sin(a) * r;
         if (px >= x0 && px < x0 + chunkSize && pz >= z0 && pz < z0 + chunkSize) {
           add('vent_chimney', px, pz, i === 0 ? 1.25 : OC.lerp(0.65, 1.15, rng()));
+        }
+      }
+    }
+
+    // 1b. Подводный вулкан: фумаролы на склонах конуса и хемосинтетические оазисы в тёплом гало
+    if (Math.abs(VOLCANO.x - x0) < VOLCANO.r * 1.4 && Math.abs(VOLCANO.z - z0) < VOLCANO.r * 1.4) {
+      const vSlots = Math.round(14 * density);
+      for (let i = 0; i < vSlots; i++) {
+        const x = x0 + rng() * chunkSize;
+        const z = z0 + rng() * chunkSize;
+        const vd = Math.hypot(x - VOLCANO.x, z - VOLCANO.z);
+        if (vd > VOLCANO.r * 1.25) continue;
+        if (vd > VOLCANO.craterR * 1.5 && rng() < 0.6) {
+          add('volcanic_fumarole', x, z, OC.lerp(0.8, 1.4, rng()));
+        } else if (rng() < 0.5) {
+          add('riftia_worms', x, z, OC.lerp(0.75, 1.2, rng()));
+        } else {
+          add('vent_mussels', x, z, OC.lerp(0.8, 1.3, rng()));
         }
       }
     }
@@ -307,6 +353,18 @@ window.OC = window.OC || {};
       pitch: -0.16,
       clearance: 5.5,
       description: 'Холодная тьма глубинного рва (2500+ м): охотничьи угодья удильщиков и глубоководных кальмаров.'
+    },
+    {
+      id: 'submarine_volcano',
+      name: 'Подводный вулкан',
+      zoneId: 'volcano_seamount',
+      x: VOLCANO.x,
+      y: -13.0,
+      z: VOLCANO.z,
+      yaw: 0.6,
+      pitch: -0.32,
+      clearance: 6.0,
+      description: 'Спящий подводный вулкан-сеаунд: раз в несколько минут просыпаются сейсмические толчки, мутные шлейфы и газовые выбросы с предвестниками.'
     }
   ];
 
@@ -326,7 +384,9 @@ window.OC = window.OC || {};
     { x: landmarks[2].x, y: -20.0, z: landmarks[2].z, lx: 500, ly: -24.0, lz: -45, title: 'Базальтовые уступы океанического разлома', duration: 9,
       fact: 'Подушечные базальтовые лавы формируют молодую земную кору вдоль Восточно-Тихоокеанского поднятия и порождают стеклянные губки.' },
     { x: landmarks[3].x, y: -62.0, z: landmarks[3].z, lx: -220, ly: -74.0, lz: -110, title: 'Жёлоб бездны и биолюминесценция', duration: 10,
-      fact: 'В вечной темноте 2500 м глубин свет рождается химически: морской чёрт манит добычу светящейся эской, а кальмар выпускает сияние.' }
+      fact: 'В вечной темноте 2500 м глубин свет рождается химически: морской чёрт манит добычу светящейся эской, а кальмар выпускает сияние.' },    { x: landmarks[4].x, y: -12.0, z: landmarks[4].z, lx: VOLCANO.x, ly: -22.0, lz: VOLCANO.z, title: 'Подводный вулкан-сеаунд', duration: 10,
+      fact: 'Спящий океанический вулкан просыпается раз в несколько минут: сейсмические толчки, мутный шлейф, газовые выбросы и локальные изменения течений — с предвестниками, без анонсов.' }
+
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
@@ -361,7 +421,11 @@ window.OC = window.OC || {};
     octopus_dumbo: ['Осьминог Дамбо (Гримпотевтис)', 'Grimpoteuthis bathynectes', 'Мегафауна', 'Разлом базальта', '2440 – 2530 м',
       'Миниатюрный глубоководный осьминог, грациозно взмахивающий парными плавниками-«ушками» над лавовыми подушками.'],
     jelly: ['Абиссальная светящаяся медуза', 'Atolla wyvillei', 'Беспозвоночные', 'Абиссаль', '2435 – 2530 м',
-      'Глубоководная корономедуза с тревожным кольцом голубой биолюминесценции для отпугивания хищников.']
+      'Глубоководная корономедуза с тревожным кольцом голубой биолюминесценции для отпугивания хищников.'],
+    volcanic_fumarole: ['Вулканическая CO₂-фумарола', 'Submarine Fumarole', 'Геология', 'Вулкан', '2438 – 2478 м',
+      'Трещины базальтового конуса, через которые выходит перегретый CO₂ и водяной пар — спутник сейсмической активности вулкана.'],
+    submarine_volcano: ['Подводный вулкан-сеаунд', 'Submarine Seamount Volcano', 'Геология', 'Вулкан', '2438 – 2478 м',
+      'Спящий океанический вулкан: раз в несколько минут просыпаются редкие события — сейсмическая активность, мутный шлейф, газовые выбросы и локальные изменения течений.']
   };
 
   const FAUNA_PLAN = {

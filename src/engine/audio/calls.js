@@ -164,4 +164,42 @@ window.OC = window.OC || {};
     src.connect(lp); lp.connect(g); g.connect(S.master);
     src.start(now); src.stop(now + dur + 0.05);
   };
+
+  /* Глухой сейсмический руммер подводного вулкана (толчки + низкочастотный гул) */
+  S.volcanoRumble = function (strength) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 4.5;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.9));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(180, now);
+    lp.frequency.linearRampToValueAtTime(60, now + dur);
+    const g = ctx.createGain();
+    const amp = Math.min(0.22, 0.05 + 0.17 * (strength || 0.5));
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(amp, now + 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(g); g.connect(S.master);
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(34, now);
+    osc.frequency.linearRampToValueAtTime(22, now + 3.2);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, now);
+    og.gain.linearRampToValueAtTime(amp * 0.8, now + 0.35);
+    og.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    osc.connect(og); og.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.05);
+    osc.start(now); osc.stop(now + dur + 0.05);
+  };
 })(window.OC);

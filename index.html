@@ -3515,6 +3515,15 @@ window.OC = window.OC || {};
       depthLabel: '2490 – 2538 м',
       tempC: 1.8,
       description: 'Вечный мрак батипелагиали (250 атм), где охотятся удильщики с биолюминесцентной приманкой и кальмары.'
+    },
+    {
+      id: 'volcano_seamount',
+      name: 'Подводный вулкан-сеаунд',
+      shortName: 'Вулкан',
+      color: '#b8863c',
+      depthLabel: '2438 – 2478 м',
+      tempC: 3.4,
+      description: 'Спящий океанический вулкан: раз в несколько минут просыпаются редкие события — сейсмическая активность, мутный шлейф, газовые выбросы и локальные изменения течений.'
     }
   ];
 
@@ -3526,6 +3535,10 @@ window.OC = window.OC || {};
     { x: 25, z: -480, r: 55, peakY: -35.0 },
     { x: -30, z: 510, r: 60, peakY: -33.0 }
   ];
+
+  /* Подводный вулкан-сеаунд (редкие события с предвестниками, см. engine/volcano.js):
+     спящий конус далеко от полей курильщиков с вершинным кратером. */
+  const VOLCANO = { x: -360, z: 180, r: 92, peakY: -18.5, craterR: 15, craterD: 5.5 };
 
   function riftAxisX(z) {
     return Math.sin(z * 0.0028) * 70 + Math.cos(z * 0.0062) * 26;
@@ -3579,6 +3592,15 @@ window.OC = window.OC || {};
       }
     }
 
+    // Подводный вулкан-сеаунд: конус + вершинный кратер (детерминированно, без Math.random)
+    const vdV = Math.hypot(x - VOLCANO.x, z - VOLCANO.z);
+    if (vdV < VOLCANO.r * 1.25) {
+      const cone = OC.smoothstep(VOLCANO.r, 8.0, vdV);
+      h = OC.lerp(h, VOLCANO.peakY + (OC.noise2(x * 0.06, z * 0.06) - 0.5) * 2.2, cone * 0.92);
+      const crater = OC.smoothstep(VOLCANO.craterR, 3.0, vdV);
+      h -= crater * VOLCANO.craterD;
+    }
+
     return OC.clamp(h, -118.0, -12.0);
   }
 
@@ -3587,6 +3609,7 @@ window.OC = window.OC || {};
   }
 
   function getZoneAt(x, y, z) {
+    if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < VOLCANO.r) return ZONES[4]; // volcano_seamount
     const vd = nearestVentDist(x, z);
     if (vd < 54) return ZONES[0]; // smoker_field
     if (vd < 115) return ZONES[1]; // riftia_garden
@@ -3672,6 +3695,11 @@ window.OC = window.OC || {};
         }
       }
     }
+
+    // Локальные изменения течений от подводного вулкана (редкие события, см. engine/volcano.js)
+    if (OC.Volcano && OC.Volcano.getCurrentBoost) {
+      OC.Volcano.getCurrentBoost(x, y, z, out);
+    }
     return out;
   }
 
@@ -3697,6 +3725,24 @@ window.OC = window.OC || {};
         const pz = vf.z + Math.sin(a) * r;
         if (px >= x0 && px < x0 + chunkSize && pz >= z0 && pz < z0 + chunkSize) {
           add('vent_chimney', px, pz, i === 0 ? 1.25 : OC.lerp(0.65, 1.15, rng()));
+        }
+      }
+    }
+
+    // 1b. Подводный вулкан: фумаролы на склонах конуса и хемосинтетические оазисы в тёплом гало
+    if (Math.abs(VOLCANO.x - x0) < VOLCANO.r * 1.4 && Math.abs(VOLCANO.z - z0) < VOLCANO.r * 1.4) {
+      const vSlots = Math.round(14 * density);
+      for (let i = 0; i < vSlots; i++) {
+        const x = x0 + rng() * chunkSize;
+        const z = z0 + rng() * chunkSize;
+        const vd = Math.hypot(x - VOLCANO.x, z - VOLCANO.z);
+        if (vd > VOLCANO.r * 1.25) continue;
+        if (vd > VOLCANO.craterR * 1.5 && rng() < 0.6) {
+          add('volcanic_fumarole', x, z, OC.lerp(0.8, 1.4, rng()));
+        } else if (rng() < 0.5) {
+          add('riftia_worms', x, z, OC.lerp(0.75, 1.2, rng()));
+        } else {
+          add('vent_mussels', x, z, OC.lerp(0.8, 1.3, rng()));
         }
       }
     }
@@ -3771,6 +3817,18 @@ window.OC = window.OC || {};
       pitch: -0.16,
       clearance: 5.5,
       description: 'Холодная тьма глубинного рва (2500+ м): охотничьи угодья удильщиков и глубоководных кальмаров.'
+    },
+    {
+      id: 'submarine_volcano',
+      name: 'Подводный вулкан',
+      zoneId: 'volcano_seamount',
+      x: VOLCANO.x,
+      y: -13.0,
+      z: VOLCANO.z,
+      yaw: 0.6,
+      pitch: -0.32,
+      clearance: 6.0,
+      description: 'Спящий подводный вулкан-сеаунд: раз в несколько минут просыпаются сейсмические толчки, мутные шлейфы и газовые выбросы с предвестниками.'
     }
   ];
 
@@ -3790,7 +3848,9 @@ window.OC = window.OC || {};
     { x: landmarks[2].x, y: -20.0, z: landmarks[2].z, lx: 500, ly: -24.0, lz: -45, title: 'Базальтовые уступы океанического разлома', duration: 9,
       fact: 'Подушечные базальтовые лавы формируют молодую земную кору вдоль Восточно-Тихоокеанского поднятия и порождают стеклянные губки.' },
     { x: landmarks[3].x, y: -62.0, z: landmarks[3].z, lx: -220, ly: -74.0, lz: -110, title: 'Жёлоб бездны и биолюминесценция', duration: 10,
-      fact: 'В вечной темноте 2500 м глубин свет рождается химически: морской чёрт манит добычу светящейся эской, а кальмар выпускает сияние.' }
+      fact: 'В вечной темноте 2500 м глубин свет рождается химически: морской чёрт манит добычу светящейся эской, а кальмар выпускает сияние.' },    { x: landmarks[4].x, y: -12.0, z: landmarks[4].z, lx: VOLCANO.x, ly: -22.0, lz: VOLCANO.z, title: 'Подводный вулкан-сеаунд', duration: 10,
+      fact: 'Спящий океанический вулкан просыпается раз в несколько минут: сейсмические толчки, мутный шлейф, газовые выбросы и локальные изменения течений — с предвестниками, без анонсов.' }
+
   ];
 
   const tourLegs = _tourRaw.map((leg) => ({
@@ -3825,7 +3885,11 @@ window.OC = window.OC || {};
     octopus_dumbo: ['Осьминог Дамбо (Гримпотевтис)', 'Grimpoteuthis bathynectes', 'Мегафауна', 'Разлом базальта', '2440 – 2530 м',
       'Миниатюрный глубоководный осьминог, грациозно взмахивающий парными плавниками-«ушками» над лавовыми подушками.'],
     jelly: ['Абиссальная светящаяся медуза', 'Atolla wyvillei', 'Беспозвоночные', 'Абиссаль', '2435 – 2530 м',
-      'Глубоководная корономедуза с тревожным кольцом голубой биолюминесценции для отпугивания хищников.']
+      'Глубоководная корономедуза с тревожным кольцом голубой биолюминесценции для отпугивания хищников.'],
+    volcanic_fumarole: ['Вулканическая CO₂-фумарола', 'Submarine Fumarole', 'Геология', 'Вулкан', '2438 – 2478 м',
+      'Трещины базальтового конуса, через которые выходит перегретый CO₂ и водяной пар — спутник сейсмической активности вулкана.'],
+    submarine_volcano: ['Подводный вулкан-сеаунд', 'Submarine Seamount Volcano', 'Геология', 'Вулкан', '2438 – 2478 м',
+      'Спящий океанический вулкан: раз в несколько минут просыпаются редкие события — сейсмическая активность, мутный шлейф, газовые выбросы и локальные изменения течений.']
   };
 
   const FAUNA_PLAN = {
@@ -15980,6 +16044,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
     return {
       key,
+      pts,
       getPosition: () => pts.position,
       update(dt, time, camPos) {
         const d = Math.hypot(opts.x - camPos.x, opts.z - camPos.z);
@@ -20262,6 +20327,472 @@ window.OC = window.OC || {};
   OC._FaunaSpawn = { spawnFauna };
 })(window.OC);
 
+// === engine/volcano.js ===
+/* ================= ПРОТОТИП ПОДВОДНОГО ВУЛКАНА: РЕДКИЕ СОБЫТИЯ С ПРЕДВЕСТНИКАМИ ================= */
+/* Отличие от чёрных курильщиков: курильщики — постоянно работающие гидротермальные
+   шпили с вечными шлейфами. Подводный вулкан-сеаунд — спящий конус, который «просыпается»
+   раз в несколько минут: сейсмическая активность (предвестник ~30 с), мутный шлейф,
+   газовые выбросы и локальные изменения течений. Без текстовых анонсов — игрок
+   замечает предвестники по гидрофону, визуальным намёкам и смене течений (как у
+   фаунных herald-событий). Детерминированно через OC.mulberry32. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  /* Сайт вулкана в биоме чёрных курильщиков (далеко от пяти полей курильщиков) */
+  const SITE = { x: -360, z: 180, r: 92, peakY: -18.5, craterR: 15, craterD: 5.5 };
+
+  const PHASE_LABELS = {
+    idle: '',
+    seismic: 'Сейсмическая активность',
+    eruption: 'Извержение · шлейф и газ',
+    cooling: 'Остывание вулкана'
+  };
+
+  const DURATIONS = { seismic: 30, eruption: 14, cooling: 16 };
+  const EVENT_TOTAL = DURATIONS.seismic + DURATIONS.eruption + DURATIONS.cooling;
+
+  const state = {
+    phase: 'idle',
+    timer: 0,
+    progress: 0,
+    intensity: 0,
+    shake: 0,
+    cooldownUntil: 0,
+    rng: OC.mulberry32(0x5137a1)
+  };
+
+  let scene = null;
+  let biome = null;
+  let group = null;
+  let gasPlume = null;   // шлейф газа через makeVentPlume (coldSeep-палитра)
+  let turb = null;       // шлейф взвеси (малая CPU-система, 1 draw call)
+  let craterLight = null;
+  let rimMesh = null;
+  let dustAccum = 0;
+  let turbAccum = 0;
+
+  const _flow = new T.Vector3();
+  const _shakeTmp = { x: 0, y: 0, z: 0 };
+  const _tremorTmp = { active: false, strength: 0, x: 0, y: 0, z: 0 };
+
+  OC.volcanoInfo = { phase: 'idle', event: null, progress: 0, intensity: 0, label: '' };
+
+  /* ---------- Малая система шлейфа взвеси: взлёт, разбухание, дрейф по течению ---------- */
+  function makeTurbidityPlume(scene, n, tex) {
+    const geo = new T.BufferGeometry();
+    const pos = new Float32Array(n * 3);
+    const vel = new Float32Array(n * 3);
+    const life = new Float32Array(n);
+    const maxLife = new Float32Array(n);
+    const size = new Float32Array(n);
+    const alpha = new Float32Array(n);
+
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aSize', new T.BufferAttribute(size, 1));
+    geo.setAttribute('aAlpha', new T.BufferAttribute(alpha, 1));
+
+    const mat = new T.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: T.NormalBlending,
+      fog: true,
+      uniforms: T.UniformsUtils.merge([
+        T.UniformsLib.fog,
+        { uTex: { value: tex }, uScale: { value: 1.0 } }
+      ]),
+      vertexShader: `
+        attribute float aSize, aAlpha;
+        uniform float uScale;
+        varying float vAlpha;
+        #include <fog_pars_vertex>
+        void main() {
+          vAlpha = aAlpha;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * uScale * (430.0 / max(1.5, -mvPosition.z));
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D uTex;
+        varying float vAlpha;
+        #include <fog_pars_fragment>
+        void main() {
+          if (vAlpha < 0.01) discard;
+          vec4 tx = texture2D(uTex, gl_PointCoord);
+          if (tx.a < 0.02) discard;
+          gl_FragColor = vec4(vec3(0.44, 0.42, 0.39), tx.a * vAlpha * 0.5);
+          #include <fog_fragment>
+        }`
+    });
+
+    const pts = new T.Points(geo, mat);
+    pts.frustumCulled = false;
+    pts.visible = false;
+    scene.add(pts);
+
+    let cursor = 0;
+
+    function emit(count) {
+      const fl = biome.getHeight(SITE.x, SITE.z) - SITE.craterD;
+      for (let k = 0; k < count; k++) {
+        const i = cursor;
+        cursor = (cursor + 1) % n;
+        const ang = Math.random() * 6.28318;
+        const r = Math.random() * 6.0;
+        const i3 = i * 3;
+        pos[i3] = SITE.x + Math.cos(ang) * r;
+        pos[i3 + 1] = fl + 0.6;
+        pos[i3 + 2] = SITE.z + Math.sin(ang) * r;
+        const spd = 1.6 + Math.random() * 2.2;
+        vel[i3] = Math.cos(ang) * spd * 0.35;
+        vel[i3 + 1] = spd;
+        vel[i3 + 2] = Math.sin(ang) * spd * 0.35;
+        const ml = 7.0 + Math.random() * 5.0;
+        life[i] = ml;
+        maxLife[i] = ml;
+        size[i] = 1.8 + Math.random() * 2.6;
+        alpha[i] = 0.05;
+      }
+      pts.visible = true;
+    }
+
+    function update(dt, time, camPos) {
+      const fl = biome.getHeight(SITE.x, SITE.z) - SITE.craterD;
+      const camD = Math.hypot(camPos.x - SITE.x, camPos.z - SITE.z);
+      pts.visible = pts.visible && camD < 420;
+      if (!pts.visible) return 0;
+      if (biome.getCurrentAt) biome.getCurrentAt(SITE.x, fl, SITE.z, time, _flow);
+      let alive = 0;
+      for (let i = 0; i < n; i++) {
+        const l = life[i];
+        if (l <= 0) { alpha[i] = 0; continue; }
+        const nl = l - dt;
+        life[i] = nl;
+        if (nl <= 0) { alpha[i] = 0; continue; }
+        const i3 = i * 3;
+        vel[i3] = vel[i3] * 0.97 + _flow.x * 0.22 * dt;
+        vel[i3 + 1] = vel[i3 + 1] * 0.985 - 0.05 * dt; // медленно оседает обратно
+        vel[i3 + 2] = vel[i3 + 2] * 0.97 + _flow.z * 0.22 * dt;
+        pos[i3] += vel[i3] * dt;
+        pos[i3 + 1] += vel[i3 + 1] * dt;
+        pos[i3 + 2] += vel[i3 + 2] * dt;
+        size[i] += dt * 1.1;
+        const frac = nl / maxLife[i];
+        alpha[i] = Math.min(0.8, frac * 1.3) * OC.smoothstep(1.0, 0.9, frac);
+        alive++;
+      }
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.aSize.needsUpdate = true;
+      geo.attributes.aAlpha.needsUpdate = true;
+      return alive;
+    }
+
+    return {
+      pts,
+      emit,
+      update,
+      setScale(s) { mat.uniforms.uScale.value = s; }
+    };
+  }
+
+  /* ---------- Обод кратера (merged geometry, 1 draw call) ---------- */
+  function buildCraterRim() {
+    const list = [];
+    const cRim = new T.Color(0xc99a3e);
+    const cRock = new T.Color(0x4a3a2c);
+    const craterY = biome.getHeight(SITE.x, SITE.z) - SITE.craterD;
+
+    // Неровный обод кратера из сегментов тора
+    const n = 14;
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * Math.PI * 2;
+      const a1 = ((i + 1) / n) * Math.PI * 2;
+      const seg = new T.TorusGeometry(SITE.craterR, 0.85 + (i % 2 ? 0.2 : 0), 5, 4, (a1 - a0));
+      seg.rotateX(Math.PI / 2);
+      seg.rotateY(a0);
+      OC.geoPrep(seg);
+      OC.paint(seg, (x, y, z, c) => {
+        const edge = Math.abs(Math.sin((Math.atan2(z, x) - a0) / (a1 - a0) * Math.PI * 0.5));
+        c.copy(cRock).lerp(cRim, OC.smoothstep(0.25, 0.95, y + 0.6));
+        c.lerp(cRim, edge * 0.3);
+      });
+      OC.withSway(seg, () => 0);
+      OC.xform(seg, { p: [SITE.x, craterY + 0.7, SITE.z] });
+      list.push(seg);
+    }
+
+    // Два жерла-фумароль на краю кратера
+    for (let i = 0; i < 2; i++) {
+      const a = i * Math.PI + 0.7;
+      const sp = new T.CylinderGeometry(0.34, 0.72, 3.4, 8, 3, true);
+      OC.geoPrep(sp);
+      OC.paint(sp, (x, y, z, c) => {
+        const u = OC.clamp((y + 1.7) / 3.4, 0, 1);
+        c.copy(cRock).lerp(cRim, OC.smoothstep(0.4, 0.95, u));
+      });
+      OC.withSway(sp, () => 0);
+      OC.xform(sp, {
+        p: [SITE.x + Math.cos(a) * (SITE.craterR - 1.5), craterY + 1.8, SITE.z + Math.sin(a) * (SITE.craterR - 1.5)]
+      });
+      list.push(sp);
+    }
+
+    return OC.mergeGeometries(list);
+  }
+
+  /* ----------Машина состояния: idle → seismic → eruption → cooling → idle ---------- */
+
+  function startPhase(phase) {
+    state.phase = phase;
+    state.timer = DURATIONS[phase];
+    state.progress = 0;
+    const sound = OC.sound;
+    if (sound && typeof sound.volcanoRumble === 'function') {
+      sound.volcanoRumble(phase === 'eruption' ? 0.9 : 0.45);
+    }
+  }
+
+  function endEvent() {
+    state.phase = 'idle';
+    state.timer = 0;
+    state.progress = 0;
+    state.intensity = 0;
+    state.shake = 0;
+  }
+
+  function update(dt, time, camPos) {
+    // Проход фаз
+    if (state.phase !== 'idle') {
+      state.timer -= dt;
+      if (state.timer <= 0) {
+        state.timer = 0;
+        if (state.phase === 'seismic') startPhase('eruption');
+        else if (state.phase === 'eruption') startPhase('cooling');
+        else if (state.phase === 'cooling') endEvent();
+      }
+      state.progress = 1.0 - Math.max(0, state.timer) / DURATIONS[state.phase];
+    }
+
+    // Запуск редких событий (детерминированно, без анонсов)
+    if (state.phase === 'idle' && time >= state.cooldownUntil && state.rng() < 0.0006) {
+      state.cooldownUntil = time + EVENT_TOTAL + 150 + state.rng() * 210; // перерыв ~2.5–6 мин
+      startPhase('seismic');
+    }
+
+    // Интенсивность и дрожание
+    if (state.phase === 'seismic') {
+      state.intensity = 0.3 + 0.5 * state.progress;
+      state.shake = OC.lerp(state.shake, 0.12 + 0.28 * state.progress, dt * 3);
+    } else if (state.phase === 'eruption') {
+      state.intensity = 0.85 + 0.15 * Math.sin(time * 7.3);
+      state.shake = OC.lerp(state.shake, 0.55, dt * 6);
+    } else if (state.phase === 'cooling') {
+      state.intensity = Math.max(0, 0.7 * (1 - state.progress));
+      state.shake = OC.lerp(state.shake, 0, dt * 2);
+    } else {
+      state.intensity = 0;
+    }
+
+    // Сейсмическая активность: выбросы пыли на склонах конуса
+    if (state.phase === 'seismic') {
+      dustAccum += dt;
+      if (dustAccum >= 1.3) {
+        dustAccum = 0;
+        const ang = state.rng() * 6.283;
+        const r = 28 + state.rng() * 52;
+        const px = SITE.x + Math.cos(ang) * r;
+        const pz = SITE.z + Math.sin(ang) * r;
+        const fx = fxRef;
+        if (fx && fx.silt) fx.silt.kick({ x: px, y: biome.getHeight(px, pz) - 0.5, z: pz }, 0.3 + 0.3 * state.intensity);
+      }
+    } else if (state.phase === 'eruption') {
+      // Мутный шлейф: взлёт взвеси из кратера + регулярные kicks
+      turbAccum += dt;
+      if (turbAccum >= 0.35) {
+        turbAccum = 0;
+        if (turb) turb.emit(9);
+        if (fxRef && fxRef.silt) fxRef.silt.kick({ x: SITE.x, y: biome.getHeight(SITE.x, SITE.z) - SITE.craterD, z: SITE.z }, 0.9);
+      }
+    }
+
+    // Газовые выбросы: шлейф + пульсация кратера
+    if (gasPlume) {
+      gasPlume.update(dt, time, camPos);
+      const phaseActive = state.phase !== 'idle';
+      const gasFade = !(state.phase === 'cooling' && state.progress > 0.35);
+      if (gasPlume.pts) gasPlume.pts.visible = phaseActive && gasFade;
+      if (craterLight) {
+        const target = state.phase === 'eruption' ? 2.2 + 0.9 * Math.sin(time * 7.3)
+          : (state.phase === 'seismic' ? 0.7 + 0.5 * state.intensity : 0);
+        craterLight.intensity = OC.lerp(craterLight.intensity, target, dt * 4);
+      }
+    }
+
+    if (turb) turb.update(dt, time, camPos);
+
+    // Подпись фазы для HUD/телеметрии
+    OC.volcanoInfo.phase = state.phase;
+    OC.volcanoInfo.event = state.phase === 'idle' ? null : state.phase;
+    OC.volcanoInfo.progress = state.progress;
+    OC.volcanoInfo.intensity = state.intensity;
+    OC.volcanoInfo.label = PHASE_LABELS[state.phase];
+  }
+
+  /* ---------- Подключаемые точки ---------- */
+
+  function getShake(t) {
+    if (state.shake <= 0.005) {
+      _shakeTmp.x = 0; _shakeTmp.y = 0; _shakeTmp.z = 0;
+      return _shakeTmp;
+    }
+    const amp = state.shake * 0.3;
+    _shakeTmp.x = Math.sin(t * 41.3) * amp;
+    _shakeTmp.y = Math.sin(t * 37.7 + 1.7) * amp * 0.85;
+    _shakeTmp.z = Math.cos(t * 44.1) * amp;
+    return _shakeTmp;
+  }
+
+  function getTremor() {
+    const ph = state.phase;
+    _tremorTmp.active = ph === 'seismic' || ph === 'eruption';
+    _tremorTmp.strength = ph === 'eruption' ? 1.0 : (ph === 'seismic' ? state.intensity : 0);
+    _tremorTmp.x = SITE.x;
+    _tremorTmp.y = biome.getHeight(SITE.x, SITE.z) - SITE.craterD + 1.0;
+    _tremorTmp.z = SITE.z;
+    return _tremorTmp;
+  }
+
+  function getCurrentBoost(x, y, z, out) {
+    const ph = state.phase;
+    if (ph === 'idle') return out;
+    const inten = ph === 'eruption' ? 1.0
+      : (ph === 'seismic' ? 0.3 + 0.4 * state.progress : Math.max(0, (1 - state.progress) * 0.8));
+    const dx = x - SITE.x;
+    const dz = z - SITE.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 260) return out;
+    const fl = biome.getHeight(x, z);
+    const above = Math.max(0, y - fl);
+    if (d < 70) {
+      // Конвективная струя над кратером + радиальный вынос
+      const core = OC.smoothstep(70, 7, d) * OC.smoothstep(75, 9, above);
+      out.y += core * 3.4 * inten;
+      const a = Math.atan2(dz, dx);
+      out.x += Math.cos(a) * core * 0.85 * inten;
+      out.z += Math.sin(a) * core * 0.85 * inten;
+    } else {
+      const a = Math.atan2(dz, dx);
+      const edge = OC.smoothstep(260, 130, d);
+      out.x += Math.cos(a) * edge * 0.6 * inten;
+      out.z += Math.sin(a) * edge * 0.6 * inten;
+    }
+    return out;
+  }
+
+  let fxRef = null;
+
+  function init(scn, bm, fx) {
+    dispose();
+    scene = scn;
+    biome = bm;
+    fxRef = fx || null;
+    group = new T.Group();
+    scene.add(group);
+
+    const craterY = biome.getHeight(SITE.x, SITE.z) - SITE.craterD;
+
+    // Обод кратера + фумаролы (1 draw call)
+    const rimGeo = buildCraterRim();
+    const rimMat = new T.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.82, metalness: 0.14, side: T.DoubleSide
+    });
+    rimMesh = new T.Mesh(rimGeo, rimMat);
+    group.add(rimMesh);
+
+    // Газовый шлейф (переиспользуем шлейф курильщиков с холодной палитрой)
+    gasPlume = OC._FaunaBuilders.makeVentPlume(scene, biome, fx && fx.texSoft, {
+      x: SITE.x, z: SITE.z, chimneyH: 5.0, height: 24, n: 140, coldSeep: true, light: false
+    });
+    if (gasPlume && gasPlume.pts) gasPlume.pts.visible = false;
+
+    // Шлейф взвеси
+    const q = OC.Quality.get ? OC.Quality.get() : null;
+    const nScale = q && typeof q.particlesScale === 'number' ? q.particlesScale : 1.0;
+    turb = makeTurbidityPlume(scene, Math.max(80, Math.round(180 * Math.min(1.3, nScale))), fx && fx.texSoft);
+
+    // Свет кратера (пульсирует во время событий)
+    craterLight = new T.PointLight(0xff6a22, 0, 80, 1.6);
+    craterLight.position.set(SITE.x, craterY + 1.5, SITE.z);
+    group.add(craterLight);
+
+    return {
+      update,
+      dispose,
+      getState: () => state,
+      getSite: () => SITE,
+      setScale(s) { if (turb) turb.setScale(s); }
+    };
+  }
+
+  function dispose() {
+    if (gasPlume && gasPlume.pts) {
+      scene.remove(gasPlume.pts);
+      if (gasPlume.pts.geometry) gasPlume.pts.geometry.dispose();
+      if (gasPlume.pts.material) gasPlume.pts.material.dispose();
+    }
+    if (turb && turb.pts) {
+      scene.remove(turb.pts);
+      if (turb.pts.geometry) turb.pts.geometry.dispose();
+      if (turb.pts.material) turb.pts.material.dispose();
+    }
+    if (group) {
+      scene.remove(group);
+      group.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          const ms = Array.isArray(o.material) ? o.material : [o.material];
+          for (let i = 0; i < ms.length; i++) if (ms[i]) ms[i].dispose();
+        }
+      });
+    }
+    gasPlume = null;
+    turb = null;
+    craterLight = null;
+    rimMesh = null;
+    group = null;
+    scene = null;
+    biome = null;
+    fxRef = null;
+    dustAccum = 0;
+    turbAccum = 0;
+    endEvent();
+  }
+
+  OC.Volcano = {
+    SITE,
+    init,
+    update,
+    dispose,
+    getState: () => state,
+    getShake,
+    getTremor,
+    getCurrentBoost,
+    isActive: () => state.phase !== 'idle',
+    getSite: () => SITE,
+    /* Тест- hook: принудительная фаза машины событий (tests/verify.mjs) */
+    _forcePhase(phase) {
+      if (DURATIONS[phase]) {
+        state.phase = phase;
+        state.timer = DURATIONS[phase];
+        state.progress = 0;
+      }
+      return state;
+    }
+  };
+})(window.OC);
+
 // === engine/fauna_engine.js ===
 /* ================= ФАУНА: ЭКОСИСТЕМНЫЙ ИИ (BOIDS), ДЕНЬ/НОЧЬ, МЕГАФАУНА, ПЛАНКТОН ================= */
 window.OC = window.OC || {};
@@ -20275,6 +20806,7 @@ window.OC = window.OC || {};
   let faunaGroup = null;
   let activeSchoolsRef = [];
   let qualityHookBound = false;
+  let volcanoFx = null; // подводный вулкан (hydrothermal_vents), см. engine/volcano.js
 
   /* ---------- Процедурная форма рыбы (нос +X, хвост -X) ---------- */
   OC._FaunaCtx = OC._FaunaCtx || { fishMatInstanced: null, fishMatBiolum: null, creatureMat: null };
@@ -20303,6 +20835,10 @@ window.OC = window.OC || {};
     });
     scene.remove(faunaGroup);
     faunaGroup = null;
+    if (volcanoFx) {
+      volcanoFx.dispose();
+      volcanoFx = null;
+    }
   }
 
   OC.FaunaEngine = {
@@ -20381,6 +20917,11 @@ window.OC = window.OC || {};
       const benthicSilt = makeBenthicSiltSystem(faunaGroup, biome, texSoft);
       const hydratePlumes = makeHydratePlumeSystem(faunaGroup, biome, texHard);
       const biolumTrail = makeBiolumTrail(faunaGroup, texSoft, noSurf);
+
+      // Подводный вулкан-сеаунд: редкие события с предвестниками (hydrothermal_vents)
+      if (biome.id === 'hydrothermal_vents' && OC.Volcano && OC.Volcano.init) {
+        volcanoFx = OC.Volcano.init(scene, biome, { silt: benthicSilt, texSoft, texHard });
+      }
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
       const dayPlanktonCol = new T.Color(0x9be8ff);
@@ -20785,6 +21326,7 @@ window.OC = window.OC || {};
           OC.faunaInfo.siltCount = siltSt.active;
           if (!ev && siltSt.turbidity > 0.38) OC.faunaInfo.activeEvent = 'silt_out';
           biolumTrail.update(dt, time, camPos, camSpeed || 0, pal.bioGlow || 0, !!flashOn);
+          if (volcanoFx) volcanoFx.update(dt, time, camPos);
         },
         setScale(s) {
           bubbleMat.uniforms.uScale.value = s;
@@ -20795,6 +21337,7 @@ window.OC = window.OC || {};
           hydratePlumes.setScale(s);
           biolumTrail.setScale(s);
           splashSystem.setScale(s);
+          if (volcanoFx && volcanoFx.setScale) volcanoFx.setScale(s);
         },
         /* Активное сонарное сканирование вперёд по курсу (рельеф + крупная фауна/стаи) */
         scanForward(origin, dir, maxRange) {
@@ -20940,6 +21483,29 @@ window.OC = window.OC || {};
                 y: ly,
                 z: lm.z
               });
+            }
+          }
+          // Сейсмическая активность подводного вулкана (редкие события, см. engine/volcano.js)
+          if (OC.Volcano && OC.Volcano.isActive && OC.Volcano.isActive()) {
+            const tr = OC.Volcano.getTremor();
+            if (tr && tr.active) {
+              const dx = tr.x - origin.x;
+              const dy = tr.y - origin.y;
+              const dz = tr.z - origin.z;
+              const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (dist <= maxR) {
+                const amp = Math.pow(1.0 - dist / maxR, 1.4) * 0.95 * tr.strength;
+                out.push({
+                  key: 'volcanic_fumarole',
+                  label: 'Подводный вулкан · тремор',
+                  dist,
+                  bearingDeg: ((Math.atan2(dx, -dz) * 180 / Math.PI) % 360 + 360) % 360,
+                  amp,
+                  x: tr.x,
+                  y: tr.y,
+                  z: tr.z
+                });
+              }
             }
           }
           out.sort((a, b) => b.amp - a.amp);
@@ -21663,6 +22229,44 @@ window.OC = window.OC || {};
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     src.connect(lp); lp.connect(g); g.connect(S.master);
     src.start(now); src.stop(now + dur + 0.05);
+  };
+
+  /* Глухой сейсмический руммер подводного вулкана (толчки + низкочастотный гул) */
+  S.volcanoRumble = function (strength) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 4.5;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.9));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(180, now);
+    lp.frequency.linearRampToValueAtTime(60, now + dur);
+    const g = ctx.createGain();
+    const amp = Math.min(0.22, 0.05 + 0.17 * (strength || 0.5));
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(amp, now + 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(g); g.connect(S.master);
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(34, now);
+    osc.frequency.linearRampToValueAtTime(22, now + 3.2);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, now);
+    og.gain.linearRampToValueAtTime(amp * 0.8, now + 0.35);
+    og.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    osc.connect(og); og.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.05);
+    osc.start(now); osc.stop(now + dur + 0.05);
   };
 })(window.OC);
 
@@ -29974,6 +30578,8 @@ window.OC = window.OC || {};
             const inCaveCeiling = !!(biome.getCeilingHeight && biome.getCeilingHeight(craftPos.x, craftPos.z) < 25.0);
             const fInfo = OC.faunaInfo || {};
             let phaseLabel = dayW < 0.35 ? 'Ночь · Био + DVM' : (dayW < 0.7 ? 'Сумерки' : 'День');
+            const vInfo = OC.volcanoInfo || {};
+            if (vInfo.phase && vInfo.phase !== 'idle') phaseLabel = 'Вулкан · ' + vInfo.label;
             if (fInfo.siltTurbidity && fInfo.siltTurbidity > 0.35) phaseLabel = 'Взвесь грунта · Silt-out';
             else if (inBrineNow) phaseLabel = 'Галоклин · Рассол 230‰';
             else if (inHaloNow) phaseLabel = 'Галоклин сенота · Облако H₂S';
@@ -31714,6 +32320,16 @@ window.OC = window.OC || {};
       if (Math.abs(camera.fov - wantFov) > 0.08) {
         camera.fov = OC.lerp(camera.fov, wantFov, Math.min(1, rawDt * 12));
         camera.updateProjectionMatrix();
+      }
+
+      // Сейсмическая дрожание камеры от подводного вулкана (редкие события)
+      if (OC.Volcano && OC.Volcano.getShake) {
+        const sh = OC.Volcano.getShake(time);
+        if (sh && (sh.x || sh.y || sh.z)) {
+          camera.position.x += sh.x;
+          camera.position.y += sh.y;
+          camera.position.z += sh.z;
+        }
       }
 
       if (OC.renderWorld) OC.renderWorld(scene, camera);

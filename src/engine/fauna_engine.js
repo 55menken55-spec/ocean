@@ -10,6 +10,7 @@ window.OC = window.OC || {};
   let faunaGroup = null;
   let activeSchoolsRef = [];
   let qualityHookBound = false;
+  let volcanoFx = null; // подводный вулкан (hydrothermal_vents), см. engine/volcano.js
 
   /* ---------- Процедурная форма рыбы (нос +X, хвост -X) ---------- */
   OC._FaunaCtx = OC._FaunaCtx || { fishMatInstanced: null, fishMatBiolum: null, creatureMat: null };
@@ -38,6 +39,10 @@ window.OC = window.OC || {};
     });
     scene.remove(faunaGroup);
     faunaGroup = null;
+    if (volcanoFx) {
+      volcanoFx.dispose();
+      volcanoFx = null;
+    }
   }
 
   OC.FaunaEngine = {
@@ -116,6 +121,11 @@ window.OC = window.OC || {};
       const benthicSilt = makeBenthicSiltSystem(faunaGroup, biome, texSoft);
       const hydratePlumes = makeHydratePlumeSystem(faunaGroup, biome, texHard);
       const biolumTrail = makeBiolumTrail(faunaGroup, texSoft, noSurf);
+
+      // Подводный вулкан-сеаунд: редкие события с предвестниками (hydrothermal_vents)
+      if (biome.id === 'hydrothermal_vents' && OC.Volcano && OC.Volcano.init) {
+        volcanoFx = OC.Volcano.init(scene, biome, { silt: benthicSilt, texSoft, texHard });
+      }
 
       const bioPlanktonCol = new T.Color(0x52f2ff);
       const dayPlanktonCol = new T.Color(0x9be8ff);
@@ -520,6 +530,7 @@ window.OC = window.OC || {};
           OC.faunaInfo.siltCount = siltSt.active;
           if (!ev && siltSt.turbidity > 0.38) OC.faunaInfo.activeEvent = 'silt_out';
           biolumTrail.update(dt, time, camPos, camSpeed || 0, pal.bioGlow || 0, !!flashOn);
+          if (volcanoFx) volcanoFx.update(dt, time, camPos);
         },
         setScale(s) {
           bubbleMat.uniforms.uScale.value = s;
@@ -530,6 +541,7 @@ window.OC = window.OC || {};
           hydratePlumes.setScale(s);
           biolumTrail.setScale(s);
           splashSystem.setScale(s);
+          if (volcanoFx && volcanoFx.setScale) volcanoFx.setScale(s);
         },
         /* Активное сонарное сканирование вперёд по курсу (рельеф + крупная фауна/стаи) */
         scanForward(origin, dir, maxRange) {
@@ -675,6 +687,29 @@ window.OC = window.OC || {};
                 y: ly,
                 z: lm.z
               });
+            }
+          }
+          // Сейсмическая активность подводного вулкана (редкие события, см. engine/volcano.js)
+          if (OC.Volcano && OC.Volcano.isActive && OC.Volcano.isActive()) {
+            const tr = OC.Volcano.getTremor();
+            if (tr && tr.active) {
+              const dx = tr.x - origin.x;
+              const dy = tr.y - origin.y;
+              const dz = tr.z - origin.z;
+              const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (dist <= maxR) {
+                const amp = Math.pow(1.0 - dist / maxR, 1.4) * 0.95 * tr.strength;
+                out.push({
+                  key: 'volcanic_fumarole',
+                  label: 'Подводный вулкан · тремор',
+                  dist,
+                  bearingDeg: ((Math.atan2(dx, -dz) * 180 / Math.PI) % 360 + 360) % 360,
+                  amp,
+                  x: tr.x,
+                  y: tr.y,
+                  z: tr.z
+                });
+              }
             }
           }
           out.sort((a, b) => b.amp - a.amp);
