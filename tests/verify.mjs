@@ -508,6 +508,25 @@ const vInfErup = OC.Volcano.getInfluence();
 assert(vInfErup.active && vInfErup.panic > 1.5 && vInfErup.strength > 12, 'Eruption must drive strong radial flee');
 OC.Volcano._forcePhase('cooling');
 assert(OC.Volcano.getInfluence().panic <= 1.2, 'Cooling must decay flee');
+// Eruption FX: crater flash spike, shockwave rings, pyroclastic flow
+OC.Volcano._forcePhase('eruption');
+OC.Volcano.update(0.1, 0, camera.position);
+const _vCur4 = new T.Vector3();
+ventBiome.getCurrentAt(vSite.x, vCrater + 12, vSite.z, 1.0, _vCur4);
+const flashPeak = _vCur4.y;
+assert(flashPeak > 1.8, `Eruption flash upwelling burst expected >1.8 m/s, got ${flashPeak.toFixed(2)}`);
+OC.Volcano.update(0.1, 0.1, camera.position);
+OC.Volcano.update(0.1, 0.2, camera.position);
+// Shockwave rings active after eruption start
+OC.Volcano.update(0.15, 0.3, camera.position);
+OC.Volcano._forcePhase('cooling');
+OC.Volcano.update(0.5, 1.0, camera.position);
+OC.Volcano._forcePhase('idle');
+OC.Volcano.update(0.5, 2.0, camera.position);
+const _vCur5 = new T.Vector3();
+ventBiome.getCurrentAt(vSite.x, vCrater + 12, vSite.z, 1.0, _vCur5);
+assert(Math.abs(_vCur5.y) < 0.5, `Volcano must be quiet after cooling, got ${_vCur5.y.toFixed(2)}`);
+
 OC.Volcano._forcePhase('idle');
 assert(!OC.Volcano.getInfluence().active, 'Influence must deactivate after the event');
 assert(ventBiome.faunaPlan.schools.some((s) => s.key === 'vent_shrimp' && Math.abs(s.cx - vSite.x) < 5 && Math.abs(s.cz - vSite.z) < 5),
