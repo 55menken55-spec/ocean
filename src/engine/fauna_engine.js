@@ -157,6 +157,13 @@ window.OC = window.OC || {};
 
       activeSchoolsRef = schools;
 
+      /* ============ ПОСЛЕДСТВИЯ СОБЫТИЙ В МИРЕ ============
+         Используются только существующие системы частиц (benthicSilt, splashSystem, coralSpawnSys)
+         — без новых draw calls. Каждое событие оставляет след в мире, пока активно.
+         ===================================================== */
+      let consequenceEvent = null;   // тип события, которое сейчас «разворачивается»
+      let consequenceAccum = 0;      // накопитель для дозированных выбросов частиц
+
       /* ============ УРОВНИ РЕДКОСТИ СОБЫТИЙ И ПРЕДВЕСТНИКИ ============
          common  — видно сразу, предвестника нет (выпрыг кита, порпойзинг, DVM, муть)
          rare    — предвестник ~30 с: стаи нервничают, гидрофон ловит звуки
@@ -356,19 +363,20 @@ window.OC = window.OC || {};
           }
           OC.faunaInfo.herald = currentHerald;
 
-          // Классифицируем ключевое природное событие в радиусе видимости
+          // Позиция текущего события для последствий в мире
+          let eventPos = null;
           let ev = null;
           for (let i = 0; i < whalesList.length; i++) {
             if (whalesList[i].isBreaching()) {
               const p = whalesList[i].getPosition();
-              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 420) { ev = 'breach'; break; }
+              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 420) { ev = 'breach'; eventPos = p; break; }
             }
           }
           if (!ev) {
             for (let i = 0; i < huntingAgents.length; i++) {
               if (huntingAgents[i].isHunting()) {
                 const p = huntingAgents[i].getPosition();
-                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 160) { ev = 'hunt'; break; }
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 160) { ev = 'hunt'; eventPos = p; break; }
               }
             }
           }
@@ -376,21 +384,21 @@ window.OC = window.OC || {};
             for (let i = 0; i < preySchools.length; i++) {
               if (preySchools[i].getPanic && preySchools[i].getPanic() > 0.5) {
                 const p = preySchools[i].center;
-                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 140) { ev = 'baitball'; break; }
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 140) { ev = 'baitball'; eventPos = p; break; }
               }
             }
           }
           if (!ev && cleanClientsBuf.length > 0) {
             for (let i = 0; i < cleanClientsBuf.length; i++) {
               const p = cleanClientsBuf[i];
-              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 120) { ev = 'cleaning'; break; }
+              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 120) { ev = 'cleaning'; eventPos = p; break; }
             }
           }
           if (!ev) {
             for (let i = 0; i < surfaceJumpers.length; i++) {
               if (surfaceJumpers[i].isPorpoising && surfaceJumpers[i].isPorpoising()) {
                 const p = surfaceJumpers[i].getPosition();
-                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 190) { ev = 'porpoising'; break; }
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 190) { ev = 'porpoising'; eventPos = p; break; }
               }
             }
           }
@@ -425,6 +433,49 @@ window.OC = window.OC || {};
               const st = heraldState[k];
               if (st.phase === 'active') st.phase = 'cooldown';
             }
+          }
+
+          // --- Последствия событий в мире (без новых draw calls) ---
+          if (ev) {
+            consequenceAccum += dt;
+            const isNew = ev !== consequenceEvent;
+            if (isNew) consequenceEvent = ev;
+
+            if (ev === 'hunt') {
+              // Охота: косяк рассыпается, чешуя и муть в воде. Дозированный выброс бентоса.
+              if (isNew || consequenceAccum >= 0.35) {
+                consequenceAccum = 0;
+                benthicSilt.kick(eventPos, 0.7);
+                if (camPos.y > -4.0) splashSystem.emit(eventPos, 0.5);
+              }
+            } else if (ev === 'baitball') {
+              // Baitball: стая сжата в шар, взвесь у дна.
+              if (isNew || consequenceAccum >= 0.7) {
+                consequenceAccum = 0;
+                benthicSilt.kick(eventPos, 0.5);
+              }
+            } else if (ev === 'coral_spawn' && coralSpawnSys) {
+              // Нерест кораллов: вода розовеет, гаметы вспыхивают, видимость падает.
+              coralSpawnSys.mat.uniforms.uIntensity.value = OC.clamp(coralSpawnIntensity * 1.8, 0, 1);
+            } else if (ev === 'breach' && camPos.y > -4.0) {
+              // Выпрыг кита: всплеск у поверхности (уже есть через onSplash, здесь добавочный).
+              if (isNew || consequenceAccum >= 0.5) {
+                consequenceAccum = 0;
+                splashSystem.emit(eventPos, 0.9);
+              }
+            } else if (ev === 'cleaning') {
+              // Симбиоз чистильщиков: биолюминесцентный шлейф через biolumTrail уже активен,
+              // плюс небольшой выброс частиц у станции чистки.
+              if (isNew || consequenceAccum >= 1.0) {
+                consequenceAccum = 0;
+                benthicSilt.kick(eventPos, 0.3);
+              }
+            }
+          } else if (consequenceEvent !== null) {
+            // Событие закончилось — сбрасываем оставшиеся эффекты
+            if (coralSpawnSys) coralSpawnSys.mat.uniforms.uIntensity.value = coralSpawnIntensity;
+            consequenceEvent = null;
+            consequenceAccum = 0;
           }
 
           bubbleMat.uniforms.uCamPos.value.copy(camPos);
