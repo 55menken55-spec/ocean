@@ -1198,6 +1198,38 @@ window.OC = window.OC || {};
       toast('Навигационный маяк снят');
     });
 
+    const downloadExpeditionReport = (fmt) => {
+      if (!OC.Expedition || !OC.Expedition.exportReport) return null;
+      const exp = OC.Expedition.exportReport(fmt, {
+        biome: activeBiome,
+        ctdCast: OC.ROV && OC.ROV.getLastCtdCast ? OC.ROV.getLastCtdCast() : null,
+        ecoState: OC.EcoLab && OC.EcoLab.getState ? OC.EcoLab.getState() : null,
+        hydroState: OC.Hydrophone && OC.Hydrophone.getState ? OC.Hydrophone.getState() : null,
+        mapCoveragePct: OC.Minimap && OC.Minimap.getCoverage ? OC.Minimap.getCoverage() : 0,
+        perfStats: OC.getPerfStats ? OC.getPerfStats() : null
+      });
+      if (!exp) return null;
+      try {
+        if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
+          const blob = new Blob([exp.content], { type: fmt === 'json' ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = exp.filename;
+          if (document.body && document.body.appendChild) document.body.appendChild(a);
+          if (typeof a.click === 'function') a.click();
+          if (a.parentNode) a.parentNode.removeChild(a);
+          setTimeout(() => { try { URL.revokeObjectURL(url); } catch (err) {} }, 2500);
+        }
+      } catch (e) {}
+      toast('Научный отчёт экспортирован: ' + exp.filename);
+      return exp;
+    };
+    const exportMdBtn = document.getElementById('journal-export-md');
+    const exportJsonBtn = document.getElementById('journal-export-json');
+    if (exportMdBtn) exportMdBtn.addEventListener('click', () => downloadExpeditionReport('md'));
+    if (exportJsonBtn) exportJsonBtn.addEventListener('click', () => downloadExpeditionReport('json'));
+
     function syncModes(mode) {
       if (btnSwim) btnSwim.classList.toggle('on', mode === 'swim');
       if (btnOrbit) btnOrbit.classList.toggle('on', mode === 'orbit');
@@ -1276,7 +1308,8 @@ window.OC = window.OC || {};
       mariana_trench: 'Марианская 10920м',
       brine_pool: 'Соляной бассейн',
       cenote_caves: 'Сеноты Юкатана',
-      galapagos_upwelling: 'Галапагосы'
+      galapagos_upwelling: 'Галапагосы',
+      amazon_igapo: 'Амазония'
     };
     const BIOME_REGION = {
       great_barrier_reef: 'GBR · Тихий океан',
@@ -1287,7 +1320,8 @@ window.OC = window.OC || {};
       mariana_trench: 'Челленджер · 10 920 м',
       brine_pool: 'Мексиканский залив · 650 м',
       cenote_caves: 'Юкатан · Сак-Актун 58 м',
-      galapagos_upwelling: 'Эквадор · Апвеллинг'
+      galapagos_upwelling: 'Эквадор · Апвеллинг',
+      amazon_igapo: 'Рио-Негру · Игапо 28 м'
     };
 
     function renderBiomeUI() {
@@ -1373,14 +1407,28 @@ window.OC = window.OC || {};
       syncWeatherButtons();
     }
 
-    /* Кнопки выбора качества графики */
-    if (qualityBtnsEl) {
-      const renderQualityButtons = () => {
-        const activeId = OC.Quality.getId();
+    /* Кнопки выбора качества графики и адаптивного Auto-LOD */
+    const btnAutoLod = document.getElementById('btn-auto-lod');
+    const qualityLodStatus = document.getElementById('quality-lod-status');
+    const renderQualityButtons = () => {
+      const activeId = OC.Quality.getId();
+      if (qualityBtnsEl) {
         qualityBtnsEl.querySelectorAll('button[data-q]').forEach((b) => {
           b.classList.toggle('on', b.getAttribute('data-q') === activeId);
         });
-      };
+      }
+      const autoOn = !!(OC.Quality.isAutoLod && OC.Quality.isAutoLod());
+      if (btnAutoLod) {
+        btnAutoLod.classList.toggle('on', autoOn);
+        btnAutoLod.textContent = autoOn ? 'Авто-LOD: Вкл' : 'Авто-LOD: Выкл';
+      }
+      if (qualityLodStatus) {
+        const al = OC.Quality.getAutoLodState ? OC.Quality.getAutoLodState() : null;
+        const p95Txt = al && al.p95CpuMs > 0 ? (' · p95 ' + al.p95CpuMs.toFixed(1) + ' мс') : '';
+        qualityLodStatus.textContent = (autoOn ? 'Авто: ' : 'Ручной: ') + OC.Quality.get().label + p95Txt;
+      }
+    };
+    if (qualityBtnsEl) {
       qualityBtnsEl.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-q]');
         if (!btn) return;
@@ -1388,10 +1436,19 @@ window.OC = window.OC || {};
         const p = OC.Quality.set(id);
         if (OC.Expedition && OC.Expedition.saveQuality) OC.Expedition.saveQuality(id);
         renderQualityButtons();
-        toast('Качество графики: ' + p.label);
+        toast('Качество графики: ' + p.label + ' (ручной профиль)');
       });
-      renderQualityButtons();
     }
+    if (btnAutoLod) {
+      btnAutoLod.addEventListener('click', () => {
+        if (!OC.Quality.setAutoLod) return;
+        const next = OC.Quality.setAutoLod(!OC.Quality.isAutoLod());
+        renderQualityButtons();
+        toast(next ? 'Адаптивный Auto-LOD включён (по p95 кадра)' : 'Адаптивный Auto-LOD выключен');
+      });
+    }
+    OC.Quality.onChange(() => renderQualityButtons());
+    renderQualityButtons();
 
     /* Виртуальный тач-джойстик и вертикальные кнопки */
     const touchStick = document.getElementById('touch-stick');
@@ -1626,7 +1683,7 @@ window.OC = window.OC || {};
       });
     }
 
-    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderQualityButtons, renderBiomeUI, renderZoneChips };
   }
 
   function switchBiome(id) {
@@ -1718,7 +1775,8 @@ window.OC = window.OC || {};
       textures: rInfo && rInfo.memory ? rInfo.memory.textures : 0,
       chunksVisible: tSt ? tSt.visible : 0,
       floraInstances: fSt ? fSt.activeInstances : 0,
-      schoolFish: OC.faunaInfo ? OC.faunaInfo.schoolFish : 0
+      schoolFish: OC.faunaInfo ? OC.faunaInfo.schoolFish : 0,
+      qualityId: OC.Quality.getId ? OC.Quality.getId() : 'high'
     };
   };
   OC.switchBiome = switchBiome;
@@ -2123,6 +2181,16 @@ window.OC = window.OC || {};
       if (fpsAcc > 0.5) {
         perfFps = Math.round(fpsFrames / fpsAcc);
         if (fpsEl) fpsEl.textContent = perfFps + ' FPS';
+        if (time >= 6.0 && perfCount >= 32 && OC.Quality && OC.Quality.evaluateAutoLod) {
+          const prevQId = OC.Quality.getId();
+          const stNow = OC.getPerfStats();
+          const nextQId = OC.Quality.evaluateAutoLod(stNow.p95CpuMs, fpsAcc);
+          if (nextQId !== prevQId) {
+            toast('Адаптивный LOD: ' + OC.Quality.PRESETS[prevQId].label + ' -> ' + OC.Quality.PRESETS[nextQId].label + ' (p95 ' + stNow.p95CpuMs.toFixed(1) + ' мс)');
+          } else if (uiHandles && uiHandles.renderQualityButtons) {
+            uiHandles.renderQualityButtons();
+          }
+        }
         fpsAcc = 0;
         fpsFrames = 0;
       }

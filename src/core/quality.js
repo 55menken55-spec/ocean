@@ -93,19 +93,99 @@ window.OC = window.OC || {};
     return 'high';
   }
 
+  const TIERS = ['low', 'medium', 'high', 'ultra'];
   let currentId = detectDefault();
+  let initialCeilingId = currentId;
   const listeners = [];
+
+  const autoLod = {
+    enabled: true,
+    cooldownSec: 0,
+    overBudgetSec: 0,
+    underBudgetSec: 0,
+    lastP95Ms: 0,
+    adjustments: 0,
+    lastReason: 'инициализация'
+  };
+
+  function applyPreset(id, fromAuto) {
+    if (!PRESETS[id] || id === currentId) return PRESETS[id];
+    currentId = id;
+    if (!fromAuto) {
+      initialCeilingId = id;
+      autoLod.overBudgetSec = 0;
+      autoLod.underBudgetSec = 0;
+    }
+    for (const fn of listeners) fn(PRESETS[id]);
+    return PRESETS[id];
+  }
 
   OC.Quality = {
     PRESETS,
     presets: PRESETS,
     getId: () => currentId,
     get: () => PRESETS[currentId],
-    set: (id) => {
-      if (!PRESETS[id] || id === currentId) return PRESETS[currentId];
-      currentId = id;
-      for (const fn of listeners) fn(PRESETS[id]);
-      return PRESETS[id];
+    set: (id, opts) => {
+      const fromAuto = !!(opts && opts.fromAuto);
+      if (!fromAuto) autoLod.enabled = !!(opts && opts.keepAuto);
+      return applyPreset(id, fromAuto);
+    },
+    setAutoLod: (on) => {
+      autoLod.enabled = !!on;
+      autoLod.overBudgetSec = 0;
+      autoLod.underBudgetSec = 0;
+      autoLod.cooldownSec = 0;
+      if (autoLod.enabled) autoLod.lastReason = 'включён';
+      else autoLod.lastReason = 'ручной режим';
+      return autoLod.enabled;
+    },
+    isAutoLod: () => autoLod.enabled,
+    getAutoLodState: () => ({
+      enabled: autoLod.enabled,
+      currentId,
+      p95CpuMs: autoLod.lastP95Ms,
+      adjustments: autoLod.adjustments,
+      lastReason: autoLod.lastReason
+    }),
+    evaluateAutoLod: (p95CpuMs, dt, opts) => {
+      if (!Number.isFinite(p95CpuMs) || p95CpuMs <= 0) return currentId;
+      autoLod.lastP95Ms = Math.round(p95CpuMs * 100) / 100;
+      if (!autoLod.enabled) return currentId;
+      const stepDt = Math.max(0.01, Math.min(2.0, dt || 0.2));
+      if (autoLod.cooldownSec > 0) autoLod.cooldownSec = Math.max(0, autoLod.cooldownSec - stepDt);
+
+      const downMs = (opts && opts.downMs) || 30.0;
+      const upMs = (opts && opts.upMs) || 13.5;
+      const tierIdx = TIERS.indexOf(currentId);
+      const maxIdx = Math.max(TIERS.indexOf(initialCeilingId), 2); // максимум 'high' или выбранный ручной потолок
+
+      if (p95CpuMs > downMs) {
+        autoLod.overBudgetSec += stepDt;
+        autoLod.underBudgetSec = 0;
+        if (autoLod.overBudgetSec >= 2.0 && autoLod.cooldownSec <= 0 && tierIdx > 0) {
+          const nextId = TIERS[tierIdx - 1];
+          autoLod.overBudgetSec = 0;
+          autoLod.cooldownSec = 5.0;
+          autoLod.adjustments++;
+          autoLod.lastReason = 'снижено (' + p95CpuMs.toFixed(1) + ' мс > ' + downMs + ')';
+          applyPreset(nextId, true);
+        }
+      } else if (p95CpuMs < upMs) {
+        autoLod.underBudgetSec += stepDt;
+        autoLod.overBudgetSec = 0;
+        if (autoLod.underBudgetSec >= 5.5 && autoLod.cooldownSec <= 0 && tierIdx < maxIdx) {
+          const nextId = TIERS[tierIdx + 1];
+          autoLod.underBudgetSec = 0;
+          autoLod.cooldownSec = 6.0;
+          autoLod.adjustments++;
+          autoLod.lastReason = 'повышено (' + p95CpuMs.toFixed(1) + ' мс < ' + upMs + ')';
+          applyPreset(nextId, true);
+        }
+      } else {
+        autoLod.overBudgetSec = Math.max(0, autoLod.overBudgetSec - stepDt * 0.5);
+        autoLod.underBudgetSec = Math.max(0, autoLod.underBudgetSec - stepDt * 0.5);
+      }
+      return currentId;
     },
     onChange: (fn) => {
       listeners.push(fn);

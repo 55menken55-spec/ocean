@@ -424,6 +424,15 @@ stepFrames(2);
 OC.ROV.recallBuoys();
 assert.equal(OC.ROV.getBuoys().length, 0, 'ROV buoy recall must clear active buoys');
 
+// Stage 4 E2E checks: Scientific Report Export & Adaptive Auto-LOD inside production bundle
+const repE2E = OC.Expedition.exportReport('md', { perfStats: OC.getPerfStats(), mapCoveragePct: OC.Minimap.getCoverage() });
+assert(repE2E && repE2E.content.includes('Большой Барьерный риф') && repE2E.report.biomes.length === 10, 'E2E production scientific report export must include all 10 biomes');
+OC.Quality.setAutoLod(true);
+for (let i = 0; i < 3; i++) OC.Quality.evaluateAutoLod(44.0, 1.0);
+assert.equal(OC.Quality.getId(), 'medium', 'Production Auto-LOD must downgrade high -> medium under simulated frame pressure');
+OC.Quality.set('high');
+stepFrames(2);
+
 console.log('3) Profiling 10 biomes × 100 continuous frames (1000 frames + 3D Multibeam Sonar scans)...');
 const biomeList = OC.Biomes.list();
 assert.equal(biomeList.length, 10, 'All 10 biomes must be registered in production bundle');

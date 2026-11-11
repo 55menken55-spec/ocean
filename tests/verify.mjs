@@ -1527,4 +1527,26 @@ assert.equal(OC.ROV.recallBuoys(), 2, 'recallBuoys must retrieve all active buoy
 assert.equal(OC.ROV.getBuoys().length, 0, 'Buoy array must be empty after recall');
 OC.Hydrophone.setOpen(false);
 console.log(`   Stage 3 ROV & Marine Science (Umbilical Tether ${tNear.lengthM}m -> ${tCrit.tensionPct}%, Autonomous Buoys & Hydrophone Bearing ${track.bearingDeg}°) verified.`);
+
+// AD) Verify Stage 4 Scientific Report Export (.MD & .JSON) & Adaptive Auto-LOD Controller
+assert(typeof OC.Expedition.buildScientificReport === 'function' && typeof OC.Expedition.exportReport === 'function', 'OC.Expedition must expose scientific report builder & exporter');
+const repMd = OC.Expedition.exportReport('md', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
+assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 10 биомам'), 'Markdown report must summarize all 10 biomes & CTD data');
+const repJson = OC.Expedition.exportReport('json', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
+const parsedRep = JSON.parse(repJson.content);
+assert.equal(parsedRep.biomes.length, 10, 'JSON scientific report must contain all 10 biomes');
+assert(parsedRep.summary.missionsTotal === 40 && parsedRep.summary.speciesTotal === 221, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
+
+assert(typeof OC.Quality.evaluateAutoLod === 'function' && typeof OC.Quality.setAutoLod === 'function' && typeof OC.Quality.getAutoLodState === 'function', 'OC.Quality must expose adaptive Auto-LOD controller');
+OC.Quality.set('high');
+assert.equal(OC.Quality.isAutoLod(), false, 'Manual preset selection must pause Auto-LOD');
+OC.Quality.setAutoLod(true);
+assert.equal(OC.Quality.isAutoLod(), true, 'setAutoLod(true) must enable adaptive Auto-LOD');
+for (let step = 0; step < 3; step++) OC.Quality.evaluateAutoLod(48.5, 1.0);
+assert.equal(OC.Quality.getId(), 'medium', 'Sustained p95 > 30ms must step Auto-LOD down from high -> medium');
+// Fast recovery only occurs after cooldown + sustained under-budget window
+for (let step = 0; step < 12; step++) OC.Quality.evaluateAutoLod(9.2, 1.0);
+assert.equal(OC.Quality.getId(), 'high', 'Sustained p95 < 13.5ms must recover Auto-LOD back to high');
+OC.Quality.set('high');
+console.log(`   Stage 4 Scientific Report Export (${parsedRep.biomes.length} biomes, ${parsedRep.summary.speciesTotal} species .MD/.JSON) & Adaptive Auto-LOD verified.`);
 console.log('ALL VERIFICATION CHECKS PASSED!');

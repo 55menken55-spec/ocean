@@ -557,6 +557,10 @@
       <button class="btn" data-q="high">Высок.</button>
       <button class="btn" data-q="ultra">Ультра</button>
     </div>
+    <div class="row" style="margin-top:6px;align-items:center">
+      <button class="btn on" id="btn-auto-lod" title="Автоматическая подстройка LOD и постобработки по p95 времени кадра">Авто-LOD: Вкл</button>
+      <span id="quality-lod-status" style="font-size:10px;color:var(--dim);flex:1;text-align:right">—</span>
+    </div>
   </div>
 
   <div class="group">
@@ -905,7 +909,9 @@
       <button class="btn on" data-jtab="missions">Научные миссии</button>
       <button class="btn" data-jtab="photos">Фотожурнал</button>
       <button class="btn" data-jtab="museum">Музей проб</button>
-      <button class="btn" id="journal-clear-wp" style="margin-left:auto">Снять маяк</button>
+      <button class="btn" id="journal-export-md" style="margin-left:auto" title="Скачать научный отчёт экспедиции (.md)">Отчёт .MD</button>
+      <button class="btn" id="journal-export-json" title="Экспортировать полную научную телеметрию (.json)">JSON</button>
+      <button class="btn" id="journal-clear-wp">Снять маяк</button>
     </div>
     <div class="atlas-grid" id="journal-grid"></div>
   </div>
