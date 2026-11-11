@@ -327,8 +327,14 @@ window.OC = window.OC || {};
     }
   }
 
+  /* Модалка сообщает о себе UI-слою: пока она открыта, HUD скрыт */
+  function notifyModal(open) {
+    if (OC.UI && OC.UI.Rail) OC.UI.Rail.setModalOpen('atlas', open);
+  }
+
   function thisClose() {
     if (modalEl) modalEl.classList.add('hidden');
+    notifyModal(false);
     stopStageLoop();
   }
 
@@ -449,6 +455,7 @@ window.OC = window.OC || {};
       if (!modalEl) return;
       const opening = modalEl.classList.contains('hidden');
       modalEl.classList.toggle('hidden');
+      notifyModal(opening);
       if (opening) {
         render();
         selectSpecies(selectedKey, false);

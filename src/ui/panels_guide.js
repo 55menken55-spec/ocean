@@ -35,6 +35,7 @@ window.OC = window.OC || {};
       if (!helpModal) return;
       const shouldOpen = !forceClose && helpModal.classList.contains('hidden');
       helpModal.classList.toggle('hidden', !shouldOpen);
+      if (OC.UI && OC.UI.Rail) OC.UI.Rail.setModalOpen('help', shouldOpen);
       if (btnHelp) btnHelp.classList.toggle('on', shouldOpen);
       if (shouldOpen && hero) hero.classList.add('fade');
     }

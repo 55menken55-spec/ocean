@@ -267,6 +267,92 @@ try {
     });
     assert(hudToggleOk.ok, `HUD toggle must hide and restore overlays: ${JSON.stringify(hudToggleOk)}`);
 
+    enterStage('icon-rail');
+    // Рейл иконок: 14 кнопок сгруппированы, сворачиваются и не наезжают на бренд/телеметрию
+    const rail = await mobilePage.evaluate(() => {
+      const railEl = document.getElementById('topright');
+      const groups = document.querySelectorAll('#icon-rail .icon-group');
+      const btns = document.querySelectorAll('#topright .icon-btn:not(.rail-toggle)');
+      const toggle = document.getElementById('btn-rail-toggle');
+      const before = railEl ? railEl.dataset.collapsed : null;
+      if (toggle) toggle.click();
+      const rendered = document.getElementById('icon-rail');
+      const cs = rendered ? window.getComputedStyle(rendered) : null;
+      const collapsed = { state: railEl ? railEl.dataset.collapsed : null, pointerEvents: cs ? cs.pointerEvents : null };
+      if (toggle) toggle.click();
+      const restored = { state: railEl ? railEl.dataset.collapsed : null };
+      return { groups: groups.length, btns: btns.length, toggle: !!toggle, before, collapsed, restored };
+    });
+    assert.equal(rail.btns, 14, `Рейл должен содержать все 14 иконок, найдено ${rail.btns}`);
+    assert.equal(rail.groups, 4, `Иконки должны быть разбиты на 4 логические группы, найдено ${rail.groups}`);
+    assert(rail.toggle, 'Кнопка сворачивания рейла #btn-rail-toggle отсутствует');
+    assert.equal(rail.collapsed.state, 'true', `Сворачивание рейла не сработало: ${JSON.stringify(rail)}`);
+    assert.equal(rail.collapsed.pointerEvents, 'none', 'Свёрнутый рейл должен быть некликабельным');
+    assert.equal(rail.restored.state, 'false', 'Повторный клик должен разворачивать рейл обратно');
+
+    enterStage('modal-hides-hud');
+    // Открытая модалка (атлас) убирает HUD с экрана и возвращает его после закрытия
+    const modalHud = await mobilePage.evaluate(() => {
+      const vis = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        return Number(window.getComputedStyle(el).opacity);
+      };
+      const before = { rail: vis('#topright'), brand: vis('.brand'), tele: vis('.telemetry') };
+      window.OC.Atlas.toggle();
+      const open = {
+        class: document.body.classList.contains('modal-open'),
+        rail: vis('#topright'), brand: vis('.brand'), tele: vis('.telemetry'),
+        atlasOpen: window.OC.Atlas.isOpen()
+      };
+      window.OC.Atlas.toggle();
+      const closed = {
+        class: document.body.classList.contains('modal-open'),
+        rail: vis('#topright'), brand: vis('.brand')
+      };
+      return { before, open, closed };
+    });
+    assert(modalHud.open.atlasOpen, 'Атлас не открылся в тесте модалок');
+    assert(modalHud.open.class === true, 'Открытая модалка должна ставить body.modal-open');
+    assert(modalHud.open.rail < 0.05 && modalHud.open.brand < 0.05 && modalHud.open.tele < 0.05,
+      `HUD не скрылся под модалкой: ${JSON.stringify(modalHud.open)}`);
+    assert(modalHud.closed.class === false, 'После закрытия модалки body.modal-open должен сниматься');
+    assert(modalHud.closed.rail > 0.95 && modalHud.closed.brand > 0.95,
+      `HUD не вернулся после закрытия модалки: ${JSON.stringify(modalHud.closed)}`);
+
+    enterStage('hud-overlap');
+    // Ни один элемент HUD не должен наезжать на другой на типовых ширинах
+    const overlaps = [];
+    for (const vp of [{ w: 1280, h: 800 }, { w: 1024, h: 768 }, { w: 844, h: 390 }]) {
+      await mobilePage.setViewportSize({ width: vp.w, height: vp.h });
+      await mobilePage.waitForTimeout(320);
+      const bad = await mobilePage.evaluate(() => {
+        const rect = (sel) => {
+          const el = document.querySelector(sel);
+          if (!el) return null;
+          const cs = window.getComputedStyle(el);
+          if (cs.display === 'none' || Number(cs.opacity) < 0.1) return null;
+          const r = el.getBoundingClientRect();
+          return r.width > 0 ? { sel, left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
+        };
+        const els = ['.brand', '.topright', '.telemetry', '.status', '#res-badge'].map(rect).filter(Boolean);
+        const hits = [];
+        for (let i = 0; i < els.length; i++) {
+          for (let j = i + 1; j < els.length; j++) {
+            const a = els[i], b = els[j];
+            const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+            const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+            if (ox > 4 && oy > 4) hits.push({ a: a.sel, b: b.sel, ox: Math.round(ox), oy: Math.round(oy) });
+          }
+        }
+        return hits;
+      });
+      if (bad.length) overlaps.push({ viewport: `${vp.w}x${vp.h}`, hits: bad });
+    }
+    await mobilePage.setViewportSize({ width: 844, height: 390 });
+    await mobilePage.waitForTimeout(320);
+    assert.equal(overlaps.length, 0, `Элементы HUD перекрывают друг друга: ${JSON.stringify(overlaps)}`);
+
     enterStage('mobile-stick');
     // Virtual stick drives the nav state (drag right = forward thrust)
     const stickDrive = await mobilePage.evaluate(() => new Promise((resolve) => {

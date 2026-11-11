@@ -109,6 +109,7 @@ ORDER = [
     'ui/panels_biomes.js',
     'ui/panels_touch.js',
     'ui/panels_guide.js',
+    'ui/rails.js',
     'ui/hotkeys.js',
     'ui/main.js',
 ]

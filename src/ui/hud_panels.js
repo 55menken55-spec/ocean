@@ -145,7 +145,10 @@ window.OC = window.OC || {};
           if (lm) {
             OC.Expedition.setWaypoint(activeBiome.id, lm.x, lm.z, lm.name);
             toast('Маяк поставлен: ' + lm.name);
-            if (journalModal) journalModal.classList.add('hidden');
+            if (journalModal) {
+            journalModal.classList.add('hidden');
+            if (OC.UI && OC.UI.Rail) OC.UI.Rail.setModalOpen('journal', false);
+          }
           }
         });
         journalGrid.appendChild(card);
@@ -170,7 +173,10 @@ window.OC = window.OC || {};
           (hasEnc ? '<button class="atlas-go">3D-Атлас →</button>' : '<button class="atlas-go">В биом →</button>') + '</div>';
         const btn = card.querySelector('.atlas-go');
         btn.addEventListener('click', () => {
-          if (journalModal) journalModal.classList.add('hidden');
+          if (journalModal) {
+            journalModal.classList.add('hidden');
+            if (OC.UI && OC.UI.Rail) OC.UI.Rail.setModalOpen('journal', false);
+          }
           if (s.biomeId !== activeBiome.id) {
             switchBiome(s.biomeId);
             return;

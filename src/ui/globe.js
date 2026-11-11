@@ -673,6 +673,7 @@ window.OC = window.OC || {};
     syncBeaconListData();
     isOpenState = true;
     modalEl.classList.remove('hidden');
+    if (OC.UI && OC.UI.Rail) OC.UI.Rail.setModalOpen('globe', true);
     ensureStage();
     resizeCanvas();
     const curId = (callbacks.getActiveBiomeId && callbacks.getActiveBiomeId()) || selectedId || (beacons[0] && beacons[0].id);
@@ -692,6 +693,7 @@ window.OC = window.OC || {};
       rafId = 0;
     }
     if (modalEl) modalEl.classList.add('hidden');
+    if (OC.UI && OC.UI.Rail) OC.UI.Rail.setModalOpen('globe', false);
   }
 
   OC.Globe = {

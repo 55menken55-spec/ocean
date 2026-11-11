@@ -138,6 +138,7 @@ window.OC = window.OC || {};
       if (!journalModal) return;
       const opening = forceClose ? false : journalModal.classList.contains('hidden');
       journalModal.classList.toggle('hidden', !opening);
+      if (OC.UI && OC.UI.Rail) OC.UI.Rail.setModalOpen('journal', opening);
       if (opening) renderJournal();
     };
     if (btnJournal) btnJournal.addEventListener('click', (e) => { e.stopPropagation(); toggleJournal(false); });

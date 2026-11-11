@@ -282,7 +282,11 @@ window.OC = window.OC || {};
         e.stopPropagation();
         journalTab = 'museum';
         if (journalTabs) journalTabs.querySelectorAll('button[data-jtab]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-jtab') === 'museum'));
-        if (journalModal) { journalModal.classList.remove('hidden'); renderJournal(); }
+        if (journalModal) {
+          journalModal.classList.remove('hidden');
+          if (OC.UI && OC.UI.Rail) OC.UI.Rail.setModalOpen('journal', true);
+          renderJournal();
+        }
       });
     }
     if (rovSamplesClear) {
@@ -625,6 +629,9 @@ window.OC = window.OC || {};
           }
         });
       }
+
+      /* Рейл иконок и скрытие HUD под модалками — ui/rails.js */
+      if (OC.UI && OC.UI.Rail) OC.UI.Rail.init();
 
       uiHandles = bindUI();
       uiHandles.syncModes(OC.Navigation.getMode());

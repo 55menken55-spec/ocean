@@ -1566,6 +1566,24 @@ assert(OC.Quality.getAutoLodState().dynamicResScale !== undefined, 'Auto-LOD tel
 const tplV5 = fs.readFileSync(path.join(ROOT, 'template.html'), 'utf8');
 assert(tplV5.includes('id="touch-actions"') && tplV5.includes('id="m-flash"') && tplV5.includes('id="m-sonar"') && tplV5.includes('id="m-sample"') && tplV5.includes('id="m-sub"'), 'template.html must add the mobile quick-action HUD buttons');
 assert(tplV5.includes('id="res-badge"') && tplV5.includes('id="hud-toggle"'), 'template.html must add the optics resolution badge and HUD toggle');
+
+// Рейл иконок: 14 кнопок в 4 логических группах + кнопка сворачивания + скрытие HUD под модалками
+const railIds = ['btn-globe','btn-atlas','btn-journal','btn-lab','btn-rov','btn-cam','btn-sonar','btn-hydro',
+  'btn-flash','btn-sound','btn-cinema','btn-sub','btn-help','btn-panel'];
+for (const id of railIds) {
+  assert(tplV5.includes(`id="${id}"`), `template.html lost rail icon #${id}`);
+}
+assert(tplV5.includes('id="icon-rail"') && tplV5.includes('id="btn-rail-toggle"'), 'template.html must wrap icons in #icon-rail with #btn-rail-toggle');
+const railGroupCount = (tplV5.match(/class="icon-group"/g) || []).length;
+assert(railGroupCount === 4, `rail must expose 4 logical icon groups, found ${railGroupCount}`);
+assert(tplV5.includes('body.modal-open'), 'template.html must hide HUD while a modal is open (body.modal-open)');
+const railsSrc = groupSource('ui/rails');
+for (const fn of ['setCollapsed', 'setModalOpen', 'isModalOpen']) {
+  assert(railsSrc.includes(fn), `ui/rails.js must expose ${fn}`);
+}
+for (const src of ['ui/atlas', 'ui/globe', 'ui/panels_guide', 'ui/panels_camera']) {
+  assert(groupSource(src).includes('setModalOpen'), `${src} must report its modal state to OC.UI.Rail`);
+}
 assert(tplV5.includes('env(safe-area-inset-bottom') && tplV5.includes('@media (max-width:430px)') && tplV5.includes('orientation:landscape') && tplV5.includes('pointer:coarse'), 'template.html must ship safe-area, narrow-phone & landscape mobile media rules');
 assert(tplV5.includes('touch-action:none') && tplV5.includes('.touch-act'), 'template.html must style touch action buttons with pointer-safe interaction');
 
