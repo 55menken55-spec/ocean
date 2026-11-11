@@ -300,17 +300,21 @@ try {
       };
       const before = { rail: vis('#topright'), brand: vis('.brand'), tele: vis('.telemetry') };
       window.OC.Atlas.toggle();
-      const open = {
+      return { before, atlasOpen: window.OC.Atlas.isOpen() };
+    });
+    await mobilePage.waitForTimeout(450); // ждём завершения перехода прозрачности
+    modalHud.open = await mobilePage.evaluate(() => {
+      const vis = (sel) => Number(window.getComputedStyle(document.querySelector(sel)).opacity);
+      return {
         class: document.body.classList.contains('modal-open'),
-        rail: vis('#topright'), brand: vis('.brand'), tele: vis('.telemetry'),
-        atlasOpen: window.OC.Atlas.isOpen()
+        rail: vis('#topright'), brand: vis('.brand'), tele: vis('.telemetry')
       };
-      window.OC.Atlas.toggle();
-      const closed = {
-        class: document.body.classList.contains('modal-open'),
-        rail: vis('#topright'), brand: vis('.brand')
-      };
-      return { before, open, closed };
+    });
+    await mobilePage.evaluate(() => window.OC.Atlas.toggle());
+    await mobilePage.waitForTimeout(450);
+    modalHud.closed = await mobilePage.evaluate(() => {
+      const vis = (sel) => Number(window.getComputedStyle(document.querySelector(sel)).opacity);
+      return { class: document.body.classList.contains('modal-open'), rail: vis('#topright'), brand: vis('.brand') };
     });
     assert(modalHud.open.atlasOpen, 'Атлас не открылся в тесте модалок');
     assert(modalHud.open.class === true, 'Открытая модалка должна ставить body.modal-open');

@@ -573,7 +573,9 @@
     .brand p,.brand .line{display:none}
     .panel{top:52px;max-height:calc(100vh - 62px)}
     .touch-nav{bottom:10px}
-    .touch-actions{bottom:auto;top:calc(56px + env(safe-area-inset-top, 0px));right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px}
+    /* Ландшафт телефона: развёрнутый рейл занимает два ряда сверху,
+       поэтому быстрые действия начинаются под ним, а не под кнопкой «›» */
+    .touch-actions{bottom:auto;top:calc(108px + env(safe-area-inset-top, 0px));right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px}
     .telemetry{bottom:8px}
   }
 </style>
