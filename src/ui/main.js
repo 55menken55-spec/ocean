@@ -814,6 +814,16 @@ window.OC = window.OC || {};
         camera.updateProjectionMatrix();
       }
 
+      // Сейсмическая дрожание камеры от подводного вулкана (редкие события)
+      if (OC.Volcano && OC.Volcano.getShake) {
+        const sh = OC.Volcano.getShake(time);
+        if (sh && (sh.x || sh.y || sh.z)) {
+          camera.position.x += sh.x;
+          camera.position.y += sh.y;
+          camera.position.z += sh.z;
+        }
+      }
+
       if (OC.renderWorld) OC.renderWorld(scene, camera);
       else renderer.render(scene, camera);
 

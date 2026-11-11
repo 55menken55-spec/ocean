@@ -18,6 +18,7 @@ window.OC = window.OC || {};
   const lastCacheCheckPos = new T.Vector3(1e9, 1e9, 1e9);
   let lastDensity = -1;
   let dirtyRebuild = false;
+  let lastVolcDmgKey = 'none';
   let cacheComplete = false;
   let totalVisibleInstances = 0;
   let qualityHookBound = false;
@@ -30,6 +31,7 @@ window.OC = window.OC || {};
   const _scale = new T.Vector3();
   const _mat4 = new T.Matrix4();
   const _col = new T.Color();
+  const _volcDmgColor = new T.Color(0x5a4a3a);
 
   function chunkKey(cx, cz) {
     return cx + ',' + cz;
@@ -125,14 +127,20 @@ window.OC = window.OC || {};
           if (pool.cullDist <= 340 && (i & 1) === 1 && d2 > (cull * 0.58) ** 2) continue;
           if (pool.count >= pool.maxCount) continue;
 
+          // Damage от событий вулкана: tint к коричневому + сжатие по damage-фактору
+          let dmg = 0;
+          if (OC.Volcano && OC.Volcano.getDamageFactor) {
+            dmg = OC.Volcano.getDamageFactor(it.x, it.z);
+          }
           const idx = pool.count++;
           _pos.set(it.x, it.y, it.z);
           _euler.set(0, it.ry, 0);
           _quat.setFromEuler(_euler);
-          _scale.setScalar(it.scale);
+          _scale.setScalar(it.scale * (1 - dmg * 0.45));
           _mat4.compose(_pos, _quat, _scale);
           pool.mesh.setMatrixAt(idx, _mat4);
           _col.setHex(it.tint);
+          if (dmg > 0) _col.lerp(_volcDmgColor, dmg * 0.7);
           pool.mesh.setColorAt(idx, _col);
           total++;
         }
@@ -252,6 +260,12 @@ window.OC = window.OC || {};
     update(camPos) {
       if (!biomeRef) return;
       updateSeasonalAppearance();
+      // Damage от вулкана: если damage-state изменился, пересобрать tint (dirtyRebuild)
+      if (OC.Volcano && OC.Volcano.getDamageState) {
+        const vs = OC.Volcano.getDamageState();
+        const key = vs.active ? vs.f.toFixed(2) : 'off';
+        if (key !== lastVolcDmgKey) { lastVolcDmgKey = key; dirtyRebuild = true; }
+      }
       const q = OC.Quality.get();
       const cacheMoved = Math.hypot(camPos.x - lastCacheCheckPos.x, camPos.z - lastCacheCheckPos.z);
 

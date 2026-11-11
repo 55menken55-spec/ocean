@@ -204,6 +204,8 @@ window.OC = window.OC || {};
             const inCaveCeiling = !!(biome.getCeilingHeight && biome.getCeilingHeight(craftPos.x, craftPos.z) < 25.0);
             const fInfo = OC.faunaInfo || {};
             let phaseLabel = dayW < 0.35 ? 'Ночь · Био + DVM' : (dayW < 0.7 ? 'Сумерки' : 'День');
+            const vInfo = OC.volcanoInfo || {};
+            if (vInfo.phase && vInfo.phase !== 'idle') phaseLabel = 'Вулкан · ' + vInfo.label;
             if (fInfo.siltTurbidity && fInfo.siltTurbidity > 0.35) phaseLabel = 'Взвесь грунта · Silt-out';
             else if (inBrineNow) phaseLabel = 'Галоклин · Рассол 230‰';
             else if (inHaloNow) phaseLabel = 'Галоклин сенота · Облако H₂S';

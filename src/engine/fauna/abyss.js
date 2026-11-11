@@ -287,6 +287,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
     return {
       key,
+      pts,
       getPosition: () => pts.position,
       update(dt, time, camPos) {
         const d = Math.hypot(opts.x - camPos.x, opts.z - camPos.z);

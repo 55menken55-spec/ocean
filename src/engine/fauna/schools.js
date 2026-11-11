@@ -549,6 +549,21 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
             maxPanicTick = Math.max(maxPanicTick, 0.5);
           }
 
+          // Раннее оповещение и бегство от подводного вулкана (редкие события, см. engine/volcano.js)
+          const volcInf = ctx ? ctx.volcano : null;
+          if (volcInf && volcInf.active && !isPredator) {
+            const vdx = x - volcInf.x, vdz = z - volcInf.z;
+            const vd2 = vdx * vdx + vdz * vdz;
+            if (vd2 < volcInf.r * volcInf.r && vd2 > 0.01) {
+              const vd = Math.sqrt(vd2);
+              const edge = OC.smoothstep(volcInf.r, volcInf.r * 0.45, vd);
+              const pulse = volcInf.strength * edge;
+              fx += (vdx / vd) * pulse;
+              fz += (vdz / vd) * pulse;
+              panic = Math.max(panic, volcInf.panic * edge + 0.2);
+            }
+          }
+
           // Реакция на дайвера / батискаф и прожектор
           if (fullBoids) {
             const cdx = x - camPos.x, cdy = y - camPos.y, cdz = z - camPos.z;
