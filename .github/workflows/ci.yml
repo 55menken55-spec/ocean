@@ -85,7 +85,19 @@ jobs:
             fi
             sleep 0.5
           done
-          node tests/e2e_playwright.mjs
+          set -o pipefail
+          node tests/e2e_playwright.mjs 2>&1 | tee /tmp/playwright.log
+
+      - name: Surface Playwright failure reason as annotation
+        if: failure()
+        run: |
+          REASON=$(grep -m1 '^::error' /tmp/playwright.log 2>/dev/null || true)
+          if [ -n "$REASON" ] || [ -f /tmp/playwright.log ]; then
+            if [ -z "$REASON" ]; then REASON=$(grep -m1 'FAILED STAGE' /tmp/playwright.log || true); fi
+            if [ -z "$REASON" ]; then REASON=$(tail -n 12 /tmp/playwright.log | tr '\n' ' ' | cut -c1-900); fi
+            if [ -z "$REASON" ]; then REASON=$(tail -n 12 /tmp/http_server.log | tr '\n' ' ' || true); fi
+            echo "::error title=Playwright E2E failure::$REASON"
+          fi
 
       - name: Upload failure screenshot on error
         if: failure()
