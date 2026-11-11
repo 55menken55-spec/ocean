@@ -76,7 +76,21 @@ window.OC = window.OC || {};
         bottomTempC: ctdCast.bottomTemp,
         thermoclineM: ctdCast.thermoclineM,
         minO2: ctdCast.minO2,
-        maxPressureAtm: ctdCast.maxPressureAtm
+        waterType: ctdCast.waterType,
+        conductivityUSCm: ctdCast.conductivityUSCm,
+        tdsMgL: ctdCast.tdsMgL,
+        mineralizationPpt: ctdCast.mineralizationPpt,
+        pH: ctdCast.pH,
+        maxPressureAtm: ctdCast.maxPressureAtm,
+        profile: (ctdCast.bins || []).map((bin) => ({
+          depthM: bin.depthM,
+          tempC: bin.tempC,
+          o2MgL: Number(bin.o2.toFixed(2)),
+          conductivityUSCm: bin.conductivityUSCm,
+          tdsMgL: bin.tdsMgL,
+          mineralizationPpt: bin.mineralizationPpt
+        })),
+        oxygenProfile: (ctdCast.bins || []).map((bin) => ({ depthM: bin.depthM, o2MgL: Number(bin.o2.toFixed(2)) }))
       } : null,
       ecoLab: ecoLab ? {
         tempDeltaC: ecoLab.tempDelta,
@@ -118,6 +132,14 @@ window.OC = window.OC || {};
       lines.push('## Последнее зондирование CTD');
       lines.push(`- Зона: **${rep.ctdCast.zoneName}** (${rep.ctdCast.minDepthM}–${rep.ctdCast.maxDepthM} м, до ${rep.ctdCast.maxPressureAtm} атм)`);
       lines.push(`- Температура (поверхн. / дно): **${rep.ctdCast.surfaceTempC} °C / ${rep.ctdCast.bottomTempC} °C** · Термоклин: **${rep.ctdCast.thermoclineM} м** · Мин. O₂: **${rep.ctdCast.minO2} мг/л**`);
+      if (Number.isFinite(rep.ctdCast.conductivityUSCm)) {
+        lines.push(`- Пресноводная химия: **${rep.ctdCast.conductivityUSCm} µS/см**, TDS **${rep.ctdCast.tdsMgL} мг/л**, минерализация **${rep.ctdCast.mineralizationPpt}‰**, pH **${rep.ctdCast.pH}**`);
+      }
+      if (rep.ctdCast.oxygenProfile.length) {
+        const top = rep.ctdCast.oxygenProfile[0];
+        const bottom = rep.ctdCast.oxygenProfile[rep.ctdCast.oxygenProfile.length - 1];
+        lines.push(`- Кислородный профиль: **${top.o2MgL} → ${bottom.o2MgL} мг/л** (${top.depthM}–${bottom.depthM} м; ${rep.ctdCast.oxygenProfile.length} точек)`);
+      }
       lines.push('');
     }
     if (rep.ecoLab) {

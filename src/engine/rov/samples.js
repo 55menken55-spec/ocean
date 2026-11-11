@@ -240,9 +240,11 @@ window.OC = window.OC || {};
       }
       Tval = Math.max(-1.9, Tval);
 
-      // Профиль кислорода: поверхностный максимум, зона кислородного минимума в толще
+      // Байкал остаётся хорошо насыщенным кислородом до глубины; морская OMZ-модель к нему не применяется.
       let o2Val = labO2;
-      if (!biome.noSurface) {
+      if (biome.id === 'baikal') {
+        o2Val = OC.clamp(labO2 + 1.8 + OC.smoothstep(35, 160, d) * 1.0 - OC.smoothstep(1320, 1640, d) * 0.25, 7.5, 13.5);
+      } else if (!biome.noSurface) {
         const surfBoost = (1 - OC.smoothstep(0, 28, d)) * 0.7;
         const omzDip = OC.smoothstep(24, 95, d) * (0.9 + nutrients * 1.6);
         o2Val = OC.clamp(labO2 + surfBoost - omzDip, 1.4, 12.6);
@@ -250,6 +252,19 @@ window.OC = window.OC || {};
         o2Val = OC.clamp(labO2 * 0.65 - f * 0.6, 1.8, 7.5);
       }
       if (o2Val < minO2) minO2 = o2Val;
+
+      let conductivityUSCm = null, tdsMgL = null, mineralizationPpt = null;
+      if (biome.id === 'baikal') {
+        let seepInfluence = 0;
+        const seeps = [[130, 170], [-110, 280], [235, -310]];
+        for (let si = 0; si < seeps.length; si++) {
+          const sd = Math.hypot(x - seeps[si][0], z - seeps[si][1]);
+          seepInfluence = Math.max(seepInfluence, Math.exp(-sd / 115));
+        }
+        conductivityUSCm = OC.clamp(122 + d * 0.008 + seepInfluence * 20, 105, 158);
+        tdsMgL = conductivityUSCm * 0.68;
+        mineralizationPpt = tdsMgL / 1000;
+      }
 
       if (prevT !== null) {
         const slope = Math.abs(Tval - prevT);
@@ -259,11 +274,12 @@ window.OC = window.OC || {};
         }
       }
       prevT = Tval;
-      bins.push({ depthM: d, tempC: Tval, o2: o2Val });
+      bins.push({ depthM: d, tempC: Tval, o2: o2Val, conductivityUSCm, tdsMgL, mineralizationPpt });
     }
 
     const surfaceTemp = bins[0].tempC;
     const bottomTemp = bins[bins.length - 1].tempC;
+    const bottomBin = bins[bins.length - 1];
     const maxPressureAtm = 1 + maxDepthM / 10.08;
 
     return {
@@ -279,6 +295,11 @@ window.OC = window.OC || {};
       bottomTemp: Number(bottomTemp.toFixed(1)),
       thermoclineM: Number(thermoclineM.toFixed(0)),
       minO2: Number(minO2.toFixed(1)),
+      waterType: biome.id === 'baikal' || biome.id === 'amazon_igapo' ? 'freshwater' : (biome.id === 'brine_pool' ? 'brine' : 'marine'),
+      pH: labState ? Number(labState.pH.toFixed(2)) : 8.1,
+      conductivityUSCm: bottomBin.conductivityUSCm === null ? null : Number(bottomBin.conductivityUSCm.toFixed(0)),
+      tdsMgL: bottomBin.tdsMgL === null ? null : Number(bottomBin.tdsMgL.toFixed(0)),
+      mineralizationPpt: bottomBin.mineralizationPpt === null ? null : Number(bottomBin.mineralizationPpt.toFixed(3)),
       maxPressureAtm: Number(maxPressureAtm.toFixed(1)),
       bins
     };

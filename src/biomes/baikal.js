@@ -182,14 +182,14 @@ window.OC = window.OC || {};
         geoOpts: { len: 1.4, height: 0.55, width: 0.24, colA: 0x718b8b, colB: 0xc2d9cf, finCol: 0x506a70, stripes: 0.2 } },
       { key: 'fish_omul', n: 42, cx: -360, cz: -90, radius: 42, yDepth: -65, yAmp: 18, spread: 14, speed: 6.1, scale: 0.76, diel: 'cathemeral', shyness: 0.62,
         geoOpts: { len: 1.4, height: 0.55, width: 0.24, colA: 0x718b8b, colB: 0xc2d9cf, finCol: 0x506a70, stripes: 0.2 } },
-      { key: 'fish_golomyanka', n: 62, cx: -70, cz: 70, radius: 54, yDepth: -420, yAmp: 170, spread: 18, speed: 4.5, scale: 0.54, diel: 'nocturnal', shyness: 0.42,
+      { key: 'fish_golomyanka', n: 62, cx: -70, cz: 70, radius: 54, yDepth: -420, yAmp: 170, dvmAmp: 105, spread: 18, speed: 4.5, scale: 0.54, diel: 'nocturnal', shyness: 0.42,
         geoOpts: { len: 1.15, height: 0.48, width: 0.18, colA: 0x8db6c5, colB: 0xe2f0ef, finCol: 0x7cabbc } },
       { key: 'fish_grayling', n: 30, cx: -500, cz: -560, radius: 30, yDepth: -6, yAmp: 2.4, spread: 8, speed: 4.4, scale: 0.65, diel: 'diurnal', shyness: 0.38,
         geoOpts: { len: 1.15, height: 0.5, width: 0.22, colA: 0x546b74, colB: 0xb7c5b3, finCol: 0x667d88, stripes: 0.18 } }
     ],
     baikalSeals: [
       { cx: -455, cz: -290, r: 52, y: -12, scale: 1.0 },
-      { cx: 70, cz: 40, r: 94, y: -210, scale: 1.18 }
+      { cx: -40, cz: 80, r: 82, y: -360, scale: 1.18 }
     ],
     seepTargets: [{ x: 130, z: 170 }, { x: -110, z: 280 }, { x: 235, z: -310 }],
     vessels: [{ x: -615, z: -408, yaw: 0.25, variant: 'expedition', name: 'НИС «Академик Коптюг»' }]

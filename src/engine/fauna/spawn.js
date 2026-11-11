@@ -131,6 +131,8 @@ window.OC = window.OC || {};
       for (const seal of (plan.baikalSeals || [])) {
         const a = OC._FaunaBuilders.makeBaikalSeal(faunaGroup, biome, seal);
         agents.push(a);
+        predatorAgents.push(a);
+        huntingAgents.push(a);
         sonarTargets.push(a);
       }
 

@@ -190,6 +190,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     }
 
     const anchor = new T.Vector3(ax0, ay0, az0);
+    anchor.schoolKey = opts.key || 'fish_blue';
     const matArr = mesh.instanceMatrix.array;
     const isHostAnemone = !!opts.hostAnemone;
     const isPrey = !isPredator && !isCleaner && !isHostAnemone && !isBiolum;

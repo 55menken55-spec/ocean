@@ -56,6 +56,9 @@ window.OC = window.OC || {};
       const rovCtdPress = document.getElementById('rov-ctd-press');
       const rovCtdTemps = document.getElementById('rov-ctd-temps');
       const rovCtdThermo = document.getElementById('rov-ctd-thermo');
+      const rovCtdWater = document.getElementById('rov-ctd-water');
+      const rovCtdConductivity = document.getElementById('rov-ctd-conductivity');
+      const rovCtdPh = document.getElementById('rov-ctd-ph');
       const rovPanel = document.getElementById('rov-panel');
       const rovSampleCount = document.getElementById('rov-sample-count');
       const rovSamplesClear = document.getElementById('rov-samples-clear');
@@ -211,6 +214,18 @@ window.OC = window.OC || {};
       if (rovCtdTemps) rovCtdTemps.textContent = cast.bottomTemp.toFixed(1) + ' / ' + cast.surfaceTemp.toFixed(1) + ' °C';
       if (rovCtdO2) rovCtdO2.textContent = cast.minO2.toFixed(1) + ' мг/л';
       if (rovCtdPress) rovCtdPress.textContent = cast.maxPressureAtm.toFixed(1) + ' атм';
+      if (rovCtdWater) {
+        const typeLabel = cast.waterType === 'freshwater' ? 'Пресная' : (cast.waterType === 'brine' ? 'Рассол' : 'Морская');
+        rovCtdWater.textContent = Number.isFinite(cast.mineralizationPpt)
+          ? typeLabel + ' · ' + cast.mineralizationPpt.toFixed(2) + '‰'
+          : typeLabel;
+      }
+      if (rovCtdConductivity) {
+        rovCtdConductivity.textContent = Number.isFinite(cast.conductivityUSCm)
+          ? cast.conductivityUSCm + ' µS/см · ' + cast.tdsMgL + ' мг/л TDS'
+          : '—';
+      }
+      if (rovCtdPh) rovCtdPh.textContent = Number.isFinite(cast.pH) ? cast.pH.toFixed(2) : '—';
       if (rovCtdChart && activeBiome()) {
         const craft = OC.Navigation.getPosition();
         const off = activeBiome().depthOffset || 0;
@@ -266,7 +281,7 @@ window.OC = window.OC || {};
       const cast = OC.ROV.runCtdCast(activeBiome(), pos, labSt);
       updateRovCtdDisplay(cast);
       if (cast) {
-        toast('CTD-зонд: дно ' + cast.maxDepthM + ' м · ' + cast.bottomTemp + ' °C · мин. O₂ ' + cast.minO2 + ' мг/л');
+        toast('CTD-зонд: дно ' + cast.maxDepthM + ' м · ' + cast.bottomTemp + ' °C · мин. O₂ ' + cast.minO2 + ' мг/л' + (Number.isFinite(cast.conductivityUSCm) ? ' · минерализация ' + cast.mineralizationPpt.toFixed(2) + '‰' : ''));
       }
       return cast;
     }

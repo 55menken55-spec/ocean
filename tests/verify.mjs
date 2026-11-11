@@ -1471,10 +1471,30 @@ for (const k of ['baikal_sponge', 'charophyte_bed', 'fish_omul', 'fish_golomyank
 }
 const ctdBaikal = OC.ROV.runCtdCast(baikal, new T.Vector3(0, -900, 80), OC.EcoLab.getState());
 assert(ctdBaikal && ctdBaikal.maxDepthM > 1500 && ctdBaikal.bottomTemp >= 3.2 && ctdBaikal.bottomTemp < 4.0, `Baikal CTD profile mismatch: ${JSON.stringify(ctdBaikal)}`);
+assert.equal(ctdBaikal.waterType, 'freshwater', 'Baikal CTD must identify freshwater');
+assert(ctdBaikal.conductivityUSCm >= 105 && ctdBaikal.conductivityUSCm <= 158 && ctdBaikal.tdsMgL > 0 && ctdBaikal.mineralizationPpt < 0.2, 'Baikal CTD must report low freshwater conductivity, TDS and mineralization');
+assert(ctdBaikal.bins.length >= 20 && ctdBaikal.bins.every((bin) => bin.o2 > 7 && bin.o2 < 14), 'Baikal oxygen profile must remain well-oxygenated from surface to bottom');
+assert(ctdBaikal.pH > 6 && ctdBaikal.pH < 9, 'Baikal CTD must include measured water pH');
 const baikalFauna = OC.FaunaEngine.init(scene, baikal);
 assert(baikalFauna.agents.some((a) => a.key === 'seal_baikal') && baikalFauna.agents.some((a) => a.key === 'fish_golomyanka') && baikalFauna.agents.some((a) => a.key === 'methane_seep_baikal'), 'Baikal fauna plan must include nerpa, golomyanka and scannable seep locations');
+const golomyankaPlan = baikal.faunaPlan.schools.find((school) => school.key === 'fish_golomyanka');
+assert(golomyankaPlan && golomyankaPlan.diel === 'nocturnal' && golomyankaPlan.dvmAmp >= 100, 'Golomyanka must use the existing nocturnal diel vertical migration system');
 baikalFauna.update(1 / 60, OC.uTime.value, new T.Vector3(baikal.spawn.pos[0], baikal.spawn.pos[1], baikal.spawn.pos[2]), 0, false);
 assert(OC.faunaInfo.hydratePlumesActive, 'Baikal methane seeps must activate the existing low-cost gas plume system');
+const testSeal = OC._FaunaBuilders.makeBaikalSeal(scene, baikal, { cx: -40, cz: 80, r: 0, y: -360, scale: 1 });
+testSeal.update(0, 0, new T.Vector3(-40, -360, 80), { preyCenters: [] });
+let golomyankaPredationCount = 0;
+const testGolomyanka = testSeal.getPosition().clone();
+testGolomyanka.schoolKey = 'fish_golomyanka';
+testGolomyanka.applyPredation = () => { golomyankaPredationCount++; };
+let huntTime = 0;
+while (!testSeal.isHunting() && huntTime < 30) {
+  testSeal.update(0.5, huntTime, new T.Vector3(-40, -360, 80), { preyCenters: [testGolomyanka] });
+  huntTime += 0.5;
+}
+assert(testSeal.isHunting(), 'Baikal nerpa must enter a hunting lunge when it finds a golomyanka school');
+for (let huntStep = 0; huntStep < 60; huntStep++) testSeal.update(0.1, huntTime + huntStep * 0.1, new T.Vector3(-40, -360, 80), { preyCenters: [testGolomyanka] });
+assert(golomyankaPredationCount > 0, 'Baikal nerpa lunge must apply predation to a golomyanka school');
 assert.equal(OC.Expedition.MISSIONS.filter((m) => m.biomeId === 'baikal').length, 4, 'Baikal must provide four expedition goals');
 OC.Biomes.setActive('great_barrier_reef');
 console.log('   11th Biome "Озеро Байкал" (1,642 m rift, clear-water optics, Baikal sponge, omul, golomyanka, nerpa, methane seeps, CTD and 4 missions) verified.');
@@ -1542,6 +1562,13 @@ assert(typeof OC.Expedition.buildScientificReport === 'function' && typeof OC.Ex
 const repMd = OC.Expedition.exportReport('md', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
 assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 11 биомам'), 'Markdown report must summarize all 11 biomes & CTD data');
 const repJson = OC.Expedition.exportReport('json', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
+const baikalReportMd = OC.Expedition.exportReport('md', { biome: baikal, ctdCast: ctdBaikal });
+const baikalReportJson = OC.Expedition.exportReport('json', { biome: baikal, ctdCast: ctdBaikal });
+const baikalReportData = JSON.parse(baikalReportJson.content);
+assert(baikalReportMd.content.includes('Пресноводная химия') && baikalReportMd.content.includes('Кислородный профиль'), `Baikal Markdown report must include freshwater chemistry and oxygen profile: ${baikalReportMd.content.slice(0, 1200)}`);
+assert.equal(baikalReportData.ctdCast.conductivityUSCm, ctdBaikal.conductivityUSCm, 'JSON report must preserve Baikal conductivity');
+assert.equal(baikalReportData.ctdCast.oxygenProfile.length, ctdBaikal.bins.length, 'JSON report must export every CTD oxygen-depth sample');
+assert.equal(baikalReportData.ctdCast.profile[0].conductivityUSCm, ctdBaikal.bins[0].conductivityUSCm, 'JSON report must retain the conductivity/TDS vertical profile');
 const parsedRep = JSON.parse(repJson.content);
 assert.equal(parsedRep.biomes.length, 11, 'JSON scientific report must contain all 11 biomes');
 assert(parsedRep.summary.missionsTotal === 44 && parsedRep.summary.speciesTotal === 230, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
