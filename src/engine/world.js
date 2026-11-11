@@ -45,9 +45,16 @@ window.OC = window.OC || {};
   let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget, flashBeam, flashBeamMat;
   let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane, raysGroup, rayMats = [], rayMeshes = [];
   let precipPts, precipMat;
+  let postRt = null, postScene = null, postCam = null, postMat = null, postQuad = null;
+  let postFxUserEnabled = true;
+  let subViewportOptics = false;
+  let lensWetness = 0;
+  let prevCamAboveWater = false;
+  const lastRenderStats = { calls: 0, triangles: 0, postFx: false };
   let flashlightOn = false;
   let timeOfDay = 0.24; // приятное утро / яркий день
 
+  const _drawSize = new T.Vector2(1024, 640);
   const sunDir = new T.Vector3(0.4, 0.85, 0.3).normalize();
   const _refractRayDir = new T.Vector3();
   const _upAxis = new T.Vector3(0, 1, 0);
@@ -68,7 +75,9 @@ window.OC = window.OC || {};
     uCurrent: { value: new T.Vector2(0, 0) },
     uSunProj: { value: new T.Vector2(0.45, 0.35) },
     uWaveAmp: { value: 1.0 },
-    uBleach: { value: 0.0 }
+    uBleach: { value: 0.0 },
+    uShadowA: { value: new T.Vector4(0, -9999, 0, 0) },
+    uShadowB: { value: new T.Vector4(0, -9999, 0, 0) }
   };
   OC.causticUniforms = causticU;
 
@@ -99,6 +108,8 @@ window.OC = window.OC || {};
       sh.uniforms.uSunProj = causticU.uSunProj;
       sh.uniforms.uWaveAmp = causticU.uWaveAmp;
       sh.uniforms.uBleach = causticU.uBleach;
+      sh.uniforms.uShadowA = causticU.uShadowA;
+      sh.uniforms.uShadowB = causticU.uShadowB;
       sh.uniforms.uCStrength = { value: cStr };
       sh.uniforms.uSwayAmp = { value: swayAmp };
       sh.uniforms.uBleachable = { value: bleachable ? 1.0 : 0.0 };
@@ -168,6 +179,8 @@ window.OC = window.OC || {};
         uniform float uWaveAmp;
         uniform float uBleach;
         uniform float uBleachable;
+        uniform vec4 uShadowA;
+        uniform vec4 uShadowB;
       `;
 
       const fColor = `
@@ -181,7 +194,7 @@ window.OC = window.OC || {};
         }
       `;
 
-      let fInject = '';
+      let fInject = 'float ocShadow = 1.0;\n';
       if (isTerrain) {
         fInject += `
           float detDist = length(cameraPosition - vCWorld);
@@ -201,11 +214,27 @@ window.OC = window.OC || {};
           // Мокрый песок у самой кромки прибоя (-0.25 .. +0.5 м)
           float wetShore = smoothstep(-0.3, 0.05, vCWorld.y) * smoothstep(0.6, 0.08, vCWorld.y);
 
-          gl_FragColor.rgb *= 1.0
+          // Динамическая тень от корпуса судна НИС (uShadowA) и проплывающей мегафауны (uShadowB) на мелководном дне
+          if (uShadowA.w > 0.5 && vCWorld.y < uShadowA.y + 0.4) {
+            float dyA = max(0.0, uShadowA.y - vCWorld.y);
+            vec2 offA = vCWorld.xz - (uShadowA.xz - uSunProj * dyA * 0.24);
+            float rA = uShadowA.w + dyA * 0.14;
+            float sA = 1.0 - smoothstep(rA * 0.42, rA * 1.15, length(offA)) * exp(-dyA * 0.032) * 0.52;
+            ocShadow *= sA;
+          }
+          if (uShadowB.w > 0.5 && vCWorld.y < uShadowB.y + 0.4) {
+            float dyB = max(0.0, uShadowB.y - vCWorld.y);
+            vec2 offB = vCWorld.xz - (uShadowB.xz - uSunProj * dyB * 0.24);
+            float rB = uShadowB.w + dyB * 0.11;
+            float sB = 1.0 - smoothstep(rB * 0.38, rB * 1.12, length(offB)) * exp(-dyB * 0.042) * 0.44;
+            ocShadow *= sB;
+          }
+
+          gl_FragColor.rgb *= (1.0
             + sandRip * 0.042 * shallowMask * flatW
             + grain * 0.048 * detFade * flatW
             + (strata * 0.085 + crag * 0.055) * detFade * slopeW
-            - wetShore * 0.16;
+            - wetShore * 0.16) * ocShadow;
         `;
       }
       if (cStr > 0) {
@@ -223,7 +252,7 @@ window.OC = window.OC || {};
           float cB = texture2D(uCausticTex, cuv - disp + vel1).r * texture2D(uCausticTex, (cuv - disp) * 1.62 - vel2).r;
           vec3 causRGB = pow(max(vec3(0.0), vec3(cR, cG, cB) * 2.95), vec3(1.12));
           vec3 prismCol = causRGB * mix(vec3(1.0), uCausticCol, 0.55);
-          gl_FragColor.rgb += prismCol * upMask * underwaterMask * focusCurve * uCStrength * uCausticI * (0.52 + uWaveAmp * 0.14);
+          gl_FragColor.rgb += prismCol * upMask * underwaterMask * focusCurve * uCStrength * uCausticI * (0.52 + uWaveAmp * 0.14) * mix(0.22, 1.0, ocShadow);
         `;
       }
       fInject += '\n#include <fog_fragment>';
@@ -814,13 +843,148 @@ window.OC = window.OC || {};
     buildRays(q.rayCount);
     buildPrecip(Math.round(1450 * q.particlesScale));
 
+    /* --- экранная постобработка подводной оптики (Bloom биолюминесценции, хроматическая аберрация, капли на линзе) --- */
+    postRt = new T.WebGLRenderTarget(512, 512, {
+      minFilter: T.LinearFilter,
+      magFilter: T.LinearFilter,
+      format: T.RGBAFormat,
+      depthBuffer: true,
+      stencilBuffer: false
+    });
+    postRt.texture.encoding = T.sRGBEncoding;
+    postRt.texture.generateMipmaps = false;
+
+    postScene = new T.Scene();
+    postCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    postMat = new T.ShaderMaterial({
+      toneMapped: false,
+      depthTest: false,
+      depthWrite: false,
+      uniforms: {
+        tDiffuse: { value: postRt.texture },
+        uTexel: { value: new T.Vector2(1 / 512, 1 / 512) },
+        uTime: OC.uTime,
+        uBloomAmt: { value: 0.22 },
+        uChromaAmt: { value: 0.0018 },
+        uWetness: { value: 0.0 },
+        uVignette: { value: 0.24 },
+        uDepthRatio: { value: 0.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main(){
+          vUv = uv;
+          gl_Position = vec4(position.xy, 0.0, 1.0);
+        }`,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 uTexel;
+        uniform float uTime, uBloomAmt, uChromaAmt, uWetness, uVignette, uDepthRatio;
+        varying vec2 vUv;
+
+        float dropLayer(vec2 uv, float scale, float speed, float seed, out vec2 dropGrad) {
+          vec2 st = uv * vec2(scale * 1.45, scale);
+          st.y += uTime * speed + sin(floor(st.x) * 1.9 + seed) * 0.4;
+          vec2 id = floor(st);
+          vec2 f = fract(st) - 0.5;
+          float h = fract(sin(dot(id + seed, vec2(127.1, 311.7))) * 43758.5453);
+          float h2 = fract(sin(dot(id + seed, vec2(269.5, 183.3))) * 19341.123);
+          float activeD = smoothstep(0.62, 0.96, h);
+          vec2 center = vec2((h2 - 0.5) * 0.46, sin(uTime * 1.6 + h * 6.28) * 0.14);
+          vec2 d = (f - center) * vec2(1.15, 0.85);
+          float r = length(d);
+          float mask = smoothstep(0.32, 0.12, r) * activeD;
+          dropGrad = -d * mask * 0.048;
+          return mask;
+        }
+
+        void main(){
+          vec2 uv = vUv;
+          float dropSpec = 0.0;
+          if (uWetness > 0.01) {
+            vec2 g1 = vec2(0.0);
+            vec2 g2 = vec2(0.0);
+            float m1 = dropLayer(uv, 9.0, 0.24, 1.7, g1);
+            float m2 = dropLayer(uv, 15.0, 0.38, 8.3, g2);
+            uv = clamp(uv + (g1 + g2 * 0.72) * uWetness, vec2(0.002), vec2(0.998));
+            dropSpec = (m1 * 0.14 + m2 * 0.10) * uWetness;
+          }
+
+          vec2 dir = uv - vec2(0.5);
+          float r2 = dot(dir, dir);
+          vec2 caOff = dir * (0.35 + r2 * 2.2) * uChromaAmt;
+
+          float rC = texture2D(tDiffuse, clamp(uv + caOff, vec2(0.001), vec2(0.999))).r;
+          vec4 base = texture2D(tDiffuse, uv);
+          float bC = texture2D(tDiffuse, clamp(uv - caOff, vec2(0.001), vec2(0.999))).b;
+          vec3 col = vec3(rC, base.g, bC);
+
+          if (uBloomAmt > 0.005) {
+            vec3 bloom = vec3(0.0);
+            vec2 o1 = uTexel * 2.2;
+            vec2 o2 = uTexel * 4.4;
+            vec3 s0 = texture2D(tDiffuse, clamp(uv + vec2(o1.x, 0.0), 0.001, 0.999)).rgb;
+            vec3 s1 = texture2D(tDiffuse, clamp(uv - vec2(o1.x, 0.0), 0.001, 0.999)).rgb;
+            vec3 s2 = texture2D(tDiffuse, clamp(uv + vec2(0.0, o1.y), 0.001, 0.999)).rgb;
+            vec3 s3 = texture2D(tDiffuse, clamp(uv - vec2(0.0, o1.y), 0.001, 0.999)).rgb;
+            vec3 s4 = texture2D(tDiffuse, clamp(uv + o2, 0.001, 0.999)).rgb;
+            vec3 s5 = texture2D(tDiffuse, clamp(uv - o2, 0.001, 0.999)).rgb;
+            vec3 s6 = texture2D(tDiffuse, clamp(uv + vec2(o2.x, -o2.y), 0.001, 0.999)).rgb;
+            vec3 s7 = texture2D(tDiffuse, clamp(uv + vec2(-o2.x, o2.y), 0.001, 0.999)).rgb;
+
+            const vec3 lumaW = vec3(0.299, 0.587, 0.114);
+            bloom += s0 * smoothstep(0.66, 1.02, dot(s0, lumaW));
+            bloom += s1 * smoothstep(0.66, 1.02, dot(s1, lumaW));
+            bloom += s2 * smoothstep(0.66, 1.02, dot(s2, lumaW));
+            bloom += s3 * smoothstep(0.66, 1.02, dot(s3, lumaW));
+            bloom += s4 * smoothstep(0.66, 1.02, dot(s4, lumaW)) * 0.75;
+            bloom += s5 * smoothstep(0.66, 1.02, dot(s5, lumaW)) * 0.75;
+            bloom += s6 * smoothstep(0.66, 1.02, dot(s6, lumaW)) * 0.75;
+            bloom += s7 * smoothstep(0.66, 1.02, dot(s7, lumaW)) * 0.75;
+            col += (bloom * 0.14) * uBloomAmt;
+          }
+
+          col += vec3(0.74, 0.92, 1.0) * dropSpec;
+
+          // Лёгкое оптическое виньетирование и глубоководный спектральный сдвиг
+          float vig = 1.0 - smoothstep(0.18, 0.85, r2) * uVignette;
+          col *= vig;
+          if (uDepthRatio > 0.05) {
+            col.r *= mix(1.0, 0.91, uDepthRatio);
+            col.b *= mix(1.0, 1.05, uDepthRatio);
+          }
+          gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+        }`
+    });
+    postQuad = new T.Mesh(new T.PlaneGeometry(2, 2), postMat);
+    postQuad.frustumCulled = false;
+    postScene.add(postQuad);
+
     OC.Quality.onChange((preset) => {
-      if (renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioMax));
+      if (renderer) {
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioMax));
+        syncPostRtSize();
+      }
       buildRays(preset.rayCount);
     });
 
     return { renderer, scene, camera };
   };
+
+  function syncPostRtSize() {
+    if (!renderer || !postRt || !postMat) return;
+    if (typeof renderer.getDrawingBufferSize === 'function') {
+      renderer.getDrawingBufferSize(_drawSize);
+    } else {
+      _drawSize.set(window.innerWidth || 1024, window.innerHeight || 640);
+    }
+    const rw = Math.max(64, Math.floor(_drawSize.x));
+    const rh = Math.max(64, Math.floor(_drawSize.y));
+    if (postRt.width !== rw || postRt.height !== rh) {
+      postRt.setSize(rw, rh);
+    }
+    postMat.uniforms.uTexel.value.set(1 / rw, 1 / rh);
+  }
 
   /* ---------- Палитра по времени суток ---------- */
   function updateBasePalette(t) {
@@ -852,6 +1016,56 @@ window.OC = window.OC || {};
   OC.getScene = () => scene;
   OC.getCamera = () => camera;
   OC.getRenderer = () => renderer;
+  OC.setPostFxEnabled = (on) => { postFxUserEnabled = !!on; return postFxUserEnabled; };
+  OC.setSubViewportOptics = (on) => { subViewportOptics = !!on; return subViewportOptics; };
+  OC.resizeWorld = function (w, h) {
+    if (!renderer) return;
+    renderer.setSize(w, h, false);
+    syncPostRtSize();
+  };
+  OC.renderWorld = function (sc, cam) {
+    const r = renderer;
+    const s = sc || scene;
+    const c = cam || camera;
+    if (!r || !s || !c) return;
+    const q = OC.Quality.get ? OC.Quality.get() : null;
+    const usePost = !!(postFxUserEnabled && postRt && postMat && postScene && postCam && (!q || q.postFx !== false));
+    if (!usePost) {
+      r.render(s, c);
+      if (r.info && r.info.render) {
+        lastRenderStats.calls = r.info.render.calls || 0;
+        lastRenderStats.triangles = r.info.render.triangles || 0;
+      }
+      lastRenderStats.postFx = false;
+      return;
+    }
+    syncPostRtSize();
+    r.setRenderTarget(postRt);
+    if (typeof r.clear === 'function') r.clear();
+    r.render(s, c);
+    if (r.info && r.info.render) {
+      lastRenderStats.calls = r.info.render.calls || 0;
+      lastRenderStats.triangles = r.info.render.triangles || 0;
+    }
+    lastRenderStats.postFx = true;
+    r.setRenderTarget(null);
+    r.render(postScene, postCam);
+  };
+  OC.getLastRenderStats = () => lastRenderStats;
+  OC.getPostFxState = function () {
+    const q = OC.Quality.get ? OC.Quality.get() : null;
+    const enabled = !!(postFxUserEnabled && postRt && postMat && (!q || q.postFx !== false));
+    return {
+      enabled,
+      bloom: postMat ? Math.round(postMat.uniforms.uBloomAmt.value * 1000) / 1000 : 0,
+      chroma: postMat ? Math.round(postMat.uniforms.uChromaAmt.value * 100000) / 100000 : 0,
+      wetness: Math.round(lensWetness * 1000) / 1000,
+      shadowAActive: causticU.uShadowA.value.w > 0.5,
+      shadowBActive: causticU.uShadowB.value.w > 0.5,
+      width: postRt ? postRt.width : 0,
+      height: postRt ? postRt.height : 0
+    };
+  };
   OC.setWorldParticleScale = (s) => {
     if (precipMat) precipMat.uniforms.uScale.value = s;
   };
@@ -1060,14 +1274,52 @@ window.OC = window.OC || {};
     }
 
     /* надводные осадки (штормовой дождь / арктический снегопад) */
+    const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
     if (precipPts && precipMat) {
-      const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
       precipPts.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && camPos.y > -12.0;
       if (precipPts.visible) {
         precipMat.uniforms.uCamPos.value.copy(camPos);
         precipMat.uniforms.uPrecip.value = wState.precip;
         precipMat.uniforms.uSnowMode.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
       }
+    }
+
+    /* динамические тени на мелководном дне от судна НИС и мегафауны */
+    const noSurf = !!(biome && biome.noSurface);
+    const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
+    if (!noSurf && vInfo && pal.dayW > 0.15) {
+      causticU.uShadowA.value.set(vInfo.x, 0.2, vInfo.z, 13.5);
+    } else {
+      causticU.uShadowA.value.set(0, -9999, 0, 0);
+    }
+    const scInfo = OC.faunaInfo ? OC.faunaInfo.shadowCaster : null;
+    if (!noSurf && scInfo && scInfo.active && pal.dayW > 0.12) {
+      causticU.uShadowB.value.set(scInfo.x, scInfo.y, scInfo.z, scInfo.radius || 4.0);
+    } else {
+      causticU.uShadowB.value.set(0, -9999, 0, 0);
+    }
+
+    /* параметры постпроцессинга подводной оптики (Bloom, хроматика, капли на линзе) */
+    const camAboveNow = !noSurf && !underCaveRoof && camPos.y > -0.18;
+    if (!noSurf && !underCaveRoof && ((camAboveNow && !prevCamAboveWater) || (camPos.y > -0.18 && camPos.y < 1.35) || (camAboveNow && wState.precip > 0.12))) {
+      lensWetness = Math.min(1.0, lensWetness + dt * 3.8);
+    } else {
+      const dryRate = camPos.y < -0.5 ? 0.42 : 0.24;
+      lensWetness = Math.max(0.0, lensWetness - dt * dryRate);
+    }
+    prevCamAboveWater = camAboveNow;
+
+    if (postMat) {
+      const qCur = OC.Quality.get ? OC.Quality.get() : null;
+      const bScale = qCur && typeof qCur.bloomScale === 'number' ? qCur.bloomScale : 1.0;
+      const depthM = (biome && biome.depthOffset ? biome.depthOffset : 0) + Math.max(0, -camPos.y);
+      const depthRatio = OC.clamp(depthM / 120, 0, 1);
+      const baseBloom = (0.16 + (opt.bioGlow || 0) * 0.20 + (wState.lightning || 0) * 0.24 + (camPos.y > 0 ? 0.08 : 0.0)) * bScale;
+      postMat.uniforms.uBloomAmt.value = baseBloom;
+      postMat.uniforms.uChromaAmt.value = (subViewportOptics ? 0.0032 : 0.0014) + depthRatio * 0.0010 + (camPos.y < 0 ? 0.0005 : 0.0);
+      postMat.uniforms.uWetness.value = lensWetness;
+      postMat.uniforms.uVignette.value = (subViewportOptics ? 0.36 : 0.19) + depthRatio * 0.14;
+      postMat.uniforms.uDepthRatio.value = noSurf ? depthRatio * 0.85 : depthRatio * 0.45;
     }
   };
 })(window.OC);

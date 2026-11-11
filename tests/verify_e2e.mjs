@@ -45,6 +45,14 @@ function createWebGLSpy() {
     RGBA: 6408,
     RGB: 6407,
     TEXTURE_2D: 3553,
+    FRAMEBUFFER: 36160,
+    RENDERBUFFER: 36161,
+    COLOR_ATTACHMENT0: 36064,
+    DEPTH_ATTACHMENT: 36096,
+    DEPTH_STENCIL_ATTACHMENT: 33306,
+    DEPTH_COMPONENT16: 33189,
+    DEPTH_STENCIL: 34041,
+    FRAMEBUFFER_COMPLETE: 36053,
     TEXTURE0: 33984,
     TEXTURE_WRAP_S: 10242,
     TEXTURE_WRAP_T: 10243,
@@ -117,6 +125,8 @@ function createWebGLSpy() {
       if (p === 35724) return 'WebGL GLSL ES 1.00';
       if (p === 3379) return 4096;
       if (p === 34076) return 4096;
+      if (p === 34024) return 4096;
+      if (p === 3386) return [4096, 4096];
       if (p === 34930 || p === 35660) return 16;
       if (p === 35661) return 32;
       if (p === 34921) return 16;
@@ -385,6 +395,22 @@ pressKey('Escape');
 stepFrames(2);
 assert(OC.Hydrophone.isOpen(), 'Backquote (~) hotkey must open Hydrophone FFT');
 assert(OC.Minimap.getCoverage() > 0, 'Minimap Fog of War must show initial charted %');
+assert(typeof OC.getPostFxState === 'function', 'OC.getPostFxState required in production bundle');
+OC.Quality.set('high');
+OC.setSubViewportOptics(false);
+stepFrames(3);
+const pfxHigh = OC.getPostFxState();
+assert(pfxHigh.enabled && pfxHigh.bloom > 0 && pfxHigh.chroma > 0 && pfxHigh.width >= 64 && pfxHigh.height >= 64, `Expected active WebGLRenderTarget post-FX in high quality, got ${JSON.stringify(pfxHigh)}`);
+OC.setSubViewportOptics(true);
+stepFrames(2);
+const pfxSub = OC.getPostFxState();
+assert(pfxSub.chroma > pfxHigh.chroma, `Submersible viewport optics must boost radial chromatic aberration (${pfxHigh.chroma} -> ${pfxSub.chroma})`);
+OC.setSubViewportOptics(false);
+OC.Quality.set('low');
+stepFrames(2);
+assert.equal(OC.getPostFxState().enabled, false, 'Low quality preset must bypass post-FX WebGLRenderTarget');
+OC.Quality.set('high');
+stepFrames(2);
 
 console.log('3) Profiling 10 biomes × 100 continuous frames (1000 frames + 3D Multibeam Sonar scans)...');
 const biomeList = OC.Biomes.list();
@@ -412,6 +438,7 @@ for (const b of biomeList) {
 console.table(perfTable);
 for (const row of perfTable) {
   assert(Number.isFinite(row.avgCpuMs) && row.avgCpuMs < 250, `Biome ${row.biome} CPU frame time budget exceeded: ${row.avgCpuMs} ms`);
+  assert(row.draws >= 30, `Biome ${row.biome} reported unexpected draw call count: ${row.draws}`);
 }
 assert.equal(pageErrors.length, 0, `Production bundle logged runtime errors:\n${pageErrors.join('\n')}`);
 assert.equal(glErrors.length, 0, `WebGL shader compilation errors:\n${glErrors.join('\n')}`);

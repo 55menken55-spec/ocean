@@ -6212,7 +6212,7 @@ window.OC = window.OC || {};
 
       fishMatInstanced = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.48, metalness: 0.06, side: T.DoubleSide
-      }), { causticStrength: biome.noSurface ? 0.0 : 0.45, fishSwim: true });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.56, fishSwim: true });
 
       fishMatBiolum = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true,
@@ -6221,11 +6221,11 @@ window.OC = window.OC || {};
         roughness: 0.42,
         metalness: 0.08,
         side: T.DoubleSide
-      }), { causticStrength: biome.noSurface ? 0.0 : 0.25, fishSwim: true });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.34, fishSwim: true });
 
       creatureMat = OC.enhanceMaterial(new T.MeshStandardMaterial({
         vertexColors: true, roughness: 0.52, metalness: 0.06, side: T.DoubleSide
-      }), { causticStrength: biome.noSurface ? 0.0 : 0.55 });
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.64 });
 
       const plan = biome.faunaPlan || {};
       const agents = [];
@@ -6602,6 +6602,13 @@ window.OC = window.OC || {};
         OC.faunaInfo.schoolFish = total;
       }
 
+      const _shadowCaster = { active: false, x: 0, y: 0, z: 0, radius: 4.5, key: '' };
+      const SHADOW_RADII = {
+        whale_humpback: 10.5, shark_whale: 7.8, orca: 5.8, manta: 4.6, mobula_ray: 4.2,
+        shark_hammerhead: 3.6, galapagos_shark: 3.4, shark_tiger: 3.6, ocean_sunfish: 3.2,
+        pink_dolphin: 3.1, arapaima: 3.2, narwhal: 3.5, beluga: 3.4, turtle: 2.4, dugong: 2.8, sea_lion: 2.3
+      };
+
       activeSchoolsRef = schools;
       OC.faunaInfo = {
         schoolFish: 0,
@@ -6609,6 +6616,7 @@ window.OC = window.OC || {};
         big: agents.length - schools.length,
         whale,
         vessel: primaryVessel ? primaryVessel.shipInfo : null,
+        shadowCaster: _shadowCaster,
         activeEvent: null,
         dvmPhase: 'day_deep',
         dvmShiftM: -5.5,
@@ -6672,6 +6680,27 @@ window.OC = window.OC || {};
           for (let i = 0; i < preySchools.length; i++) {
             const ps = preySchools[i];
             if (ps.mesh && ps.mesh.visible && ps.center) preyCentersBuf.push(ps.center);
+          }
+
+          // Клиенты станций чистки и выбор ближайшей мегафауны для тени на мелководном дне
+          _shadowCaster.active = false;
+          let bestShadowScore = 1e9;
+          for (let i = 0; i < agents.length; i++) {
+            const ag = agents[i];
+            if (!ag || !ag.key || !ag.getPosition) continue;
+            const sr = SHADOW_RADII[ag.key];
+            if (!sr) continue;
+            const ap = ag.getPosition();
+            const dCam = Math.hypot(ap.x - camPos.x, ap.z - camPos.z);
+            if (dCam < 135 && dCam - sr * 4 < bestShadowScore) {
+              bestShadowScore = dCam - sr * 4;
+              _shadowCaster.active = true;
+              _shadowCaster.x = ap.x;
+              _shadowCaster.y = ap.y;
+              _shadowCaster.z = ap.z;
+              _shadowCaster.radius = sr;
+              _shadowCaster.key = ag.key;
+            }
           }
 
           // Клиенты станций чистки заполняются агентами в этом кадре (если остаются рядом — используются в следующем)

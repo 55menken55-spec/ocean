@@ -904,6 +904,7 @@ window.OC = window.OC || {};
       }
       if (subHud) subHud.classList.toggle('hidden', !on);
       if (sonarBox) sonarBox.classList.toggle('hidden', !on);
+      if (OC.setSubViewportOptics) OC.setSubViewportOptics(on);
     };
     syncSubMode(false);
     if (btnSub) {
@@ -1632,6 +1633,7 @@ window.OC = window.OC || {};
       p95 = slice[Math.min(n - 1, Math.floor(n * 0.95))];
     }
     const rInfo = lastRendererRef && lastRendererRef.info ? lastRendererRef.info : null;
+    const lr = OC.getLastRenderStats ? OC.getLastRenderStats() : null;
     const tSt = OC.Terrain && OC.Terrain.getStats ? OC.Terrain.getStats() : null;
     const fSt = OC.FloraStreamer && OC.FloraStreamer.getStats ? OC.FloraStreamer.getStats() : null;
     return {
@@ -1641,8 +1643,8 @@ window.OC = window.OC || {};
       avgCpuMs: n ? Math.round((sum / n) * 100) / 100 : 0,
       p95CpuMs: Math.round(p95 * 100) / 100,
       maxCpuMs: Math.round(max * 100) / 100,
-      drawCalls: rInfo && rInfo.render ? rInfo.render.calls : 0,
-      triangles: rInfo && rInfo.render ? rInfo.render.triangles : 0,
+      drawCalls: (lr && lr.calls) ? lr.calls : (rInfo && rInfo.render ? rInfo.render.calls : 0),
+      triangles: (lr && lr.triangles) ? lr.triangles : (rInfo && rInfo.render ? rInfo.render.triangles : 0),
       geometries: rInfo && rInfo.memory ? rInfo.memory.geometries : 0,
       textures: rInfo && rInfo.memory ? rInfo.memory.textures : 0,
       chunksVisible: tSt ? tSt.visible : 0,
@@ -1655,7 +1657,7 @@ window.OC = window.OC || {};
   function boot() {
     try {
       const savedQ = OC.Expedition && OC.Expedition.getSavedQuality ? OC.Expedition.getSavedQuality() : null;
-      if (savedQ && OC.Quality.presets && OC.Quality.presets[savedQ]) OC.Quality.set(savedQ);
+      if (savedQ && OC.Quality.PRESETS && OC.Quality.PRESETS[savedQ]) OC.Quality.set(savedQ);
 
       activeBiome = OC.Biomes.getActive();
       if (OC.Weather && OC.Weather.onThunder) {
@@ -1771,7 +1773,8 @@ window.OC = window.OC || {};
 
     function resize() {
       const w = window.innerWidth, h = window.innerHeight;
-      renderer.setSize(w, h, false);
+      if (OC.resizeWorld) OC.resizeWorld(w, h);
+      else renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       if (lensCanvas) {
@@ -2037,7 +2040,8 @@ window.OC = window.OC || {};
         camera.updateProjectionMatrix();
       }
 
-      renderer.render(scene, camera);
+      if (OC.renderWorld) OC.renderWorld(scene, camera);
+      else renderer.render(scene, camera);
 
       const cpuMs = performance.now() - cpuT0;
       cpuMsRing[perfCursor] = cpuMs;

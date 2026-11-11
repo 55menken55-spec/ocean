@@ -20,7 +20,9 @@ window.OC = window.OC || {};
       fishScale: 0.55,
       particlesScale: 0.5,
       rayCount: 10,
-      caustics: true
+      caustics: true,
+      postFx: false,
+      bloomScale: 0.0
     },
     medium: {
       id: 'medium',
@@ -38,7 +40,9 @@ window.OC = window.OC || {};
       fishScale: 0.8,
       particlesScale: 0.8,
       rayCount: 16,
-      caustics: true
+      caustics: true,
+      postFx: true,
+      bloomScale: 0.72
     },
     high: {
       id: 'high',
@@ -56,7 +60,9 @@ window.OC = window.OC || {};
       fishScale: 1.0,
       particlesScale: 1.0,
       rayCount: 22,
-      caustics: true
+      caustics: true,
+      postFx: true,
+      bloomScale: 1.0
     },
     ultra: {
       id: 'ultra',
@@ -74,7 +80,9 @@ window.OC = window.OC || {};
       fishScale: 1.3,
       particlesScale: 1.35,
       rayCount: 28,
-      caustics: true
+      caustics: true,
+      postFx: true,
+      bloomScale: 1.28
     }
   };
 
@@ -90,6 +98,7 @@ window.OC = window.OC || {};
 
   OC.Quality = {
     PRESETS,
+    presets: PRESETS,
     getId: () => currentId,
     get: () => PRESETS[currentId],
     set: (id) => {
