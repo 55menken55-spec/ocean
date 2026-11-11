@@ -43,8 +43,9 @@ window.OC = window.OC || {};
   };
 
   let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget, flashBeam, flashBeamMat;
-  let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane, raysGroup, rayMats = [], rayMeshes = [];
-  let precipPts, precipMat;
+  let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane;
+  const raysState = { scene: null, raysGroup: null, rayMats: [], rayMeshes: [] };
+  let precipFx = null;
   let postRt = null, postScene = null, postCam = null, postMat = null, postQuad = null;
   let postFxUserEnabled = true;
   let subViewportOptics = false;
@@ -274,281 +275,13 @@ window.OC = window.OC || {};
     return mat;
   };
 
-  /* ---------- Текстуры каустики и ряби ---------- */
-  function causticTexture(seedPts) {
-    const S = 256;
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = S;
-    const ctx = cv.getContext('2d');
-    const img = ctx.createImageData(S, S);
-    const rng = OC.mulberry32(7331);
-    const pts = [];
-    for (let i = 0; i < seedPts; i++) pts.push([rng() * S, rng() * S]);
-    for (let y = 0; y < S; y++) {
-      for (let x = 0; x < S; x++) {
-        let f1 = 1e9, f2 = 1e9;
-        for (let i = 0; i < pts.length; i++) {
-          const p = pts[i];
-          let dx = Math.abs(x - p[0]); dx = Math.min(dx, S - dx);
-          let dy = Math.abs(y - p[1]); dy = Math.min(dy, S - dy);
-          const d = dx * dx + dy * dy;
-          if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
-        }
-        const e = Math.sqrt(f2) - Math.sqrt(f1);
-        let v = Math.exp(-e * e / 26);
-        v = Math.pow(v, 1.35);
-        const idx = (y * S + x) * 4;
-        img.data[idx] = 255 * v;
-        img.data[idx + 1] = 255 * v;
-        img.data[idx + 2] = 255 * v;
-        img.data[idx + 3] = 255 * v;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-    const cv2 = document.createElement('canvas');
-    cv2.width = cv2.height = S;
-    const ctx2 = cv2.getContext('2d');
-    ctx2.filter = 'blur(1.2px)';
-    ctx2.drawImage(cv, 0, 0);
-    const tex = new T.CanvasTexture(cv2);
-    tex.wrapS = tex.wrapT = T.RepeatWrapping;
-    return tex;
-  }
 
-  function rippleTexture() {
-    const S = 256;
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = S;
-    const ctx = cv.getContext('2d');
-    const rng = OC.mulberry32(1945);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, S, S);
-    ctx.strokeStyle = 'rgba(255,255,255,0.88)';
-    for (let i = 0; i < 28; i++) {
-      ctx.lineWidth = 1 + rng() * 2.8;
-      ctx.beginPath();
-      const y0 = rng() * S;
-      for (let x = 0; x <= S; x += 8) {
-        const y = y0 + Math.sin((x / S) * Math.PI * 4 + i) * 6 + Math.sin((x / S) * Math.PI * 10 + i * 1.7) * 3;
-        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-    const cv2 = document.createElement('canvas');
-    cv2.width = cv2.height = S;
-    const ctx2 = cv2.getContext('2d');
-    ctx2.filter = 'blur(1.4px)';
-    ctx2.drawImage(cv, 0, 0);
-    const tex = new T.CanvasTexture(cv2);
-    tex.wrapS = tex.wrapT = T.RepeatWrapping;
-    return tex;
-  }
-
-  /* ---------- Текстура мелководья, берегового прибоя и кромки пакового льда ---------- */
-  function buildBathymetryFoamTex(biome) {
-    const S = 192;
-    const data = new Uint8Array(S * S * 4);
-    const R = biome ? (biome.worldRadius || 1200) : 1200;
-    for (let iz = 0; iz < S; iz++) {
-      const wz = ((iz / (S - 1)) * 2 - 1) * R;
-      for (let ix = 0; ix < S; ix++) {
-        const wx = ((ix / (S - 1)) * 2 - 1) * R;
-        const h = biome ? biome.getHeight(wx, wz) : -12;
-        const depthNorm = OC.clamp(-h / 45.0, 0, 1);
-        // Пена прибоя над очень мелким гребнем (-3.9 .. +0.55 м) и кромкой берега/скал/колонн
-        const crestFoam = OC.smoothstep(-3.9, -1.4, h) * OC.smoothstep(0.55, -0.3, h);
-        const shoreFoam = OC.smoothstep(-1.45, 0.06, h) * OC.smoothstep(0.62, 0.02, h);
-        const idx = (iz * S + ix) * 4;
-        data[idx] = Math.round(depthNorm * 255);
-        data[idx + 1] = Math.round(crestFoam * 255);
-        data[idx + 2] = Math.round(shoreFoam * 255);
-        data[idx + 3] = 255;
-      }
-    }
-
-    // В Арктике впечатываем контактную ледяную пену вокруг льдин (ice_floe) и айсбергов (iceberg)
-    if (biome && biome.hasAurora && biome.generateChunkFlora) {
-      const cSz = biome.chunkSize || 150;
-      const cellW = (2 * R) / S;
-      for (let cz = -4; cz <= 4; cz++) {
-        for (let cx = -4; cx <= 4; cx++) {
-          const items = biome.generateChunkFlora(cx, cz, cSz, 1.0, OC.mulberry32(((cx * 9187) ^ (cz * 3571)) >>> 0));
-          for (let i = 0; i < items.length; i++) {
-            const it = items[i];
-            if (it.species !== 'ice_floe' && it.species !== 'iceberg') continue;
-            const rad = (it.species === 'iceberg' ? 23.0 : 13.5) * (it.scale || 1.0);
-            const cX = ((it.x / R) * 0.5 + 0.5) * (S - 1);
-            const cZ = ((it.z / R) * 0.5 + 0.5) * (S - 1);
-            const rPx = Math.ceil((rad + 8.0) / cellW);
-            const minX = Math.max(0, Math.floor(cX - rPx));
-            const maxX = Math.min(S - 1, Math.ceil(cX + rPx));
-            const minZ = Math.max(0, Math.floor(cZ - rPx));
-            const maxZ = Math.min(S - 1, Math.ceil(cZ + rPx));
-            for (let pz = minZ; pz <= maxZ; pz++) {
-              const dwz = (pz - cZ) * cellW;
-              for (let px = minX; px <= maxX; px++) {
-                const dwx = (px - cX) * cellW;
-                const d = Math.hypot(dwx, dwz);
-                const ring = OC.smoothstep(rad - 5.5, rad - 1.0, d) * OC.smoothstep(rad + 7.5, rad + 1.5, d);
-                if (ring > 0.02) {
-                  const idx = (pz * S + px) * 4;
-                  const addVal = Math.round(ring * 240);
-                  if (addVal > data[idx + 2]) data[idx + 2] = addVal;
-                  if (addVal * 0.7 > data[idx + 1]) data[idx + 1] = Math.round(addVal * 0.7);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    const tex = new T.DataTexture(data, S, S, T.RGBAFormat);
-    tex.magFilter = T.LinearFilter;
-    tex.minFilter = T.LinearFilter;
-    tex.wrapS = T.ClampToEdgeWrapping;
-    tex.wrapT = T.ClampToEdgeWrapping;
-    tex.needsUpdate = true;
-    return tex;
-  }
-
-  /* ---------- Объёмные 3D-конусы солнечных лучей (Volumetric God Rays) ---------- */
-  function buildRays(count) {
-    if (raysGroup) {
-      raysGroup.traverse((o) => {
-        if (o.geometry) o.geometry.dispose();
-        if (o.material) o.material.dispose();
-      });
-      scene.remove(raysGroup);
-    }
-    raysGroup = new T.Group();
-    rayMats = [];
-    rayMeshes = [];
-    const rng = OC.mulberry32(5522);
-    for (let i = 0; i < count; i++) {
-      const rTop = OC.lerp(1.4, 3.6, rng());
-      const rBot = rTop * OC.lerp(2.4, 3.8, rng());
-      const h = OC.lerp(46, 76, rng());
-      const geo = new T.CylinderGeometry(rTop, rBot, h, 14, 1, true);
-      const mat = new T.ShaderMaterial({
-        transparent: true, depthWrite: false, blending: T.AdditiveBlending,
-        side: T.DoubleSide, fog: false,
-        uniforms: {
-          uIntensity: { value: 0.35 },
-          uColor: { value: new T.Color(0xbfefff) },
-          uTime: OC.uTime,
-          uSeed: { value: rng() * 12 },
-          uWaveAmp: { value: 1.0 }
-        },
-        vertexShader: `
-          varying vec2 vUv;
-          varying vec3 vWorldP;
-          varying vec3 vNormW;
-          void main(){
-            vUv = uv;
-            vec4 wp = modelMatrix * vec4(position, 1.0);
-            vWorldP = wp.xyz;
-            vNormW = normalize(mat3(modelMatrix) * normal);
-            gl_Position = projectionMatrix * viewMatrix * wp;
-          }`,
-        fragmentShader: `
-          varying vec2 vUv;
-          varying vec3 vWorldP;
-          varying vec3 vNormW;
-          uniform float uIntensity, uTime, uSeed, uWaveAmp;
-          uniform vec3 uColor;
-          void main(){
-            vec3 toCam = normalize(cameraPosition - vWorldP);
-            float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.42);
-            float vert = smoothstep(0.0, 0.38, vUv.y) * smoothstep(1.0, 0.68, vUv.y);
-            float shimmer = 0.58 + 0.42 * sin(vUv.x * 18.85 + uTime * (0.65 + uWaveAmp * 0.45) + uSeed * 5.0);
-            float flick = 0.76 + 0.24 * sin(uTime * 0.32 + uSeed + vUv.y * 5.0);
-            float a = rim * vert * shimmer * flick * uIntensity * 0.26;
-            if (a < 0.002) discard;
-            gl_FragColor = vec4(uColor, a);
-          }`
-      });
-      rayMats.push(mat);
-      const m = new T.Mesh(geo, mat);
-      m.position.set(OC.lerp(-145, 145, rng()), -h * 0.48 - 1.2, OC.lerp(-145, 145, rng()));
-      m.rotation.y = rng() * Math.PI * 2;
-      raysGroup.add(m);
-      rayMeshes.push(m);
-    }
-    scene.add(raysGroup);
-  }
-
-  /* ---------- Надводные GPU-осадки: тропический ливень или арктическая метель ---------- */
-  function buildPrecip(count) {
-    const geo = new T.BufferGeometry();
-    const pos = new Float32Array(count * 3);
-    const ph = new Float32Array(count);
-    const sz = new Float32Array(count);
-    const rng = OC.mulberry32(91827);
-    for (let i = 0; i < count; i++) {
-      pos[i * 3] = (rng() - 0.5) * 140;
-      pos[i * 3 + 1] = rng() * 72;
-      pos[i * 3 + 2] = (rng() - 0.5) * 140;
-      ph[i] = rng() * 6.283;
-      sz[i] = OC.lerp(1.4, 3.6, rng());
-    }
-    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
-    geo.setAttribute('aPhase', new T.BufferAttribute(ph, 1));
-    geo.setAttribute('aSize', new T.BufferAttribute(sz, 1));
-
-    const tex = OC.circleTexture(64, false);
-    precipMat = new T.ShaderMaterial({
-      transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false,
-      uniforms: {
-        uTex: { value: tex },
-        uTime: OC.uTime,
-        uCamPos: { value: new T.Vector3() },
-        uPrecip: { value: 0.0 },
-        uSnowMode: { value: 0.0 },
-        uScale: { value: 1.0 }
-      },
-      vertexShader: `
-        attribute float aPhase, aSize;
-        uniform float uTime, uPrecip, uSnowMode, uScale;
-        uniform vec3 uCamPos;
-        varying float vAlpha;
-        void main(){
-          vec3 box = vec3(140.0, 72.0, 140.0);
-          float fallSpd = mix(36.0, 7.2, uSnowMode);
-          vec3 p = position;
-          p.y -= uTime * fallSpd * (0.85 + 0.3 * fract(aPhase));
-          p.x += uTime * mix(6.5, 4.2, uSnowMode) + sin(uTime * 1.4 + aPhase) * mix(0.2, 2.4, uSnowMode);
-          p.z += cos(uTime * 1.1 + aPhase) * mix(0.2, 2.1, uSnowMode);
-          vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
-          vec3 worldP = uCamPos + rel;
-          float aboveWater = step(0.15, worldP.y);
-          vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
-          gl_PointSize = aboveWater * aSize * uScale * mix(95.0, 165.0, uSnowMode) / max(1.5, -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
-          vAlpha = aboveWater * uPrecip * mix(0.46, 0.72, uSnowMode);
-        }`,
-      fragmentShader: `
-        uniform sampler2D uTex;
-        uniform float uSnowMode;
-        varying float vAlpha;
-        void main(){
-          if (vAlpha < 0.01) discard;
-          vec2 uv = gl_PointCoord;
-          if (uSnowMode < 0.5) {
-            // Вытянутая наклонная капля дождя
-            uv.x = (uv.x - 0.5) * 3.4 + 0.5;
-          }
-          vec4 tx = texture2D(uTex, clamp(uv, 0.0, 1.0));
-          if (tx.a < 0.04) discard;
-          vec3 col = mix(vec3(0.76, 0.88, 0.98), vec3(0.96, 0.99, 1.0), uSnowMode);
-          gl_FragColor = vec4(col, tx.a * vAlpha);
-        }`
-    });
-    precipPts = new T.Points(geo, precipMat);
-    precipPts.frustumCulled = false;
-    precipPts.visible = false;
-    scene.add(precipPts);
-  }
+  /* Текстуры, лучи и осадки вынесены в world/textures.js, world/rays.js, world/precip.js */
+  const {
+    causticTexture, rippleTexture, buildBathymetryFoamTex
+  } = OC._WorldTextures;
+  const { buildRays } = OC._WorldRays;
+  const { buildPrecip } = OC._WorldPrecip;
 
   /* ---------- Инициализация сцены ---------- */
   OC.initWorld = function (canvas) {
@@ -862,8 +595,9 @@ window.OC = window.OC || {};
     surfacePlane.frustumCulled = false;
     scene.add(surfacePlane);
 
-    buildRays(q.rayCount);
-    buildPrecip(Math.round(1450 * q.particlesScale));
+    raysState.scene = scene;
+    buildRays(raysState, q.rayCount);
+    precipFx = buildPrecip(scene, Math.round(1450 * q.particlesScale));
 
     /* --- экранная постобработка подводной оптики (Bloom биолюминесценции, хроматическая аберрация, капли на линзе) --- */
     postRt = new T.WebGLRenderTarget(512, 512, {
@@ -997,7 +731,7 @@ window.OC = window.OC || {};
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioMax * currentPixelScale()));
         syncPostRtSize();
       }
-      buildRays(preset.rayCount);
+      buildRays(raysState, preset.rayCount);
     });
 
     return { renderer, scene, camera };
@@ -1119,7 +853,7 @@ window.OC = window.OC || {};
     };
   };
   OC.setWorldParticleScale = (s) => {
-    if (precipMat) precipMat.uniforms.uScale.value = s;
+    if (precipFx) precipFx.mat.uniforms.uScale.value = s;
   };
   OC.refreshWorldForBiome = function (biome) {
     if (!surfaceMat || !biome) return;
@@ -1302,8 +1036,8 @@ window.OC = window.OC || {};
 
     /* объёмные 3D-конусы солнечных лучей, ориентированные по преломлённому солнцу */
     const rayIntensity = opt.rayStrength * (1.0 - wState.stormMix * 0.65) * bloomAtten;
-    raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && rayIntensity > 0.02;
-    if (raysGroup.visible) {
+    raysState.raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && rayIntensity > 0.02;
+    if (raysState.raysGroup.visible) {
       if (biome && biome.getCenoteShafts) {
         const shafts = biome.getCenoteShafts();
         let best = shafts && shafts[0];
@@ -1314,18 +1048,18 @@ window.OC = window.OC || {};
           if (d2 < bestD2) { bestD2 = d2; best = s; }
         }
         if (best) {
-          raysGroup.position.x = best.x;
-          raysGroup.position.z = best.z;
+          raysState.raysGroup.position.x = best.x;
+          raysState.raysGroup.position.z = best.z;
         }
       } else {
-        raysGroup.position.x = Math.round(camPos.x / 60) * 60;
-        raysGroup.position.z = Math.round(camPos.z / 60) * 60;
+        raysState.raysGroup.position.x = Math.round(camPos.x / 60) * 60;
+        raysState.raysGroup.position.z = Math.round(camPos.z / 60) * 60;
       }
       // Закон Снеллиуса сжимает наклон луча в воде (~0.75 от горизонтального отклонения)
       _refractRayDir.set(sunDir.x * 0.68, Math.max(0.45, sunDir.y), sunDir.z * 0.68).normalize();
       _rayQuat.setFromUnitVectors(_upAxis, _refractRayDir);
-      for (let i = 0; i < rayMeshes.length; i++) rayMeshes[i].quaternion.copy(_rayQuat);
-      for (const m of rayMats) {
+      for (let i = 0; i < raysState.rayMeshes.length; i++) raysState.rayMeshes[i].quaternion.copy(_rayQuat);
+      for (const m of raysState.rayMats) {
         m.uniforms.uIntensity.value = rayIntensity * (0.45 + 0.55 * Math.abs(Math.sin(time * 0.14 + m.uniforms.uSeed.value)));
         m.uniforms.uWaveAmp.value = wState.waveAmp;
         m.uniforms.uColor.value.copy(pal.water);
@@ -1334,12 +1068,12 @@ window.OC = window.OC || {};
 
     /* надводные осадки (штормовой дождь / арктический снегопад) */
     const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
-    if (precipPts && precipMat) {
-      precipPts.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && camPos.y > -12.0;
-      if (precipPts.visible) {
-        precipMat.uniforms.uCamPos.value.copy(camPos);
-        precipMat.uniforms.uPrecip.value = wState.precip;
-        precipMat.uniforms.uSnowMode.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
+    if (precipFx) {
+      precipFx.points.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && camPos.y > -12.0;
+      if (precipFx.points.visible) {
+        precipFx.mat.uniforms.uCamPos.value.copy(camPos);
+        precipFx.mat.uniforms.uPrecip.value = wState.precip;
+        precipFx.mat.uniforms.uSnowMode.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
       }
     }
 

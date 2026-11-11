@@ -21,6 +21,9 @@ const SRC_ORDER = [
   'src/biomes/amazon_igapo.js',
   'src/engine/weather.js',
   'src/engine/eco_lab.js',
+  'src/engine/world/textures.js',
+  'src/engine/world/rays.js',
+  'src/engine/world/precip.js',
   'src/engine/world.js',
   'src/engine/terrain.js',
   'src/engine/flora/reef_corals.js',
@@ -300,7 +303,12 @@ for (const spKey in floraProtos) {
 }
 
 // Verify world.js water foam + volumetric beam + marine snow contracts exist
-const worldSrc = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8');
+const worldSrc = [
+  'src/engine/world.js',
+  'src/engine/world/textures.js',
+  'src/engine/world/rays.js',
+  'src/engine/world/precip.js'
+].map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')).join('\n');
 assert(worldSrc.includes('uFoamTex') && worldSrc.includes('flashBeamMat'), 'world.js missing uFoamTex surf foam or flashBeamMat cone');
 const faunaSrc = [
   'src/engine/fauna_engine.js',
