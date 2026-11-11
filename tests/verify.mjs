@@ -50,6 +50,7 @@ const SRC_ORDER = [
   'src/ui/panels_rov.js',
   'src/ui/panels_camera.js',
   'src/ui/panels_options.js',
+  'src/ui/panels_biomes.js',
   'src/ui/main.js',
 ];
 

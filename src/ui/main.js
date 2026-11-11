@@ -25,12 +25,6 @@ window.OC = window.OC || {};
   const btnOrbit = document.getElementById('btn-mode-orbit');
   const btnTour = document.getElementById('btn-explore');
   const btnCinemaMode = document.getElementById('btn-mode-cinema');
-  const zoneChipsEl = document.getElementById('zone-chips');
-  const biomeBarEl = document.getElementById('biome-bar');
-  const biomeBtnsEl = document.getElementById('biome-btns');
-  const brandTitleEl = document.getElementById('brand-title');
-  const brandSubEl = document.getElementById('brand-sub');
-  const statusRegionEl = document.getElementById('status-region');
 
   const subHud = document.getElementById('sub-hud');
   const subHorizon = document.getElementById('sub-horizon');
@@ -662,68 +656,14 @@ window.OC = window.OC || {};
     const syncHudToggle = optHud.syncHudToggle;
     const toggleHud = optHud.toggleHud;
 
-    const BIOME_SHORT = OC._HudPanels.BIOME_SHORT;
-    const BIOME_REGION = OC._HudPanels.BIOME_REGION;
-
-    function renderBiomeUI() {
-      const list = OC.Biomes.list();
-      const curId = activeBiome ? activeBiome.id : '';
-      if (brandTitleEl && activeBiome) {
-        const parts = activeBiome.name.split(' ');
-        brandTitleEl.innerHTML = parts.length > 1
-          ? (parts[0] + ' <span>' + parts.slice(1).join(' ') + '</span>')
-          : activeBiome.name;
-      }
-      if (brandSubEl && activeBiome) brandSubEl.textContent = activeBiome.subtitle || activeBiome.region;
-      if (statusRegionEl) statusRegionEl.textContent = BIOME_REGION[curId] || (activeBiome ? activeBiome.region : 'Океан');
-
-      if (biomeBarEl) {
-        biomeBarEl.innerHTML = '';
-        list.forEach((b) => {
-          const pill = document.createElement('button');
-          pill.className = 'biome-pill' + (b.id === curId ? ' on' : '');
-          pill.textContent = BIOME_SHORT[b.id] || b.name;
-          pill.title = b.name + ' · ' + b.region;
-          pill.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (b.id !== curId) switchBiome(b.id);
-          });
-          biomeBarEl.appendChild(pill);
-        });
-      }
-      if (biomeBtnsEl) {
-        biomeBtnsEl.innerHTML = '';
-        list.forEach((b) => {
-          const btn = document.createElement('button');
-          btn.className = 'btn chip' + (b.id === curId ? ' on' : '');
-          btn.textContent = BIOME_SHORT[b.id] || b.name;
-          btn.title = b.name + ' (' + b.region + ')';
-          btn.addEventListener('click', () => {
-            if (b.id !== curId) switchBiome(b.id);
-          });
-          biomeBtnsEl.appendChild(btn);
-        });
-      }
-    }
-
-    function renderZoneChips() {
-      if (!zoneChipsEl || !activeBiome || !activeBiome.landmarks) return;
-      zoneChipsEl.innerHTML = '';
-      activeBiome.landmarks.forEach((lm) => {
-        const b = document.createElement('button');
-        b.className = 'btn chip';
-        b.textContent = lm.name;
-        b.title = lm.description;
-        b.addEventListener('click', () => {
-          OC.Navigation.flyTo(lm.x, lm.y, lm.z, lm.yaw, lm.pitch);
-          toast(lm.name + ' · ' + lm.description);
-        });
-        zoneChipsEl.appendChild(b);
-      });
-    }
-
-    renderBiomeUI();
-    renderZoneChips();
+    /* Переключатель биомов и чипы локаций — ui/panels_biomes.js */
+    const bioHud = OC._HudPanelsBiomes.bind({
+      toast,
+      getBiome: () => activeBiome,
+      switchBiome: (id) => switchBiome(id)
+    });
+    const renderBiomeUI = bioHud.renderBiomeUI;
+    const renderZoneChips = bioHud.renderZoneChips;
 
 
     /* Виртуальный тач-джойстик и вертикальные кнопки */
