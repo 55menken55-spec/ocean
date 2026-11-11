@@ -1575,12 +1575,15 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
-// === biomes/great_barrier_reef.js ===
-/* ================= БИОМ: БОЛЬШОЙ БАРЬЕРНЫЙ РИФ (2.4 × 2.4 КМ) ================= */
+// === biomes/great_barrier_reef/base.js ===
+/* ================= ББР: БАТИМЕТРИЯ, ЗОНЫ И ОПТИКА ================= */
+/* Геометрия шельфа (getHeight), карта зон, цвет дна, оптический профиль воды,
+   поле течений и хелпер safeSpotY. Общий фундамент для flora/tour/fauna_plan. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
   const T = THREE;
+
 
   const WORLD_RADIUS = 1200; // 2400 × 2400 м
   const CHUNK_SIZE = 150;    // 16 × 16 чанков
@@ -2003,6 +2006,30 @@ window.OC = window.OC || {};
     return out.set(vx * shelter, vy * shelter, vz * shelter);
   }
 
+  function safeSpotY(x, z, desiredY, minClearance) {
+    const floor = getHeight(x, z);
+    return Math.max(desiredY, floor + (minClearance || 2.8));
+  }
+  /* Публичный фундамент биома для flora/tour/fauna_plan и регистрации */
+  OC._GbrBase = {
+    WORLD_RADIUS, CHUNK_SIZE, shelfOffset, passCenterZ,
+    BLUE_HOLE_X, BLUE_HOLE_Z, CAY_X, CAY_Z, BOMMIES,
+    ZONES, safeSpotY, getHeight, getZoneAt, getTerrainColor,
+    getOpticalProfile, getCurrentAt
+  };
+})(window.OC);
+
+// === biomes/great_barrier_reef/flora.js ===
+/* ================= ББР: ПРОЦЕДУРНОЕ РАЗМЕЩЕНИЕ ФЛОРЫ ПО ЧАНКАМ ================= */
+/* Детерминированное зонально-реалистичное заполнение 16 × 16 чанков: мангры,
+   морская трава, кораллы гребня и склона, саргассы, губки Голубой дыры. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const { shelfOffset, passCenterZ, BLUE_HOLE_X, BLUE_HOLE_Z, CAY_X, CAY_Z, BOMMIES,
+          WORLD_RADIUS, CHUNK_SIZE, getHeight, getZoneAt } = OC._GbrBase;
+
   /* ---- Размещение флоры в чанке (детерминированное, зонально-реалистичное) ---- */
   function generateChunkFlora(cx, cz, chunkSize, density, rng) {
     const x0 = cx * chunkSize;
@@ -2275,121 +2302,19 @@ window.OC = window.OC || {};
 
     return out;
   }
+  OC._GbrFlora = { generateChunkFlora };
+})(window.OC);
 
-  function safeSpotY(x, z, desiredY, minClearance) {
-    const floor = getHeight(x, z);
-    return Math.max(desiredY, floor + (minClearance || 2.8));
-  }
+// === biomes/great_barrier_reef/encyclopedia.js ===
+/* ================= ББР: ЭНЦИКЛОПЕДИЯ ВИДОВ И ГЕОЛОГИИ ================= */
+/* 90+ карточек: география, кораллы, беспозвоночные, рыбы, мегафауна, экспедиция.
+   Формат строки: [название, латынь, категория, зона, глубины, описание]. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
 
-  /* ---- Знаковые ориентиры (Landmarks) ---- */
-  const _lmRaw = [
-    {
-      id: 'mangroves',
-      name: 'Мангровые отмели',
-      zoneId: 'mangroves',
-      x: -775 + shelfOffset(-120),
-      y: -1.6,
-      z: -120,
-      yaw: 1.48,
-      pitch: -0.05,
-      clearance: 2.2,
-      description: 'Западная береговая кромка с корнями красных мангров в тёплом изумрудном мелководье.'
-    },
-    {
-      id: 'seagrass',
-      name: 'Луга морской травы',
-      zoneId: 'seagrass',
-      x: -555 + shelfOffset(90),
-      y: -4.5,
-      z: 90,
-      yaw: 0.75,
-      pitch: -0.14,
-      clearance: 3.2,
-      description: 'Ковры морской травы Halophila и Zostera — место кормления дюгоней и морских черепах.'
-    },
-    {
-      id: 'sand_cay',
-      name: 'Коралловый островок',
-      zoneId: 'lagoon',
-      x: CAY_X + 74,
-      y: 2.2,
-      z: CAY_Z + 56,
-      yaw: 2.32,
-      pitch: -0.08,
-      clearance: 3.5,
-      description: 'Солнечный песчаный островок (Sand Cay) посреди лазурной лагуны Большого Барьерного рифа.'
-    },
-    {
-      id: 'bommies',
-      name: 'Коралловые бомми',
-      zoneId: 'lagoon',
-      x: (BOMMIES[0] ? BOMMIES[0].x : -140) + 32,
-      y: -8.0,
-      z: (BOMMIES[0] ? BOMMIES[0].z : 60) + 26,
-      yaw: 2.28,
-      pitch: -0.06,
-      clearance: 3.5,
-      description: 'Гигантские известняковые башни-бомми из колоний Porites, окружённые стаями рифовых рыб.'
-    },
-    {
-      id: 'crest',
-      name: 'Гребень и желоба',
-      zoneId: 'crest',
-      x: 155 + shelfOffset(20),
-      y: -6.5,
-      z: 20,
-      yaw: -1.35,
-      pitch: -0.18,
-      clearance: 4.5,
-      description: 'Живой гребень барьера с параллельными коралловыми контрфорсами и песчаными желобами прибоя.'
-    },
-    {
-      id: 'pass',
-      name: 'Рифовый проход',
-      zoneId: 'slope_hole',
-      x: 340 + shelfOffset(250),
-      y: -17.5,
-      z: passCenterZ(340 + shelfOffset(250)),
-      yaw: -1.55,
-      pitch: -0.08,
-      clearance: 5.0,
-      description: 'Глубокий приливный канал через рифовый щит: здесь кружат стаи барракуд и парят пятнистые орляки.'
-    },
-    {
-      id: 'blue_hole',
-      name: 'Голубая дыра',
-      zoneId: 'slope_hole',
-      x: BLUE_HOLE_X + 28,
-      y: -22.0,
-      z: BLUE_HOLE_Z + 24,
-      yaw: 2.35,
-      pitch: -0.45,
-      clearance: 6.0,
-      description: 'Затопленный карстовый провал диаметром ~110 м, уходящий отвесными уступами на глубину 88 метров.'
-    },
-    {
-      id: 'dropoff',
-      name: 'Стена в бездну',
-      zoneId: 'dropoff',
-      x: 645 + shelfOffset(-60),
-      y: -34.0,
-      z: -60,
-      yaw: 1.55,
-      pitch: -0.12,
-      clearance: 8.0,
-      description: 'Внешняя стена Большого Барьерного рифа — вертикальный обрыв в глубины Кораллового моря.'
-    }
-  ];
 
-  const LANDMARKS = _lmRaw.map((lm) => Object.assign({}, lm, {
-    y: safeSpotY(lm.x, lm.z, lm.y, lm.clearance)
-  }));
-
-  const SPAWN_X = -45 + shelfOffset(35);
-  const SPAWN_Z = 35;
-  const SPAWN_Y = safeSpotY(SPAWN_X, SPAWN_Z, -7.2, 5.5);
-
-  /* ---- Энциклопедия видов и геологии ---- */
   const ENCYCLOPEDIA = {
     // География
     floor: ['Морское дно и рельеф рифа', 'Bathymetry / Benthos', 'Геология', 'Все зоны', '0–168 м', 'Карбонатные пески, известняковые плиты, контрфорсы прибоя (spur-and-groove) и отвесный склон шельфа Кораллового моря.'],
@@ -2450,8 +2375,19 @@ window.OC = window.OC || {};
     dolphin: ['Длиннорылый продельфин', 'Stenella longirostris', 'Мегафауна', 'Поверхность лагуны и прохода', '+2.5 .. -8 м', 'Быстрые акробаты тропических вод, выпрыгивающие каскадами из волны у борта научного судна.'],
     flying_fish: ['Тропическая летучая рыба', 'Exocoetus volitans', 'Рыбы', 'Поверхность открытого прохода', '+1.5 .. -2 м', 'Выпрыгивает из-под волны и планирует до 200 метров над водой на широких переливающихся грудных плавниках-крыльях.']
   };
+  OC._GbrEncyclopedia = { ENCYCLOPEDIA };
+})(window.OC);
 
-  /* ---- Сценарий автоматического тура по всему Большому Барьерному рифу ---- */
+// === biomes/great_barrier_reef/tour.js ===
+/* ================= ББР: СЦЕНАРИЙ АВТОМАТИЧЕСКОГО ТУРА ================= */
+/* Восемь остановок от мангров до отвесной стены Кораллового моря; высоты посадки
+   выправляются safeSpotY, чтобы камера не входила в рельеф. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const { shelfOffset, passCenterZ, BLUE_HOLE_X, BLUE_HOLE_Z, CAY_X, CAY_Z, BOMMIES, safeSpotY } = OC._GbrBase;
+
   const _tourRaw = [
     { pos: [-775 + shelfOffset(-120), -1.8, -110], look: [-855 + shelfOffset(-120), -1.2, -135], title: 'Мангровые отмели побережья', duration: 9,
       fact: 'Арочные корни красных мангров опресняют морскую воду, задерживают ил с берега и укрывают миллионы мальков рифовых рыб.' },
@@ -2478,8 +2414,19 @@ window.OC = window.OC || {};
     fact: leg.fact,
     duration: leg.duration
   }));
+  OC._GbrTour = { TOUR_LEGS };
+})(window.OC);
 
-  /* ---- Экологический план фауны биома (для OC.FaunaEngine) ---- */
+// === biomes/great_barrier_reef/fauna_plan.js ===
+/* ================= ББР: ЭКОЛОГИЧЕСКИЙ ПЛАН ФАУНЫ ================= */
+/* План для OC.FaunaEngine: станции очистки, стаи, одиночная мегафауна, дельфины
+   и летучие рыбы с привязкой к геометрии лагуны и рифового прохода. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const { shelfOffset, passCenterZ, BLUE_HOLE_X, BLUE_HOLE_Z, CAY_X, CAY_Z, BOMMIES } = OC._GbrBase;
+
   const bom0 = BOMMIES[0] || { x: -140, z: 60 };
   const bom1 = BOMMIES[1] || { x: -195, z: -85 };
   const CLEANING_STATIONS = [
@@ -2615,6 +2562,135 @@ window.OC = window.OC || {};
       { cx: 520 + shelfOffset(90), cz: 90, r: 48, speed: 9.8, count: 7 }
     ]
   };
+  OC._GbrFaunaPlan = { FAUNA_PLAN };
+})(window.OC);
+
+// === biomes/great_barrier_reef.js ===
+/* ================= БИОМ: БОЛЬШОЙ БАРЬЕРНЫЙ РИФ (2.4 × 2.4 КМ) ================= */
+/* Регистрация биома. Числовая геометрия и оптика — biomes/great_barrier_reef/base.js,
+   флора — flora.js, энциклопедия — encyclopedia.js, тур — tour.js, фауна — fauna_plan.js. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+
+  const {
+    WORLD_RADIUS, CHUNK_SIZE, shelfOffset, passCenterZ,
+    BLUE_HOLE_X, BLUE_HOLE_Z, CAY_X, CAY_Z, BOMMIES, safeSpotY,
+    ZONES, getHeight, getZoneAt, getTerrainColor,
+    getOpticalProfile, getCurrentAt
+  } = OC._GbrBase;
+  const { generateChunkFlora } = OC._GbrFlora;
+  const { ENCYCLOPEDIA } = OC._GbrEncyclopedia;
+  const { TOUR_LEGS } = OC._GbrTour;
+  const { FAUNA_PLAN } = OC._GbrFaunaPlan;
+
+  /* ---- Знаковые ориентиры (Landmarks) ---- */
+  const _lmRaw = [
+    {
+      id: 'mangroves',
+      name: 'Мангровые отмели',
+      zoneId: 'mangroves',
+      x: -775 + shelfOffset(-120),
+      y: -1.6,
+      z: -120,
+      yaw: 1.48,
+      pitch: -0.05,
+      clearance: 2.2,
+      description: 'Западная береговая кромка с корнями красных мангров в тёплом изумрудном мелководье.'
+    },
+    {
+      id: 'seagrass',
+      name: 'Луга морской травы',
+      zoneId: 'seagrass',
+      x: -555 + shelfOffset(90),
+      y: -4.5,
+      z: 90,
+      yaw: 0.75,
+      pitch: -0.14,
+      clearance: 3.2,
+      description: 'Ковры морской травы Halophila и Zostera — место кормления дюгоней и морских черепах.'
+    },
+    {
+      id: 'sand_cay',
+      name: 'Коралловый островок',
+      zoneId: 'lagoon',
+      x: CAY_X + 74,
+      y: 2.2,
+      z: CAY_Z + 56,
+      yaw: 2.32,
+      pitch: -0.08,
+      clearance: 3.5,
+      description: 'Солнечный песчаный островок (Sand Cay) посреди лазурной лагуны Большого Барьерного рифа.'
+    },
+    {
+      id: 'bommies',
+      name: 'Коралловые бомми',
+      zoneId: 'lagoon',
+      x: (BOMMIES[0] ? BOMMIES[0].x : -140) + 32,
+      y: -8.0,
+      z: (BOMMIES[0] ? BOMMIES[0].z : 60) + 26,
+      yaw: 2.28,
+      pitch: -0.06,
+      clearance: 3.5,
+      description: 'Гигантские известняковые башни-бомми из колоний Porites, окружённые стаями рифовых рыб.'
+    },
+    {
+      id: 'crest',
+      name: 'Гребень и желоба',
+      zoneId: 'crest',
+      x: 155 + shelfOffset(20),
+      y: -6.5,
+      z: 20,
+      yaw: -1.35,
+      pitch: -0.18,
+      clearance: 4.5,
+      description: 'Живой гребень барьера с параллельными коралловыми контрфорсами и песчаными желобами прибоя.'
+    },
+    {
+      id: 'pass',
+      name: 'Рифовый проход',
+      zoneId: 'slope_hole',
+      x: 340 + shelfOffset(250),
+      y: -17.5,
+      z: passCenterZ(340 + shelfOffset(250)),
+      yaw: -1.55,
+      pitch: -0.08,
+      clearance: 5.0,
+      description: 'Глубокий приливный канал через рифовый щит: здесь кружат стаи барракуд и парят пятнистые орляки.'
+    },
+    {
+      id: 'blue_hole',
+      name: 'Голубая дыра',
+      zoneId: 'slope_hole',
+      x: BLUE_HOLE_X + 28,
+      y: -22.0,
+      z: BLUE_HOLE_Z + 24,
+      yaw: 2.35,
+      pitch: -0.45,
+      clearance: 6.0,
+      description: 'Затопленный карстовый провал диаметром ~110 м, уходящий отвесными уступами на глубину 88 метров.'
+    },
+    {
+      id: 'dropoff',
+      name: 'Стена в бездну',
+      zoneId: 'dropoff',
+      x: 645 + shelfOffset(-60),
+      y: -34.0,
+      z: -60,
+      yaw: 1.55,
+      pitch: -0.12,
+      clearance: 8.0,
+      description: 'Внешняя стена Большого Барьерного рифа — вертикальный обрыв в глубины Кораллового моря.'
+    }
+  ];
+
+  const LANDMARKS = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: safeSpotY(lm.x, lm.z, lm.y, lm.clearance)
+  }));
+
+  const SPAWN_X = -45 + shelfOffset(35);
+  const SPAWN_Z = 35;
+  const SPAWN_Y = safeSpotY(SPAWN_X, SPAWN_Z, -7.2, 5.5);
 
   OC.Biomes.register({
     id: 'great_barrier_reef',

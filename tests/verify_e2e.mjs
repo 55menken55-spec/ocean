@@ -341,7 +341,7 @@ const sandbox = {
       const msg = a.map((x) => (x && x.message ? x.message : String(x))).join(' ');
       const bId = sandbox.OC && sandbox.OC.Biomes ? sandbox.OC.Biomes.getActive().id : 'boot';
       const st = new Error().stack.split('\n').slice(1, 5).map((l) => l.trim()).join(' <- ');
-      pageErrors.push(`[${bId}] ${msg} (${st})`);
+      pageErrors.push(`[${bId}] ${msg} ${a.map((x) => (x && x.stack ? x.stack.split('\\n').slice(0,8).join(' | ') : '')).join(' ')} (${st})`);
     },
   },
   Math, Date, Float32Array, Float64Array, Uint8Array, Uint16Array, Uint32Array, Uint8ClampedArray, Int32Array,

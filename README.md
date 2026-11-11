@@ -105,7 +105,8 @@ src/
 │   ├── quality.js           # Профили качества (Low/Medium/High/Ultra)
 │   └── biome_registry.js    # Реестр водных биомов планеты (OC.Biomes)
 ├── biomes/
-│   ├── great_barrier_reef.js # География, батиметрия, флора и энциклопедия GBR
+│   ├── great_barrier_reef.js # Регистрация биома GBR (ориентиры, спавн, реестр)
+│   ├── great_barrier_reef/   # base (батиметрия/зоны/оптика), flora, encyclopedia, tour, fauna_plan
 │   ├── kelp_forest.js        # Лес гигантской ламинарии (Залив Монтерей, 0–74 м)
 │   ├── hydrothermal_vents.js # Абиссальные чёрные курильщики (ВТП, 2420–2538 м)
 │   ├── arctic_sea.js         # Полярное море: паковый лёд, айсберги, брайниклы (74° N)
