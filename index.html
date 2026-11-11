@@ -670,7 +670,8 @@
   <div class="group">
     <h2>Время суток и свет</h2>
     <input type="range" id="time-slider" min="0" max="100" value="24" aria-label="Время суток">
-    <div class="time-row"><span>Время на рифе</span><b id="time-label">05:45</b></div>
+    <div class="time-row"><span>Время суток</span><b id="time-label">05:45</b></div>
+    <div class="time-row"><span>Сезон · годовой цикл</span><b id="season-label" title="Мягкая смена температуры и освещения">Лето</b></div>
     <div class="row" style="margin-top:8px">
       <button class="btn" id="btn-dawn">Рассвет</button>
       <button class="btn" id="btn-day">Полдень</button>
@@ -1616,6 +1617,16 @@ window.OC = window.OC || {};
      */
     register(def) {
       if (!def || !def.id) throw new Error('Biome definition requires id');
+      if (typeof def.getTemperatureAt === 'function' && !def.getTemperatureAt._seasonWrapped) {
+        const baseTemperatureAt = def.getTemperatureAt;
+        const seasonalTemperatureAt = function (x, depthM, zone) {
+          const baseTemp = baseTemperatureAt.call(this, x, depthM, zone);
+          const seasonalDelta = OC.Seasons ? OC.Seasons.getTemperatureDelta(this, depthM) : 0;
+          return baseTemp + seasonalDelta;
+        };
+        seasonalTemperatureAt._seasonWrapped = true;
+        def.getTemperatureAt = seasonalTemperatureAt;
+      }
       registry.set(def.id, def);
       if (!activeBiome) activeBiome = def;
       return def;
@@ -1640,6 +1651,90 @@ window.OC = window.OC || {};
   /* Удобный общий доступ к текущей высоте дна */
   OC.floorH = function (x, z) {
     return activeBiome ? activeBiome.getHeight(x, z) : -20;
+  };
+})(window.OC);
+
+// === engine/seasons.js ===
+/* ================= СЕЗОННЫЙ ЦИКЛ ПЛАНЕТАРНЫХ ВОДНЫХ БИОМОВ ================= */
+/* Непрерывный годовой цикл: температура зависит от широты региона и глубины,
+   а не переключается скачком между четырьмя состояниями. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+
+  const YEAR_SECONDS = 1200;
+  const TAU = Math.PI * 2;
+  const SEASONS = [
+    { id: 'winter', label: 'Зима', icon: '❄' },
+    { id: 'spring', label: 'Весна', icon: '🌱' },
+    { id: 'summer', label: 'Лето', icon: '☀' },
+    { id: 'autumn', label: 'Осень', icon: '🍂' }
+  ];
+  const CLIMATES = {
+    great_barrier_reef: { hemisphere: 'south', amplitudeC: 0.8, depthScaleM: 72, lightAmplitude: 0.035 },
+    kelp_forest: { hemisphere: 'north', amplitudeC: 1.8, depthScaleM: 95, lightAmplitude: 0.075 },
+    hydrothermal_vents: { hemisphere: 'north', amplitudeC: 0.05, depthScaleM: 260, lightAmplitude: 0.0 },
+    arctic_sea: { hemisphere: 'north', amplitudeC: 0.12, depthScaleM: 65, lightAmplitude: 0.13 },
+    wreck_atoll: { hemisphere: 'north', amplitudeC: 0.45, depthScaleM: 55, lightAmplitude: 0.025 },
+    mariana_trench: { hemisphere: 'north', amplitudeC: 0.04, depthScaleM: 300, lightAmplitude: 0.0 },
+    brine_pool: { hemisphere: 'north', amplitudeC: 0.08, depthScaleM: 240, lightAmplitude: 0.0 },
+    cenote_caves: { hemisphere: 'north', amplitudeC: 1.1, depthScaleM: 28, lightAmplitude: 0.035 },
+    galapagos_upwelling: { hemisphere: 'equatorial', amplitudeC: 0.35, depthScaleM: 85, lightAmplitude: 0.015 },
+    amazon_igapo: { hemisphere: 'south', amplitudeC: 0.8, depthScaleM: 32, lightAmplitude: 0.025 },
+    baikal: { hemisphere: 'north', amplitudeC: 3.2, depthScaleM: 58, lightAmplitude: 0.11 }
+  };
+
+  let phase = 0.5; // Стартовая экспедиция: лето в северном полушарии.
+
+  function climateFor(biome) {
+    return CLIMATES[biome && biome.id] || { hemisphere: 'north', amplitudeC: 0.6, depthScaleM: 80, lightAmplitude: 0.025 };
+  }
+
+  function localPhaseFor(climate) {
+    return (phase + (climate.hemisphere === 'south' ? 0.5 : 0)) % 1;
+  }
+
+  function getState(biome) {
+    const climate = climateFor(biome);
+    const localPhase = localPhaseFor(climate);
+    const sector = Math.floor((((localPhase + 0.125) % 1) * 4));
+    const season = SEASONS[sector];
+    const warmFactor = -Math.cos(localPhase * TAU);
+    return {
+      id: season.id,
+      label: season.label,
+      icon: season.icon,
+      phase,
+      localPhase,
+      hemisphere: climate.hemisphere,
+      warmFactor,
+      lightFactor: 1 + warmFactor * climate.lightAmplitude,
+      progress: localPhase
+    };
+  }
+
+  function getTemperatureDelta(biome, depthM) {
+    const climate = climateFor(biome);
+    const phaseLocal = localPhaseFor(climate);
+    const depth = Number.isFinite(depthM) ? Math.abs(depthM) : 0;
+    const surfaceInfluence = Math.exp(-Math.max(0, depth) / climate.depthScaleM);
+    return climate.amplitudeC * -Math.cos(phaseLocal * TAU) * surfaceInfluence;
+  }
+
+  OC.Seasons = {
+    YEAR_SECONDS,
+    update(dt) {
+      if (Number.isFinite(dt) && dt > 0) phase = (phase + Math.min(dt, 0.25) / YEAR_SECONDS) % 1;
+      return phase;
+    },
+    getPhase: () => phase,
+    setPhase(value) {
+      if (!Number.isFinite(value)) return phase;
+      phase = ((value % 1) + 1) % 1;
+      return phase;
+    },
+    getState,
+    getTemperatureDelta
   };
 })(window.OC);
 
@@ -9447,9 +9542,11 @@ window.OC = window.OC || {};
   /* ---------- Обновление мира на каждом кадре ---------- */
   OC.updateWorld = function (dt, time, camPos, autoCycle) {
     if (autoCycle) timeOfDay = (timeOfDay + dt / 150) % 1;
+    if (OC.Seasons) OC.Seasons.update(dt);
     updateBasePalette(timeOfDay);
 
     const biome = OC.Biomes.getActive();
+    const season = OC.Seasons ? OC.Seasons.getState(biome) : null;
     const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
     const lab = OC.EcoLab ? OC.EcoLab.update(dt, biome, pal.dayW) : null;
     causticU.uBleach.value = lab ? lab.bleaching : 0.0;
@@ -9506,7 +9603,8 @@ window.OC = window.OC || {};
     hemi.intensity = pal.hemiI * (biome && biome.noSurface ? (0.14 + twilightLux * 0.45) : (0.35 + 0.65 * pal.sunAtten));
 
     sun.color.copy(pal.sunCol);
-    sun.intensity = pal.sunI * (biome && biome.noSurface ? (0.03 + twilightLux * 0.34) : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
+    const seasonLight = season ? season.lightFactor : 1.0;
+    sun.intensity = pal.sunI * seasonLight * (biome && biome.noSurface ? (0.03 + twilightLux * 0.34) : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
     const sunElev = (biome && biome.hasAurora) ? Math.max(0.10, Math.sin(ang) * 0.42 + 0.18) : Math.max(0.18, Math.sin(ang) * 0.85 + 0.28);
@@ -29813,6 +29911,8 @@ window.OC = window.OC || {};
       const btnAuto = document.getElementById('btn-auto');
       const timeSlider = document.getElementById('time-slider');
       const timeLabel = document.getElementById('time-label');
+      const seasonLabel = document.getElementById('season-label');
+      let lastSeasonText = '';
       const weatherBtnsEl = document.getElementById('weather-btns');
       const weatherGroupEl = document.getElementById('weather-group');
       const qualityBtnsEl = document.getElementById('quality-btns');
@@ -29965,9 +30065,19 @@ window.OC = window.OC || {};
 
     function syncClock(t, auto) {
       if (auto) syncTimeSlider(Math.round(t * 100));
-      if (!timeLabel) return;
-      const hrs = (t * 24) % 24;
-      timeLabel.textContent = String(Math.floor(hrs)).padStart(2, '0') + ':' + String(Math.floor((hrs % 1) * 60)).padStart(2, '0');
+      if (timeLabel) {
+        const hrs = (t * 24) % 24;
+        timeLabel.textContent = String(Math.floor(hrs)).padStart(2, '0') + ':' + String(Math.floor((hrs % 1) * 60)).padStart(2, '0');
+      }
+      if (seasonLabel && OC.Seasons) {
+        const season = OC.Seasons.getState(activeBiome());
+        const text = season.icon + ' ' + season.label;
+        if (text !== lastSeasonText) {
+          seasonLabel.textContent = text;
+          seasonLabel.title = 'Мягкий годовой переход · ' + (season.hemisphere === 'south' ? 'Южное полушарие' : (season.hemisphere === 'north' ? 'Северное полушарие' : 'Экваториальная область'));
+          lastSeasonText = text;
+        }
+      }
     }
 
     return { syncAuto, setTOD, syncWeatherButtons, renderQualityButtons, updateResBadge,

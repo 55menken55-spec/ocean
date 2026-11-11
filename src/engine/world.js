@@ -728,9 +728,11 @@ window.OC = window.OC || {};
   /* ---------- Обновление мира на каждом кадре ---------- */
   OC.updateWorld = function (dt, time, camPos, autoCycle) {
     if (autoCycle) timeOfDay = (timeOfDay + dt / 150) % 1;
+    if (OC.Seasons) OC.Seasons.update(dt);
     updateBasePalette(timeOfDay);
 
     const biome = OC.Biomes.getActive();
+    const season = OC.Seasons ? OC.Seasons.getState(biome) : null;
     const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
     const lab = OC.EcoLab ? OC.EcoLab.update(dt, biome, pal.dayW) : null;
     causticU.uBleach.value = lab ? lab.bleaching : 0.0;
@@ -787,7 +789,8 @@ window.OC = window.OC || {};
     hemi.intensity = pal.hemiI * (biome && biome.noSurface ? (0.14 + twilightLux * 0.45) : (0.35 + 0.65 * pal.sunAtten));
 
     sun.color.copy(pal.sunCol);
-    sun.intensity = pal.sunI * (biome && biome.noSurface ? (0.03 + twilightLux * 0.34) : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
+    const seasonLight = season ? season.lightFactor : 1.0;
+    sun.intensity = pal.sunI * seasonLight * (biome && biome.noSurface ? (0.03 + twilightLux * 0.34) : (0.22 + 0.78 * pal.sunAtten)) + wState.lightning * 1.45;
 
     const ang = timeOfDay * Math.PI * 2 - Math.PI * 0.5;
     const sunElev = (biome && biome.hasAurora) ? Math.max(0.10, Math.sin(ang) * 0.42 + 0.18) : Math.max(0.18, Math.sin(ang) * 0.85 + 0.28);

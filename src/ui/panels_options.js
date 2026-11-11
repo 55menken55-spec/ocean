@@ -19,6 +19,8 @@ window.OC = window.OC || {};
       const btnAuto = document.getElementById('btn-auto');
       const timeSlider = document.getElementById('time-slider');
       const timeLabel = document.getElementById('time-label');
+      const seasonLabel = document.getElementById('season-label');
+      let lastSeasonText = '';
       const weatherBtnsEl = document.getElementById('weather-btns');
       const weatherGroupEl = document.getElementById('weather-group');
       const qualityBtnsEl = document.getElementById('quality-btns');
@@ -171,9 +173,19 @@ window.OC = window.OC || {};
 
     function syncClock(t, auto) {
       if (auto) syncTimeSlider(Math.round(t * 100));
-      if (!timeLabel) return;
-      const hrs = (t * 24) % 24;
-      timeLabel.textContent = String(Math.floor(hrs)).padStart(2, '0') + ':' + String(Math.floor((hrs % 1) * 60)).padStart(2, '0');
+      if (timeLabel) {
+        const hrs = (t * 24) % 24;
+        timeLabel.textContent = String(Math.floor(hrs)).padStart(2, '0') + ':' + String(Math.floor((hrs % 1) * 60)).padStart(2, '0');
+      }
+      if (seasonLabel && OC.Seasons) {
+        const season = OC.Seasons.getState(activeBiome());
+        const text = season.icon + ' ' + season.label;
+        if (text !== lastSeasonText) {
+          seasonLabel.textContent = text;
+          seasonLabel.title = 'Мягкий годовой переход · ' + (season.hemisphere === 'south' ? 'Южное полушарие' : (season.hemisphere === 'north' ? 'Северное полушарие' : 'Экваториальная область'));
+          lastSeasonText = text;
+        }
+      }
     }
 
     return { syncAuto, setTOD, syncWeatherButtons, renderQualityButtons, updateResBadge,

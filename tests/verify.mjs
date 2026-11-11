@@ -1457,6 +1457,22 @@ console.log('   10th Biome "Амазония: Лес Игапо" (Rio Negro blac
 
 // AB) Verify 11th Biome: Lake Baikal's clear-water rift, endemic fauna, and sponge reefs
 const baikal = OC.Biomes.setActive('baikal');
+assert(OC.Seasons && OC.Seasons.YEAR_SECONDS === 1200, 'The continuous annual season cycle must be available');
+const savedSeasonPhase = OC.Seasons.getPhase();
+OC.Seasons.setPhase(0);
+const baikalWinterTemp = baikal.getTemperatureAt(0, 0, baikal.getZoneAt(0, 0, 0));
+const reef = OC.Biomes.get('great_barrier_reef');
+const reefSouthernSummerDelta = OC.Seasons.getTemperatureDelta(reef, 0);
+OC.Seasons.setPhase(0.5);
+const baikalSummerTemp = baikal.getTemperatureAt(0, 0, baikal.getZoneAt(0, 0, 0));
+const reefSouthernWinterDelta = OC.Seasons.getTemperatureDelta(reef, 0);
+assert(baikalSummerTemp - baikalWinterTemp > 6 && reefSouthernSummerDelta > reefSouthernWinterDelta, 'Seasonal water temperatures must follow hemisphere and smoothly vary with the annual cycle');
+OC.Seasons.setPhase(0.249);
+const springBefore = baikal.getTemperatureAt(0, 0, baikal.getZoneAt(0, 0, 0));
+OC.Seasons.setPhase(0.251);
+const springAfter = baikal.getTemperatureAt(0, 0, baikal.getZoneAt(0, 0, 0));
+assert(Math.abs(springAfter - springBefore) < 0.1, 'Seasonal temperature transitions must be continuous, without boundary jumps');
+OC.Seasons.setPhase(savedSeasonPhase);
 assert(baikal && baikal.minimapTheme === 'baikal' && baikal.noSurface === false, 'Baikal must register as a surface freshwater biome with its own minimap theme');
 assert(baikal.zones.length === 5 && baikal.landmarks.length === 6 && baikal.tourLegs.length === 6, 'Baikal must expose 5 zones, 6 landmarks and 6 guided tour legs');
 assert(baikal.getHeight(0, 80) < -1500 && baikal.getHeight(-520, -420) > -15, 'Baikal bathymetry must include both the deep rift and shallow Academy Bay');

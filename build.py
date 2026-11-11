@@ -20,6 +20,7 @@ ORDER = [
     'core/util.js',
     'core/quality.js',
     'core/biome_registry.js',
+    'engine/seasons.js',
     'biomes/great_barrier_reef/base.js',
     'biomes/great_barrier_reef/flora.js',
     'biomes/great_barrier_reef/encyclopedia.js',

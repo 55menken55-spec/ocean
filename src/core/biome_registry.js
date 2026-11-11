@@ -25,6 +25,16 @@ window.OC = window.OC || {};
      */
     register(def) {
       if (!def || !def.id) throw new Error('Biome definition requires id');
+      if (typeof def.getTemperatureAt === 'function' && !def.getTemperatureAt._seasonWrapped) {
+        const baseTemperatureAt = def.getTemperatureAt;
+        const seasonalTemperatureAt = function (x, depthM, zone) {
+          const baseTemp = baseTemperatureAt.call(this, x, depthM, zone);
+          const seasonalDelta = OC.Seasons ? OC.Seasons.getTemperatureDelta(this, depthM) : 0;
+          return baseTemp + seasonalDelta;
+        };
+        seasonalTemperatureAt._seasonWrapped = true;
+        def.getTemperatureAt = seasonalTemperatureAt;
+      }
       registry.set(def.id, def);
       if (!activeBiome) activeBiome = def;
       return def;
