@@ -47,6 +47,8 @@ const SRC_ORDER = [
   'src/ui/atlas.js',
   'src/ui/globe.js',
   'src/ui/hud_panels.js',
+  'src/ui/panels_rov.js',
+  'src/ui/panels_camera.js',
   'src/ui/main.js',
 ];
 

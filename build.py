@@ -47,6 +47,8 @@ ORDER = [
     'ui/atlas.js',
     'ui/globe.js',
     'ui/hud_panels.js',
+    'ui/panels_rov.js',
+    'ui/panels_camera.js',
     'ui/main.js',
 ]
 
