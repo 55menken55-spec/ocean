@@ -68,6 +68,10 @@ window.OC = window.OC || {};
   const teleWpSep = document.getElementById('tele-wp-sep');
   const teleWpWrap = document.getElementById('tele-wp-wrap');
   const teleWp = document.getElementById('tele-wp');
+  const resBadgeEl = document.getElementById('res-badge');
+  const resScaleEl = document.getElementById('res-scale');
+  const resQualityEl = document.getElementById('res-quality');
+  const hudToggleEl = document.getElementById('hud-toggle');
   const weatherBtnsEl = document.getElementById('weather-btns');
   const weatherGroupEl = document.getElementById('weather-group');
   const lensCanvas = document.getElementById('lens-fx');
@@ -1181,6 +1185,40 @@ window.OC = window.OC || {};
     OC.Quality.onChange(() => renderQualityButtons());
     renderQualityButtons();
 
+    /* Индикатор оптики: профиль качества, динамическое разрешение и масштаб пикселей */
+    const updateResBadge = () => {
+      if (!resBadgeEl) return;
+      const qLabel = OC.Quality && OC.Quality.get ? OC.Quality.get().label : '—';
+      const st = (OC.Quality && OC.Quality.getDynamicResolution) ? OC.Quality.getDynamicResolution() : null;
+      const scalePct = st ? Math.round(st.scale * 100) : 100;
+      if (resScaleEl) resScaleEl.textContent = scalePct + '%';
+      if (resQualityEl) resQualityEl.textContent = qLabel;
+      resBadgeEl.classList.toggle('low', scalePct < 80);
+    };
+    updateResBadge();
+    if (OC.Quality && OC.Quality.onChange) OC.Quality.onChange(() => updateResBadge());
+
+    /* Кнопка «глаз»: показать/скрыть весь HUD на сенсорных экранах */
+    const syncHudToggle = () => {
+      if (!hudToggleEl) return;
+      hudToggleEl.classList.toggle('on', hudHidden);
+      hudToggleEl.setAttribute('aria-pressed', hudHidden ? 'true' : 'false');
+    };
+    const toggleHud = () => {
+      hudHidden = !hudHidden;
+      hudEls.forEach((el) => el.classList.toggle('hud-hidden', hudHidden));
+      syncHudToggle();
+      if (hudToggleEl) hudToggleEl.classList.toggle('show', hudHidden);
+    };
+    if (hudToggleEl) {
+      hudToggleEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHud();
+      });
+      if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) hudToggleEl.classList.add('show');
+    }
+    syncHudToggle();
+
     /* Виртуальный тач-джойстик и вертикальные кнопки */
     const touchStick = document.getElementById('touch-stick');
     const touchKnob = document.getElementById('touch-knob');
@@ -1229,6 +1267,55 @@ window.OC = window.OC || {};
     };
     bindVertBtn(mUp, 1);
     bindVertBtn(mDown, -1);
+
+    /* Сенсорный блок быстрых действий: прожектор, сонар, проба, батискаф, меню */
+    const mFlash = document.getElementById('m-flash');
+    const mSonar = document.getElementById('m-sonar');
+    const mSample = document.getElementById('m-sample');
+    const mSub = document.getElementById('m-sub');
+    const mMenu = document.getElementById('m-menu');
+    const syncTouchQuick = () => {
+      if (mFlash) mFlash.classList.toggle('on', !!(OC.isFlashlightOn && OC.isFlashlightOn()));
+      if (mSub) mSub.classList.toggle('on', subMode);
+      if (mMenu && panel) mMenu.classList.toggle('on', !panel.classList.contains('closed'));
+    };
+    if (mFlash) {
+      mFlash.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const on = OC.toggleFlashlight();
+        syncFlash(on);
+        syncTouchQuick();
+        toast(on ? 'Прожектор включён' : 'Прожектор выключен');
+      });
+    }
+    if (mSonar) {
+      mSonar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fireSonarPing();
+      });
+    }
+    if (mSample) {
+      mSample.addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerSampleGrab();
+      });
+    }
+    if (mSub) {
+      mSub.addEventListener('click', (e) => {
+        e.stopPropagation();
+        syncSubMode(!subMode);
+        syncTouchQuick();
+        toast(subMode ? 'Режим батискафа включён' : 'Режим свободного дайвера');
+      });
+    }
+    if (mMenu) {
+      mMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (btnPanel) btnPanel.click();
+        syncTouchQuick();
+      });
+    }
+    syncTouchQuick();
 
     window.addEventListener('gamepadconnected', (e) => {
       const id = e && e.gamepad ? e.gamepad.id.slice(0, 32) : 'Контроллер';
@@ -1307,8 +1394,25 @@ window.OC = window.OC || {};
         toast('Цветофильтр: ' + f.label);
       }
       if (e.code === 'KeyH') {
-        hudHidden = !hudHidden;
-        hudEls.forEach((el) => el.classList.toggle('hud-hidden', hudHidden));
+        toggleHud();
+      }
+      // Быстрые горячие клавиши оптики: [ — пиксельный масштаб, ] — профиль качества
+      if (e.code === 'BracketLeft' && OC.Quality && OC.Quality.getDynamicResolution) {
+        const st = OC.Quality.getDynamicResolution();
+        const nextEnable = !st.enabled;
+        OC.Quality.setDynamicResolution(nextEnable);
+        if (OC.applyPixelScale) OC.applyPixelScale(nextEnable ? OC.Quality.evaluateDynamicResolution(1, 0) : 1.0);
+        updateResBadge();
+        toast(nextEnable ? 'Динамическое разрешение включено' : 'Динамическое разрешение выключено (100%)');
+      }
+      if (e.code === 'BracketRight' && OC.Quality && OC.Quality.PRESETS) {
+        const tiers = ['low', 'medium', 'high', 'ultra'];
+        const idx = tiers.indexOf(OC.Quality.getId());
+        const nextId = tiers[(idx + 1) % tiers.length];
+        OC.Quality.set(nextId);
+        if (OC.Expedition && OC.Expedition.saveQuality) OC.Expedition.saveQuality(nextId);
+        updateResBadge();
+        toast('Профиль оптики: ' + OC.Quality.PRESETS[nextId].label);
       }
       if (e.code === 'KeyU' && OC.Weather) {
         if (activeBiome && activeBiome.noSurface) {
@@ -1414,7 +1518,7 @@ window.OC = window.OC || {};
       });
     }
 
-    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderQualityButtons, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderQualityButtons, renderBiomeUI, renderZoneChips, updateResBadge, syncTouchQuick, syncHudToggle, toggleHud };
   }
 
   function switchBiome(id) {
@@ -1607,6 +1711,23 @@ window.OC = window.OC || {};
       uiHandles.syncModes(OC.Navigation.getMode());
       uiHandles.syncGuideCard(OC.Navigation.getTourState());
 
+      // Мобильный старт: сразу удерживаем целевой FPS динамическим разрешением
+      if (OC.Quality && OC.Quality.isMobile && OC.Quality.isMobile()) {
+        const dyn = OC.Quality.getDynamicResolution ? OC.Quality.getDynamicResolution() : null;
+        if (dyn && dyn.enabled && OC.applyPixelScale) OC.applyPixelScale(dyn.scale);
+        document.body.classList.add('coarse-pointer');
+        if (uiHandles.updateResBadge) uiHandles.updateResBadge();
+      }
+      // Реакция на смену ориентации/размера: пересчёт буфера и компактного HUD
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => {
+          if (OC.applyPixelScale) OC.applyPixelScale();
+          if (renderer && renderer.setSize) {
+            renderer.setSize(window.innerWidth, window.innerHeight, false);
+          }
+        }, 220);
+      });
+
       setBar(1.0);
       setTimeout(() => {
         if (loading) {
@@ -1645,8 +1766,18 @@ window.OC = window.OC || {};
     window.addEventListener('resize', resize);
     resize();
 
+    /* Энергосбережение: на скрытой вкладке цикл рендера замирает и не жжёт GPU */
+    let hiddenPaused = false;
+    if (document.addEventListener) {
+      document.addEventListener('visibilitychange', () => {
+        hiddenPaused = !!document.hidden;
+        if (!hiddenPaused) last = performance.now();
+      });
+    }
+
     function frame(now) {
       requestAnimationFrame(frame);
+      if (hiddenPaused) { last = now; return; }
       const cpuT0 = performance.now();
       const rawDt = Math.min(0.05, (now - last) / 1000) || 0.016;
       last = now;
@@ -1920,6 +2051,15 @@ window.OC = window.OC || {};
             toast('Адаптивный LOD: ' + OC.Quality.PRESETS[prevQId].label + ' -> ' + OC.Quality.PRESETS[nextQId].label + ' (p95 ' + stNow.p95CpuMs.toFixed(1) + ' мс)');
           } else if (uiHandles && uiHandles.renderQualityButtons) {
             uiHandles.renderQualityButtons();
+          }
+          // Динамическое разрешение: независимая от профиля тонкая подстройка пиксельной плотности
+          if (OC.Quality.evaluateDynamicResolution) {
+            const prevScale = OC.getPixelScale ? OC.getPixelScale() : 1.0;
+            const nextScale = OC.Quality.evaluateDynamicResolution(stNow.p95CpuMs, fpsAcc);
+            if (Math.abs(nextScale - prevScale) > 0.015 && OC.applyPixelScale) {
+              OC.applyPixelScale(nextScale);
+              if (uiHandles && uiHandles.updateResBadge) uiHandles.updateResBadge();
+            }
           }
         }
         fpsAcc = 0;

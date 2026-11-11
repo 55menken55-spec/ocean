@@ -313,8 +313,40 @@
     box-shadow:0 4px 16px rgba(0,0,0,.45);pointer-events:none}
   .touch-vert{display:flex;flex-direction:column;gap:8px;pointer-events:auto}
   .touch-vert .btn{padding:11px 14px;background:var(--glass);backdrop-filter:blur(10px);min-width:52px}
+  .touch-stick-label{position:absolute;left:50%;bottom:-17px;transform:translateX(-50%);font-size:9px;
+    letter-spacing:.14em;text-transform:uppercase;color:rgba(150,210,235,.72);pointer-events:none;white-space:nowrap}
+  .touch-actions{position:fixed;right:18px;bottom:172px;z-index:27;display:none;flex-direction:column;gap:8px;pointer-events:auto}
+  .touch-act{width:52px;height:52px;border-radius:16px;border:1px solid var(--glass-brd);background:var(--glass);
+    backdrop-filter:blur(12px);color:var(--ink);font-size:15px;display:grid;place-items:center;cursor:pointer;
+    transition:.18s;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  .touch-act:active,.touch-act.on{background:rgba(88,224,255,.28);border-color:rgba(88,224,255,.8);
+    box-shadow:0 0 18px rgba(88,224,255,.28)}
+  .touch-act small{position:absolute;opacity:0;pointer-events:none}
   @media (pointer:coarse){
     .touch-nav{display:flex}
+    .touch-actions{display:flex}
+    .icon-btn{width:44px;height:44px}
+  }
+  /* Сенсорный HUD и на узких экранах без coarse-указателя (планшеты, узкие окна) */
+  @media (max-width:960px){
+    .touch-actions{display:flex}
+  }
+  @media (max-height:520px){
+    .touch-nav{bottom:14px}
+    .touch-stick{width:86px;height:86px}
+    .touch-knob{width:34px;height:34px;margin:-17px 0 0 -17px}
+    .touch-actions{bottom:120px;flex-direction:row;right:14px}
+  }
+  .res-badge{position:fixed;right:18px;bottom:14px;z-index:21;font-size:9.5px;letter-spacing:.1em;
+    color:rgba(155,195,215,.66);text-transform:uppercase;pointer-events:none;font-variant-numeric:tabular-nums}
+  .res-badge b{color:var(--ok);font-weight:600}
+  .hud-toggle{position:fixed;left:18px;bottom:14px;z-index:30;width:40px;height:40px;border-radius:13px;
+    border:1px solid var(--glass-brd);background:var(--glass);backdrop-filter:blur(12px);color:var(--ink);
+    font-size:15px;display:none;place-items:center;cursor:pointer;transition:.2s}
+  .hud-toggle.show{display:grid}
+  .hud-toggle.on{border-color:rgba(88,224,255,.7);background:rgba(88,224,255,.2)}
+  @media (max-width:960px),(pointer:coarse){
+    .hud-toggle{display:grid}
   }
 
   /* ---------- 3D-глобус планеты ---------- */
@@ -445,15 +477,61 @@
     .minimap-box{display:none}
     .hero{display:none}
     .touch-nav{display:flex}
+    /* Компактный HUD планшета: верхние кнопки уходят под сейф-зону, телеметрия сжимается */
+    .topright{right:12px;top:calc(10px + env(safe-area-inset-top, 0px));gap:6px;flex-wrap:wrap;
+      max-width:calc(100vw - 24px);justify-content:flex-end}
+    .telemetry{bottom:calc(10px + env(safe-area-inset-bottom, 0px));font-size:10px;
+      max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none}
+    .telemetry::-webkit-scrollbar{display:none}
+    .brand{max-width:calc(100vw - 96px)}
+    .biome-bar{max-width:calc(100vw - 40px);overflow-x:auto;flex-wrap:nowrap;padding-bottom:3px;scrollbar-width:none}
+    .biome-bar::-webkit-scrollbar{display:none}
+    .biome-pill{flex:0 0 auto;padding:4px 9px;font-size:10px}
+    .res-badge{display:none}
   }
   @media (max-width:720px){
-    .brand{left:14px;top:12px}
+    .brand{left:14px;top:calc(10px + env(safe-area-inset-top, 0px))}
     .brand h1{font-size:13px;letter-spacing:.1em}
     .brand p{font-size:8.5px}
-    .topright{right:12px;top:12px;gap:6px}
-    .icon-btn{width:38px;height:38px;font-size:14px}
-    .panel{right:10px;top:60px;width:min(300px, calc(100vw - 20px));max-height:calc(100vh - 110px)}
+    .topright{right:10px;top:calc(8px + env(safe-area-inset-top, 0px));gap:5px}
+    .icon-btn{width:38px;height:38px;font-size:14px;border-radius:11px}
+    .panel{right:10px;top:calc(58px + env(safe-area-inset-top, 0px));width:min(300px, calc(100vw - 20px));
+      max-height:calc(100vh - 120px)}
+    .panel.lab-panel,.panel.rov-panel{left:10px;right:10px;width:auto}
     .status{display:none}
+    .telemetry{max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;border-radius:14px}
+    .telemetry::-webkit-scrollbar{display:none}
+    .sub-strip{flex-wrap:wrap;justify-content:center;gap:8px;max-width:calc(100vw - 20px);
+      bottom:calc(58px + env(safe-area-inset-bottom, 0px))}
+    .sub-frame{inset:8px;border-radius:18px}
+    .sub-reticle{width:132px;height:132px}
+    .touch-nav{left:12px;right:12px;bottom:calc(56px + env(safe-area-inset-bottom, 0px))}
+    .touch-stick{width:96px;height:96px}
+    .touch-actions{bottom:calc(164px + env(safe-area-inset-bottom, 0px));right:12px}
+    .cam-hud{left:8px;right:8px}
+    .cinema-hud{max-width:calc(100vw - 16px);justify-content:center}
+    .guide-card{width:calc(100vw - 16px);bottom:calc(60px + env(safe-area-inset-bottom, 0px))}
+    .atlas-modal{padding:8px}
+    .atlas-box{max-height:96vh}
+    .atlas-grid{grid-template-columns:1fr;padding:12px}
+    .popup{width:min(268px, calc(100vw - 24px))}
+  }
+  @media (max-width:430px){
+    .brand h1{font-size:11.5px}
+    .brand p{display:none}
+    .icon-btn{width:34px;height:34px;font-size:12.5px}
+    .biome-bar{margin-top:7px}
+    .telemetry{font-size:9.5px;padding:5px 10px;gap:6px}
+    .touch-actions{gap:6px}
+    .touch-act{width:46px;height:46px;font-size:13px}
+    .sub-horizon{width:70px;margin-left:-35px}
+  }
+  @media (orientation:landscape) and (max-height:560px){
+    .brand p,.brand .line{display:none}
+    .panel{top:52px;max-height:calc(100vh - 62px)}
+    .touch-nav{bottom:10px}
+    .touch-actions{bottom:auto;top:calc(56px + env(safe-area-inset-top, 0px));right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px}
+    .telemetry{bottom:8px}
   }
 </style>
 </head>
@@ -783,11 +861,20 @@
 <div class="touch-nav hud-hideable">
   <div class="touch-stick" id="touch-stick" aria-label="Виртуальный джойстик плавания">
     <div class="touch-knob" id="touch-knob"></div>
+    <span class="touch-stick-label">Плавание</span>
   </div>
   <div class="touch-vert">
-    <button class="btn" id="m-up" title="Всплыть">&#9650;</button>
-    <button class="btn" id="m-down" title="Глубже">&#9660;</button>
+    <button class="btn" id="m-up" title="Всплыть" aria-label="Всплыть">&#9650;</button>
+    <button class="btn" id="m-down" title="Глубже" aria-label="Погрузиться">&#9660;</button>
   </div>
+</div>
+
+<div class="touch-actions hud-hideable" id="touch-actions" aria-label="Быстрые действия для сенсорных экранов">
+  <button class="touch-act" id="m-flash" title="Прожектор (F)" aria-label="Прожектор">&#128294;</button>
+  <button class="touch-act" id="m-sonar" title="Сонар (G)" aria-label="Сонар">&#128225;</button>
+  <button class="touch-act" id="m-sample" title="Взять пробу (Z)" aria-label="Проба">&#129520;</button>
+  <button class="touch-act" id="m-sub" title="Режим батискафа (B)" aria-label="Батискаф">&#9678;</button>
+  <button class="touch-act" id="m-menu" title="Настройки и качество (H — скрыть HUD)" aria-label="Меню">&#9776;</button>
 </div>
 
 <div class="hero hud-hideable" id="hero-onboard">
@@ -801,6 +888,9 @@
 </div>
 
 <div class="status hud-hideable"><span id="status-region">GBR · Тихий океан</span><span id="fps">— FPS</span></div>
+
+<div class="res-badge hud-hideable" id="res-badge" aria-live="off">Оптика <b id="res-scale">100%</b> · <span id="res-quality">Высокое</span></div>
+<button class="hud-toggle" id="hud-toggle" title="Показать / скрыть интерфейс (H)" aria-label="Скрыть или показать HUD">&#128065;</button>
 
 <div class="guide-card hidden hud-hideable" id="guide-card" role="region" aria-label="Сюжетный гид-тур">
   <div class="guide-head">
@@ -1284,6 +1374,19 @@ window.OC = window.OC || {};
     return 'high';
   }
 
+  /* Динамическое разрешение: на мобильных и слабых GPU шаг пикселя плавно
+     опускается до 62% от профиля, чтобы удержать 60 FPS без потери HUD-чёткости. */
+  const dynRes = {
+    enabled: true,
+    scale: 1.0,
+    lastReason: 'инициализация'
+  };
+
+  function isMobileDevice() {
+    const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    return !!(coarse || (navigator.maxTouchPoints > 0 && window.innerWidth < 1100));
+  }
+
   const TIERS = ['low', 'medium', 'high', 'ultra'];
   let currentId = detectDefault();
   let initialCeilingId = currentId;
@@ -1331,12 +1434,45 @@ window.OC = window.OC || {};
       return autoLod.enabled;
     },
     isAutoLod: () => autoLod.enabled,
+    isMobile: isMobileDevice,
+    setDynamicResolution: (on) => {
+      dynRes.enabled = !!on;
+      if (!dynRes.enabled) dynRes.scale = 1.0;
+      dynRes.lastReason = dynRes.enabled ? 'включено' : 'отключено';
+      return dynRes.enabled;
+    },
+    getDynamicResolution: () => ({
+      enabled: dynRes.enabled,
+      scale: Math.round(dynRes.scale * 1000) / 1000,
+      pixelRatio: Math.round(PRESETS[currentId].pixelRatioMax * dynRes.scale * 1000) / 1000,
+      lastReason: dynRes.lastReason
+    }),
+    evaluateDynamicResolution: (p95CpuMs, dt) => {
+      if (!dynRes.enabled || !Number.isFinite(p95CpuMs) || p95CpuMs <= 0) return dynRes.scale;
+      const stepDt = Math.max(0.01, Math.min(2.0, dt || 0.2));
+      // Мобильные профили агрессивнее: целимся в 19 мс на тач-устройствах
+      const target = isMobileDevice() ? 19.0 : 22.0;
+      const floor = isMobileDevice() ? 0.62 : 0.72;
+      let next = dynRes.scale;
+      if (p95CpuMs > target * 1.22) {
+        next = Math.max(floor, dynRes.scale - stepDt * 0.22);
+      } else if (p95CpuMs < target * 0.78) {
+        next = Math.min(1.0, dynRes.scale + stepDt * 0.10);
+      }
+      if (Math.abs(next - dynRes.scale) > 0.004) {
+        dynRes.scale = next;
+        dynRes.lastReason = 'p95 ' + p95CpuMs.toFixed(1) + ' мс → масштаб ' + Math.round(next * 100) + '%';
+      }
+      return dynRes.scale;
+    },
     getAutoLodState: () => ({
       enabled: autoLod.enabled,
       currentId,
       p95CpuMs: autoLod.lastP95Ms,
       adjustments: autoLod.adjustments,
-      lastReason: autoLod.lastReason
+      lastReason: autoLod.lastReason,
+      dynamicResScale: Math.round(dynRes.scale * 1000) / 1000,
+      dynamicResEnabled: dynRes.enabled
     }),
     evaluateAutoLod: (p95CpuMs, dt, opts) => {
       if (!Number.isFinite(p95CpuMs) || p95CpuMs <= 0) return currentId;
@@ -7949,6 +8085,25 @@ window.OC = window.OC || {};
       `;
 
       let fInject = 'float ocShadow = 1.0;\n';
+      if (isTerrain || cStr > 0.0) {
+        fInject += `
+          // Динамическая тень от корпуса судна НИС (uShadowA) и проплывающей мегафауны (uShadowB) в толще воды и на дне
+          if (uShadowA.w > 0.5 && vCWorld.y < uShadowA.y + 0.4) {
+            float dyA = max(0.0, uShadowA.y - vCWorld.y);
+            vec2 offA = vCWorld.xz - (uShadowA.xz - uSunProj * dyA * 0.24);
+            float rA = uShadowA.w + dyA * 0.14;
+            float sA = 1.0 - smoothstep(rA * 0.42, rA * 1.15, length(offA)) * exp(-dyA * 0.032) * 0.52;
+            ocShadow *= sA;
+          }
+          if (uShadowB.w > 0.5 && vCWorld.y < uShadowB.y + 0.4) {
+            float dyB = max(0.0, uShadowB.y - vCWorld.y);
+            vec2 offB = vCWorld.xz - (uShadowB.xz - uSunProj * dyB * 0.24);
+            float rB = uShadowB.w + dyB * 0.11;
+            float sB = 1.0 - smoothstep(rB * 0.38, rB * 1.12, length(offB)) * exp(-dyB * 0.042) * 0.44;
+            ocShadow *= sB;
+          }
+        `;
+      }
       if (isTerrain) {
         fInject += `
           float detDist = length(cameraPosition - vCWorld);
@@ -7968,27 +8123,17 @@ window.OC = window.OC || {};
           // Мокрый песок у самой кромки прибоя (-0.25 .. +0.5 м)
           float wetShore = smoothstep(-0.3, 0.05, vCWorld.y) * smoothstep(0.6, 0.08, vCWorld.y);
 
-          // Динамическая тень от корпуса судна НИС (uShadowA) и проплывающей мегафауны (uShadowB) на мелководном дне
-          if (uShadowA.w > 0.5 && vCWorld.y < uShadowA.y + 0.4) {
-            float dyA = max(0.0, uShadowA.y - vCWorld.y);
-            vec2 offA = vCWorld.xz - (uShadowA.xz - uSunProj * dyA * 0.24);
-            float rA = uShadowA.w + dyA * 0.14;
-            float sA = 1.0 - smoothstep(rA * 0.42, rA * 1.15, length(offA)) * exp(-dyA * 0.032) * 0.52;
-            ocShadow *= sA;
-          }
-          if (uShadowB.w > 0.5 && vCWorld.y < uShadowB.y + 0.4) {
-            float dyB = max(0.0, uShadowB.y - vCWorld.y);
-            vec2 offB = vCWorld.xz - (uShadowB.xz - uSunProj * dyB * 0.24);
-            float rB = uShadowB.w + dyB * 0.11;
-            float sB = 1.0 - smoothstep(rB * 0.38, rB * 1.12, length(offB)) * exp(-dyB * 0.042) * 0.44;
-            ocShadow *= sB;
-          }
-
           gl_FragColor.rgb *= (1.0
             + sandRip * 0.042 * shallowMask * flatW
             + grain * 0.048 * detFade * flatW
             + (strata * 0.085 + crag * 0.055) * detFade * slopeW
             - wetShore * 0.16) * ocShadow;
+        `;
+      } else if (cStr > 0.0) {
+        fInject += `
+          float underwaterEnt = smoothstep(0.25, -0.35, vCWorld.y);
+          float counterShade = mix(0.80, 1.0, smoothstep(-0.85, 0.45, vCNormal.y));
+          gl_FragColor.rgb *= mix(1.0, counterShade * mix(0.54, 1.0, ocShadow), underwaterEnt);
         `;
       }
       if (cStr > 0) {
@@ -8299,7 +8444,7 @@ window.OC = window.OC || {};
   OC.initWorld = function (canvas) {
     const q = OC.Quality.get();
     renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatioMax));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatioMax * currentPixelScale()));
     renderer.outputEncoding = T.sRGBEncoding;
     renderer.toneMapping = T.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -8337,7 +8482,8 @@ window.OC = window.OC || {};
         uIntensity: { value: 0.0 },
         uColor: { value: new T.Color(0xcdf4ff) },
         uTime: OC.uTime,
-        uNoSurface: { value: 0.0 }
+        uNoSurface: { value: 0.0 },
+        uBedDepth: { value: 999.0 }
       },
       vertexShader: `
         varying vec3 vWorldP;
@@ -8354,18 +8500,23 @@ window.OC = window.OC || {};
         varying vec3 vWorldP;
         varying vec3 vNormW;
         varying float vDist;
-        uniform float uIntensity, uTime, uNoSurface;
+        uniform float uIntensity, uTime, uNoSurface, uBedDepth;
         uniform vec3 uColor;
         void main(){
           if (uIntensity < 0.01) discard;
           vec3 toCam = normalize(cameraPosition - vWorldP);
-          float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.75);
-          float axial = smoothstep(1.2, 8.5, vDist) * smoothstep(68.0, 10.0, vDist);
-          float dust = 0.86 + 0.14 * sin(vWorldP.x * 0.45 + uTime * 0.9) * cos(vWorldP.z * 0.42 - uTime * 0.7);
+          float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.65);
+          float core = pow(rim, 2.6) * 0.65;
+          float axial = smoothstep(0.8, 7.2, vDist) * smoothstep(70.0, 9.0, vDist);
+          float dust = 0.84 + 0.16 * sin(vWorldP.x * 0.48 + uTime * 1.05) * cos(vWorldP.z * 0.44 - uTime * 0.78);
+          float motes = pow(max(0.0, sin(vWorldP.x * 1.85 + uTime * 0.6) * cos(vWorldP.y * 2.1 - uTime * 0.45) * sin(vWorldP.z * 1.7 + uTime * 0.5)), 4.0);
           float belowW = max(uNoSurface, smoothstep(0.1, -0.4, vWorldP.y));
-          float a = rim * axial * dust * belowW * uIntensity * 0.145;
+          // Луч мягко «упирается» в дно: гасим хвост у грунта и усиливаем яркость у контакта
+          float bedMask = smoothstep(0.0, 2.4, vWorldP.y - uBedDepth);
+          float floorGlow = (1.0 - bedMask) * 0.55;
+          float a = (rim * 0.78 + core) * axial * (dust + motes * 0.35 + floorGlow) * belowW * uIntensity * 0.165 * mix(0.28, 1.0, bedMask);
           if (a < 0.002) discard;
-          gl_FragColor = vec4(uColor, a);
+          gl_FragColor = vec4(uColor + vec3(0.08, 0.12, 0.14) * motes, a);
         }`
     });
     flashBeam = new T.Mesh(beamGeo, flashBeamMat);
@@ -8556,6 +8707,10 @@ window.OC = window.OC || {};
           vec3 n = normalize(vec3((r1 - 0.5) * (0.28 + uStorm * 0.24), 1.0, (r2 - 0.5) * (0.28 + uStorm * 0.24)));
           vec3 sunH = normalize(normalize(uSunDir) + toEye);
           float spec = pow(max(dot(n, sunH), 0.0), 48.0) * uDayW * (1.0 - uStorm * 0.65);
+
+          // Мерцающая «дорожка» солнечных блик-точек на гребнях волн и подводная каустическая сетка
+          float sparkle = pow(max(0.0, r1 * r2 * 1.85 - 0.42), 2.6);
+          float causticBands = pow(max(0.0, sin(cuv.x * 21.0 + cuv.y * 13.0 + r1 * 7.0 + uTime * 0.85)), 5.0);
           vec3 foamCol = mix(vec3(0.45, 0.72, 0.85), vec3(0.95, 0.99, 1.0), 0.25 + 0.75 * uDayW);
 
           // Оттенок воды меняется от бирюзового мелководья к глубокому кобальту Кораллового моря
@@ -8570,6 +8725,8 @@ window.OC = window.OC || {};
             vec3 reflectCol = deepCol * (0.28 + rip * 0.45);
             vec3 windowCol = mix(deepCol, uSkyCol, 0.75) * (0.55 + rip * 0.35) + uSunCol * spec * 1.1;
             vec3 col = mix(reflectCol, windowCol, snell) + prismCol;
+            col += uSunCol * sparkle * uDayW * 0.14;
+            col += uWaterCol * causticBands * 0.16 * uDayW;
             col = mix(col, foamCol * 0.82, foam * 0.58);
             float alpha = mix(0.32 + rip * 0.24, 0.62 + rip * 0.2, snell) * fade * (0.35 + 0.65 * uDayW);
             alpha = clamp(alpha + foam * 0.26 * fade, 0.0, 0.94);
@@ -8581,6 +8738,7 @@ window.OC = window.OC || {};
             vec3 skyRefl = mix(uSkyCol, vec3(0.18, 0.25, 0.34), uStorm * 0.75);
             vec3 col = mix(shallowTint, skyRefl, clamp(fresnel * 0.82 + 0.12, 0.0, 1.0));
             col += uSunCol * spec * 1.35 + vec3(0.68, 0.86, 1.0) * uLightning * 0.65 * fresnel;
+            col += uSunCol * sparkle * uDayW * 0.26;
             col = mix(col, foamCol, foam);
             float alpha = mix(0.46 + (1.0 - depthT) * 0.08, 0.90, fresnel) * fade;
             alpha = clamp(alpha + foam * 0.45 * fade, 0.0, 0.97);
@@ -8622,7 +8780,8 @@ window.OC = window.OC || {};
         uChromaAmt: { value: 0.0018 },
         uWetness: { value: 0.0 },
         uVignette: { value: 0.24 },
-        uDepthRatio: { value: 0.0 }
+        uDepthRatio: { value: 0.0 },
+        uFlashGlow: { value: 0.0 }
       },
       vertexShader: `
         varying vec2 vUv;
@@ -8633,7 +8792,7 @@ window.OC = window.OC || {};
       fragmentShader: `
         uniform sampler2D tDiffuse;
         uniform vec2 uTexel;
-        uniform float uTime, uBloomAmt, uChromaAmt, uWetness, uVignette, uDepthRatio;
+        uniform float uTime, uBloomAmt, uChromaAmt, uWetness, uVignette, uDepthRatio, uFlashGlow;
         varying vec2 vUv;
 
         float dropLayer(vec2 uv, float scale, float speed, float seed, out vec2 dropGrad) {
@@ -8700,6 +8859,12 @@ window.OC = window.OC || {};
 
           col += vec3(0.74, 0.92, 1.0) * dropSpec;
 
+          // Рассеяние взвеси Тиндаля вокруг центра луча прожектора на глубине и в темноте
+          if (uFlashGlow > 0.01) {
+            float coneScatter = exp(-r2 * 4.2) * uFlashGlow * 0.085;
+            col += vec3(0.32, 0.74, 0.88) * coneScatter;
+          }
+
           // Лёгкое оптическое виньетирование и глубоководный спектральный сдвиг
           float vig = 1.0 - smoothstep(0.18, 0.85, r2) * uVignette;
           col *= vig;
@@ -8707,6 +8872,9 @@ window.OC = window.OC || {};
             col.r *= mix(1.0, 0.91, uDepthRatio);
             col.b *= mix(1.0, 1.05, uDepthRatio);
           }
+          // Киноплёночное зерно + дизеринг: убирает полосы на глубоководных градиентах
+          float grainH = fract(sin(dot(gl_FragCoord.xy + fract(uTime * 7.0) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
+          col += (grainH - 0.5) * (0.012 + uDepthRatio * 0.026);
           gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
         }`
     });
@@ -8716,7 +8884,7 @@ window.OC = window.OC || {};
 
     OC.Quality.onChange((preset) => {
       if (renderer) {
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioMax));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioMax * currentPixelScale()));
         syncPostRtSize();
       }
       buildRays(preset.rayCount);
@@ -8772,6 +8940,24 @@ window.OC = window.OC || {};
   OC.getRenderer = () => renderer;
   OC.setPostFxEnabled = (on) => { postFxUserEnabled = !!on; return postFxUserEnabled; };
   OC.setSubViewportOptics = (on) => { subViewportOptics = !!on; return subViewportOptics; };
+
+  /* Множитель динамического разрешения (мобильный баланс FPS/чёткости) */
+  function currentPixelScale() {
+    if (!OC.Quality || !OC.Quality.getDynamicResolution) return 1.0;
+    const st = OC.Quality.getDynamicResolution();
+    return st.enabled ? OC.clamp(st.scale, 0.55, 1.0) : 1.0;
+  }
+  OC.applyPixelScale = function (scale) {
+    if (!renderer) return 1.0;
+    const q = OC.Quality.get ? OC.Quality.get() : null;
+    const base = q ? q.pixelRatioMax : 1.5;
+    const s = OC.clamp(scale === undefined ? currentPixelScale() : scale, 0.55, 1.0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, base * s));
+    syncPostRtSize();
+    return s;
+  };
+  OC.getPixelScale = () => currentPixelScale();
+
   OC.resizeWorld = function (w, h) {
     if (!renderer) return;
     renderer.setSize(w, h, false);
@@ -8816,6 +9002,8 @@ window.OC = window.OC || {};
       wetness: Math.round(lensWetness * 1000) / 1000,
       shadowAActive: causticU.uShadowA.value.w > 0.5,
       shadowBActive: causticU.uShadowB.value.w > 0.5,
+      flashGlow: postMat ? Math.round(postMat.uniforms.uFlashGlow.value * 1000) / 1000 : 0,
+      entityShadows: !!(postMat && causticU.uShadowB.value.w > 0.5),
       width: postRt ? postRt.width : 0,
       height: postRt ? postRt.height : 0
     };
@@ -8942,6 +9130,13 @@ window.OC = window.OC || {};
         flashBeamMat.uniforms.uIntensity.value = beamStrength;
         flashBeamMat.uniforms.uNoSurface.value = (biome && biome.noSurface) ? 1.0 : 0.0;
         flashBeamMat.uniforms.uColor.value.copy(pal.water).lerp(_beamTint, 0.68);
+        if (biome && biome.getHeight) {
+          const bx = flashTarget.position.x;
+          const bz = flashTarget.position.z;
+          flashBeamMat.uniforms.uBedDepth.value = biome.getHeight(bx, bz);
+        } else {
+          flashBeamMat.uniforms.uBedDepth.value = -999.0;
+        }
       }
     }
 
@@ -9074,6 +9269,9 @@ window.OC = window.OC || {};
       postMat.uniforms.uWetness.value = lensWetness;
       postMat.uniforms.uVignette.value = (subViewportOptics ? 0.36 : 0.19) + depthRatio * 0.14;
       postMat.uniforms.uDepthRatio.value = noSurf ? depthRatio * 0.85 : depthRatio * 0.45;
+      const flashRatio = OC.clamp(flashlight.intensity / 4.2, 0, 1);
+      const darkWater = (noSurf || camPos.y < 0.2) ? (1.0 - pal.dayW * opt.sunAtten * 0.65) : 0.0;
+      postMat.uniforms.uFlashGlow.value = flashRatio * darkWater * (0.45 + depthRatio * 0.55);
     }
   };
 })(window.OC);
@@ -20579,7 +20777,7 @@ window.OC = window.OC || {};
   const T = THREE;
 
   const MAX_SAMPLES = 20;
-  const WAKE_COUNT = 72;
+  const WAKE_COUNT = 128;
   const STREAM_COUNT = 140;
   const TETHER_SEGS = 22;
   const MAX_BUOYS = 2;
@@ -20970,11 +21168,12 @@ window.OC = window.OC || {};
     const geo = new T.BufferGeometry();
     geo.setAttribute('position', new T.BufferAttribute(wakePos, 3));
     const mat = new T.PointsMaterial({
-      size: 0.34,
-      map: OC.circleTexture(32, false),
-      color: 0xdff8ff,
+      size: 0.42,
+      map: OC.circleTexture(64, false),
+      color: 0xe8fbff,
       transparent: true,
-      opacity: 0.52,
+      opacity: 0.62,
+      blending: T.AdditiveBlending,
       depthWrite: false
     });
     const pts = new T.Points(geo, mat);
@@ -23255,6 +23454,9 @@ window.OC = window.OC || {};
       state.virtX = OC.clamp(vx || 0, -1, 1);
       state.virtY = OC.clamp(vy || 0, -1, 1);
       state.virtZ = OC.clamp(vz || 0, -1, 1);
+    },
+    getVirtualInput() {
+      return { x: state.virtX, y: state.virtY, z: state.virtZ };
     },
     getForward(out) {
       out = out || new T.Vector3();
@@ -26762,6 +26964,10 @@ window.OC = window.OC || {};
   const teleWpSep = document.getElementById('tele-wp-sep');
   const teleWpWrap = document.getElementById('tele-wp-wrap');
   const teleWp = document.getElementById('tele-wp');
+  const resBadgeEl = document.getElementById('res-badge');
+  const resScaleEl = document.getElementById('res-scale');
+  const resQualityEl = document.getElementById('res-quality');
+  const hudToggleEl = document.getElementById('hud-toggle');
   const weatherBtnsEl = document.getElementById('weather-btns');
   const weatherGroupEl = document.getElementById('weather-group');
   const lensCanvas = document.getElementById('lens-fx');
@@ -27875,6 +28081,40 @@ window.OC = window.OC || {};
     OC.Quality.onChange(() => renderQualityButtons());
     renderQualityButtons();
 
+    /* Индикатор оптики: профиль качества, динамическое разрешение и масштаб пикселей */
+    const updateResBadge = () => {
+      if (!resBadgeEl) return;
+      const qLabel = OC.Quality && OC.Quality.get ? OC.Quality.get().label : '—';
+      const st = (OC.Quality && OC.Quality.getDynamicResolution) ? OC.Quality.getDynamicResolution() : null;
+      const scalePct = st ? Math.round(st.scale * 100) : 100;
+      if (resScaleEl) resScaleEl.textContent = scalePct + '%';
+      if (resQualityEl) resQualityEl.textContent = qLabel;
+      resBadgeEl.classList.toggle('low', scalePct < 80);
+    };
+    updateResBadge();
+    if (OC.Quality && OC.Quality.onChange) OC.Quality.onChange(() => updateResBadge());
+
+    /* Кнопка «глаз»: показать/скрыть весь HUD на сенсорных экранах */
+    const syncHudToggle = () => {
+      if (!hudToggleEl) return;
+      hudToggleEl.classList.toggle('on', hudHidden);
+      hudToggleEl.setAttribute('aria-pressed', hudHidden ? 'true' : 'false');
+    };
+    const toggleHud = () => {
+      hudHidden = !hudHidden;
+      hudEls.forEach((el) => el.classList.toggle('hud-hidden', hudHidden));
+      syncHudToggle();
+      if (hudToggleEl) hudToggleEl.classList.toggle('show', hudHidden);
+    };
+    if (hudToggleEl) {
+      hudToggleEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHud();
+      });
+      if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) hudToggleEl.classList.add('show');
+    }
+    syncHudToggle();
+
     /* Виртуальный тач-джойстик и вертикальные кнопки */
     const touchStick = document.getElementById('touch-stick');
     const touchKnob = document.getElementById('touch-knob');
@@ -27923,6 +28163,55 @@ window.OC = window.OC || {};
     };
     bindVertBtn(mUp, 1);
     bindVertBtn(mDown, -1);
+
+    /* Сенсорный блок быстрых действий: прожектор, сонар, проба, батискаф, меню */
+    const mFlash = document.getElementById('m-flash');
+    const mSonar = document.getElementById('m-sonar');
+    const mSample = document.getElementById('m-sample');
+    const mSub = document.getElementById('m-sub');
+    const mMenu = document.getElementById('m-menu');
+    const syncTouchQuick = () => {
+      if (mFlash) mFlash.classList.toggle('on', !!(OC.isFlashlightOn && OC.isFlashlightOn()));
+      if (mSub) mSub.classList.toggle('on', subMode);
+      if (mMenu && panel) mMenu.classList.toggle('on', !panel.classList.contains('closed'));
+    };
+    if (mFlash) {
+      mFlash.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const on = OC.toggleFlashlight();
+        syncFlash(on);
+        syncTouchQuick();
+        toast(on ? 'Прожектор включён' : 'Прожектор выключен');
+      });
+    }
+    if (mSonar) {
+      mSonar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fireSonarPing();
+      });
+    }
+    if (mSample) {
+      mSample.addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerSampleGrab();
+      });
+    }
+    if (mSub) {
+      mSub.addEventListener('click', (e) => {
+        e.stopPropagation();
+        syncSubMode(!subMode);
+        syncTouchQuick();
+        toast(subMode ? 'Режим батискафа включён' : 'Режим свободного дайвера');
+      });
+    }
+    if (mMenu) {
+      mMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (btnPanel) btnPanel.click();
+        syncTouchQuick();
+      });
+    }
+    syncTouchQuick();
 
     window.addEventListener('gamepadconnected', (e) => {
       const id = e && e.gamepad ? e.gamepad.id.slice(0, 32) : 'Контроллер';
@@ -28001,8 +28290,25 @@ window.OC = window.OC || {};
         toast('Цветофильтр: ' + f.label);
       }
       if (e.code === 'KeyH') {
-        hudHidden = !hudHidden;
-        hudEls.forEach((el) => el.classList.toggle('hud-hidden', hudHidden));
+        toggleHud();
+      }
+      // Быстрые горячие клавиши оптики: [ — пиксельный масштаб, ] — профиль качества
+      if (e.code === 'BracketLeft' && OC.Quality && OC.Quality.getDynamicResolution) {
+        const st = OC.Quality.getDynamicResolution();
+        const nextEnable = !st.enabled;
+        OC.Quality.setDynamicResolution(nextEnable);
+        if (OC.applyPixelScale) OC.applyPixelScale(nextEnable ? OC.Quality.evaluateDynamicResolution(1, 0) : 1.0);
+        updateResBadge();
+        toast(nextEnable ? 'Динамическое разрешение включено' : 'Динамическое разрешение выключено (100%)');
+      }
+      if (e.code === 'BracketRight' && OC.Quality && OC.Quality.PRESETS) {
+        const tiers = ['low', 'medium', 'high', 'ultra'];
+        const idx = tiers.indexOf(OC.Quality.getId());
+        const nextId = tiers[(idx + 1) % tiers.length];
+        OC.Quality.set(nextId);
+        if (OC.Expedition && OC.Expedition.saveQuality) OC.Expedition.saveQuality(nextId);
+        updateResBadge();
+        toast('Профиль оптики: ' + OC.Quality.PRESETS[nextId].label);
       }
       if (e.code === 'KeyU' && OC.Weather) {
         if (activeBiome && activeBiome.noSurface) {
@@ -28108,7 +28414,7 @@ window.OC = window.OC || {};
       });
     }
 
-    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderQualityButtons, renderBiomeUI, renderZoneChips };
+    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderQualityButtons, renderBiomeUI, renderZoneChips, updateResBadge, syncTouchQuick, syncHudToggle, toggleHud };
   }
 
   function switchBiome(id) {
@@ -28301,6 +28607,23 @@ window.OC = window.OC || {};
       uiHandles.syncModes(OC.Navigation.getMode());
       uiHandles.syncGuideCard(OC.Navigation.getTourState());
 
+      // Мобильный старт: сразу удерживаем целевой FPS динамическим разрешением
+      if (OC.Quality && OC.Quality.isMobile && OC.Quality.isMobile()) {
+        const dyn = OC.Quality.getDynamicResolution ? OC.Quality.getDynamicResolution() : null;
+        if (dyn && dyn.enabled && OC.applyPixelScale) OC.applyPixelScale(dyn.scale);
+        document.body.classList.add('coarse-pointer');
+        if (uiHandles.updateResBadge) uiHandles.updateResBadge();
+      }
+      // Реакция на смену ориентации/размера: пересчёт буфера и компактного HUD
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => {
+          if (OC.applyPixelScale) OC.applyPixelScale();
+          if (renderer && renderer.setSize) {
+            renderer.setSize(window.innerWidth, window.innerHeight, false);
+          }
+        }, 220);
+      });
+
       setBar(1.0);
       setTimeout(() => {
         if (loading) {
@@ -28339,8 +28662,18 @@ window.OC = window.OC || {};
     window.addEventListener('resize', resize);
     resize();
 
+    /* Энергосбережение: на скрытой вкладке цикл рендера замирает и не жжёт GPU */
+    let hiddenPaused = false;
+    if (document.addEventListener) {
+      document.addEventListener('visibilitychange', () => {
+        hiddenPaused = !!document.hidden;
+        if (!hiddenPaused) last = performance.now();
+      });
+    }
+
     function frame(now) {
       requestAnimationFrame(frame);
+      if (hiddenPaused) { last = now; return; }
       const cpuT0 = performance.now();
       const rawDt = Math.min(0.05, (now - last) / 1000) || 0.016;
       last = now;
@@ -28614,6 +28947,15 @@ window.OC = window.OC || {};
             toast('Адаптивный LOD: ' + OC.Quality.PRESETS[prevQId].label + ' -> ' + OC.Quality.PRESETS[nextQId].label + ' (p95 ' + stNow.p95CpuMs.toFixed(1) + ' мс)');
           } else if (uiHandles && uiHandles.renderQualityButtons) {
             uiHandles.renderQualityButtons();
+          }
+          // Динамическое разрешение: независимая от профиля тонкая подстройка пиксельной плотности
+          if (OC.Quality.evaluateDynamicResolution) {
+            const prevScale = OC.getPixelScale ? OC.getPixelScale() : 1.0;
+            const nextScale = OC.Quality.evaluateDynamicResolution(stNow.p95CpuMs, fpsAcc);
+            if (Math.abs(nextScale - prevScale) > 0.015 && OC.applyPixelScale) {
+              OC.applyPixelScale(nextScale);
+              if (uiHandles && uiHandles.updateResBadge) uiHandles.updateResBadge();
+            }
           }
         }
         fpsAcc = 0;

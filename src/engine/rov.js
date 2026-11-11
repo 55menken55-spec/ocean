@@ -5,7 +5,7 @@ window.OC = window.OC || {};
   const T = THREE;
 
   const MAX_SAMPLES = 20;
-  const WAKE_COUNT = 72;
+  const WAKE_COUNT = 128;
   const STREAM_COUNT = 140;
   const TETHER_SEGS = 22;
   const MAX_BUOYS = 2;
@@ -396,11 +396,12 @@ window.OC = window.OC || {};
     const geo = new T.BufferGeometry();
     geo.setAttribute('position', new T.BufferAttribute(wakePos, 3));
     const mat = new T.PointsMaterial({
-      size: 0.34,
-      map: OC.circleTexture(32, false),
-      color: 0xdff8ff,
+      size: 0.42,
+      map: OC.circleTexture(64, false),
+      color: 0xe8fbff,
       transparent: true,
-      opacity: 0.52,
+      opacity: 0.62,
+      blending: T.AdditiveBlending,
       depthWrite: false
     });
     const pts = new T.Points(geo, mat);

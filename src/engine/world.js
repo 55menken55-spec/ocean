@@ -195,6 +195,25 @@ window.OC = window.OC || {};
       `;
 
       let fInject = 'float ocShadow = 1.0;\n';
+      if (isTerrain || cStr > 0.0) {
+        fInject += `
+          // Динамическая тень от корпуса судна НИС (uShadowA) и проплывающей мегафауны (uShadowB) в толще воды и на дне
+          if (uShadowA.w > 0.5 && vCWorld.y < uShadowA.y + 0.4) {
+            float dyA = max(0.0, uShadowA.y - vCWorld.y);
+            vec2 offA = vCWorld.xz - (uShadowA.xz - uSunProj * dyA * 0.24);
+            float rA = uShadowA.w + dyA * 0.14;
+            float sA = 1.0 - smoothstep(rA * 0.42, rA * 1.15, length(offA)) * exp(-dyA * 0.032) * 0.52;
+            ocShadow *= sA;
+          }
+          if (uShadowB.w > 0.5 && vCWorld.y < uShadowB.y + 0.4) {
+            float dyB = max(0.0, uShadowB.y - vCWorld.y);
+            vec2 offB = vCWorld.xz - (uShadowB.xz - uSunProj * dyB * 0.24);
+            float rB = uShadowB.w + dyB * 0.11;
+            float sB = 1.0 - smoothstep(rB * 0.38, rB * 1.12, length(offB)) * exp(-dyB * 0.042) * 0.44;
+            ocShadow *= sB;
+          }
+        `;
+      }
       if (isTerrain) {
         fInject += `
           float detDist = length(cameraPosition - vCWorld);
@@ -214,27 +233,17 @@ window.OC = window.OC || {};
           // Мокрый песок у самой кромки прибоя (-0.25 .. +0.5 м)
           float wetShore = smoothstep(-0.3, 0.05, vCWorld.y) * smoothstep(0.6, 0.08, vCWorld.y);
 
-          // Динамическая тень от корпуса судна НИС (uShadowA) и проплывающей мегафауны (uShadowB) на мелководном дне
-          if (uShadowA.w > 0.5 && vCWorld.y < uShadowA.y + 0.4) {
-            float dyA = max(0.0, uShadowA.y - vCWorld.y);
-            vec2 offA = vCWorld.xz - (uShadowA.xz - uSunProj * dyA * 0.24);
-            float rA = uShadowA.w + dyA * 0.14;
-            float sA = 1.0 - smoothstep(rA * 0.42, rA * 1.15, length(offA)) * exp(-dyA * 0.032) * 0.52;
-            ocShadow *= sA;
-          }
-          if (uShadowB.w > 0.5 && vCWorld.y < uShadowB.y + 0.4) {
-            float dyB = max(0.0, uShadowB.y - vCWorld.y);
-            vec2 offB = vCWorld.xz - (uShadowB.xz - uSunProj * dyB * 0.24);
-            float rB = uShadowB.w + dyB * 0.11;
-            float sB = 1.0 - smoothstep(rB * 0.38, rB * 1.12, length(offB)) * exp(-dyB * 0.042) * 0.44;
-            ocShadow *= sB;
-          }
-
           gl_FragColor.rgb *= (1.0
             + sandRip * 0.042 * shallowMask * flatW
             + grain * 0.048 * detFade * flatW
             + (strata * 0.085 + crag * 0.055) * detFade * slopeW
             - wetShore * 0.16) * ocShadow;
+        `;
+      } else if (cStr > 0.0) {
+        fInject += `
+          float underwaterEnt = smoothstep(0.25, -0.35, vCWorld.y);
+          float counterShade = mix(0.80, 1.0, smoothstep(-0.85, 0.45, vCNormal.y));
+          gl_FragColor.rgb *= mix(1.0, counterShade * mix(0.54, 1.0, ocShadow), underwaterEnt);
         `;
       }
       if (cStr > 0) {
@@ -545,7 +554,7 @@ window.OC = window.OC || {};
   OC.initWorld = function (canvas) {
     const q = OC.Quality.get();
     renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatioMax));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatioMax * currentPixelScale()));
     renderer.outputEncoding = T.sRGBEncoding;
     renderer.toneMapping = T.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -583,7 +592,8 @@ window.OC = window.OC || {};
         uIntensity: { value: 0.0 },
         uColor: { value: new T.Color(0xcdf4ff) },
         uTime: OC.uTime,
-        uNoSurface: { value: 0.0 }
+        uNoSurface: { value: 0.0 },
+        uBedDepth: { value: 999.0 }
       },
       vertexShader: `
         varying vec3 vWorldP;
@@ -600,18 +610,23 @@ window.OC = window.OC || {};
         varying vec3 vWorldP;
         varying vec3 vNormW;
         varying float vDist;
-        uniform float uIntensity, uTime, uNoSurface;
+        uniform float uIntensity, uTime, uNoSurface, uBedDepth;
         uniform vec3 uColor;
         void main(){
           if (uIntensity < 0.01) discard;
           vec3 toCam = normalize(cameraPosition - vWorldP);
-          float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.75);
-          float axial = smoothstep(1.2, 8.5, vDist) * smoothstep(68.0, 10.0, vDist);
-          float dust = 0.86 + 0.14 * sin(vWorldP.x * 0.45 + uTime * 0.9) * cos(vWorldP.z * 0.42 - uTime * 0.7);
+          float rim = pow(abs(dot(normalize(vNormW), toCam)), 1.65);
+          float core = pow(rim, 2.6) * 0.65;
+          float axial = smoothstep(0.8, 7.2, vDist) * smoothstep(70.0, 9.0, vDist);
+          float dust = 0.84 + 0.16 * sin(vWorldP.x * 0.48 + uTime * 1.05) * cos(vWorldP.z * 0.44 - uTime * 0.78);
+          float motes = pow(max(0.0, sin(vWorldP.x * 1.85 + uTime * 0.6) * cos(vWorldP.y * 2.1 - uTime * 0.45) * sin(vWorldP.z * 1.7 + uTime * 0.5)), 4.0);
           float belowW = max(uNoSurface, smoothstep(0.1, -0.4, vWorldP.y));
-          float a = rim * axial * dust * belowW * uIntensity * 0.145;
+          // Луч мягко «упирается» в дно: гасим хвост у грунта и усиливаем яркость у контакта
+          float bedMask = smoothstep(0.0, 2.4, vWorldP.y - uBedDepth);
+          float floorGlow = (1.0 - bedMask) * 0.55;
+          float a = (rim * 0.78 + core) * axial * (dust + motes * 0.35 + floorGlow) * belowW * uIntensity * 0.165 * mix(0.28, 1.0, bedMask);
           if (a < 0.002) discard;
-          gl_FragColor = vec4(uColor, a);
+          gl_FragColor = vec4(uColor + vec3(0.08, 0.12, 0.14) * motes, a);
         }`
     });
     flashBeam = new T.Mesh(beamGeo, flashBeamMat);
@@ -802,6 +817,10 @@ window.OC = window.OC || {};
           vec3 n = normalize(vec3((r1 - 0.5) * (0.28 + uStorm * 0.24), 1.0, (r2 - 0.5) * (0.28 + uStorm * 0.24)));
           vec3 sunH = normalize(normalize(uSunDir) + toEye);
           float spec = pow(max(dot(n, sunH), 0.0), 48.0) * uDayW * (1.0 - uStorm * 0.65);
+
+          // Мерцающая «дорожка» солнечных блик-точек на гребнях волн и подводная каустическая сетка
+          float sparkle = pow(max(0.0, r1 * r2 * 1.85 - 0.42), 2.6);
+          float causticBands = pow(max(0.0, sin(cuv.x * 21.0 + cuv.y * 13.0 + r1 * 7.0 + uTime * 0.85)), 5.0);
           vec3 foamCol = mix(vec3(0.45, 0.72, 0.85), vec3(0.95, 0.99, 1.0), 0.25 + 0.75 * uDayW);
 
           // Оттенок воды меняется от бирюзового мелководья к глубокому кобальту Кораллового моря
@@ -816,6 +835,8 @@ window.OC = window.OC || {};
             vec3 reflectCol = deepCol * (0.28 + rip * 0.45);
             vec3 windowCol = mix(deepCol, uSkyCol, 0.75) * (0.55 + rip * 0.35) + uSunCol * spec * 1.1;
             vec3 col = mix(reflectCol, windowCol, snell) + prismCol;
+            col += uSunCol * sparkle * uDayW * 0.14;
+            col += uWaterCol * causticBands * 0.16 * uDayW;
             col = mix(col, foamCol * 0.82, foam * 0.58);
             float alpha = mix(0.32 + rip * 0.24, 0.62 + rip * 0.2, snell) * fade * (0.35 + 0.65 * uDayW);
             alpha = clamp(alpha + foam * 0.26 * fade, 0.0, 0.94);
@@ -827,6 +848,7 @@ window.OC = window.OC || {};
             vec3 skyRefl = mix(uSkyCol, vec3(0.18, 0.25, 0.34), uStorm * 0.75);
             vec3 col = mix(shallowTint, skyRefl, clamp(fresnel * 0.82 + 0.12, 0.0, 1.0));
             col += uSunCol * spec * 1.35 + vec3(0.68, 0.86, 1.0) * uLightning * 0.65 * fresnel;
+            col += uSunCol * sparkle * uDayW * 0.26;
             col = mix(col, foamCol, foam);
             float alpha = mix(0.46 + (1.0 - depthT) * 0.08, 0.90, fresnel) * fade;
             alpha = clamp(alpha + foam * 0.45 * fade, 0.0, 0.97);
@@ -868,7 +890,8 @@ window.OC = window.OC || {};
         uChromaAmt: { value: 0.0018 },
         uWetness: { value: 0.0 },
         uVignette: { value: 0.24 },
-        uDepthRatio: { value: 0.0 }
+        uDepthRatio: { value: 0.0 },
+        uFlashGlow: { value: 0.0 }
       },
       vertexShader: `
         varying vec2 vUv;
@@ -879,7 +902,7 @@ window.OC = window.OC || {};
       fragmentShader: `
         uniform sampler2D tDiffuse;
         uniform vec2 uTexel;
-        uniform float uTime, uBloomAmt, uChromaAmt, uWetness, uVignette, uDepthRatio;
+        uniform float uTime, uBloomAmt, uChromaAmt, uWetness, uVignette, uDepthRatio, uFlashGlow;
         varying vec2 vUv;
 
         float dropLayer(vec2 uv, float scale, float speed, float seed, out vec2 dropGrad) {
@@ -946,6 +969,12 @@ window.OC = window.OC || {};
 
           col += vec3(0.74, 0.92, 1.0) * dropSpec;
 
+          // Рассеяние взвеси Тиндаля вокруг центра луча прожектора на глубине и в темноте
+          if (uFlashGlow > 0.01) {
+            float coneScatter = exp(-r2 * 4.2) * uFlashGlow * 0.085;
+            col += vec3(0.32, 0.74, 0.88) * coneScatter;
+          }
+
           // Лёгкое оптическое виньетирование и глубоководный спектральный сдвиг
           float vig = 1.0 - smoothstep(0.18, 0.85, r2) * uVignette;
           col *= vig;
@@ -953,6 +982,9 @@ window.OC = window.OC || {};
             col.r *= mix(1.0, 0.91, uDepthRatio);
             col.b *= mix(1.0, 1.05, uDepthRatio);
           }
+          // Киноплёночное зерно + дизеринг: убирает полосы на глубоководных градиентах
+          float grainH = fract(sin(dot(gl_FragCoord.xy + fract(uTime * 7.0) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
+          col += (grainH - 0.5) * (0.012 + uDepthRatio * 0.026);
           gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
         }`
     });
@@ -962,7 +994,7 @@ window.OC = window.OC || {};
 
     OC.Quality.onChange((preset) => {
       if (renderer) {
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioMax));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, preset.pixelRatioMax * currentPixelScale()));
         syncPostRtSize();
       }
       buildRays(preset.rayCount);
@@ -1018,6 +1050,24 @@ window.OC = window.OC || {};
   OC.getRenderer = () => renderer;
   OC.setPostFxEnabled = (on) => { postFxUserEnabled = !!on; return postFxUserEnabled; };
   OC.setSubViewportOptics = (on) => { subViewportOptics = !!on; return subViewportOptics; };
+
+  /* Множитель динамического разрешения (мобильный баланс FPS/чёткости) */
+  function currentPixelScale() {
+    if (!OC.Quality || !OC.Quality.getDynamicResolution) return 1.0;
+    const st = OC.Quality.getDynamicResolution();
+    return st.enabled ? OC.clamp(st.scale, 0.55, 1.0) : 1.0;
+  }
+  OC.applyPixelScale = function (scale) {
+    if (!renderer) return 1.0;
+    const q = OC.Quality.get ? OC.Quality.get() : null;
+    const base = q ? q.pixelRatioMax : 1.5;
+    const s = OC.clamp(scale === undefined ? currentPixelScale() : scale, 0.55, 1.0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, base * s));
+    syncPostRtSize();
+    return s;
+  };
+  OC.getPixelScale = () => currentPixelScale();
+
   OC.resizeWorld = function (w, h) {
     if (!renderer) return;
     renderer.setSize(w, h, false);
@@ -1062,6 +1112,8 @@ window.OC = window.OC || {};
       wetness: Math.round(lensWetness * 1000) / 1000,
       shadowAActive: causticU.uShadowA.value.w > 0.5,
       shadowBActive: causticU.uShadowB.value.w > 0.5,
+      flashGlow: postMat ? Math.round(postMat.uniforms.uFlashGlow.value * 1000) / 1000 : 0,
+      entityShadows: !!(postMat && causticU.uShadowB.value.w > 0.5),
       width: postRt ? postRt.width : 0,
       height: postRt ? postRt.height : 0
     };
@@ -1188,6 +1240,13 @@ window.OC = window.OC || {};
         flashBeamMat.uniforms.uIntensity.value = beamStrength;
         flashBeamMat.uniforms.uNoSurface.value = (biome && biome.noSurface) ? 1.0 : 0.0;
         flashBeamMat.uniforms.uColor.value.copy(pal.water).lerp(_beamTint, 0.68);
+        if (biome && biome.getHeight) {
+          const bx = flashTarget.position.x;
+          const bz = flashTarget.position.z;
+          flashBeamMat.uniforms.uBedDepth.value = biome.getHeight(bx, bz);
+        } else {
+          flashBeamMat.uniforms.uBedDepth.value = -999.0;
+        }
       }
     }
 
@@ -1320,6 +1379,9 @@ window.OC = window.OC || {};
       postMat.uniforms.uWetness.value = lensWetness;
       postMat.uniforms.uVignette.value = (subViewportOptics ? 0.36 : 0.19) + depthRatio * 0.14;
       postMat.uniforms.uDepthRatio.value = noSurf ? depthRatio * 0.85 : depthRatio * 0.45;
+      const flashRatio = OC.clamp(flashlight.intensity / 4.2, 0, 1);
+      const darkWater = (noSurf || camPos.y < 0.2) ? (1.0 - pal.dayW * opt.sunAtten * 0.65) : 0.0;
+      postMat.uniforms.uFlashGlow.value = flashRatio * darkWater * (0.45 + depthRatio * 0.55);
     }
   };
 })(window.OC);

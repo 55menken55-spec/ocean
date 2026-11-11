@@ -130,6 +130,178 @@ try {
     fs.appendFileSync(SUMMARY_MD, lines.join('\n') + '\n');
   }
 
+  // Mobile / tablet HUD pass: emulate a coarse-pointer phone in landscape and verify the
+  // responsive HUD, touch quick-actions and dynamic resolution ladder stay functional.
+  const mobileContext = await browser.newContext({
+    viewport: { width: 844, height: 390 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true
+  });
+  const mobilePage = await mobileContext.newPage();
+  const mobileErrors = [];
+  mobilePage.on('pageerror', (err) => mobileErrors.push(`pageerror: ${err.message}`));
+  mobilePage.on('console', (msg) => {
+    if (msg.type() === 'error') mobileErrors.push(`console.error: ${msg.text()}`);
+  });
+  try {
+    console.log('\nMobile HUD pass (844×390 landscape, coarse pointer, DPR 2)...');
+    await mobilePage.goto(URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await mobilePage.waitForFunction(
+      () => window.OC && window.OC.getPerfStats && window.OC.getPerfStats().sampleCount >= 8,
+      { timeout: 30000 }
+    );
+    await mobilePage.waitForTimeout(600);
+
+    async function readHudState(pg) {
+      return pg.evaluate(() => {
+        const vis = (sel) => {
+          const el = document.querySelector(sel);
+          if (!el) return null;
+          const cs = window.getComputedStyle(el);
+          const r = el.getBoundingClientRect();
+          return { display: cs.display, w: Math.round(r.width), h: Math.round(r.height), opacity: Number(cs.opacity) };
+        };
+        return {
+          touchNav: vis('.touch-nav'),
+          touchActions: vis('#touch-actions'),
+          stick: vis('#touch-stick'),
+          badge: vis('#res-badge'),
+          stickLabel: vis('.touch-stick-label'),
+          hudToggle: vis('#hud-toggle'),
+          dyn: window.OC.Quality.getDynamicResolution(),
+          mobile: window.OC.Quality.isMobile(),
+          qualityId: window.OC.Quality.getId()
+        };
+      });
+    }
+    let hudState = await readHudState(mobilePage);
+
+    // Rotation: portrait phone must re-layout the HUD without overflow, then return to landscape
+    await mobilePage.setViewportSize({ width: 390, height: 844 });
+    await mobilePage.waitForTimeout(500);
+    const portrait = await mobilePage.evaluate(() => {
+      const bad = [];
+      for (const sel of ['.brand', '.topright', '#touch-actions', '.telemetry']) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const cs = window.getComputedStyle(el);
+        if (cs.display === 'none') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && (r.right > window.innerWidth + 2 || r.left < -2 || r.bottom > window.innerHeight + 2)) {
+          bad.push({ sel, left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom) });
+        }
+      }
+      return { bad, w: window.innerWidth, h: window.innerHeight, drawCalls: window.OC.getPerfStats().drawCalls };
+    });
+    assert(portrait.bad && portrait.bad.length === 0, `Portrait phone HUD overflows: ${JSON.stringify(portrait)}`);
+    assert(portrait.drawCalls > 0, 'Portrait rotation must keep the WebGL loop rendering');
+    await mobilePage.setViewportSize({ width: 844, height: 390 });
+    await mobilePage.waitForTimeout(500);
+    hudState = await readHudState(mobilePage);
+    assert(hudState.hudToggle && hudState.hudToggle.display !== 'none', `Coarse-pointer devices must expose the HUD toggle, got ${JSON.stringify(hudState.hudToggle)}`);
+    assert(hudState.touchNav && hudState.touchNav.display !== 'none', `Mobile HUD must show touch-nav, got ${JSON.stringify(hudState.touchNav)}`);
+    assert(hudState.touchActions && hudState.touchActions.display !== 'none', `Mobile HUD must show quick-action buttons, got ${JSON.stringify(hudState.touchActions)}`);
+    assert(hudState.stick && hudState.stick.w > 40 && hudState.stick.h > 40, `Virtual stick must be tappable on mobile, got ${JSON.stringify(hudState.stick)}`);
+    assert(hudState.dyn && typeof hudState.dyn.scale === 'number', 'Dynamic resolution telemetry must be live on mobile');
+
+    // Touch quick actions: flashlight, sonar, sample, boat mode, menu open
+    for (const id of ['#m-flash', '#m-sonar', '#m-sample', '#m-sub', '#m-menu']) {
+      await mobilePage.click(id, { force: true });
+      await mobilePage.waitForTimeout(180);
+    }
+    const quickState = await mobilePage.evaluate(() => ({
+      flash: window.OC.isFlashlightOn(),
+      subHud: !document.getElementById('sub-hud').classList.contains('hidden'),
+      panelOpen: !document.getElementById('panel').classList.contains('closed')
+    }));
+    assert(quickState.flash === true, 'Touch flashlight button must enable the ROV/diver spotlight');
+    assert(quickState.subHud === true, 'Touch batiscaphe button must open the sub HUD');
+    assert(quickState.panelOpen === true, 'Touch menu button must open the settings panel');
+
+    // Safe-area / narrow-phone rules must not push the HUD off-screen
+    const overflow = await mobilePage.evaluate(() => {
+      const bad = [];
+      for (const sel of ['.brand', '.topright', '.touch-nav', '#touch-actions', '.telemetry']) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && (r.right > window.innerWidth + 2 || r.left < -2 || r.bottom > window.innerHeight + 2)) {
+          bad.push({ sel, left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom) });
+        }
+      }
+      return { bad, w: window.innerWidth, h: window.innerHeight };
+    });
+    assert.equal(overflow.bad.length, 0, `Mobile HUD elements overflow the viewport: ${JSON.stringify(overflow)}`);
+
+    // HUD hide/show («глаз») keeps the canvas interactive while hiding overlays
+    const hudToggleOk = await mobilePage.evaluate(() => {
+      const btn = document.getElementById('hud-toggle');
+      if (!btn) return { ok: false, reason: 'missing #hud-toggle' };
+      btn.click();
+      const hiddenCount = document.querySelectorAll('.hud-hideable.hud-hidden').length;
+      const reShow = document.getElementById('hud-toggle').classList.contains('show');
+      btn.click();
+      const restored = document.querySelectorAll('.hud-hideable.hud-hidden').length === 0;
+      return { ok: hiddenCount > 3 && restored && reShow, hiddenCount, reShow, restored };
+    });
+    assert(hudToggleOk.ok, `HUD toggle must hide and restore overlays: ${JSON.stringify(hudToggleOk)}`);
+
+    // Virtual stick drives the nav state (drag right = forward thrust)
+    const stickDrive = await mobilePage.evaluate(() => new Promise((resolve) => {
+      const stick = document.getElementById('touch-stick');
+      const r = stick.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const fire = (type, x, y) => stick.dispatchEvent(new PointerEvent(type, {
+        pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true
+      }));
+      fire('pointerdown', cx, cy);
+      fire('pointermove', cx, cy - r.height * 0.4);
+      const knob = document.getElementById('touch-knob');
+      const moved = !!(knob && /translate\(/.test(knob.style.transform || ''));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const speedAfterPush = window.OC.Navigation.getSpeed();
+        fire('pointerup', cx, cy - r.height * 0.4);
+        resolve({ moved, speedAfterPush, transform: knob ? knob.style.transform : null });
+      }));
+    }));
+    assert(stickDrive.moved, `Touch stick must move its knob visual: ${JSON.stringify(stickDrive)}`);
+    assert(stickDrive.speedAfterPush > 0.3, `Touch stick must thrust the diver forward: ${JSON.stringify(stickDrive)}`);
+
+    // Virtual stick must feed the navigation axis state (thrust then release)
+    const stickAxis = await mobilePage.evaluate(() => new Promise((resolve) => {
+      const stick = document.getElementById('touch-stick');
+      const r = stick.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const fire = (type, x, y) => stick.dispatchEvent(new PointerEvent(type, {
+        pointerId: 9, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true
+      }));
+      fire('pointerdown', cx, cy);
+      fire('pointermove', cx, cy - r.height * 0.45);
+      const pushed = window.OC.Navigation.getVirtualInput();
+      fire('pointerup', cx, cy - r.height * 0.45);
+      const released = window.OC.Navigation.getVirtualInput();
+      resolve({ pushed, released });
+    }));
+    assert(stickAxis.pushed.y > 0.5, `Touch stick must push the forward axis: ${JSON.stringify(stickAxis)}`);
+    assert(Math.abs(stickAxis.released.y) < 0.01 && Math.abs(stickAxis.released.x) < 0.01, `Releasing the stick must zero thrust: ${JSON.stringify(stickAxis)}`);
+
+    // Keyboard optics shortcuts work alongside touch controls
+    await mobilePage.keyboard.press('BracketRight');
+    await mobilePage.waitForTimeout(200);
+    const tierAfter = await mobilePage.evaluate(() => window.OC.Quality.getId());
+    assert(['low', 'medium', 'high', 'ultra'].includes(tierAfter), `Quality cycle hotkey produced invalid tier ${tierAfter}`);
+
+    const mobileSt = await mobilePage.evaluate(() => window.OC.getPerfStats());
+    assert(mobileSt.drawCalls > 0 && mobileSt.sampleCount > 0, `Mobile viewport rendered no frames: ${JSON.stringify(mobileSt)}`);
+    assert.equal(mobileErrors.length, 0, `Mobile HUD page errors:\n${mobileErrors.join('\n')}`);
+    console.log(`   Mobile HUD verified (dynRes=${(hudState.dyn.scale * 100).toFixed(0)}%, quickActions=5, quality=${tierAfter}, drawCalls=${mobileSt.drawCalls}).`);
+  } finally {
+    await mobileContext.close();
+  }
+
   assert.equal(errors.length, 0, `Encountered browser console/page errors:\n${errors.join('\n')}`);
   console.log('PLAYWRIGHT WEBGL E2E VERIFICATION PASSED!');
 } catch (err) {

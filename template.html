@@ -313,8 +313,40 @@
     box-shadow:0 4px 16px rgba(0,0,0,.45);pointer-events:none}
   .touch-vert{display:flex;flex-direction:column;gap:8px;pointer-events:auto}
   .touch-vert .btn{padding:11px 14px;background:var(--glass);backdrop-filter:blur(10px);min-width:52px}
+  .touch-stick-label{position:absolute;left:50%;bottom:-17px;transform:translateX(-50%);font-size:9px;
+    letter-spacing:.14em;text-transform:uppercase;color:rgba(150,210,235,.72);pointer-events:none;white-space:nowrap}
+  .touch-actions{position:fixed;right:18px;bottom:172px;z-index:27;display:none;flex-direction:column;gap:8px;pointer-events:auto}
+  .touch-act{width:52px;height:52px;border-radius:16px;border:1px solid var(--glass-brd);background:var(--glass);
+    backdrop-filter:blur(12px);color:var(--ink);font-size:15px;display:grid;place-items:center;cursor:pointer;
+    transition:.18s;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  .touch-act:active,.touch-act.on{background:rgba(88,224,255,.28);border-color:rgba(88,224,255,.8);
+    box-shadow:0 0 18px rgba(88,224,255,.28)}
+  .touch-act small{position:absolute;opacity:0;pointer-events:none}
   @media (pointer:coarse){
     .touch-nav{display:flex}
+    .touch-actions{display:flex}
+    .icon-btn{width:44px;height:44px}
+  }
+  /* Сенсорный HUD и на узких экранах без coarse-указателя (планшеты, узкие окна) */
+  @media (max-width:960px){
+    .touch-actions{display:flex}
+  }
+  @media (max-height:520px){
+    .touch-nav{bottom:14px}
+    .touch-stick{width:86px;height:86px}
+    .touch-knob{width:34px;height:34px;margin:-17px 0 0 -17px}
+    .touch-actions{bottom:120px;flex-direction:row;right:14px}
+  }
+  .res-badge{position:fixed;right:18px;bottom:14px;z-index:21;font-size:9.5px;letter-spacing:.1em;
+    color:rgba(155,195,215,.66);text-transform:uppercase;pointer-events:none;font-variant-numeric:tabular-nums}
+  .res-badge b{color:var(--ok);font-weight:600}
+  .hud-toggle{position:fixed;left:18px;bottom:14px;z-index:30;width:40px;height:40px;border-radius:13px;
+    border:1px solid var(--glass-brd);background:var(--glass);backdrop-filter:blur(12px);color:var(--ink);
+    font-size:15px;display:none;place-items:center;cursor:pointer;transition:.2s}
+  .hud-toggle.show{display:grid}
+  .hud-toggle.on{border-color:rgba(88,224,255,.7);background:rgba(88,224,255,.2)}
+  @media (max-width:960px),(pointer:coarse){
+    .hud-toggle{display:grid}
   }
 
   /* ---------- 3D-глобус планеты ---------- */
@@ -445,15 +477,61 @@
     .minimap-box{display:none}
     .hero{display:none}
     .touch-nav{display:flex}
+    /* Компактный HUD планшета: верхние кнопки уходят под сейф-зону, телеметрия сжимается */
+    .topright{right:12px;top:calc(10px + env(safe-area-inset-top, 0px));gap:6px;flex-wrap:wrap;
+      max-width:calc(100vw - 24px);justify-content:flex-end}
+    .telemetry{bottom:calc(10px + env(safe-area-inset-bottom, 0px));font-size:10px;
+      max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none}
+    .telemetry::-webkit-scrollbar{display:none}
+    .brand{max-width:calc(100vw - 96px)}
+    .biome-bar{max-width:calc(100vw - 40px);overflow-x:auto;flex-wrap:nowrap;padding-bottom:3px;scrollbar-width:none}
+    .biome-bar::-webkit-scrollbar{display:none}
+    .biome-pill{flex:0 0 auto;padding:4px 9px;font-size:10px}
+    .res-badge{display:none}
   }
   @media (max-width:720px){
-    .brand{left:14px;top:12px}
+    .brand{left:14px;top:calc(10px + env(safe-area-inset-top, 0px))}
     .brand h1{font-size:13px;letter-spacing:.1em}
     .brand p{font-size:8.5px}
-    .topright{right:12px;top:12px;gap:6px}
-    .icon-btn{width:38px;height:38px;font-size:14px}
-    .panel{right:10px;top:60px;width:min(300px, calc(100vw - 20px));max-height:calc(100vh - 110px)}
+    .topright{right:10px;top:calc(8px + env(safe-area-inset-top, 0px));gap:5px}
+    .icon-btn{width:38px;height:38px;font-size:14px;border-radius:11px}
+    .panel{right:10px;top:calc(58px + env(safe-area-inset-top, 0px));width:min(300px, calc(100vw - 20px));
+      max-height:calc(100vh - 120px)}
+    .panel.lab-panel,.panel.rov-panel{left:10px;right:10px;width:auto}
     .status{display:none}
+    .telemetry{max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;border-radius:14px}
+    .telemetry::-webkit-scrollbar{display:none}
+    .sub-strip{flex-wrap:wrap;justify-content:center;gap:8px;max-width:calc(100vw - 20px);
+      bottom:calc(58px + env(safe-area-inset-bottom, 0px))}
+    .sub-frame{inset:8px;border-radius:18px}
+    .sub-reticle{width:132px;height:132px}
+    .touch-nav{left:12px;right:12px;bottom:calc(56px + env(safe-area-inset-bottom, 0px))}
+    .touch-stick{width:96px;height:96px}
+    .touch-actions{bottom:calc(164px + env(safe-area-inset-bottom, 0px));right:12px}
+    .cam-hud{left:8px;right:8px}
+    .cinema-hud{max-width:calc(100vw - 16px);justify-content:center}
+    .guide-card{width:calc(100vw - 16px);bottom:calc(60px + env(safe-area-inset-bottom, 0px))}
+    .atlas-modal{padding:8px}
+    .atlas-box{max-height:96vh}
+    .atlas-grid{grid-template-columns:1fr;padding:12px}
+    .popup{width:min(268px, calc(100vw - 24px))}
+  }
+  @media (max-width:430px){
+    .brand h1{font-size:11.5px}
+    .brand p{display:none}
+    .icon-btn{width:34px;height:34px;font-size:12.5px}
+    .biome-bar{margin-top:7px}
+    .telemetry{font-size:9.5px;padding:5px 10px;gap:6px}
+    .touch-actions{gap:6px}
+    .touch-act{width:46px;height:46px;font-size:13px}
+    .sub-horizon{width:70px;margin-left:-35px}
+  }
+  @media (orientation:landscape) and (max-height:560px){
+    .brand p,.brand .line{display:none}
+    .panel{top:52px;max-height:calc(100vh - 62px)}
+    .touch-nav{bottom:10px}
+    .touch-actions{bottom:auto;top:calc(56px + env(safe-area-inset-top, 0px));right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px}
+    .telemetry{bottom:8px}
   }
 </style>
 </head>
@@ -783,11 +861,20 @@
 <div class="touch-nav hud-hideable">
   <div class="touch-stick" id="touch-stick" aria-label="Виртуальный джойстик плавания">
     <div class="touch-knob" id="touch-knob"></div>
+    <span class="touch-stick-label">Плавание</span>
   </div>
   <div class="touch-vert">
-    <button class="btn" id="m-up" title="Всплыть">&#9650;</button>
-    <button class="btn" id="m-down" title="Глубже">&#9660;</button>
+    <button class="btn" id="m-up" title="Всплыть" aria-label="Всплыть">&#9650;</button>
+    <button class="btn" id="m-down" title="Глубже" aria-label="Погрузиться">&#9660;</button>
   </div>
+</div>
+
+<div class="touch-actions hud-hideable" id="touch-actions" aria-label="Быстрые действия для сенсорных экранов">
+  <button class="touch-act" id="m-flash" title="Прожектор (F)" aria-label="Прожектор">&#128294;</button>
+  <button class="touch-act" id="m-sonar" title="Сонар (G)" aria-label="Сонар">&#128225;</button>
+  <button class="touch-act" id="m-sample" title="Взять пробу (Z)" aria-label="Проба">&#129520;</button>
+  <button class="touch-act" id="m-sub" title="Режим батискафа (B)" aria-label="Батискаф">&#9678;</button>
+  <button class="touch-act" id="m-menu" title="Настройки и качество (H — скрыть HUD)" aria-label="Меню">&#9776;</button>
 </div>
 
 <div class="hero hud-hideable" id="hero-onboard">
@@ -801,6 +888,9 @@
 </div>
 
 <div class="status hud-hideable"><span id="status-region">GBR · Тихий океан</span><span id="fps">— FPS</span></div>
+
+<div class="res-badge hud-hideable" id="res-badge" aria-live="off">Оптика <b id="res-scale">100%</b> · <span id="res-quality">Высокое</span></div>
+<button class="hud-toggle" id="hud-toggle" title="Показать / скрыть интерфейс (H)" aria-label="Скрыть или показать HUD">&#128065;</button>
 
 <div class="guide-card hidden hud-hideable" id="guide-card" role="region" aria-label="Сюжетный гид-тур">
   <div class="guide-head">

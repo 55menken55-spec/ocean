@@ -464,6 +464,9 @@ window.OC = window.OC || {};
       state.virtY = OC.clamp(vy || 0, -1, 1);
       state.virtZ = OC.clamp(vz || 0, -1, 1);
     },
+    getVirtualInput() {
+      return { x: state.virtX, y: state.virtY, z: state.virtZ };
+    },
     getForward(out) {
       out = out || new T.Vector3();
       return out.set(
