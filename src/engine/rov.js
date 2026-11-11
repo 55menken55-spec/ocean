@@ -7,6 +7,8 @@ window.OC = window.OC || {};
   const MAX_SAMPLES = 20;
   const WAKE_COUNT = 72;
   const STREAM_COUNT = 140;
+  const TETHER_SEGS = 22;
+  const MAX_BUOYS = 2;
   const STREAM_BOX_XZ = 92;
   const STREAM_BOX_Y = 46;
 
@@ -28,6 +30,23 @@ window.OC = window.OC || {};
   let fpArmGroup = null;
   let wakePoints = null;
   let currentsMesh = null;
+  let tetherLine = null;
+  const tetherPos = new Float32Array((TETHER_SEGS + 1) * 3);
+  const tetherCol = new Float32Array((TETHER_SEGS + 1) * 3);
+  const tetherState = {
+    active: false,
+    lengthM: 0,
+    maxLengthM: 420,
+    tensionPct: 0,
+    status: 'откл.',
+    anchorLabel: 'НИС «Океан-1»',
+    anchorX: 0,
+    anchorY: 0,
+    anchorZ: 0
+  };
+  const buoys = [];
+  const buoyMeshes = [];
+  let buoySeq = 0;
 
   // Подвижные узлы 3D-аппарата
   let propL = null, propR = null, propV = null;
@@ -520,6 +539,174 @@ window.OC = window.OC || {};
     currentsMesh.geometry.attributes.color.needsUpdate = true;
   }
 
+  function buildTetherMesh() {
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(tetherPos, 3));
+    geo.setAttribute('color', new T.BufferAttribute(tetherCol, 3));
+    const mat = new T.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.92
+    });
+    const line = new T.Line(geo, mat);
+    line.frustumCulled = false;
+    line.visible = false;
+    return line;
+  }
+
+  function updateTether(craftPos, biome, time, showCraft, labState) {
+    if (!tetherLine || !craftPos) return;
+    if (!showCraft) {
+      tetherLine.visible = false;
+      tetherState.active = false;
+      tetherState.tensionPct = 0;
+      tetherState.lengthM = 0;
+      tetherState.status = 'свёрнут';
+      return;
+    }
+
+    const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
+    const noSurf = !!(biome && biome.noSurface);
+    let ax = 0, ay = 2.6, az = 0, maxLen = 1200, anchorLabel = 'Буй-лебёдка';
+    if (vInfo) {
+      const sy = Math.cos(vInfo.yaw || 0);
+      const sx = Math.sin(vInfo.yaw || 0);
+      ax = vInfo.x - sx * 22.0;
+      ay = 2.8;
+      az = vInfo.z - sy * 22.0;
+      maxLen = 1200;
+      anchorLabel = vInfo.name || 'НИС';
+    } else if (noSurf) {
+      const sp = biome && biome.spawn ? biome.spawn.pos : [0, -18, 0];
+      ax = sp[0];
+      ay = 72.0;
+      az = sp[2];
+      maxLen = 1450;
+      anchorLabel = 'Депрессор лебёдки';
+    } else if (biome && biome.spawn) {
+      ax = biome.spawn.pos[0];
+      ay = 0.6;
+      az = biome.spawn.pos[2];
+      maxLen = 1200;
+      anchorLabel = 'Опорный буй';
+    }
+
+    const rx = craftPos.x;
+    const ry = craftPos.y + 0.52;
+    const rz = craftPos.z;
+    const directDist = Math.hypot(rx - ax, ry - ay, rz - az);
+    const ratio = OC.clamp(directDist / maxLen, 0, 1.2);
+    const sagAmt = (1.0 - OC.clamp(ratio, 0, 0.96)) * Math.min(24.0, directDist * 0.22 + 3.5);
+    const tensionPct = Math.round(ratio * 100);
+    const cableLen = Math.round(directDist + sagAmt * 0.42);
+
+    tetherState.active = true;
+    tetherState.lengthM = cableLen;
+    tetherState.maxLengthM = maxLen;
+    tetherState.tensionPct = tensionPct;
+    tetherState.anchorLabel = anchorLabel;
+    tetherState.anchorX = ax;
+    tetherState.anchorY = ay;
+    tetherState.anchorZ = az;
+    tetherState.status = tensionPct >= 88 ? 'предел' : (tensionPct >= 62 ? 'натянут' : 'норма');
+
+    if (biome && biome.getCurrentAt) {
+      biome.getCurrentAt((ax + rx) * 0.5, (ay + ry) * 0.5, (az + rz) * 0.5, time, _currTmp);
+      const mult = labState ? labState.currentMult : 1.0;
+      _currTmp.multiplyScalar(mult * (1.0 - ratio * 0.72));
+    } else {
+      _currTmp.set(0, 0, 0);
+    }
+
+    // Цвет кабель-троса: жёлтый кевлар -> янтарь -> тревожный красный
+    let cr = 0.96, cg = 0.80, cb = 0.26;
+    if (tensionPct >= 88) { cr = 1.0; cg = 0.28; cb = 0.34; }
+    else if (tensionPct >= 62) { cr = 1.0; cg = 0.62; cb = 0.22; }
+
+    for (let i = 0; i <= TETHER_SEGS; i++) {
+      const f = i / TETHER_SEGS;
+      const arch = 4.0 * f * (1.0 - f);
+      const px = OC.lerp(ax, rx, f) + _currTmp.x * arch * 2.2;
+      const py = OC.lerp(ay, ry, f) - sagAmt * arch;
+      const pz = OC.lerp(az, rz, f) + _currTmp.z * arch * 2.2;
+      const idx = i * 3;
+      tetherPos[idx] = px;
+      tetherPos[idx + 1] = py;
+      tetherPos[idx + 2] = pz;
+      tetherCol[idx] = OC.lerp(cr * 0.78, cr, f);
+      tetherCol[idx + 1] = OC.lerp(cg * 0.84, cg, f);
+      tetherCol[idx + 2] = OC.lerp(cb * 0.84, cb, f);
+    }
+
+    tetherLine.geometry.attributes.position.needsUpdate = true;
+    tetherLine.geometry.attributes.color.needsUpdate = true;
+    tetherLine.visible = true;
+  }
+
+  function buildBuoyMesh() {
+    const g = new T.Group();
+    const mat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.28 });
+
+    const parts = [];
+    // Жёлтый синтактический поплавок буя-станции
+    const collar = new T.CylinderGeometry(0.46, 0.38, 0.42, 14);
+    OC.geoPrep(collar);
+    OC.xform(collar, { p: [0, 0.35, 0] });
+    OC.paint(collar, 0xf6c945);
+    parts.push(collar);
+
+    // Титановая рама-трипод и донный балласт
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const leg = new T.CylinderGeometry(0.036, 0.042, 1.35, 6);
+      OC.geoPrep(leg);
+      OC.xform(leg, { r: [0.22, 0, 0], p: [0, -0.35, 0.36] });
+      OC.xform(leg, { r: [0, a, 0] });
+      OC.paint(leg, 0x384b5c);
+      parts.push(leg);
+    }
+    const ballast = new T.CylinderGeometry(0.55, 0.62, 0.14, 14);
+    OC.geoPrep(ballast);
+    OC.xform(ballast, { p: [0, -0.98, 0] });
+    OC.paint(ballast, 0x26323d);
+    parts.push(ballast);
+
+    // Мачта проблескового маяка и гидрофонный стакан
+    const mast = new T.CylinderGeometry(0.03, 0.035, 0.72, 8);
+    OC.geoPrep(mast);
+    OC.xform(mast, { p: [0, 0.90, 0] });
+    OC.paint(mast, 0xc7d6e4);
+    parts.push(mast);
+
+    g.add(new T.Mesh(OC.mergeGeometries(parts), mat));
+
+    // Проблесковый маяк и оптика гидрофона/камеры
+    const strobeM = new T.MeshStandardMaterial({
+      color: 0xff9f43,
+      emissive: new T.Color(0xff7722),
+      emissiveIntensity: 1.8,
+      roughness: 0.2
+    });
+    const strobe = new T.Mesh(new T.SphereGeometry(0.11, 10, 8), strobeM);
+    strobe.position.set(0, 1.28, 0);
+    g.add(strobe);
+
+    const hydroM = new T.MeshStandardMaterial({
+      color: 0x58e0ff,
+      emissive: new T.Color(0x2ce8ff),
+      emissiveIntensity: 1.1,
+      roughness: 0.18
+    });
+    const hydroDome = new T.Mesh(new T.SphereGeometry(0.14, 12, 10), hydroM);
+    hydroDome.position.set(0, -0.05, 0);
+    g.add(hydroDome);
+
+    g.userData.strobeMat = strobeM;
+    g.userData.hydroMat = hydroM;
+    g.visible = false;
+    return g;
+  }
+
   function updateWake(dt, craftPos, speed, chaseActive) {
     if (!wakePoints) return;
     if (!chaseActive) {
@@ -829,6 +1016,12 @@ window.OC = window.OC || {};
       if (fpArmGroup && fpArmGroup.parent) fpArmGroup.parent.remove(fpArmGroup);
       if (wakePoints && wakePoints.parent) wakePoints.parent.remove(wakePoints);
       if (currentsMesh && currentsMesh.parent) currentsMesh.parent.remove(currentsMesh);
+      if (tetherLine && tetherLine.parent) tetherLine.parent.remove(tetherLine);
+      while (buoyMeshes.length) {
+        const bm = buoyMeshes.pop();
+        if (bm && bm.parent) bm.parent.remove(bm);
+      }
+      buoys.length = 0;
 
       rovGroup = buildRovModel();
       rovGroup.rotation.order = 'YXZ';
@@ -844,6 +1037,15 @@ window.OC = window.OC || {};
       currentsMesh = buildCurrentStreamlines();
       scene.add(currentsMesh);
 
+      tetherLine = buildTetherMesh();
+      scene.add(tetherLine);
+
+      for (let i = 0; i < MAX_BUOYS; i++) {
+        const bm = buildBuoyMesh();
+        scene.add(bm);
+        buoyMeshes.push(bm);
+      }
+
       wakeInited = false;
       streamsInited = false;
       grabTimer = 0;
@@ -853,6 +1055,11 @@ window.OC = window.OC || {};
       streamsInited = false;
       wakeInited = false;
       grabTimer = 0;
+      if (tetherLine) tetherLine.visible = false;
+      tetherState.active = false;
+      tetherState.tensionPct = 0;
+      buoys.length = 0;
+      for (let i = 0; i < buoyMeshes.length; i++) buoyMeshes[i].visible = false;
       if (pos) prevCraftPos.copy(pos);
       lastCtdCast = null;
       if (biome && pos) {
@@ -1075,8 +1282,58 @@ window.OC = window.OC || {};
 
       updateWake(dt, craftPos || camera.position, speed, showCraft);
       updateCurrents(dt, time, craftPos || camera.position, biome, labState);
+      updateTether(craftPos || (camera ? camera.position : null), biome, time, showCraft, labState);
+
+      for (let i = 0; i < buoyMeshes.length; i++) {
+        const bm = buoyMeshes[i];
+        const b = buoys[i];
+        if (!b) {
+          bm.visible = false;
+          continue;
+        }
+        bm.visible = true;
+        bm.position.set(b.x, b.y + Math.sin(time * 1.4 + i * 1.7) * 0.04, b.z);
+        if (bm.userData.strobeMat) {
+          const p = Math.pow(Math.max(0, Math.sin(time * 3.1 + i * 2.0)), 14);
+          bm.userData.strobeMat.emissiveIntensity = 0.25 + p * 3.4;
+        }
+      }
     },
 
+    deployBuoy(biome, pos, yaw) {
+      if (!biome || !pos) return null;
+      const fl = biome.getHeight(pos.x, pos.z);
+      const settledY = Math.max(fl + 1.15, (pos.y - fl > 26 && biome.noSurface) ? (pos.y - 1.5) : (fl + 1.15));
+      const off = biome.depthOffset || 0;
+      const depthM = Math.max(0, off + (off > 0 ? -settledY : Math.max(0, -settledY)));
+      buoySeq++;
+      const entry = {
+        id: buoySeq,
+        slot: buoys.length < MAX_BUOYS ? buoys.length + 1 : 1,
+        label: 'Буй-станция №' + buoySeq,
+        biomeId: biome.id,
+        x: Number(pos.x.toFixed(1)),
+        y: Number(settledY.toFixed(1)),
+        z: Number(pos.z.toFixed(1)),
+        yaw: typeof yaw === 'number' ? yaw : 0,
+        depthM: Number(depthM.toFixed(1))
+      };
+      if (buoys.length >= MAX_BUOYS) buoys.shift();
+      buoys.push(entry);
+      if (OC.sound && OC.sound.rovServo) OC.sound.rovServo(true);
+      return entry;
+    },
+
+    recallBuoys() {
+      const n = buoys.length;
+      buoys.length = 0;
+      for (let i = 0; i < buoyMeshes.length; i++) buoyMeshes[i].visible = false;
+      if (n > 0 && OC.sound && OC.sound.rovServo) OC.sound.rovServo(false);
+      return n;
+    },
+
+    getBuoys: () => buoys.slice(),
+    getTetherState: () => tetherState,
     getMesh: () => rovGroup,
     getWakeCount: () => WAKE_COUNT,
     getStreamCount: () => STREAM_COUNT

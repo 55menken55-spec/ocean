@@ -180,8 +180,11 @@
   #hydro-canvas{display:block;width:272px;height:94px;border-radius:10px;border:1px solid rgba(140,225,255,.18);
     background:#020c18}
   .hydro-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:10px;color:#d6effa}
-  .hydro-foot span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
+  .hydro-foot span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:176px}
   .hydro-foot b{color:var(--accent);font-size:9.5px;white-space:nowrap;font-weight:600}
+  .hydro-bearing{display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:4px;
+    border-top:1px solid rgba(140,225,255,.12);font-size:9.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .hydro-bearing b{color:var(--ok);font-weight:600}
 
   @media (max-width:960px){
     .sonar-box,.hydro-box{display:none}
@@ -413,7 +416,9 @@
   .rov-target-box{padding:8px 10px;border-radius:10px;background:rgba(3,16,30,.72);
     border:1px solid rgba(130,222,255,.18);font-size:11px;line-height:1.45;margin-bottom:10px}
   .rov-target-box b{color:var(--ok);display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .rov-target-box small{color:var(--dim);font-size:10px}
+  .rov-target-box small{color:var(--dim);font-size:10px;display:block}
+  .rov-target-box small.warn{color:var(--warn);font-weight:600}
+  .rov-target-box small.crit{color:#ff5e6c;font-weight:700}
   #rov-ctd-chart{display:block;width:100%;height:104px;border-radius:10px;border:1px solid rgba(130,222,255,.18);margin-bottom:6px}
   .rov-sample-list{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;scrollbar-width:thin}
   .rov-sample-item{padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(130,222,255,.14);
@@ -658,10 +663,15 @@
       <button class="btn chip" id="rov-btn-sample" title="Захватить пробу манипулятором (Z)">Взять пробу (Z)</button>
       <button class="btn chip on" id="rov-btn-ctd" title="Сбросить CTD-зонд по вертикали (I)">Зонд CTD (I)</button>
       <button class="btn chip" id="rov-btn-vessel" title="Всплыть к надводному экспедиционному судну НИС">К судну НИС</button>
+      <button class="btn chip" id="rov-btn-buoy" title="Сбросить автономный буй-гидрофон (9)">Сбросить буй (9)</button>
+      <button class="btn chip" id="rov-btn-buoy-view" title="Перелететь к развёрнутому бую-станции">К бую</button>
+      <button class="btn chip" id="rov-btn-buoy-recall" title="Свернуть все буи">Собрать</button>
     </div>
     <div class="rov-target-box">
       <b id="rov-target-label">Захват: Толща воды (Нискин)</b>
       <small id="rov-flow-label">Вектор течения: 0.0 уз</small>
+      <small id="rov-tether-label">Кабель-трос: свёрнут (вкл. Y)</small>
+      <small id="rov-buoy-status">Автономные буи: 0 / 2</small>
     </div>
   </div>
 
@@ -760,9 +770,10 @@
 </div>
 
 <div class="hydro-box hidden hud-hideable" id="hydro-box">
-  <div class="hydro-head"><span>Гидрофон · FFT</span><b id="hydro-db">92 dB</b><button class="hydro-btn" id="hydro-listen-btn" title="Прослушать голос пикового источника">Слушать пик</button></div>
-  <canvas id="hydro-canvas" width="272" height="94" title="Спектрограмма-водопад 0–4 кГц"></canvas>
+  <div class="hydro-head"><span>Гидрофон · FFT</span><b id="hydro-db">92 dB</b><div style="display:flex;gap:4px"><button class="hydro-btn" id="hydro-listen-btn" title="Прослушать голос пикового источника">Слушать</button><button class="hydro-btn" id="hydro-track-btn" title="Навести камеру/ROV по пеленгу на источник">Курс</button></div></div>
+  <canvas id="hydro-canvas" width="272" height="94" title="Спектрограмма-водопад 0–4 кГц и пеленгатор"></canvas>
   <div class="hydro-foot"><span id="hydro-source">Фоновый шум океана</span><b id="hydro-band">40–320 Гц</b></div>
+  <div class="hydro-bearing"><span>Пеленгатор:</span><b id="hydro-bearing">Ожидание сигнала…</b></div>
 </div>
 
 <div class="touch-nav hud-hideable">
@@ -924,7 +935,7 @@
       <div class="help-cat">
         <h4>Наука, ROV и Эколаб</h4>
         <button class="help-item" data-help-act="sample"><span>Взять научную пробу манипулятором ROV</span><kbd>Z</kbd></button>
-        <button class="help-item" data-help-act="rov"><span>Приборы ROV и профиль CTD-зонда</span><kbd>I / Y</kbd></button>
+        <button class="help-item" data-help-act="rov"><span>Приборы ROV, кабель и буй-гидрофон</span><kbd>I / Y / 9</kbd></button>
         <button class="help-item" data-help-act="lab"><span>Эколаб: стресс-тест и обесцвечивание</span><kbd>L</kbd></button>
         <button class="help-item" data-help-act="journal"><span>Журнал, 40 миссий и Музей проб</span><kbd>J</kbd></button>
       </div>

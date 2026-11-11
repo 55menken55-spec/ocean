@@ -6925,8 +6925,43 @@ window.OC = window.OC || {};
               label: enc ? enc[0] : (tgt.key || 'Акустический объект'),
               dist,
               bearingDeg,
-              amp
+              amp,
+              x: pos.x,
+              y: pos.y,
+              z: pos.z
             });
+          }
+          // Геоакустические ориентиры (чёрные курильщики, фумаролы, метановые сипы, ледяные сталактиты)
+          if (biome && Array.isArray(biome.landmarks)) {
+            for (let i = 0; i < biome.landmarks.length; i++) {
+              const lm = biome.landmarks[i];
+              if (!lm) continue;
+              const lid = (lm.id || '').toLowerCase();
+              let geoKey = null;
+              if (lid.includes('smoker') || lid.includes('vent')) geoKey = 'vent_chimney';
+              else if (lid.includes('fumarole')) geoKey = 'volcanic_fumarole';
+              else if (lid.includes('hydrate') || lid.includes('seep') || lid.includes('brine')) geoKey = 'methane_hydrate';
+              else if (lid.includes('brinicle') || lid.includes('ice')) geoKey = 'brinicle';
+              if (!geoKey) continue;
+              const ly = lm.y - 3.0;
+              const dx = lm.x - origin.x;
+              const dy = ly - origin.y;
+              const dz = lm.z - origin.z;
+              const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (dist > maxR) continue;
+              const amp = Math.pow(1.0 - dist / maxR, 1.4) * 0.72;
+              const bearingDeg = ((Math.atan2(dx, -dz) * 180 / Math.PI) % 360 + 360) % 360;
+              out.push({
+                key: geoKey,
+                label: lm.name || 'Геоакустический источник',
+                dist,
+                bearingDeg,
+                amp,
+                x: lm.x,
+                y: ly,
+                z: lm.z
+              });
+            }
           }
           out.sort((a, b) => b.amp - a.amp);
           return out.slice(0, 6);

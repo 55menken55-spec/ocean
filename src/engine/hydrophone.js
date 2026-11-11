@@ -32,9 +32,13 @@ window.OC = window.OC || {};
     dominantLabel: 'Фоновый шум океана',
     dominantDist: 0,
     bearingDeg: 0,
+    relBearingDeg: 0,
+    viaBuoy: false,
+    targetPos: null,
     sources: [],
     spectrumBins: bins
   };
+  const _buoyProbe = { x: 0, y: 0, z: 0 };
 
   // Предвычисленная палитра спектрограммы (глубокий синий -> бирюзовый -> золотой -> белый)
   (function buildPalette() {
@@ -213,6 +217,50 @@ window.OC = window.OC || {};
     ctx.fillText('3.5k', 4, 11);
     ctx.fillText('2.0k', 4, CANVAS_H * 0.5 + 3);
     ctx.fillText('250 Гц', 4, CANVAS_H - 5);
+
+    // Акустический компас-пеленгатор в правом верхнем углу водопада
+    const cx = SPEC_W - 22;
+    const cy = 22;
+    const rad = 15;
+    ctx.save();
+    ctx.fillStyle = 'rgba(2, 12, 24, 0.78)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad + 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = state.targetPos ? 'rgba(88, 224, 255, 0.58)' : 'rgba(130, 210, 245, 0.25)';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+    ctx.stroke();
+    // Риска курса камеры (верх = прямо по курсу)
+    ctx.fillStyle = '#d8f6ff';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - rad - 1);
+    ctx.lineTo(cx - 2.4, cy - rad + 3);
+    ctx.lineTo(cx + 2.4, cy - rad + 3);
+    ctx.closePath();
+    ctx.fill();
+    if (state.targetPos) {
+      const a = (state.relBearingDeg * Math.PI) / 180 - Math.PI / 2;
+      const nx = cx + Math.cos(a) * (rad - 2.5);
+      const ny = cy + Math.sin(a) * (rad - 2.5);
+      ctx.strokeStyle = state.viaBuoy ? '#ffd17a' : '#5be8b0';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(nx, ny);
+      ctx.stroke();
+      ctx.fillStyle = state.viaBuoy ? '#ffd17a' : '#5be8b0';
+      ctx.beginPath();
+      ctx.arc(nx, ny, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(88,224,255,0.45)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   OC.Hydrophone = {
@@ -291,10 +339,49 @@ window.OC = window.OC || {};
         addGaussianBand(clickHz, 190, 0.34 * surfAtten);
       }
 
-      // 4. Активные биоакустические и геологические источники из FaunaEngine
+      // 4. Активные биоакустические и геологические источники (плюс ретрансляция с автономных буёв ROV)
       const sources = (fauna && fauna.scanAcousticSources && camPos)
-        ? fauna.scanAcousticSources(camPos, 260)
+        ? fauna.scanAcousticSources(camPos, 260).slice()
         : [];
+      if (fauna && fauna.scanAcousticSources && OC.ROV && OC.ROV.getBuoys && camPos) {
+        const deployed = OC.ROV.getBuoys();
+        for (let bi = 0; bi < deployed.length; bi++) {
+          const buoy = deployed[bi];
+          if (!buoy || (biome && buoy.biomeId && buoy.biomeId !== biome.id)) continue;
+          _buoyProbe.x = buoy.x;
+          _buoyProbe.y = buoy.y;
+          _buoyProbe.z = buoy.z;
+          const bHits = fauna.scanAcousticSources(_buoyProbe, 260);
+          for (let j = 0; j < bHits.length; j++) {
+            const h = bHits[j];
+            if (!h) continue;
+            const dup = sources.some((s) => s.key === h.key && h.x !== undefined && s.x !== undefined && Math.hypot(s.x - h.x, s.z - h.z) < 25);
+            if (dup) continue;
+            const tx = h.x !== undefined ? h.x : buoy.x;
+            const ty = h.y !== undefined ? h.y : buoy.y;
+            const tz = h.z !== undefined ? h.z : buoy.z;
+            const dx = tx - camPos.x;
+            const dy = ty - camPos.y;
+            const dz = tz - camPos.z;
+            const distFromCam = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            const bearingFromCam = ((Math.atan2(dx, -dz) * 180 / Math.PI) % 360 + 360) % 360;
+            sources.push({
+              key: h.key,
+              label: h.label,
+              dist: distFromCam,
+              bearingDeg: bearingFromCam,
+              amp: h.amp * 0.88,
+              x: tx,
+              y: ty,
+              z: tz,
+              viaBuoy: true,
+              buoyId: buoy.id
+            });
+          }
+        }
+        if (sources.length > 1) sources.sort((a, b) => b.amp - a.amp);
+        if (sources.length > 6) sources.length = 6;
+      }
       state.sources = sources;
 
       let bestProfile = null;
@@ -323,27 +410,42 @@ window.OC = window.OC || {};
       const meanE = totalE / BINS;
       state.dbSPL = Math.round((86 + meanE * 54 + peakVal * 26) * 10) / 10;
       state.peakHz = Math.round((peakBin + 0.5) * HZ_PER_BIN);
+      const headingDeg = ((180 - (yaw || 0) * 180 / Math.PI) % 360 + 360) % 360;
 
       if (sonarFlash > 0.4) {
         state.dominantKey = null;
         state.dominantLabel = 'Импульс сонара 1.34 кГц';
         state.dominantDist = 0;
+        state.viaBuoy = false;
+        state.targetPos = null;
+        state.relBearingDeg = 0;
         state.bandLabel = '1280–1420 Гц';
       } else if (bestSource && bestProfile) {
         state.dominantKey = bestSource.key;
-        state.dominantLabel = bestProfile.label + ' (' + Math.round(bestSource.dist) + ' м)';
+        state.viaBuoy = !!bestSource.viaBuoy;
+        state.dominantLabel = bestProfile.label + ' (' + Math.round(bestSource.dist) + ' м' + (bestSource.viaBuoy ? ' · буй' : '') + ')';
         state.dominantDist = Math.round(bestSource.dist);
         state.bearingDeg = Math.round(bestSource.bearingDeg);
+        state.relBearingDeg = Math.round((((bestSource.bearingDeg - headingDeg) % 360) + 540) % 360 - 180);
+        state.targetPos = (bestSource.x !== undefined && bestSource.z !== undefined)
+          ? { x: bestSource.x, y: bestSource.y || 0, z: bestSource.z }
+          : null;
         state.bandLabel = bestProfile.minHz + '–' + bestProfile.maxHz + ' Гц';
       } else if (hasShrimp) {
         state.dominantKey = null;
         state.dominantLabel = 'Хор рачков-щелкунов рифа';
         state.dominantDist = 12;
+        state.viaBuoy = false;
+        state.targetPos = null;
+        state.relBearingDeg = 0;
         state.bandLabel = '1.8–3.8 кГц';
       } else {
         state.dominantKey = null;
         state.dominantLabel = sm > 0.45 ? 'Шум штормовой зыби' : 'Фоновый шум океана';
         state.dominantDist = 0;
+        state.viaBuoy = false;
+        state.targetPos = null;
+        state.relBearingDeg = 0;
         state.bandLabel = '40–320 Гц';
       }
 
@@ -353,6 +455,22 @@ window.OC = window.OC || {};
         renderWaterfall();
       }
       return state;
+    },
+
+    getTrackTarget() {
+      if (!state.targetPos) return null;
+      return {
+        active: true,
+        key: state.dominantKey,
+        label: state.dominantLabel,
+        dist: state.dominantDist,
+        bearingDeg: state.bearingDeg,
+        relBearingDeg: state.relBearingDeg,
+        viaBuoy: state.viaBuoy,
+        x: state.targetPos.x,
+        y: state.targetPos.y,
+        z: state.targetPos.z
+      };
     },
 
     getState() {

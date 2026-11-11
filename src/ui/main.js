@@ -55,6 +55,8 @@ window.OC = window.OC || {};
   const hydroSource = document.getElementById('hydro-source');
   const hydroBand = document.getElementById('hydro-band');
   const hydroListenBtn = document.getElementById('hydro-listen-btn');
+  const hydroTrackBtn = document.getElementById('hydro-track-btn');
+  const hydroBearingEl = document.getElementById('hydro-bearing');
 
   const teleZone = document.getElementById('tele-zone');
   const teleDepth = document.getElementById('tele-depth');
@@ -138,8 +140,13 @@ window.OC = window.OC || {};
   const rovBtnSample = document.getElementById('rov-btn-sample');
   const rovBtnCtd = document.getElementById('rov-btn-ctd');
   const rovBtnVessel = document.getElementById('rov-btn-vessel');
+  const rovBtnBuoy = document.getElementById('rov-btn-buoy');
+  const rovBtnBuoyView = document.getElementById('rov-btn-buoy-view');
+  const rovBtnBuoyRecall = document.getElementById('rov-btn-buoy-recall');
   const rovTargetLabel = document.getElementById('rov-target-label');
   const rovFlowLabel = document.getElementById('rov-flow-label');
+  const rovTetherLabel = document.getElementById('rov-tether-label');
+  const rovBuoyStatus = document.getElementById('rov-buoy-status');
   const rovCtdChart = document.getElementById('rov-ctd-chart');
   const rovCtdThermo = document.getElementById('rov-ctd-thermo');
   const rovCtdTemps = document.getElementById('rov-ctd-temps');
@@ -670,6 +677,7 @@ window.OC = window.OC || {};
       const currOn = !!(OC.ROV && OC.ROV.isCurrentsVisible && OC.ROV.isCurrentsVisible());
       const panelOpen = !!(rovPanel && !rovPanel.classList.contains('closed'));
       const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
+      const buoysList = (OC.ROV && OC.ROV.getBuoys) ? OC.ROV.getBuoys() : [];
       if (btnRov) btnRov.classList.toggle('on', panelOpen || chaseOn || currOn);
       if (rovBtnChase) rovBtnChase.classList.toggle('on', chaseOn);
       if (rovBtnCurrents) rovBtnCurrents.classList.toggle('on', currOn);
@@ -678,6 +686,16 @@ window.OC = window.OC || {};
         rovBtnVessel.title = vInfo
           ? ('Всплыть к судну ' + vInfo.name)
           : 'Надводное судно недоступно в глубоководной зоне';
+      }
+      if (rovBtnBuoyView) rovBtnBuoyView.disabled = buoysList.length === 0;
+      if (rovBtnBuoyRecall) rovBtnBuoyRecall.disabled = buoysList.length === 0;
+      if (rovBuoyStatus) {
+        if (buoysList.length) {
+          const lastB = buoysList[buoysList.length - 1];
+          rovBuoyStatus.textContent = 'Автономные буи: ' + buoysList.length + ' / 2 (посл. ' + lastB.depthM + ' м)';
+        } else {
+          rovBuoyStatus.textContent = 'Автономные буи: 0 / 2';
+        }
       }
     };
 
@@ -773,6 +791,15 @@ window.OC = window.OC || {};
       return cast;
     };
 
+    const triggerDeployBuoy = () => {
+      if (!OC.ROV || !OC.ROV.deployBuoy || !activeBiome) return null;
+      const pos = OC.Navigation.getPosition();
+      const b = OC.ROV.deployBuoy(activeBiome, pos, OC.Navigation.getYaw());
+      syncRovButtons();
+      if (b) toast(b.label + ' установлен на глубине ' + b.depthM + ' м (ретрансляция гидрофона)');
+      return b;
+    };
+
     if (btnRov) {
       btnRov.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -791,6 +818,25 @@ window.OC = window.OC || {};
     }
     if (rovBtnSample) rovBtnSample.addEventListener('click', triggerSampleGrab);
     if (rovBtnCtd) rovBtnCtd.addEventListener('click', triggerCtdCast);
+    if (rovBtnBuoy) rovBtnBuoy.addEventListener('click', triggerDeployBuoy);
+    if (rovBtnBuoyView) {
+      rovBtnBuoyView.addEventListener('click', () => {
+        if (!OC.ROV || !OC.ROV.getBuoys) return;
+        const list = OC.ROV.getBuoys();
+        if (!list.length) { toast('Сначала сбросьте автономный буй (9)'); return; }
+        const b = list[list.length - 1];
+        OC.Navigation.flyTo(b.x - 3.6, b.y + 1.8, b.z - 3.6, Math.atan2(3.6, 3.6), -0.22);
+        toast('Переход к камере ' + b.label);
+      });
+    }
+    if (rovBtnBuoyRecall) {
+      rovBtnBuoyRecall.addEventListener('click', () => {
+        if (!OC.ROV || !OC.ROV.recallBuoys) return;
+        const n = OC.ROV.recallBuoys();
+        syncRovButtons();
+        toast(n > 0 ? ('Свёрнуто автономных буёв: ' + n) : 'Нет развёрнутых буёв');
+      });
+    }
     if (rovBtnVessel) {
       rovBtnVessel.addEventListener('click', () => {
         const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
@@ -972,6 +1018,26 @@ window.OC = window.OC || {};
           const lbl = OC.Hydrophone.listenPeak();
           toast('Гидрофон: воспроизведение — ' + lbl);
         }
+      });
+    }
+    if (hydroTrackBtn) {
+      hydroTrackBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!OC.Hydrophone || !OC.Hydrophone.getTrackTarget) return;
+        const tgt = OC.Hydrophone.getTrackTarget();
+        if (!tgt) {
+          toast('Нет активного пеленга на источник звука');
+          return;
+        }
+        const pos = OC.Navigation.getPosition();
+        const dx = tgt.x - pos.x;
+        const dy = tgt.y - pos.y;
+        const dz = tgt.z - pos.z;
+        const horiz = Math.max(0.1, Math.hypot(dx, dz));
+        const turnYaw = Math.atan2(dx, dz);
+        const turnPitch = OC.clamp(Math.atan2(dy, horiz), -0.65, 0.45);
+        OC.Navigation.flyTo(pos.x, pos.y, pos.z, turnYaw, turnPitch);
+        toast('Курс на пеленг ' + String(tgt.bearingDeg).padStart(3, '0') + '° — ' + tgt.label);
       });
     }
 
@@ -1476,6 +1542,9 @@ window.OC = window.OC || {};
         else if (OC.Navigation.getMode() === 'cinema') OC.Navigation.setMode('swim');
         else if (OC.Navigation.getMode() === 'tour') OC.Navigation.stopTour();
       }
+      if (e.code === 'Digit9') {
+        triggerDeployBuoy();
+      }
       if (e.code === 'Slash' || e.code === 'F1') {
         e.preventDefault();
         toggleHelp(false);
@@ -1769,7 +1838,7 @@ window.OC = window.OC || {};
   function runLoop(renderer, scene, camera) {
     lastRendererRef = renderer;
     let last = performance.now();
-    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100, wasInHalocline = false, lastHaloToastAt = -100;
+    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100, wasInHalocline = false, lastHaloToastAt = -100, lastTetherWarnAt = -100;
 
     function resize() {
       const w = window.innerWidth, h = window.innerHeight;
@@ -1834,6 +1903,17 @@ window.OC = window.OC || {};
           if (hydroDb) hydroDb.textContent = hs.dbSPL.toFixed(1) + ' dB';
           if (hydroSource) hydroSource.textContent = hs.dominantLabel;
           if (hydroBand) hydroBand.textContent = hs.bandLabel;
+          if (hydroBearingEl) {
+            if (hs.targetPos) {
+              const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
+              const dName = dirs[Math.round(hs.bearingDeg / 45) % 8];
+              const relSign = hs.relBearingDeg >= 0 ? ('+' + hs.relBearingDeg) : String(hs.relBearingDeg);
+              hydroBearingEl.textContent = String(hs.bearingDeg).padStart(3, '0') + '° (' + dName + ') · курс ' + relSign + '°';
+            } else {
+              hydroBearingEl.textContent = 'Всенаправленный фон';
+            }
+          }
+          if (hydroTrackBtn) hydroTrackBtn.disabled = !hs.targetPos;
         }
         const biome = activeBiome;
         const zone = biome.getZoneAt(craftPos.x, craftPos.y, craftPos.z);
@@ -1971,6 +2051,24 @@ window.OC = window.OC || {};
             subPhaseEl.textContent = phaseLabel;
           }
           drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
+        }
+
+        if (OC.ROV && OC.ROV.getTetherState) {
+          const tSt = OC.ROV.getTetherState();
+          if (tSt.active && tSt.tensionPct >= 88 && time - lastTetherWarnAt > 10) {
+            lastTetherWarnAt = time;
+            toast('Натяжение кабель-троса ' + tSt.tensionPct + '% (' + tSt.lengthM + '/' + tSt.maxLengthM + ' м) — вернитесь ближе к ' + tSt.anchorLabel + '!');
+          }
+          if (rovPanel && !rovPanel.classList.contains('closed') && rovTetherLabel) {
+            if (tSt.active) {
+              rovTetherLabel.textContent = 'Кабель (' + tSt.anchorLabel + '): ' + tSt.lengthM + ' / ' + tSt.maxLengthM + ' м · ' + tSt.tensionPct + '% (' + tSt.status + ')';
+              rovTetherLabel.classList.toggle('warn', tSt.tensionPct >= 62 && tSt.tensionPct < 88);
+              rovTetherLabel.classList.toggle('crit', tSt.tensionPct >= 88);
+            } else {
+              rovTetherLabel.textContent = 'Кабель-трос: свёрнут (вкл. Y)';
+              rovTetherLabel.classList.remove('warn', 'crit');
+            }
+          }
         }
 
         if (OC.ROV && rovPanel && !rovPanel.classList.contains('closed')) {

@@ -412,6 +412,18 @@ assert.equal(OC.getPostFxState().enabled, false, 'Low quality preset must bypass
 OC.Quality.set('high');
 stepFrames(2);
 
+// Stage 3 E2E checks: KeyY ROV 3rd-person tether, Digit9 autonomous buoy deploy & recall, and acoustic bearing compass
+pressKey('KeyY');
+stepFrames(4);
+assert(OC.ROV.getTetherState().active, 'KeyY must activate 3D ROV & physical umbilical tether');
+pressKey('Digit9');
+stepFrames(3);
+assert(OC.ROV.getBuoys().length === 1, 'Digit9 must deploy an autonomous benthic buoy');
+pressKey('KeyY');
+stepFrames(2);
+OC.ROV.recallBuoys();
+assert.equal(OC.ROV.getBuoys().length, 0, 'ROV buoy recall must clear active buoys');
+
 console.log('3) Profiling 10 biomes × 100 continuous frames (1000 frames + 3D Multibeam Sonar scans)...');
 const biomeList = OC.Biomes.list();
 assert.equal(biomeList.length, 10, 'All 10 biomes must be registered in production bundle');

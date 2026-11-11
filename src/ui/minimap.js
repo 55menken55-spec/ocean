@@ -592,6 +592,31 @@ window.OC = window.OC || {};
         ctx.restore();
       }
 
+      // Автономные буи-гидрофоны ROV на карте
+      if (OC.ROV && OC.ROV.getBuoys) {
+        const buoys = OC.ROV.getBuoys();
+        for (let i = 0; i < buoys.length; i++) {
+          const b = buoys[i];
+          if (!b || (biomeRef && b.biomeId !== biomeRef.id)) continue;
+          const [bx, bz] = worldToMap(b.x, b.z);
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255, 209, 122, 0.78)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(bx, bz, 5.5, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = '#58e0ff';
+          ctx.beginPath();
+          ctx.moveTo(bx, bz - 3.6);
+          ctx.lineTo(bx + 3.4, bz);
+          ctx.lineTo(bx, bz + 3.6);
+          ctx.lineTo(bx - 3.4, bz);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
       ctx.save();
       ctx.translate(cx, cz);
       // В Three.js forward = (sin(yaw), cos(yaw)), на карте X вправо, Z вниз
