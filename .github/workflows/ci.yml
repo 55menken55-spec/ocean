@@ -70,7 +70,17 @@ jobs:
       - name: Install Playwright & Chromium with system dependencies
         run: |
           npm install --no-save playwright
-          npx playwright install --with-deps chromium
+          # CDN playwright иногда отдаёт обрыв соединения — до трёх попыток
+          for attempt in 1 2 3; do
+            if npx playwright install --with-deps chromium; then
+              echo "Playwright/Chromium установлены с попытки $attempt"
+              exit 0
+            fi
+            echo "Попытка $attempt не удалась, повтор через $((attempt * 15)) с"
+            sleep $((attempt * 15))
+          done
+          echo "Не удалось установить Playwright/Chromium после 3 попыток"
+          exit 1
 
       - name: Run Playwright WebGL SwiftShader E2E & FPS Profile
         env:
