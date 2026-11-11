@@ -12,6 +12,14 @@ const MODULE_ORDER = JSON.parse(execFileSync('python3', [path.join(ROOT, 'build.
 assert(MODULE_ORDER.length > 0, 'build.py --list вернул пустой порядок модулей');
 const SRC_ORDER = MODULE_ORDER.map((rel) => path.join('src', rel));
 
+/* Склеивает исходники группы по префиксу из общего порядка модулей:
+   новые файлы группы подхватываются автоматически, список не надо править. */
+function groupSource(prefix) {
+  const files = MODULE_ORDER.filter((rel) => rel.startsWith(prefix));
+  assert(files.length > 0, `groupSource: в ORDER нет модулей с префиксом ${prefix}`);
+  return files.map((rel) => fs.readFileSync(path.join(ROOT, 'src', rel), 'utf8')).join('\n');
+}
+
 console.log('1) Checking syntax of all source modules...');
 for (const rel of SRC_ORDER) {
   const code = fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -251,34 +259,9 @@ for (const spKey in floraProtos) {
 }
 
 // Verify world.js water foam + volumetric beam + marine snow contracts exist
-const worldSrc = [
-  'src/engine/world.js',
-  'src/engine/world/textures.js',
-  'src/engine/world/rays.js',
-  'src/engine/world/precip.js',
-  'src/engine/world/postfx.js'
-].map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')).join('\n');
+const worldSrc = groupSource('engine/world')
 assert(worldSrc.includes('uFoamTex') && worldSrc.includes('flashBeamMat'), 'world.js missing uFoamTex surf foam or flashBeamMat cone');
-const faunaSrc = [
-  'src/engine/fauna_engine.js',
-  'src/engine/fauna/schools.js',
-  'src/engine/fauna/reef_life.js',
-  'src/engine/fauna/rays_sharks.js',
-  'src/engine/fauna/whales.js',
-  'src/engine/fauna/polar.js',
-  'src/engine/fauna/abyss.js',
-  'src/engine/fauna/brine_lake.js',
-  'src/engine/fauna/cave_twilight.js',
-  'src/engine/fauna/brine_cave.js',
-  'src/engine/fauna/surface_birds.js',
-  'src/engine/fauna/cetaceans.js',
-  'src/engine/fauna/galapagos.js',
-  'src/engine/fauna/amazon_river.js',
-  'src/engine/fauna/particles.js',
-  'src/engine/fauna/splash.js',
-  'src/engine/fauna/haze.js',
-  'src/engine/fauna/systems.js'
-].map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')).join('\n');
+const faunaSrc = groupSource('engine/fauna')
 assert(faunaSrc.includes('marine_snow'), 'fauna_engine.js missing marine_snow deep particle layer');
 
 // Verify all placed visible fauna/flora objects have encyclopedia keys
@@ -1486,7 +1469,7 @@ shShadowMat.onBeforeCompile(shShadow);
 assert(shShadow.uniforms.uShadowA && shShadow.uniforms.uShadowB, 'enhanceMaterial must bind uShadowA & uShadowB uniforms');
 assert(shShadow.fragmentShader.includes('ocShadow') && shShadow.fragmentShader.includes('uShadowA') && shShadow.fragmentShader.includes('uShadowB'), 'Terrain fragment shader must compute overhead ship & megafauna shadows');
 
-const worldFxSrc = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8') + '\n' + fs.readFileSync(path.join(ROOT, 'src/engine/world/postfx.js'), 'utf8');
+const worldFxSrc = worldSrc;
 assert(worldFxSrc.includes('WebGLRenderTarget') && worldFxSrc.includes('dropLayer') && worldFxSrc.includes('uBloomAmt') && worldFxSrc.includes('uChromaAmt'), 'world.js must compile WebGLRenderTarget post-FX shader (Bloom, Chromatic Aberration, Water Droplets)');
 const gbrFxFauna = OC.FaunaEngine.init(scene, OC.Biomes.get('great_barrier_reef'));
 assert(OC.faunaInfo && OC.faunaInfo.shadowCaster && typeof OC.faunaInfo.shadowCaster === 'object', 'OC.faunaInfo must expose zero-GC shadowCaster slot');
@@ -1554,7 +1537,7 @@ OC.Quality.set('high');
 console.log(`   Stage 4 Scientific Report Export (${parsedRep.biomes.length} biomes, ${parsedRep.summary.speciesTotal} species .MD/.JSON) & Adaptive Auto-LOD verified.`);
 
 // AE) Verify Stage 5 Visual & Immersion Upgrade (Cinematic Water Optics, Tindall Glow, Entity Shadows, Touch HUD)
-const worldV5 = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8') + '\n' + fs.readFileSync(path.join(ROOT, 'src/engine/world/postfx.js'), 'utf8');
+const worldV5 = worldSrc;
 assert(worldV5.includes('uFlashGlow') && worldV5.includes('coneScatter'), 'world post-FX must add flashlight Tindall scatter (uFlashGlow)');
 assert(worldV5.includes('uBedDepth') && worldV5.includes('floorGlow'), 'world.js volumetric flashlight beam must respect seabed contact (uBedDepth)');
 assert(worldV5.includes('sparkle') && worldV5.includes('causticBands'), 'world.js water surface must add sun sparkle glitter & underwater caustic bands');

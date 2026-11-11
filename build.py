@@ -148,12 +148,47 @@ def check(strict=True):
     return True
 
 
+def check_readme(strict=True):
+    """Каждый модуль из ORDER должен быть представлен в дереве README.
+    Групповые строки вида `world/` покрывают все файлы каталога."""
+    readme_path = os.path.join(ROOT, 'README.md')
+    if not os.path.isfile(readme_path):
+        print('README.md не найден, проверка дерева пропущена.')
+        return True
+    text = open(readme_path, encoding='utf-8').read()
+    if '### Исходный код' not in text:
+        print('README без секции «Исходный код», проверка пропущена.')
+        return True
+    tree = text.split('### Исходный код', 1)[1]
+    # берём содержимое первого блока ```...``` после заголовка
+    if '```' in tree:
+        tree = tree.split('```', 2)[1]
+    missing = []
+    for rel in ORDER:
+        stem = os.path.splitext(os.path.basename(rel))[0]
+        parent = os.path.dirname(rel)
+        group = f'{parent}/' if parent else ''
+        if stem in tree or (group and group in tree):
+            continue
+        missing.append(rel)
+    if missing:
+        print('README-дерево отстало от ORDER:')
+        for rel in missing:
+            print('  -', rel)
+        if strict:
+            sys.exit(1)
+        return False
+    print(f'README ok: все {len(ORDER)} модулей представлены в дереве.')
+    return True
+
+
 def main(argv):
     if '--list' in argv:
         list_modules()
         return
     if '--check' in argv:
         check()
+        check_readme()
         return
 
     with open(os.path.join(ROOT, 'three.min.js'), encoding='utf-8') as f:
