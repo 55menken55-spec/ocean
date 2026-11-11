@@ -24,6 +24,7 @@ const SRC_ORDER = [
   'src/engine/world/textures.js',
   'src/engine/world/rays.js',
   'src/engine/world/precip.js',
+  'src/engine/world/postfx.js',
   'src/engine/world.js',
   'src/engine/terrain.js',
   'src/engine/flora/reef_corals.js',
@@ -307,7 +308,8 @@ const worldSrc = [
   'src/engine/world.js',
   'src/engine/world/textures.js',
   'src/engine/world/rays.js',
-  'src/engine/world/precip.js'
+  'src/engine/world/precip.js',
+  'src/engine/world/postfx.js'
 ].map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')).join('\n');
 assert(worldSrc.includes('uFoamTex') && worldSrc.includes('flashBeamMat'), 'world.js missing uFoamTex surf foam or flashBeamMat cone');
 const faunaSrc = [
@@ -1525,7 +1527,7 @@ shShadowMat.onBeforeCompile(shShadow);
 assert(shShadow.uniforms.uShadowA && shShadow.uniforms.uShadowB, 'enhanceMaterial must bind uShadowA & uShadowB uniforms');
 assert(shShadow.fragmentShader.includes('ocShadow') && shShadow.fragmentShader.includes('uShadowA') && shShadow.fragmentShader.includes('uShadowB'), 'Terrain fragment shader must compute overhead ship & megafauna shadows');
 
-const worldFxSrc = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8');
+const worldFxSrc = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8') + '\n' + fs.readFileSync(path.join(ROOT, 'src/engine/world/postfx.js'), 'utf8');
 assert(worldFxSrc.includes('WebGLRenderTarget') && worldFxSrc.includes('dropLayer') && worldFxSrc.includes('uBloomAmt') && worldFxSrc.includes('uChromaAmt'), 'world.js must compile WebGLRenderTarget post-FX shader (Bloom, Chromatic Aberration, Water Droplets)');
 const gbrFxFauna = OC.FaunaEngine.init(scene, OC.Biomes.get('great_barrier_reef'));
 assert(OC.faunaInfo && OC.faunaInfo.shadowCaster && typeof OC.faunaInfo.shadowCaster === 'object', 'OC.faunaInfo must expose zero-GC shadowCaster slot');
@@ -1593,8 +1595,8 @@ OC.Quality.set('high');
 console.log(`   Stage 4 Scientific Report Export (${parsedRep.biomes.length} biomes, ${parsedRep.summary.speciesTotal} species .MD/.JSON) & Adaptive Auto-LOD verified.`);
 
 // AE) Verify Stage 5 Visual & Immersion Upgrade (Cinematic Water Optics, Tindall Glow, Entity Shadows, Touch HUD)
-const worldV5 = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8');
-assert(worldV5.includes('uFlashGlow') && worldV5.includes('coneScatter'), 'world.js post-FX must add flashlight Tindall scatter (uFlashGlow)');
+const worldV5 = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8') + '\n' + fs.readFileSync(path.join(ROOT, 'src/engine/world/postfx.js'), 'utf8');
+assert(worldV5.includes('uFlashGlow') && worldV5.includes('coneScatter'), 'world post-FX must add flashlight Tindall scatter (uFlashGlow)');
 assert(worldV5.includes('uBedDepth') && worldV5.includes('floorGlow'), 'world.js volumetric flashlight beam must respect seabed contact (uBedDepth)');
 assert(worldV5.includes('sparkle') && worldV5.includes('causticBands'), 'world.js water surface must add sun sparkle glitter & underwater caustic bands');
 assert(worldV5.includes('currentPixelScale') && worldV5.includes('OC.applyPixelScale'), 'world.js must expose dynamic pixel-scale application');

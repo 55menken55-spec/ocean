@@ -24,6 +24,7 @@ ORDER = [
     'engine/world/textures.js',
     'engine/world/rays.js',
     'engine/world/precip.js',
+    'engine/world/postfx.js',
     'engine/world.js',
     'engine/terrain.js',
     'engine/flora/reef_corals.js',
