@@ -468,8 +468,27 @@ assert(OC.Volcano.getState().phase === 'idle', 'Volcano must return to idle afte
 const _vCur2 = new T.Vector3();
 ventBiome.getCurrentAt(vSite.x, vCrater + 12, vSite.z, 1.0, _vCur2);
 assert(Math.abs(_vCur2.y) < 0.5, 'Volcano must be quiet when idle');
+
+// Fauna response: per-phase influence (agitation during precursor, flee during eruption)
+const schoolsSrc = groupSource('engine/fauna');
+assert(schoolsSrc.includes('ctx.volcano') && schoolsSrc.includes('volcInf'), 'schools.js must react to volcano influence via ctx.volcano');
+assert(!OC.Volcano.getInfluence().active, 'Volcano influence must be inactive when idle');
+OC.Volcano._forcePhase('seismic');
+const vInfSeis = OC.Volcano.getInfluence();
+assert(vInfSeis.active && vInfSeis.panic > 0.4 && vInfSeis.panic < 1.2, 'Seismic precursor must agitate schools without full panic');
+OC.Volcano._forcePhase('eruption');
+const vInfErup = OC.Volcano.getInfluence();
+assert(vInfErup.active && vInfErup.panic > 1.5 && vInfErup.strength > 12, 'Eruption must drive strong radial flee');
+OC.Volcano._forcePhase('cooling');
+assert(OC.Volcano.getInfluence().panic <= 1.2, 'Cooling must decay flee');
+OC.Volcano._forcePhase('idle');
+assert(!OC.Volcano.getInfluence().active, 'Influence must deactivate after the event');
+assert(ventBiome.faunaPlan.schools.some((s) => s.key === 'vent_shrimp' && Math.abs(s.cx - vSite.x) < 5 && Math.abs(s.cz - vSite.z) < 5),
+  'Vent shrimp school must swarm above the volcano crater');
+assert(ventBiome.faunaPlan.schools.some((s) => s.key === 'fish_lantern' && Math.abs(s.cx - vSite.x) < 100 && Math.abs(s.cz - vSite.z) < 100),
+  'Fish lantern school must patrol volcano flanks');
 OC.Volcano.dispose();
-console.log('   Submarine volcano: terrain, zones, flora, event machine & current events verified.');
+console.log('   Submarine volcano: terrain, zones, flora, event machine, currents & fauna response verified.');
 
 // Verify Arctic Sea specifics: polar temperature < -1.0C, aurora, ice_floe/iceberg/brinicle/kelp_arctic & Ultra 5x5 capacity
 const arcticBiome = OC.Biomes.get('arctic_sea');

@@ -46,6 +46,7 @@ window.OC = window.OC || {};
   const _flow = new T.Vector3();
   const _shakeTmp = { x: 0, y: 0, z: 0 };
   const _tremorTmp = { active: false, strength: 0, x: 0, y: 0, z: 0 };
+  const _infTmp = { active: false, x: 0, z: 0, r: 0, panic: 0, strength: 0 };
 
   OC.volcanoInfo = { phase: 'idle', event: null, progress: 0, intensity: 0, label: '' };
 
@@ -334,6 +335,33 @@ window.OC = window.OC || {};
     return _tremorTmp;
   }
 
+  /* Влияние событий вулкана на фауну (стаи удирают, креветки нервничают) —
+     читается в цикле Boids через ctx.volcano, без новых draw calls. */
+  function getInfluence() {
+    const ph = state.phase;
+    if (ph === 'idle') {
+      _infTmp.active = false;
+      return _infTmp;
+    }
+    _infTmp.active = true;
+    _infTmp.x = SITE.x;
+    _infTmp.z = SITE.z;
+    _infTmp.r = ph === 'eruption' ? 240 : 190;
+    if (ph === 'seismic') {
+      // Предвестник: стаи нервничают (ускорение), но не бегут
+      _infTmp.panic = 0.55 + 0.35 * state.progress;
+      _infTmp.strength = 6.0 + 4.0 * state.progress;
+    } else if (ph === 'eruption') {
+      _infTmp.panic = 1.75;
+      _infTmp.strength = 16.0;
+    } else {
+      // Остывание: затухающее бегство
+      _infTmp.panic = Math.max(0, 1.2 * (1 - state.progress));
+      _infTmp.strength = 10.0 * (1 - state.progress);
+    }
+    return _infTmp;
+  }
+
   function getCurrentBoost(x, y, z, out) {
     const ph = state.phase;
     if (ph === 'idle') return out;
@@ -449,11 +477,16 @@ window.OC = window.OC || {};
     getShake,
     getTremor,
     getCurrentBoost,
+    getInfluence,
     isActive: () => state.phase !== 'idle',
     getSite: () => SITE,
     /* Тест- hook: принудительная фаза машины событий (tests/verify.mjs) */
     _forcePhase(phase) {
-      if (DURATIONS[phase]) {
+      if (phase === 'idle') {
+        state.phase = 'idle';
+        state.timer = 0;
+        state.progress = 0;
+      } else if (DURATIONS[phase]) {
         state.phase = phase;
         state.timer = DURATIONS[phase];
         state.progress = 0;

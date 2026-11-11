@@ -3906,6 +3906,10 @@ window.OC = window.OC || {};
         geoOpts: { len: 0.72, height: 0.24, width: 0.20, colA: 0xe8d9ce, colB: 0xfff5ec, finCol: 0xffcfb0, eyeScale: 0.3 } },
       { key: 'vent_shrimp', n: 55, cx: VENT_FIELDS[2].x, cz: VENT_FIELDS[2].z, radius: 15, yDepth: -22, yAmp: 4, spread: 7, speed: 4.6, scale: 0.44, diel: 'cathemeral', biolum: false, shyness: 0.25,
         geoOpts: { len: 0.72, height: 0.24, width: 0.20, colA: 0xe8d9ce, colB: 0xfff5ec, finCol: 0xffcfb0, eyeScale: 0.3 } },
+      { key: 'vent_shrimp', n: 42, cx: VOLCANO.x, cz: VOLCANO.z, radius: 11, yDepth: -17, yAmp: 3.5, spread: 6, speed: 5.0, scale: 0.44, diel: 'cathemeral', biolum: false, shyness: 0.25, curious: 0.35,
+        geoOpts: { len: 0.72, height: 0.24, width: 0.20, colA: 0xe8d9ce, colB: 0xfff5ec, finCol: 0xffcfb0, eyeScale: 0.3 } },
+      { key: 'fish_lantern', n: 22, cx: VOLCANO.x + 70, cz: VOLCANO.z - 50, radius: 26, yDepth: -40, yAmp: 7, spread: 9, speed: 5.4, scale: 0.54, diel: 'nocturnal', biolum: true, shyness: 0.4,
+        geoOpts: { len: 1.05, height: 0.36, width: 0.16, colA: 0x162840, colB: 0x58e8ff, finCol: 0x36c4e8, eyeScale: 1.45 } },
       { key: 'fish_lantern', n: 32, cx: -180, cz: -120, radius: 48, yDepth: -54, yAmp: 8, spread: 14, speed: 5.2, scale: 0.56, diel: 'nocturnal', biolum: true, shyness: 0.4,
         geoOpts: { len: 1.05, height: 0.36, width: 0.16, colA: 0x162840, colB: 0x58e8ff, finCol: 0x36c4e8, eyeScale: 1.45 } },
       { key: 'fish_lantern', n: 28, cx: 160, cz: 190, radius: 46, yDepth: -48, yAmp: 7, spread: 13, speed: 5.0, scale: 0.54, diel: 'nocturnal', biolum: true, shyness: 0.4,
@@ -13874,6 +13878,21 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
             maxPanicTick = Math.max(maxPanicTick, 0.5);
           }
 
+          // Раннее оповещение и бегство от подводного вулкана (редкие события, см. engine/volcano.js)
+          const volcInf = ctx ? ctx.volcano : null;
+          if (volcInf && volcInf.active && !isPredator) {
+            const vdx = x - volcInf.x, vdz = z - volcInf.z;
+            const vd2 = vdx * vdx + vdz * vdz;
+            if (vd2 < volcInf.r * volcInf.r && vd2 > 0.01) {
+              const vd = Math.sqrt(vd2);
+              const edge = OC.smoothstep(volcInf.r, volcInf.r * 0.45, vd);
+              const pulse = volcInf.strength * edge;
+              fx += (vdx / vd) * pulse;
+              fz += (vdz / vd) * pulse;
+              panic = Math.max(panic, volcInf.panic * edge + 0.2);
+            }
+          }
+
           // Реакция на дайвера / батискаф и прожектор
           if (fullBoids) {
             const cdx = x - camPos.x, cdy = y - camPos.y, cdz = z - camPos.z;
@@ -20376,6 +20395,7 @@ window.OC = window.OC || {};
   const _flow = new T.Vector3();
   const _shakeTmp = { x: 0, y: 0, z: 0 };
   const _tremorTmp = { active: false, strength: 0, x: 0, y: 0, z: 0 };
+  const _infTmp = { active: false, x: 0, z: 0, r: 0, panic: 0, strength: 0 };
 
   OC.volcanoInfo = { phase: 'idle', event: null, progress: 0, intensity: 0, label: '' };
 
@@ -20664,6 +20684,33 @@ window.OC = window.OC || {};
     return _tremorTmp;
   }
 
+  /* Влияние событий вулкана на фауну (стаи удирают, креветки нервничают) —
+     читается в цикле Boids через ctx.volcano, без новых draw calls. */
+  function getInfluence() {
+    const ph = state.phase;
+    if (ph === 'idle') {
+      _infTmp.active = false;
+      return _infTmp;
+    }
+    _infTmp.active = true;
+    _infTmp.x = SITE.x;
+    _infTmp.z = SITE.z;
+    _infTmp.r = ph === 'eruption' ? 240 : 190;
+    if (ph === 'seismic') {
+      // Предвестник: стаи нервничают (ускорение), но не бегут
+      _infTmp.panic = 0.55 + 0.35 * state.progress;
+      _infTmp.strength = 6.0 + 4.0 * state.progress;
+    } else if (ph === 'eruption') {
+      _infTmp.panic = 1.75;
+      _infTmp.strength = 16.0;
+    } else {
+      // Остывание: затухающее бегство
+      _infTmp.panic = Math.max(0, 1.2 * (1 - state.progress));
+      _infTmp.strength = 10.0 * (1 - state.progress);
+    }
+    return _infTmp;
+  }
+
   function getCurrentBoost(x, y, z, out) {
     const ph = state.phase;
     if (ph === 'idle') return out;
@@ -20779,11 +20826,16 @@ window.OC = window.OC || {};
     getShake,
     getTremor,
     getCurrentBoost,
+    getInfluence,
     isActive: () => state.phase !== 'idle',
     getSite: () => SITE,
     /* Тест- hook: принудительная фаза машины событий (tests/verify.mjs) */
     _forcePhase(phase) {
-      if (DURATIONS[phase]) {
+      if (phase === 'idle') {
+        state.phase = 'idle';
+        state.timer = 0;
+        state.progress = 0;
+      } else if (DURATIONS[phase]) {
         state.phase = phase;
         state.timer = DURATIONS[phase];
         state.progress = 0;
@@ -20941,7 +20993,8 @@ window.OC = window.OC || {};
         cleaningStations: plan.cleaningStations || [],
         sonarOrigin,
         sonarPulseAge: 99,
-        frameIdx: 0
+        frameIdx: 0,
+        volcano: null
       };
       const _scanSample = new T.Vector3();
       const _toTarget = new T.Vector3();
@@ -21059,6 +21112,7 @@ window.OC = window.OC || {};
           updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;
+          updateCtx.volcano = (OC.Volcano && OC.Volcano.getInfluence) ? OC.Volcano.getInfluence() : null;
           const ecoState = OC.EcoLab ? OC.EcoLab.getState() : null;
           updateCtx.fishActivity = ecoState ? ecoState.fishActivity : 1.0;
           updateCtx.frameIdx++;

@@ -145,7 +145,8 @@ window.OC = window.OC || {};
         cleaningStations: plan.cleaningStations || [],
         sonarOrigin,
         sonarPulseAge: 99,
-        frameIdx: 0
+        frameIdx: 0,
+        volcano: null
       };
       const _scanSample = new T.Vector3();
       const _toTarget = new T.Vector3();
@@ -263,6 +264,7 @@ window.OC = window.OC || {};
           updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;
+          updateCtx.volcano = (OC.Volcano && OC.Volcano.getInfluence) ? OC.Volcano.getInfluence() : null;
           const ecoState = OC.EcoLab ? OC.EcoLab.getState() : null;
           updateCtx.fishActivity = ecoState ? ecoState.fishActivity : 1.0;
           updateCtx.frameIdx++;
