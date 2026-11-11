@@ -43,6 +43,7 @@ const SRC_ORDER = [
   'src/engine/fauna/systems.js',
   'src/engine/fauna_engine.js',
   'src/engine/audio.js',
+  'src/engine/rov/model.js',
   'src/engine/rov/tether.js',
   'src/engine/rov/buoys.js',
   'src/engine/rov.js',
