@@ -4,14 +4,8 @@
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
-  /* Состояние звуковой шины: единственная точка правды для всех audio/* модулей */
-  const S = OC._SoundState = OC._SoundState || {
-    ctx: null, master: null, muted: false, started: false,
-    timers: [], deepFilter: null, reefGain: null, abyssGain: null,
-    currentZoneId: 'crest', currentDepth: 8, currentDayW: 1.0, currentBiomeId: 'great_barrier_reef'
-  };
-  OC.sound = S;
-
+  /* Общий DSP-слой: буфер шума и зацикленный шумовой слой с LFO.
+     Живёт здесь, чтобы не дублировать его в каждом audio/* модуле. */
   function rnd(a, b) { return a + Math.random() * (b - a); }
 
   function noiseBuffer(ctx) {
@@ -48,6 +42,16 @@ window.OC = window.OC || {};
     src.start();
     return { src, f, g };
   }
+
+  OC._AudioDsp = { rnd, noiseBuffer, loopNoise };
+
+  /* Состояние звуковой шины: единственная точка правды для всех audio/* модулей */
+  const S = OC._SoundState = OC._SoundState || {
+    ctx: null, master: null, muted: false, started: false,
+    timers: [], deepFilter: null, reefGain: null, abyssGain: null,
+    currentZoneId: 'crest', currentDepth: 8, currentDayW: 1.0, currentBiomeId: 'great_barrier_reef'
+  };
+  OC.sound = S;
 
   S.ensure = function () {
     if (S.ctx) { if (S.ctx.state === 'suspended') S.ctx.resume(); return true; }

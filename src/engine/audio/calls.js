@@ -5,42 +5,7 @@ window.OC = window.OC || {};
   'use strict';
   const S = OC._SoundState;
 
-  function rnd(a, b) { return a + Math.random() * (b - a); }
-
-  function noiseBuffer(ctx) {
-    const len = ctx.sampleRate * 4;
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch);
-      let last = 0;
-      for (let i = 0; i < len; i++) {
-        const white = Math.random() * 2 - 1;
-        last = (last + 0.022 * white) / 1.022;
-        d[i] = last * 3.1;
-      }
-    }
-    return buf;
-  }
-
-  function loopNoise(ctx, dest, type, freq, gain) {
-    const src = ctx.createBufferSource();
-    src.buffer = noiseBuffer(ctx);
-    src.loop = true;
-    const f = ctx.createBiquadFilter();
-    f.type = type; f.frequency.value = freq; f.Q.value = 0.65;
-    const g = ctx.createGain();
-    g.gain.value = gain;
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    lfo.frequency.value = 0.05 + Math.random() * 0.05;
-    lfoGain.gain.value = gain * 0.45;
-    lfo.connect(lfoGain);
-    lfoGain.connect(g.gain);
-    lfo.start();
-    src.connect(f); f.connect(g); g.connect(dest);
-    src.start();
-    return { src, f, g };
-  }
+  const { rnd, noiseBuffer, loopNoise } = OC._AudioDsp;
 
   S.sonarPing = function (rangeMeters, hasEcho) {
     if (S.muted) return false;
