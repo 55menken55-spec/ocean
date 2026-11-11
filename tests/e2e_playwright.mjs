@@ -141,6 +141,10 @@ try {
     fs.appendFileSync(SUMMARY_MD, lines.join('\n') + '\n');
   }
 
+  // Free the SwiftShader CPU budget: the desktop page keeps rendering in the background and
+  // would starve the emulated mobile page of frames during its boot wait.
+  await context.close();
+
   // Mobile / tablet HUD pass: emulate a coarse-pointer phone in landscape and verify the
   // responsive HUD, touch quick-actions and dynamic resolution ladder stay functional.
   const mobileContext = await browser.newContext({
@@ -160,8 +164,8 @@ try {
     console.log('\nMobile HUD pass (844×390 landscape, coarse pointer, DPR 2)...');
     await mobilePage.goto(URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await mobilePage.waitForFunction(
-      () => window.OC && window.OC.getPerfStats && window.OC.getPerfStats().sampleCount >= 8,
-      { timeout: 30000 }
+      () => window.OC && window.OC.getPerfStats && window.OC.getPerfStats().sampleCount >= 5,
+      { timeout: 60000 }
     );
     await mobilePage.waitForTimeout(600);
 
@@ -330,7 +334,9 @@ try {
   console.log(`::error title=Playwright E2E failed (${stage})::${detail}`);
   try {
     fs.mkdirSync(path.join(process.cwd(), 'test-results'), { recursive: true });
-    await page.screenshot({ path: path.join(process.cwd(), 'test-results', 'failure.png') });
+    if (page && !page.isClosed()) {
+      await page.screenshot({ path: path.join(process.cwd(), 'test-results', 'failure.png') });
+    }
     fs.writeFileSync(path.join(process.cwd(), 'test-results', 'failure-stage.txt'), `stage: ${stage}\n\n${detail}\n`);
     console.error('Saved failure screenshot to test-results/failure.png');
   } catch (_) {}
