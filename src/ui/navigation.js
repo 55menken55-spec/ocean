@@ -1,129 +1,25 @@
 /* ================= ГИБРИДНАЯ НАВИГАЦИЯ: СВОБОДНОЕ ПЛАВАНИЕ + ОРБИТА + АВТО-ТУР ================= */
+/* Публичный API OC.Navigation и обработка ввода (мышь, тач, клавиатура, виртуальный
+   джойстик). Состояние и границы мира — navigation/state.js, тур — navigation/tour.js,
+   геймпад — navigation/gamepad.js. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
   const T = THREE;
 
-  const keys = Object.create(null);
-  const _fwd = new T.Vector3();
-  const _right = new T.Vector3();
-  const _move = new T.Vector3();
-  const _lookAt = new T.Vector3();
-  const _curr = new T.Vector3();
-  const _cinemaTarget = new T.Vector3();
-  const _chaseGoal = new T.Vector3();
-  const _gpOut = { moveX: 0, moveY: 0, vertZ: 0, boost: false };
-
-  const state = {
-    mode: 'swim', // 'swim' | 'orbit' | 'tour' | 'cinema'
-    pos: new T.Vector3(),
-    vel: new T.Vector3(),
-    yaw: 2.25,
-    pitch: -0.14,
-    targetYaw: 2.25,
-    targetPitch: -0.14,
-    swimSpeed: 18,
-    inBrine: false,
-    inHalocline: false,
-    // Вид от 3-го лица за аппаратом ROV
-    rovView: false,
-    chasePos: new T.Vector3(),
-    chaseInited: false,
-    // Орбита
-    orbitTarget: new T.Vector3(),
-    orbitDist: 42,
-    orbitTargetDist: 42,
-    // Авто-тур
-    tourIdx: 0,
-    tourT: 0,
-    tourPaused: false,
-    tourFromPos: new T.Vector3(),
-    tourFromLook: new T.Vector3(),
-    // Кино-режим (круизный пролёт)
-    cinemaCenter: new T.Vector3(),
-    cinemaPhase: 0,
-    cinemaYawOffset: 0,
-    cinemaPitchOffset: 0,
-    // Плавный перелёт к точке (Minimap / Landmark)
-    glide: null,
-    // Виртуальный тач-джойстик и геймпад
-    virtX: 0,
-    virtY: 0,
-    virtZ: 0,
-    gamepadActive: false,
-    gamepadBoost: false,
-    prevGpBtns: [false, false, false, false, false, false, false, false, false, false],
-    // Ввод
-    dragging: false,
-    lastX: 0,
-    lastY: 0,
-    pointerMoved: 0,
-    pinchDist: 0,
-    onPick: null,
-    onModeChange: null,
-    onTourToast: null,
-    onTourChange: null,
-    onGamepadAction: null
-  };
-
-  let biomeRef = null;
-  let canvasRef = null;
-  const _tourStateOut = { active: false, paused: false, idx: 0, total: 0, progress: 0, leg: null };
-
-  function buildTourState() {
-    const legs = (biomeRef && biomeRef.tourLegs) || [];
-    const total = legs.length;
-    const idx = total ? (state.tourIdx % total) : 0;
-    const leg = total ? legs[idx] : null;
-    const dur = (leg && leg.duration) || 9;
-    _tourStateOut.active = state.mode === 'tour' && total > 0;
-    _tourStateOut.paused = !!state.tourPaused;
-    _tourStateOut.idx = idx;
-    _tourStateOut.total = total;
-    _tourStateOut.progress = total ? OC.clamp(state.tourT / dur, 0, 1) : 0;
-    _tourStateOut.leg = leg;
-    return _tourStateOut;
-  }
-
-  function emitTourChange() {
-    if (state.onTourChange) state.onTourChange(buildTourState());
-  }
-
-  function captureTourOrigin() {
-    state.tourFromPos.copy(state.pos);
-    _fwd.set(
-      Math.sin(state.yaw) * Math.cos(state.pitch),
-      Math.sin(state.pitch),
-      Math.cos(state.yaw) * Math.cos(state.pitch)
-    ).normalize();
-    state.tourFromLook.copy(state.pos).addScaledVector(_fwd, 28);
-  }
-
-  function startTourStep(idx, fromCurrent) {
-    const legs = (biomeRef && biomeRef.tourLegs) || [];
-    if (!legs.length) return;
-    const n = legs.length;
-    const nextIdx = ((idx % n) + n) % n;
-    if (fromCurrent) {
-      captureTourOrigin();
-    } else {
-      const prev = legs[(nextIdx - 1 + n) % n];
-      state.tourFromPos.set(prev.pos[0], prev.pos[1], prev.pos[2]);
-      state.tourFromLook.set(prev.look[0], prev.look[1], prev.look[2]);
-    }
-    state.tourIdx = nextIdx;
-    state.tourT = 0;
-    const leg = legs[nextIdx];
-    if (state.onTourToast && leg) state.onTourToast(leg.title);
-    emitTourChange();
-  }
+  const {
+    state, keys, _fwd, _right, _move, _lookAt, _curr, _cinemaTarget, _chaseGoal, _gpOut,
+    getBiome, setBiomeRef, setCanvas, clampPosition
+  } = OC._NavState;
+  const { buildTourState, emitTourChange, startTourStep } = OC._NavTour;
+  const { pollGamepad } = OC._NavGamepad;
 
   function setMode(m) {
     if (state.mode === m) return;
     if (m === 'orbit') {
       if (state.rovView) {
         state.orbitTarget.copy(state.pos);
-        const fl = biomeRef ? biomeRef.getHeight(state.orbitTarget.x, state.orbitTarget.z) : -10;
+        const fl = getBiome() ? getBiome().getHeight(state.orbitTarget.x, state.orbitTarget.z) : -10;
         state.orbitTarget.y = Math.max(state.orbitTarget.y, fl + 1.65);
         state.orbitDist = 11.5;
         state.orbitTargetDist = 11.5;
@@ -139,10 +35,10 @@ window.OC = window.OC || {};
           Math.cos(state.yaw) * Math.cos(state.pitch)
         ).normalize();
         state.orbitTarget.copy(state.pos).addScaledVector(_fwd, 34);
-        const fl = biomeRef.getHeight(state.orbitTarget.x, state.orbitTarget.z);
+        const fl = getBiome().getHeight(state.orbitTarget.x, state.orbitTarget.z);
         let orbCeil = 1e6;
-        if (biomeRef && biomeRef.getCeilingHeight) {
-          const ch = biomeRef.getCeilingHeight(state.orbitTarget.x, state.orbitTarget.z);
+        if (getBiome() && getBiome().getCeilingHeight) {
+          const ch = getBiome().getCeilingHeight(state.orbitTarget.x, state.orbitTarget.z);
           if (ch < 35.0) orbCeil = ch - 2.4;
         }
         state.orbitTarget.y = Math.min(orbCeil, Math.max(state.orbitTarget.y, fl + 1.5));
@@ -161,10 +57,10 @@ window.OC = window.OC || {};
         Math.cos(state.yaw) * Math.cos(state.pitch)
       ).normalize();
       state.cinemaCenter.copy(state.pos).addScaledVector(_fwd, 28);
-      const fl = biomeRef ? biomeRef.getHeight(state.cinemaCenter.x, state.cinemaCenter.z) : -10;
+      const fl = getBiome() ? getBiome().getHeight(state.cinemaCenter.x, state.cinemaCenter.z) : -10;
       let cinCeil = 1e6;
-      if (biomeRef && biomeRef.getCeilingHeight) {
-        const ch = biomeRef.getCeilingHeight(state.cinemaCenter.x, state.cinemaCenter.z);
+      if (getBiome() && getBiome().getCeilingHeight) {
+        const ch = getBiome().getCeilingHeight(state.cinemaCenter.x, state.cinemaCenter.z);
         if (ch < 35.0) cinCeil = ch - 2.4;
       }
       state.cinemaCenter.y = Math.min(cinCeil, Math.max(state.cinemaCenter.y, fl + 3.0));
@@ -207,97 +103,10 @@ window.OC = window.OC || {};
     if (state.onModeChange) state.onModeChange(m);
   }
 
-  function deadzone(v, dz) {
-    if (!v || Math.abs(v) < dz) return 0;
-    return (v - Math.sign(v) * dz) / (1 - dz);
-  }
-
-  function pollGamepad(dt, gpOut) {
-    gpOut.moveX = 0; gpOut.moveY = 0; gpOut.vertZ = 0; gpOut.boost = false;
-    if (typeof navigator === 'undefined' || !navigator.getGamepads) return false;
-    const pads = navigator.getGamepads();
-    let pad = null;
-    if (pads) {
-      for (let i = 0; i < pads.length; i++) {
-        if (pads[i] && pads[i].connected) { pad = pads[i]; break; }
-      }
-    }
-    if (!pad) {
-      state.gamepadActive = false;
-      state.gamepadBoost = false;
-      return false;
-    }
-    state.gamepadActive = true;
-    const ax = pad.axes || [];
-    const btns = pad.buttons || [];
-
-    const lx = deadzone(ax[0] || 0, 0.15);
-    const ly = deadzone(ax[1] || 0, 0.15);
-    const rx = deadzone(ax[2] || 0, 0.14);
-    const ry = deadzone(ax[3] || 0, 0.14);
-
-    if (rx || ry) {
-      if (state.mode === 'cinema') {
-        state.cinemaYawOffset -= rx * 1.3 * dt;
-        state.cinemaPitchOffset = OC.clamp(state.cinemaPitchOffset - ry * 0.95 * dt, -0.7, 0.7);
-      } else {
-        state.targetYaw -= rx * 2.1 * dt;
-        state.targetPitch = OC.clamp(state.targetPitch + (state.mode === 'orbit' ? ry : -ry) * 1.65 * dt, -1.2, 1.2);
-      }
-    }
-
-    const rTrig = btns[7] ? btns[7].value : 0;
-    const lTrig = btns[6] ? btns[6].value : 0;
-    const rBump = btns[5] && btns[5].pressed ? 1 : 0;
-    const lBump = btns[4] && btns[4].pressed ? 1 : 0;
-    gpOut.moveX = lx;
-    gpOut.moveY = -ly; // вперёд на стике = отрицательный Y
-    gpOut.vertZ = Math.max(rTrig, rBump) - Math.max(lTrig, lBump);
-    gpOut.boost = !!(btns[0] && btns[0].pressed);
-    state.gamepadBoost = gpOut.boost;
-
-    // Обработка одиночных нажатий кнопок действий (A/B/X/Y/Start)
-    const map = [
-      [0, 'photo'],
-      [1, 'sub'],
-      [2, 'sonar'],
-      [3, 'flashlight'],
-      [9, 'cinema']
-    ];
-    for (let i = 0; i < map.length; i++) {
-      const idx = map[i][0], action = map[i][1];
-      const down = !!(btns[idx] && btns[idx].pressed);
-      if (down && !state.prevGpBtns[idx] && state.onGamepadAction) {
-        state.onGamepadAction(action);
-      }
-      state.prevGpBtns[idx] = down;
-    }
-    return true;
-  }
-
-  function clampPosition(p) {
-    const bound = (biomeRef.worldRadius || 1200) - 30;
-    p.x = OC.clamp(p.x, -bound, bound);
-    p.z = OC.clamp(p.z, -bound, bound);
-    const fl = biomeRef.getHeight(p.x, p.z);
-    let minY = fl + 1.65;
-    if (biomeRef && biomeRef.getBrineSurfaceAt) {
-      const brine = biomeRef.getBrineSurfaceAt(p.x, p.z);
-      if (brine) minY = Math.max(minY, brine.level - 1.1);
-    }
-    let maxY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
-    if (biomeRef && biomeRef.getCeilingHeight) {
-      const ceil = biomeRef.getCeilingHeight(p.x, p.z);
-      if (ceil < 35.0) maxY = Math.min(maxY, ceil - 1.75);
-    }
-    if (maxY < minY) maxY = minY;
-    p.y = OC.clamp(p.y, minY, maxY);
-  }
-
   OC.Navigation = {
     init(canvas, biome, callbacks) {
-      canvasRef = canvas;
-      biomeRef = biome;
+      setCanvas(canvas);
+      setBiomeRef(biome);
       callbacks = callbacks || {};
       state.onPick = callbacks.onPick || null;
       state.onModeChange = callbacks.onModeChange || null;
@@ -400,7 +209,7 @@ window.OC = window.OC || {};
 
     setMode,
     setBiome(biome) {
-      biomeRef = biome;
+      setBiomeRef(biome);
       state.mode = 'swim';
       state.glide = null;
       state.tourPaused = false;
@@ -413,7 +222,7 @@ window.OC = window.OC || {};
       if (state.onModeChange) state.onModeChange('swim');
     },
     stepTour(delta) {
-      const legs = (biomeRef && biomeRef.tourLegs) || [];
+      const legs = (getBiome() && getBiome().tourLegs) || [];
       if (!legs.length) return;
       if (state.mode !== 'tour') {
         state.tourPaused = false;
@@ -477,7 +286,7 @@ window.OC = window.OC || {};
     },
 
     resetToSpawn() {
-      const sp = biomeRef.spawn;
+      const sp = getBiome().spawn;
       state.pos.set(sp.pos[0], sp.pos[1], sp.pos[2]);
       state.vel.set(0, 0, 0);
       state.inBrine = false;
@@ -493,14 +302,14 @@ window.OC = window.OC || {};
 
     flyTo(x, y, z, yaw, pitch) {
       if (state.mode === 'tour') setMode('swim');
-      let minSafe = biomeRef.getHeight(x, z) + 2.4;
-      if (biomeRef && biomeRef.getBrineSurfaceAt) {
-        const brine = biomeRef.getBrineSurfaceAt(x, z);
+      let minSafe = getBiome().getHeight(x, z) + 2.4;
+      if (getBiome() && getBiome().getBrineSurfaceAt) {
+        const brine = getBiome().getBrineSurfaceAt(x, z);
         if (brine) minSafe = Math.max(minSafe, brine.level + 0.8);
       }
-      let maxSafe = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
-      if (biomeRef && biomeRef.getCeilingHeight) {
-        const cEnd = biomeRef.getCeilingHeight(x, z);
+      let maxSafe = (getBiome() && getBiome().maxCamY !== undefined) ? getBiome().maxCamY : 16.0;
+      if (getBiome() && getBiome().getCeilingHeight) {
+        const cEnd = getBiome().getCeilingHeight(x, z);
         if (cEnd < 35.0) maxSafe = Math.min(maxSafe, cEnd - 2.2);
       }
       const safeY = OC.clamp(y, minSafe, Math.max(minSafe, maxSafe));
@@ -512,10 +321,10 @@ window.OC = window.OC || {};
         const dirZ = (state.pos.z - z) / dist;
         const nearX = x + dirX * 55;
         const nearZ = z + dirZ * 55;
-        const nearFl = biomeRef.getHeight(nearX, nearZ) + 3;
+        const nearFl = getBiome().getHeight(nearX, nearZ) + 3;
         let nearMax = maxSafe;
-        if (biomeRef && biomeRef.getCeilingHeight) {
-          const cNear = biomeRef.getCeilingHeight(nearX, nearZ);
+        if (getBiome() && getBiome().getCeilingHeight) {
+          const cNear = getBiome().getCeilingHeight(nearX, nearZ);
           if (cNear < 35.0) nearMax = Math.min(nearMax, cNear - 2.2);
         }
         state.pos.set(nearX, OC.clamp(safeY + 4, nearFl, Math.max(nearFl, nearMax)), nearZ);
@@ -571,8 +380,8 @@ window.OC = window.OC || {};
         const radZ = 28 + Math.cos(state.cinemaPhase * 0.5) * 8;
         const cx = state.cinemaCenter.x + Math.cos(state.cinemaPhase) * radX;
         const cz = state.cinemaCenter.z + Math.sin(state.cinemaPhase) * radZ;
-        const baseFl = biomeRef ? biomeRef.getHeight(cx, cz) : -20;
-        const maxCamY = (biomeRef && biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
+        const baseFl = getBiome() ? getBiome().getHeight(cx, cz) : -20;
+        const maxCamY = (getBiome() && getBiome().maxCamY !== undefined) ? getBiome().maxCamY : 16.0;
         const cy = OC.clamp(state.cinemaCenter.y + Math.sin(state.cinemaPhase * 1.4) * 3.5, baseFl + 2.8, maxCamY - 0.5);
         _cinemaTarget.set(cx, cy, cz);
         state.pos.lerp(_cinemaTarget, Math.min(1, dt * 1.8));
@@ -584,7 +393,7 @@ window.OC = window.OC || {};
         state.targetYaw = Math.atan2(dx, dz) + state.cinemaYawOffset;
         state.targetPitch = OC.clamp(Math.asin(OC.clamp(dy / d, -0.9, 0.9)) + state.cinemaPitchOffset, -1.1, 1.1);
       } else if (state.mode === 'tour') {
-        const legs = biomeRef.tourLegs;
+        const legs = getBiome().tourLegs;
         if (legs && legs.length) {
           const cur = legs[state.tourIdx % legs.length];
           if (!state.tourPaused) state.tourT += dt;
@@ -686,8 +495,8 @@ window.OC = window.OC || {};
         }
 
         // Приливные и прибойные течения океана (сносят батискаф в Проходе и над Гребнем)
-        if (!reduced && biomeRef && biomeRef.getCurrentAt && (state.pos.y < -0.25 || biomeRef.noSurface)) {
-          biomeRef.getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
+        if (!reduced && getBiome() && getBiome().getCurrentAt && (state.pos.y < -0.25 || getBiome().noSurface)) {
+          getBiome().getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
           const flowMult = OC.EcoLab ? OC.EcoLab.getState().currentMult : 1.0;
           _curr.multiplyScalar(flowMult);
           state.vel.addScaledVector(_curr, 1.45 * dt);
@@ -697,8 +506,8 @@ window.OC = window.OC || {};
 
         // Архимедова выталкивающая сила сверхсолёного подводного озера (галоклин ~230‰)
         let nowInBrine = false;
-        if (biomeRef && biomeRef.getBrineSurfaceAt) {
-          const brine = biomeRef.getBrineSurfaceAt(state.pos.x, state.pos.z);
+        if (getBiome() && getBiome().getBrineSurfaceAt) {
+          const brine = getBiome().getBrineSurfaceAt(state.pos.x, state.pos.z);
           if (brine && state.pos.y < brine.level + 0.45) {
             nowInBrine = true;
             const sub = (brine.level + 0.06) - state.pos.y;
@@ -714,11 +523,11 @@ window.OC = window.OC || {};
         state.vel.multiplyScalar(damp);
         state.pos.addScaledVector(state.vel, dt);
         clampPosition(state.pos);
-        if (biomeRef && biomeRef.getBrineSurfaceAt) {
-          const brEnd = biomeRef.getBrineSurfaceAt(state.pos.x, state.pos.z);
+        if (getBiome() && getBiome().getBrineSurfaceAt) {
+          const brEnd = getBiome().getBrineSurfaceAt(state.pos.x, state.pos.z);
           state.inBrine = !!(brEnd && state.pos.y <= brEnd.level + 0.45);
         }
-        state.inHalocline = !!(biomeRef && biomeRef.getHaloclineAt && biomeRef.getHaloclineAt(state.pos.x, state.pos.y, state.pos.z));
+        state.inHalocline = !!(getBiome() && getBiome().getHaloclineAt && getBiome().getHaloclineAt(state.pos.x, state.pos.y, state.pos.z));
       }
 
       _fwd.set(
@@ -737,11 +546,11 @@ window.OC = window.OC || {};
           state.pos.y - _fwd.y * chaseDist + chaseUp,
           state.pos.z - _fwd.z * chaseDist
         );
-        if (biomeRef) {
-          const flCam = biomeRef.getHeight(_chaseGoal.x, _chaseGoal.z);
-          let maxCamY = (biomeRef.maxCamY !== undefined) ? biomeRef.maxCamY : 16.0;
-          if (biomeRef.getCeilingHeight) {
-            const cCam = biomeRef.getCeilingHeight(_chaseGoal.x, _chaseGoal.z);
+        if (getBiome()) {
+          const flCam = getBiome().getHeight(_chaseGoal.x, _chaseGoal.z);
+          let maxCamY = (getBiome().maxCamY !== undefined) ? getBiome().maxCamY : 16.0;
+          if (getBiome().getCeilingHeight) {
+            const cCam = getBiome().getCeilingHeight(_chaseGoal.x, _chaseGoal.z);
             if (cCam < 35.0) maxCamY = Math.min(maxCamY, cCam - 0.95);
           }
           const loY = flCam + 0.85;
@@ -758,7 +567,7 @@ window.OC = window.OC || {};
         camera.lookAt(_lookAt);
       } else {
         state.chaseInited = false;
-        const bob = reduced || (!biomeRef.noSurface && state.pos.y > -0.2) ? 0 : Math.sin(time * 0.65) * 0.14;
+        const bob = reduced || (!getBiome().noSurface && state.pos.y > -0.2) ? 0 : Math.sin(time * 0.65) * 0.14;
         camera.position.set(state.pos.x, state.pos.y + bob, state.pos.z);
         _lookAt.copy(camera.position).add(_fwd);
         camera.lookAt(_lookAt);
