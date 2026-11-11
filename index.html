@@ -9902,16 +9902,15 @@ window.OC = window.OC || {};
 })(window.OC);
 
 // === engine/flora/reef_corals.js ===
-/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: кораллы, губки, иглокожие и мангры рифовых биомов ================= */
-/* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
-   Материалы и реестр прототипов живут в engine/flora_library.js. */
+/* ================= ГЕОМЕТРИИ: ЖЁСТКИЕ КОРАЛЛЫ РИФОВЫХ БИОМОВ ================= */
+/* Ветвистые, столовые, мозговые, массивные Porites (бомми), листовые и корковые колонии.
+   Часть OC.FloraLibrary: builder → BufferGeometry, материалы живут в flora_library.js. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
   const T = THREE;
   const COL = (c) => new T.Color(c);
   const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
-
   function buildStaghorn(hue, rng) {
     const list = [];
     const baseCol = COL().setHSL(hue, 0.82, 0.36);
@@ -10077,6 +10076,51 @@ window.OC = window.OC || {};
   }
   BUILDERS.buildPlateCoral = buildPlateCoral;
 
+  function buildCrustCoral(hue, rng) {
+    const list = [];
+    const c1 = COL().setHSL(hue, 0.56, 0.36);
+    const c2 = COL().setHSL((hue + 0.06) % 1, 0.78, 0.58);
+    const lobes = 4 + Math.floor(rng() * 2);
+    for (let i = 0; i < lobes; i++) {
+      const a = (i / lobes) * Math.PI * 2 + rng() * 0.5;
+      const d = i === 0 ? 0 : OC.lerp(0.65, 1.35, rng());
+      const rx = OC.lerp(0.85, 1.45, rng());
+      const ry = OC.lerp(0.18, 0.36, rng());
+      const g = new T.CylinderGeometry(rx, rx * 0.82, ry, 10, 1);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const vx = p.getX(k), vy = p.getY(k), vz = p.getZ(k);
+        const w = 1 + 0.14 * Math.sin(Math.atan2(vz, vx) * 4 + i);
+        p.setXYZ(k, vx * w, vy + (vy > 0 ? Math.sin(vx * 2.1 + vz * 2.3) * 0.06 : 0), vz * w);
+      }
+      OC.geoPrep(g);
+      g.computeVertexNormals();
+      OC.paint(g, (x, y, z, c) => {
+        const r = Math.hypot(x, z) / Math.max(0.5, rx);
+        c.copy(c1).lerp(c2, OC.smoothstep(0.35, 1.0, r));
+      });
+      OC.withSway(g, () => 0);
+      OC.xform(g, {
+        r: [(rng() - 0.5) * 0.18, rng() * 6.28, (rng() - 0.5) * 0.18],
+        p: [Math.cos(a) * d, ry * 0.42 + i * 0.03, Math.sin(a) * d]
+      });
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildCrustCoral = buildCrustCoral;
+})(window.OC);
+
+// === engine/flora/reef_soft.js ===
+/* ================= ГЕОМЕТРИИ: МЯГКИЕ КОРАЛЛЫ И ГОРГОНАРИИ ================= */
+/* Веера, мягкие и чёрные кораллы, хлыстовики, золотые веера и тубастреи — фильтраторы
+   поперёк течения. Часть OC.FloraLibrary. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
   function buildSeaFan(hue, rng) {
     const list = [];
     const R = OC.lerp(2.4, 3.8, rng());
@@ -10186,6 +10230,117 @@ window.OC = window.OC || {};
   }
   BUILDERS.buildBlackCoral = buildBlackCoral;
 
+  function buildWhipCoral(hue, rng) {
+    const list = [];
+    const baseCol = COL().setHSL(hue, 0.85, 0.42);
+    const tipCol = COL().setHSL((hue + 0.08) % 1, 0.95, 0.68);
+    const nWhips = 3;
+    for (let w = 0; w < nWhips; w++) {
+      const ox = (w - 1) * 0.28 + (rng() - 0.5) * 0.14;
+      const oz = (rng() - 0.5) * 0.28;
+      const h = OC.lerp(2.6, 4.4, rng());
+      const pts = [];
+      const turns = 2.6 + rng() * 1.4;
+      const ph = rng() * 6.28;
+      for (let k = 0; k <= 16; k++) {
+        const t = k / 16;
+        const rad = 0.08 + t * 0.36;
+        pts.push(new T.Vector3(
+          ox + Math.cos(t * turns * Math.PI * 2 + ph) * rad,
+          t * h,
+          oz + Math.sin(t * turns * Math.PI * 2 + ph) * rad
+        ));
+      }
+      const whip = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 22, 0.048, 5, false);
+      OC.geoPrep(whip);
+      OC.paint(whip, (x, y, z, c) => c.copy(baseCol).lerp(tipCol, OC.clamp(y / h, 0, 1)));
+      OC.withSway(whip, (x, y) => Math.pow(OC.clamp(y / h, 0, 1), 1.4) * 0.72);
+      list.push(whip);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildWhipCoral = buildWhipCoral;
+
+  function buildGoldSeaFan(rng) {
+    const list = [];
+    const cStem = COL(0xb87212);
+    const cFan = COL(0xf4ba2c);
+    const stem = new T.CylinderGeometry(0.08, 0.14, 0.65, 6);
+    OC.geoPrep(stem);
+    OC.paint(stem, cStem);
+    OC.withSway(stem, () => 0);
+    OC.xform(stem, { p: [0, 0.32, 0] });
+    list.push(stem);
+
+    const nRibs = 13;
+    for (let i = 0; i < nRibs; i++) {
+      const u = (i / (nRibs - 1)) * 2 - 1;
+      const ang = u * 1.05;
+      const len = OC.lerp(2.1, 3.0, Math.cos(u * 1.1)) * OC.lerp(0.9, 1.12, rng());
+      const rib = new T.CylinderGeometry(0.025, 0.055, len, 4);
+      OC.geoPrep(rib);
+      rib.translate(0, len * 0.5, 0);
+      OC.paint(rib, (x, y, z, c) => c.copy(cStem).lerp(cFan, OC.clamp(y / 2.8, 0, 1)));
+      OC.withSway(rib, (x, y) => Math.pow(OC.clamp(y / 3.0, 0, 1), 1.2) * 0.45);
+      OC.xform(rib, { r: [(rng() - 0.5) * 0.08, 0, -ang], p: [0, 0.55, 0] });
+      list.push(rib);
+    }
+    for (let ring = 1; ring <= 4; ring++) {
+      const r = ring * 0.58;
+      const arc = new T.TorusGeometry(r, 0.022, 4, 14, Math.PI * 0.78);
+      OC.geoPrep(arc);
+      OC.paint(arc, cFan);
+      OC.withSway(arc, () => Math.pow(ring / 4, 1.2) * 0.42);
+      OC.xform(arc, { r: [0, 0, Math.PI * 0.11], p: [0, 0.55, 0] });
+      list.push(arc);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildGoldSeaFan = buildGoldSeaFan;
+
+  function buildTubastraeaCoral(rng) {
+    const list = [];
+    const cBase = COL(0x7c2a12);
+    const cOrange = COL(0xf46818);
+    const cGold = COL(0xffc938);
+
+    const mound = OC.geoPrep(new T.SphereGeometry(0.42, 8, 6));
+    mound.scale(1.15, 0.62, 1.15);
+    OC.paint(mound, cBase);
+    OC.xform(mound, { p: [0, 0.14, 0] });
+    OC.withSway(mound, () => 0);
+    list.push(mound);
+
+    const nCups = 9;
+    for (let i = 0; i < nCups; i++) {
+      const a = (i / nCups) * Math.PI * 2 + rng() * 0.4;
+      const r = i === 0 ? 0.04 : OC.lerp(0.18, 0.36, rng());
+      const cupH = OC.lerp(0.18, 0.34, rng());
+      const cup = OC.geoPrep(new T.CylinderGeometry(0.11, 0.055, cupH, 7));
+      OC.paint(cup, (x, y, z, col) => {
+        const u = OC.clamp((y + cupH * 0.5) / cupH, 0, 1);
+        col.copy(cBase).lerp(cOrange, OC.smoothstep(0.15, 0.72, u)).lerp(cGold, OC.smoothstep(0.76, 1.0, u));
+      });
+      const tilt = i === 0 ? 0 : 0.48;
+      OC.xform(cup, { r: [Math.sin(a) * tilt, 0, -Math.cos(a) * tilt], p: [Math.cos(a) * r, 0.28, Math.sin(a) * r] });
+      OC.withSway(cup, () => 0);
+      list.push(cup);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildTubastraeaCoral = buildTubastraeaCoral;
+})(window.OC);
+
+// === engine/flora/reef_sponges.js ===
+/* ================= ГЕОМЕТРИИ: ГУБКИ, АКТИНИИ И ТРИДАКНЫ ================= */
+/* Трубчатые и бочкообразные губки, анемоны с щупальцами и гигантский моллюск Tridacna.
+   Часть OC.FloraLibrary. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
   function buildTubeSponge(hueA, hueB, rng) {
     const list = [];
     const n = 5 + Math.floor(rng() * 4);
@@ -10329,7 +10484,18 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
   BUILDERS.buildGiantClam = buildGiantClam;
+})(window.OC);
 
+// === engine/flora/reef_benthos.js ===
+/* ================= ГЕОМЕТРИИ: МАНГРЫ, ИГЛОКОЖИЕ И БЕНТОС ================= */
+/* Ходульные корни мангров, ежи, морские звёзды, тритоны, морские лилии и галапагосские
+   балянусы. Часть OC.FloraLibrary. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
   function buildMangrove(rng) {
     const list = [];
     const barkC = COL(0x5a4232);
@@ -10453,40 +10619,6 @@ window.OC = window.OC || {};
   }
   BUILDERS.buildTritonShell = buildTritonShell;
 
-  function buildCrustCoral(hue, rng) {
-    const list = [];
-    const c1 = COL().setHSL(hue, 0.56, 0.36);
-    const c2 = COL().setHSL((hue + 0.06) % 1, 0.78, 0.58);
-    const lobes = 4 + Math.floor(rng() * 2);
-    for (let i = 0; i < lobes; i++) {
-      const a = (i / lobes) * Math.PI * 2 + rng() * 0.5;
-      const d = i === 0 ? 0 : OC.lerp(0.65, 1.35, rng());
-      const rx = OC.lerp(0.85, 1.45, rng());
-      const ry = OC.lerp(0.18, 0.36, rng());
-      const g = new T.CylinderGeometry(rx, rx * 0.82, ry, 10, 1);
-      const p = g.attributes.position;
-      for (let k = 0; k < p.count; k++) {
-        const vx = p.getX(k), vy = p.getY(k), vz = p.getZ(k);
-        const w = 1 + 0.14 * Math.sin(Math.atan2(vz, vx) * 4 + i);
-        p.setXYZ(k, vx * w, vy + (vy > 0 ? Math.sin(vx * 2.1 + vz * 2.3) * 0.06 : 0), vz * w);
-      }
-      OC.geoPrep(g);
-      g.computeVertexNormals();
-      OC.paint(g, (x, y, z, c) => {
-        const r = Math.hypot(x, z) / Math.max(0.5, rx);
-        c.copy(c1).lerp(c2, OC.smoothstep(0.35, 1.0, r));
-      });
-      OC.withSway(g, () => 0);
-      OC.xform(g, {
-        r: [(rng() - 0.5) * 0.18, rng() * 6.28, (rng() - 0.5) * 0.18],
-        p: [Math.cos(a) * d, ry * 0.42 + i * 0.03, Math.sin(a) * d]
-      });
-      list.push(g);
-    }
-    return OC.mergeGeometries(list);
-  }
-  BUILDERS.buildCrustCoral = buildCrustCoral;
-
   function buildCrinoid(hue, rng) {
     const list = [];
     const c1 = COL().setHSL(hue, 0.78, 0.42);
@@ -10531,106 +10663,6 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
   BUILDERS.buildCrinoid = buildCrinoid;
-
-  function buildWhipCoral(hue, rng) {
-    const list = [];
-    const baseCol = COL().setHSL(hue, 0.85, 0.42);
-    const tipCol = COL().setHSL((hue + 0.08) % 1, 0.95, 0.68);
-    const nWhips = 3;
-    for (let w = 0; w < nWhips; w++) {
-      const ox = (w - 1) * 0.28 + (rng() - 0.5) * 0.14;
-      const oz = (rng() - 0.5) * 0.28;
-      const h = OC.lerp(2.6, 4.4, rng());
-      const pts = [];
-      const turns = 2.6 + rng() * 1.4;
-      const ph = rng() * 6.28;
-      for (let k = 0; k <= 16; k++) {
-        const t = k / 16;
-        const rad = 0.08 + t * 0.36;
-        pts.push(new T.Vector3(
-          ox + Math.cos(t * turns * Math.PI * 2 + ph) * rad,
-          t * h,
-          oz + Math.sin(t * turns * Math.PI * 2 + ph) * rad
-        ));
-      }
-      const whip = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 22, 0.048, 5, false);
-      OC.geoPrep(whip);
-      OC.paint(whip, (x, y, z, c) => c.copy(baseCol).lerp(tipCol, OC.clamp(y / h, 0, 1)));
-      OC.withSway(whip, (x, y) => Math.pow(OC.clamp(y / h, 0, 1), 1.4) * 0.72);
-      list.push(whip);
-    }
-    return OC.mergeGeometries(list);
-  }
-  BUILDERS.buildWhipCoral = buildWhipCoral;
-
-  function buildGoldSeaFan(rng) {
-    const list = [];
-    const cStem = COL(0xb87212);
-    const cFan = COL(0xf4ba2c);
-    const stem = new T.CylinderGeometry(0.08, 0.14, 0.65, 6);
-    OC.geoPrep(stem);
-    OC.paint(stem, cStem);
-    OC.withSway(stem, () => 0);
-    OC.xform(stem, { p: [0, 0.32, 0] });
-    list.push(stem);
-
-    const nRibs = 13;
-    for (let i = 0; i < nRibs; i++) {
-      const u = (i / (nRibs - 1)) * 2 - 1;
-      const ang = u * 1.05;
-      const len = OC.lerp(2.1, 3.0, Math.cos(u * 1.1)) * OC.lerp(0.9, 1.12, rng());
-      const rib = new T.CylinderGeometry(0.025, 0.055, len, 4);
-      OC.geoPrep(rib);
-      rib.translate(0, len * 0.5, 0);
-      OC.paint(rib, (x, y, z, c) => c.copy(cStem).lerp(cFan, OC.clamp(y / 2.8, 0, 1)));
-      OC.withSway(rib, (x, y) => Math.pow(OC.clamp(y / 3.0, 0, 1), 1.2) * 0.45);
-      OC.xform(rib, { r: [(rng() - 0.5) * 0.08, 0, -ang], p: [0, 0.55, 0] });
-      list.push(rib);
-    }
-    for (let ring = 1; ring <= 4; ring++) {
-      const r = ring * 0.58;
-      const arc = new T.TorusGeometry(r, 0.022, 4, 14, Math.PI * 0.78);
-      OC.geoPrep(arc);
-      OC.paint(arc, cFan);
-      OC.withSway(arc, () => Math.pow(ring / 4, 1.2) * 0.42);
-      OC.xform(arc, { r: [0, 0, Math.PI * 0.11], p: [0, 0.55, 0] });
-      list.push(arc);
-    }
-    return OC.mergeGeometries(list);
-  }
-  BUILDERS.buildGoldSeaFan = buildGoldSeaFan;
-
-  function buildTubastraeaCoral(rng) {
-    const list = [];
-    const cBase = COL(0x7c2a12);
-    const cOrange = COL(0xf46818);
-    const cGold = COL(0xffc938);
-
-    const mound = OC.geoPrep(new T.SphereGeometry(0.42, 8, 6));
-    mound.scale(1.15, 0.62, 1.15);
-    OC.paint(mound, cBase);
-    OC.xform(mound, { p: [0, 0.14, 0] });
-    OC.withSway(mound, () => 0);
-    list.push(mound);
-
-    const nCups = 9;
-    for (let i = 0; i < nCups; i++) {
-      const a = (i / nCups) * Math.PI * 2 + rng() * 0.4;
-      const r = i === 0 ? 0.04 : OC.lerp(0.18, 0.36, rng());
-      const cupH = OC.lerp(0.18, 0.34, rng());
-      const cup = OC.geoPrep(new T.CylinderGeometry(0.11, 0.055, cupH, 7));
-      OC.paint(cup, (x, y, z, col) => {
-        const u = OC.clamp((y + cupH * 0.5) / cupH, 0, 1);
-        col.copy(cBase).lerp(cOrange, OC.smoothstep(0.15, 0.72, u)).lerp(cGold, OC.smoothstep(0.76, 1.0, u));
-      });
-      const tilt = i === 0 ? 0 : 0.48;
-      OC.xform(cup, { r: [Math.sin(a) * tilt, 0, -Math.cos(a) * tilt], p: [Math.cos(a) * r, 0.28, Math.sin(a) * r] });
-      OC.withSway(cup, () => 0);
-      list.push(cup);
-    }
-    return OC.mergeGeometries(list);
-  }
-  BUILDERS.buildTubastraeaCoral = buildTubastraeaCoral;
 
   function buildGalapagosBarnacle(rng) {
     const list = [];
