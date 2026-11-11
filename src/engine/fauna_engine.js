@@ -141,6 +141,7 @@ window.OC = window.OC || {};
       const _toTarget = new T.Vector3();
       const _currFlow = new T.Vector3();
       const _flowAccum = new T.Vector3();
+      let faunaCountRefreshTimer = 0;
 
       function refreshFaunaCounts() {
         let total = 0;
@@ -271,7 +272,7 @@ window.OC = window.OC || {};
           preyCentersBuf.length = 0;
           for (let i = 0; i < preySchools.length; i++) {
             const ps = preySchools[i];
-            if (ps.mesh && ps.mesh.visible && ps.center) preyCentersBuf.push(ps.center);
+            if (ps.mesh && ps.mesh.visible && ps.getCount() > 0 && ps.center) preyCentersBuf.push(ps.center);
           }
 
           // Клиенты станций чистки и выбор ближайшей мегафауны для тени на мелководном дне
@@ -304,6 +305,11 @@ window.OC = window.OC || {};
 
           for (let i = 0; i < agents.length; i++) {
             agents[i].update(dt, time, camPos, updateCtx);
+          }
+          faunaCountRefreshTimer += dt;
+          if (faunaCountRefreshTimer >= 1) {
+            faunaCountRefreshTimer %= 1;
+            refreshFaunaCounts();
           }
           splashSystem.update(dt);
 

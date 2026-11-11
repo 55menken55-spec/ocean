@@ -5,6 +5,31 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 (function (OC) {
   'use strict';
   const T = THREE;
+  const ECO_STORAGE_KEY = 'oc_ocean_ecosystem_v1';
+  const ECO_RECOVERY_PER_SEC = 0.00045; // ~37 минут до полного восстановления без новых потерь
+  let ecoPopulations = null;
+  let lastEcoSave = 0;
+
+  function getEcoPopulations() {
+    if (ecoPopulations) return ecoPopulations;
+    ecoPopulations = {};
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const saved = JSON.parse(localStorage.getItem(ECO_STORAGE_KEY) || '{}');
+        if (saved && typeof saved === 'object' && !Array.isArray(saved)) ecoPopulations = saved;
+      }
+    } catch (e) { /* повреждённое или недоступное хранилище не блокирует симуляцию */ }
+    return ecoPopulations;
+  }
+
+  function saveEcoPopulations(force) {
+    const now = Date.now();
+    if (!force && now - lastEcoSave < 15000) return;
+    lastEcoSave = now;
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(ECO_STORAGE_KEY, JSON.stringify(getEcoPopulations()));
+    } catch (e) { /* симуляция продолжает работать и без сохранения */ }
+  }
 
   function makeFishGeo(opts) {
     const o = Object.assign({
@@ -173,6 +198,41 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     let huntCooldown = 8 + rng() * 14;
     let huntTarget = null;
     let schoolPanic = 0;
+    let qualityScale = OC.Quality.get().fishScale;
+    const populationKey = biome.id + '|' + (opts.key || 'fish_blue') + '|' + Math.round(cx) + '|' + Math.round(cz);
+    const populationStore = getEcoPopulations();
+    let populationState = isPrey ? populationStore[populationKey] : null;
+    if (!populationState || !Number.isFinite(populationState.ratio)) {
+      populationState = { ratio: 1, updatedAt: Date.now() };
+      if (isPrey) populationStore[populationKey] = populationState;
+    } else {
+      const elapsed = OC.clamp((Date.now() - (populationState.updatedAt || Date.now())) / 1000, 0, 30 * 24 * 60 * 60);
+      populationState.ratio = OC.clamp(populationState.ratio + elapsed * ECO_RECOVERY_PER_SEC, 0, 1);
+      populationState.updatedAt = Date.now();
+    }
+
+    function syncSchoolCount() {
+      const nextN = isPrey
+        ? OC.clamp(Math.round(Math.max(6, baseN * qualityScale) * populationState.ratio), 0, maxN)
+        : OC.clamp(Math.round(baseN * qualityScale), 6, maxN);
+      if (nextN !== n) {
+        n = nextN;
+        mesh.count = n;
+      }
+    }
+
+    function applyPredation() {
+      if (!isPrey || populationState.ratio <= 0) return;
+      const now = Date.now();
+      const elapsed = OC.clamp((now - (populationState.updatedAt || now)) / 1000, 0, 30 * 24 * 60 * 60);
+      populationState.ratio = OC.clamp(populationState.ratio + elapsed * ECO_RECOVERY_PER_SEC - 0.055, 0, 1);
+      populationState.updatedAt = now;
+      syncSchoolCount();
+      saveEcoPopulations(true);
+    }
+
+    syncSchoolCount();
+    if (isPrey) anchor.applyPredation = applyPredation;
 
     // Если это семья рыб-клоунов, ставим реальную актинию-хозяина прямо на дно в центре территории
     if (isHostAnemone) {
@@ -209,11 +269,18 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
       center: anchor,
       getPosition: () => anchor,
       setQualityScale(mult) {
-        n = OC.clamp(Math.round(baseN * mult), 6, maxN);
-        mesh.count = n;
+        qualityScale = mult;
+        syncSchoolCount();
       },
       getCount: () => n,
       update(dt, time, camPos, ctx) {
+        if (isPrey && populationState.ratio < 1) {
+          const simDt = Math.max(0, Math.min(0.25, dt || 0));
+          populationState.ratio = Math.min(1, populationState.ratio + simDt * ECO_RECOVERY_PER_SEC);
+          populationState.updatedAt = Date.now();
+          syncSchoolCount();
+          saveEcoPopulations(false);
+        }
         const distCam = Math.hypot(anchor.x - camPos.x, anchor.z - camPos.z);
         if (distCam > 540) {
           mesh.visible = false;
@@ -275,6 +342,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
               if (bestP) {
                 huntTarget = bestP;
                 huntTimer = 4.6;
+                if (bestP.applyPredation) bestP.applyPredation();
               }
               huntCooldown = 15 + ((frameIdx * 7) % 10);
             }
