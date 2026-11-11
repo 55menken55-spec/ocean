@@ -680,125 +680,35 @@ window.OC = window.OC || {};
       toast('Геймпад подключён: ' + id);
     });
 
-    /* Горячие клавиши */
-    window.addEventListener('keydown', (e) => {
-      if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
-      if (e.code === 'KeyM') { syncSound(OC.sound.toggle()); }
-      if (e.code === 'KeyF') {
-        const on = OC.toggleFlashlight();
-        syncFlash(on);
-        toast(on ? 'Прожектор включён' : 'Прожектор выключен');
-      }
-      if (e.code === 'KeyB') {
-        syncSubMode(!subMode);
-        toast(subMode ? 'Режим батискафа: эхолот и приборы включены' : 'Режим свободного дайвера');
-      }
-      if (e.code === 'KeyG') { fireSonarPing(); }
-      if (e.code === 'Backquote') {
-        const next = !(OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen());
-        syncHydroMode(next);
-        toast(next ? 'Гидрофон активен: живая FFT-спектрограмма (0–4 кГц)' : 'Гидрофон свёрнут');
-      }
-      if (e.code === 'KeyV') {
-        const next = OC.Navigation.getMode() === 'orbit' ? 'swim' : 'orbit';
-        OC.Navigation.setMode(next);
-        toast(next === 'orbit' ? 'Режим орбиты' : 'Свободное плавание');
-      }
-      if (e.code === 'KeyT') {
-        const next = OC.Navigation.getMode() === 'tour' ? 'swim' : 'tour';
-        OC.Navigation.setMode(next);
-      }
-      if (e.code === 'KeyR') { OC.Navigation.resetToSpawn(); toast('Возврат к старту: ' + (activeBiome ? activeBiome.name : 'океан')); }
-      if (e.code === 'KeyK') { OC.Atlas.toggle(); }
-      if (e.code === 'KeyO' && OC.Globe) {
-        OC.Globe.toggle();
-        if (OC.sound && OC.sound.globeWhoosh) OC.sound.globeWhoosh();
-      }
-      if (e.code === 'KeyL') { toggleLab(false); }
-      if (e.code === 'KeyY') { toggleRovChase(); }
-      if (e.code === 'KeyZ') { triggerSampleGrab(); }
-      if (e.code === 'KeyI') {
-        const opened = toggleRovPanel(false);
-        if (opened) triggerCtdCast();
-      }
-      if (e.code === 'ArrowRight' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(1); }
-      if (e.code === 'ArrowLeft' && OC.Navigation.getMode() === 'tour') { OC.Navigation.stepTour(-1); }
-      if (e.code === 'KeyP') {
-        const next = !(OC.Expedition && OC.Expedition.isPhotoMode());
-        syncCamMode(next);
-        toast(next ? 'Фотокамера: наведите и нажмите Enter' : 'Фотокамера закрыта');
-      }
-      if (e.code === 'KeyJ') { toggleJournal(false); }
-      if (e.code === 'Enter' && OC.Expedition && OC.Expedition.isPhotoMode()) {
-        e.preventDefault();
-        triggerShutter();
-      }
-      if (e.code === 'BracketRight' && OC.Expedition && OC.Expedition.isPhotoMode()) {
-        const fov = OC.Expedition.adjustZoom(-5);
-        if (camFovLabel) camFovLabel.textContent = Math.round(fov) + '°';
-      }
-      if (e.code === 'BracketLeft' && OC.Expedition && OC.Expedition.isPhotoMode()) {
-        const fov = OC.Expedition.adjustZoom(5);
-        if (camFovLabel) camFovLabel.textContent = Math.round(fov) + '°';
-      }
-      if (e.code === 'KeyN') {
-        const next = OC.Navigation.getMode() === 'cinema' ? 'swim' : 'cinema';
-        OC.Navigation.setMode(next);
-        toast(next === 'cinema' ? 'Кино-режим: автопролёт и фильтры (N / X)' : 'Свободное плавание');
-      }
-      if (e.code === 'KeyX' && OC.Expedition && OC.Expedition.cycleFilter) {
-        const f = OC.Expedition.cycleFilter();
-        syncFilterUI();
-        toast('Цветофильтр: ' + f.label);
-      }
-      if (e.code === 'KeyH') {
-        toggleHud();
-      }
-      // Быстрые горячие клавиши оптики: [ — пиксельный масштаб, ] — профиль качества
-      if (e.code === 'BracketLeft' && OC.Quality && OC.Quality.getDynamicResolution) {
-        const st = OC.Quality.getDynamicResolution();
-        const nextEnable = !st.enabled;
-        OC.Quality.setDynamicResolution(nextEnable);
-        if (OC.applyPixelScale) OC.applyPixelScale(nextEnable ? OC.Quality.evaluateDynamicResolution(1, 0) : 1.0);
-        updateResBadge();
-        toast(nextEnable ? 'Динамическое разрешение включено' : 'Динамическое разрешение выключено (100%)');
-      }
-      if (e.code === 'BracketRight' && OC.Quality && OC.Quality.PRESETS) {
-        const tiers = ['low', 'medium', 'high', 'ultra'];
-        const idx = tiers.indexOf(OC.Quality.getId());
-        const nextId = tiers[(idx + 1) % tiers.length];
-        OC.Quality.set(nextId);
-        if (OC.Expedition && OC.Expedition.saveQuality) OC.Expedition.saveQuality(nextId);
-        updateResBadge();
-        toast('Профиль оптики: ' + OC.Quality.PRESETS[nextId].label);
-      }
-      if (e.code === 'KeyU' && OC.Weather) {
-        if (activeBiome && activeBiome.noSurface) {
-          toast('Погода на поверхности недоступна в глубоководной зоне');
-        } else {
-          OC.Weather.cycleMode();
-          if (uiHandles && uiHandles.syncWeatherButtons) uiHandles.syncWeatherButtons();
-          toast('Погода: ' + OC.Weather.getLabel(activeBiome));
-        }
-      }
-      if (e.code === 'Escape') {
-        if (isHelpOpen()) toggleHelp(true);
-        else if (OC.Globe && OC.Globe.isOpen()) OC.Globe.close();
-        else if (OC.Atlas.isOpen()) OC.Atlas.toggle();
-        else if (journalModal && !journalModal.classList.contains('hidden')) toggleJournal(true);
-        else if (labPanel && !labPanel.classList.contains('closed')) toggleLab(true);
-        else if (rovPanel && !rovPanel.classList.contains('closed')) toggleRovPanel(true);
-        else if (OC.Expedition && OC.Expedition.isPhotoMode()) syncCamMode(false);
-        else if (OC.Navigation.getMode() === 'cinema') OC.Navigation.setMode('swim');
-        else if (OC.Navigation.getMode() === 'tour') OC.Navigation.stopTour();
-      }
-      if (e.code === 'Digit9') {
-        triggerDeployBuoy();
-      }
-      if (e.code === 'Slash' || e.code === 'F1') {
-        e.preventDefault();
-        toggleHelp(false);
-      }
+    /* Горячие клавиши — ui/hotkeys.js */
+    const keyMap = OC._Hotkeys.bind({
+      toast,
+      getBiome: () => activeBiome,
+      syncSound: (on) => syncSound(on),
+      syncFlash: (on) => syncFlash(on),
+      syncSubMode: (on) => syncSubMode(on),
+      isSubMode: () => subMode,
+      syncHydroMode: (on) => syncHydroMode(on),
+      fireSonarPing: () => fireSonarPing(),
+      triggerShutter: () => triggerShutter(),
+      toggleLab: (f) => toggleLab(f),
+      toggleRovChase: () => toggleRovChase(),
+      triggerSampleGrab: () => triggerSampleGrab(),
+      toggleRovPanel: (f) => toggleRovPanel(f),
+      triggerCtdCast: () => triggerCtdCast(),
+      syncCamMode: (on) => syncCamMode(on),
+      toggleJournal: (f) => toggleJournal(f),
+      syncFilterUI: () => syncFilterUI(),
+      toggleHud: () => toggleHud(),
+      updateResBadge: () => updateResBadge(),
+      syncWeatherButtons: () => syncWeatherButtons(),
+      triggerDeployBuoy: () => triggerDeployBuoy(),
+      toggleHelp: (f) => toggleHelp(f),
+      isHelpOpen: () => isHelpOpen(),
+      isJournalOpen: () => !!(journalModal && !journalModal.classList.contains('hidden')),
+      isLabOpen: () => !!(labPanel && !labPanel.classList.contains('closed')),
+      isRovOpen: () => !!(rovPanel && !rovPanel.classList.contains('closed')),
+      camFovLabel
     });
 
     /* Модалка помощи и онбординг-герой — ui/panels_guide.js */

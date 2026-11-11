@@ -53,6 +53,7 @@ ORDER = [
     'ui/panels_biomes.js',
     'ui/panels_touch.js',
     'ui/panels_guide.js',
+    'ui/hotkeys.js',
     'ui/main.js',
 ]
 

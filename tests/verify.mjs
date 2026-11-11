@@ -53,6 +53,7 @@ const SRC_ORDER = [
   'src/ui/panels_biomes.js',
   'src/ui/panels_touch.js',
   'src/ui/panels_guide.js',
+  'src/ui/hotkeys.js',
   'src/ui/main.js',
 ];
 
@@ -1467,7 +1468,9 @@ const ciSrc = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'ci.yml'),
 const pwSrc = fs.readFileSync(path.join(ROOT, 'tests', 'e2e_playwright.mjs'), 'utf8');
 assert(tplSrc.includes('id="btn-help"') && tplSrc.includes('id="help-modal"') && tplSrc.includes('id="hero-tour-btn"') && tplSrc.includes('id="hero-help-btn"'), 'template.html must contain interactive onboarding & Quick-Help modal markup');
 const guideUiSrc = fs.readFileSync(path.join(ROOT, 'src/ui/panels_guide.js'), 'utf8');
-assert(mainUiSrc.includes("e.code === 'Slash'") && mainUiSrc.includes('OC.getPerfStats'), 'src/ui/main.js must wire Slash/F1 help modal & OC.getPerfStats');
+const hotkeysSrc = fs.readFileSync(path.join(ROOT, 'src/ui/hotkeys.js'), 'utf8');
+assert(hotkeysSrc.includes("e.code === 'Slash'") && mainUiSrc.includes('OC._Hotkeys.bind'), 'src/ui/hotkeys.js must own the Slash/F1 quick-help shortcut, wired from main.js');
+assert(mainUiSrc.includes('OC.getPerfStats'), 'src/ui/main.js must wire OC.getPerfStats');
 assert(guideUiSrc.includes('oc_onboard_seen_v1') && guideUiSrc.includes('function dismissHero') && mainUiSrc.includes('OC._HudPanelsGuide.bind'), 'src/ui/panels_guide.js must own persisted onboarding dismissal & the help modal');
 assert(!ciSrc.includes('\t'), '.github/workflows/ci.yml must not contain raw tab indentation');
 assert(ciSrc.includes('build-and-vm-verify') && ciSrc.includes('browser-webgl-e2e') && ciSrc.includes('e2e_playwright.mjs') && ciSrc.includes('verify_e2e.mjs'), 'ci.yml must run build check, verify.mjs, verify_e2e.mjs and browser-webgl-e2e');
