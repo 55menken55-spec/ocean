@@ -671,7 +671,16 @@
     <h2>Время суток и свет</h2>
     <input type="range" id="time-slider" min="0" max="100" value="24" aria-label="Время суток">
     <div class="time-row"><span>Время суток</span><b id="time-label">05:45</b></div>
-    <div class="time-row"><span>Сезон · годовой цикл</span><b id="season-label" title="Мягкая смена температуры и освещения">Лето</b></div>
+    <div class="time-row"><span>Сезон</span><b id="season-label" title="Смена сезона плавно меняет температуру и освещение">Лето</b></div>
+    <div class="row" id="season-buttons" style="margin-top:6px" aria-label="Выбрать время года">
+      <button class="btn" data-season="spring">Весна</button>
+      <button class="btn on" data-season="summer">Лето</button>
+      <button class="btn" data-season="autumn">Осень</button>
+      <button class="btn" data-season="winter">Зима</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn on" id="btn-season-auto">⟳ Годовой цикл: Авто</button>
+    </div>
     <div class="row" style="margin-top:8px">
       <button class="btn" id="btn-dawn">Рассвет</button>
       <button class="btn" id="btn-day">Полдень</button>
@@ -1685,6 +1694,8 @@ window.OC = window.OC || {};
   };
 
   let phase = 0.5; // Стартовая экспедиция: лето в северном полушарии.
+  let autoAdvance = true;
+  let transition = null;
 
   function climateFor(biome) {
     return CLIMATES[biome && biome.id] || { hemisphere: 'north', amplitudeC: 0.6, depthScaleM: 80, lightAmplitude: 0.025 };
@@ -1724,14 +1735,46 @@ window.OC = window.OC || {};
   OC.Seasons = {
     YEAR_SECONDS,
     update(dt) {
-      if (Number.isFinite(dt) && dt > 0) phase = (phase + Math.min(dt, 0.25) / YEAR_SECONDS) % 1;
+      const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.25) : 0;
+      if (autoAdvance) {
+        phase = (phase + step / YEAR_SECONDS) % 1;
+      } else if (transition && step > 0) {
+        transition.elapsed = Math.min(transition.duration, transition.elapsed + step);
+        const t = transition.elapsed / transition.duration;
+        const eased = t * t * (3 - 2 * t);
+        phase = ((transition.from + transition.delta * eased) % 1 + 1) % 1;
+        if (transition.elapsed >= transition.duration) {
+          phase = transition.to;
+          transition = null;
+        }
+      }
       return phase;
     },
     getPhase: () => phase,
     setPhase(value) {
       if (!Number.isFinite(value)) return phase;
       phase = ((value % 1) + 1) % 1;
+      transition = null;
       return phase;
+    },
+    setAutoAdvance(value) {
+      autoAdvance = !!value;
+      if (autoAdvance) transition = null;
+      return autoAdvance;
+    },
+    isAutoAdvance: () => autoAdvance,
+    selectSeason(id, biome) {
+      const index = SEASONS.findIndex((season) => season.id === id);
+      if (index < 0) return false;
+      autoAdvance = false;
+      const climate = climateFor(biome);
+      const localTarget = index * 0.25;
+      const target = ((localTarget - (climate.hemisphere === 'south' ? 0.5 : 0)) % 1 + 1) % 1;
+      let delta = target - phase;
+      if (delta > 0.5) delta -= 1;
+      else if (delta < -0.5) delta += 1;
+      transition = { from: phase, to: target, delta, elapsed: 0, duration: 3.5 };
+      return true;
     },
     getState,
     getTemperatureDelta
@@ -29912,7 +29955,12 @@ window.OC = window.OC || {};
       const timeSlider = document.getElementById('time-slider');
       const timeLabel = document.getElementById('time-label');
       const seasonLabel = document.getElementById('season-label');
+      const seasonAutoBtn = document.getElementById('btn-season-auto');
+      const seasonButtonsEl = document.getElementById('season-buttons');
       let lastSeasonText = '';
+      let lastSeasonContext = '';
+      let lastSeasonAuto = null;
+      let lastSeasonId = '';
       const weatherBtnsEl = document.getElementById('weather-btns');
       const weatherGroupEl = document.getElementById('weather-group');
       const qualityBtnsEl = document.getElementById('quality-btns');
@@ -29931,6 +29979,20 @@ window.OC = window.OC || {};
       btnAuto.addEventListener('click', () => {
         setAutoCycle(!isAutoCycle());
         syncAuto();
+      });
+    }
+    if (seasonAutoBtn && OC.Seasons) {
+      seasonAutoBtn.addEventListener('click', () => {
+        OC.Seasons.setAutoAdvance(!OC.Seasons.isAutoAdvance());
+        syncSeasonControls();
+      });
+    }
+    if (seasonButtonsEl && OC.Seasons) {
+      seasonButtonsEl.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-season]');
+        if (!button) return;
+        OC.Seasons.selectSeason(button.getAttribute('data-season'), activeBiome());
+        syncSeasonControls();
       });
     }
 
@@ -30063,21 +30125,38 @@ window.OC = window.OC || {};
       if (timeSlider) timeSlider.value = pct;
     }
 
+    function syncSeasonControls() {
+      if (!OC.Seasons) return;
+      const state = OC.Seasons.getState(activeBiome());
+      const text = state.icon + ' ' + state.label;
+      const contextKey = state.id + ':' + state.hemisphere;
+      if (seasonLabel && (text !== lastSeasonText || contextKey !== lastSeasonContext)) {
+        seasonLabel.textContent = text;
+        seasonLabel.title = 'Мягкий годовой переход · ' + (state.hemisphere === 'south' ? 'Южное полушарие' : (state.hemisphere === 'north' ? 'Северное полушарие' : 'Экваториальная область'));
+        lastSeasonText = text;
+        lastSeasonContext = contextKey;
+      }
+      const autoOn = OC.Seasons.isAutoAdvance();
+      if (seasonAutoBtn && autoOn !== lastSeasonAuto) {
+        seasonAutoBtn.classList.toggle('on', autoOn);
+        seasonAutoBtn.textContent = autoOn ? '⟳ Годовой цикл: Авто' : '⏸ Годовой цикл: Пауза';
+        lastSeasonAuto = autoOn;
+      }
+      if (seasonButtonsEl && state.id !== lastSeasonId) {
+        seasonButtonsEl.querySelectorAll('button[data-season]').forEach((button) => {
+          button.classList.toggle('on', button.getAttribute('data-season') === state.id);
+        });
+        lastSeasonId = state.id;
+      }
+    }
+
     function syncClock(t, auto) {
       if (auto) syncTimeSlider(Math.round(t * 100));
       if (timeLabel) {
         const hrs = (t * 24) % 24;
         timeLabel.textContent = String(Math.floor(hrs)).padStart(2, '0') + ':' + String(Math.floor((hrs % 1) * 60)).padStart(2, '0');
       }
-      if (seasonLabel && OC.Seasons) {
-        const season = OC.Seasons.getState(activeBiome());
-        const text = season.icon + ' ' + season.label;
-        if (text !== lastSeasonText) {
-          seasonLabel.textContent = text;
-          seasonLabel.title = 'Мягкий годовой переход · ' + (season.hemisphere === 'south' ? 'Южное полушарие' : (season.hemisphere === 'north' ? 'Северное полушарие' : 'Экваториальная область'));
-          lastSeasonText = text;
-        }
-      }
+      syncSeasonControls();
     }
 
     return { syncAuto, setTOD, syncWeatherButtons, renderQualityButtons, updateResBadge,

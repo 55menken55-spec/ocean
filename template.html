@@ -671,7 +671,16 @@
     <h2>Время суток и свет</h2>
     <input type="range" id="time-slider" min="0" max="100" value="24" aria-label="Время суток">
     <div class="time-row"><span>Время суток</span><b id="time-label">05:45</b></div>
-    <div class="time-row"><span>Сезон · годовой цикл</span><b id="season-label" title="Мягкая смена температуры и освещения">Лето</b></div>
+    <div class="time-row"><span>Сезон</span><b id="season-label" title="Смена сезона плавно меняет температуру и освещение">Лето</b></div>
+    <div class="row" id="season-buttons" style="margin-top:6px" aria-label="Выбрать время года">
+      <button class="btn" data-season="spring">Весна</button>
+      <button class="btn on" data-season="summer">Лето</button>
+      <button class="btn" data-season="autumn">Осень</button>
+      <button class="btn" data-season="winter">Зима</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn on" id="btn-season-auto">⟳ Годовой цикл: Авто</button>
+    </div>
     <div class="row" style="margin-top:8px">
       <button class="btn" id="btn-dawn">Рассвет</button>
       <button class="btn" id="btn-day">Полдень</button>

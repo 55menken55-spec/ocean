@@ -380,6 +380,12 @@ console.log('2) Exercising initial boot & all interactive hotkeys across full re
 stepFrames(2);
 await new Promise((r) => setTimeout(r, 80));
 assert.equal(pageErrors.length, 0, `Boot logged errors:\n${pageErrors.join('\n')}`);
+assert(html.includes('id="season-buttons"') && html.includes('id="btn-season-auto"'), 'Options panel must provide season selection and automatic-cycle controls');
+const winterButtonStub = { getAttribute: (name) => name === 'data-season' ? 'winter' : null };
+getEl('season-buttons').dispatchEvent({ type: 'click', target: { closest: () => winterButtonStub } });
+assert.equal(OC.Seasons.isAutoAdvance(), false, 'Selecting a season in the options panel must pause automatic progression');
+getEl('btn-season-auto').dispatchEvent({ type: 'click', target: getEl('btn-season-auto') });
+assert.equal(OC.Seasons.isAutoAdvance(), true, 'The annual-cycle button must resume automatic progression');
 assert(rafQueue.length > 0, 'runLoop must schedule requestAnimationFrame after boot()');
 stepFrames(28);
 

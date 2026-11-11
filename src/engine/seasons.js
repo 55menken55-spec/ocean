@@ -28,6 +28,8 @@ window.OC = window.OC || {};
   };
 
   let phase = 0.5; // Стартовая экспедиция: лето в северном полушарии.
+  let autoAdvance = true;
+  let transition = null;
 
   function climateFor(biome) {
     return CLIMATES[biome && biome.id] || { hemisphere: 'north', amplitudeC: 0.6, depthScaleM: 80, lightAmplitude: 0.025 };
@@ -67,14 +69,46 @@ window.OC = window.OC || {};
   OC.Seasons = {
     YEAR_SECONDS,
     update(dt) {
-      if (Number.isFinite(dt) && dt > 0) phase = (phase + Math.min(dt, 0.25) / YEAR_SECONDS) % 1;
+      const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.25) : 0;
+      if (autoAdvance) {
+        phase = (phase + step / YEAR_SECONDS) % 1;
+      } else if (transition && step > 0) {
+        transition.elapsed = Math.min(transition.duration, transition.elapsed + step);
+        const t = transition.elapsed / transition.duration;
+        const eased = t * t * (3 - 2 * t);
+        phase = ((transition.from + transition.delta * eased) % 1 + 1) % 1;
+        if (transition.elapsed >= transition.duration) {
+          phase = transition.to;
+          transition = null;
+        }
+      }
       return phase;
     },
     getPhase: () => phase,
     setPhase(value) {
       if (!Number.isFinite(value)) return phase;
       phase = ((value % 1) + 1) % 1;
+      transition = null;
       return phase;
+    },
+    setAutoAdvance(value) {
+      autoAdvance = !!value;
+      if (autoAdvance) transition = null;
+      return autoAdvance;
+    },
+    isAutoAdvance: () => autoAdvance,
+    selectSeason(id, biome) {
+      const index = SEASONS.findIndex((season) => season.id === id);
+      if (index < 0) return false;
+      autoAdvance = false;
+      const climate = climateFor(biome);
+      const localTarget = index * 0.25;
+      const target = ((localTarget - (climate.hemisphere === 'south' ? 0.5 : 0)) % 1 + 1) % 1;
+      let delta = target - phase;
+      if (delta > 0.5) delta -= 1;
+      else if (delta < -0.5) delta += 1;
+      transition = { from: phase, to: target, delta, elapsed: 0, duration: 3.5 };
+      return true;
     },
     getState,
     getTemperatureDelta
