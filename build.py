@@ -52,6 +52,7 @@ ORDER = [
     'ui/panels_options.js',
     'ui/panels_biomes.js',
     'ui/panels_touch.js',
+    'ui/panels_guide.js',
     'ui/main.js',
 ]
 
