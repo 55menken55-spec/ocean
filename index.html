@@ -24536,8 +24536,11 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
-// === ui/expedition.js ===
-/* ================= ЭКСПЕДИЦИЯ: ФОТОКАМЕРА, НАУЧНЫЕ МИССИИ, МАЯЧКИ И СОХРАНЕНИЕ ================= */
+// === ui/expedition/store.js ===
+/* ================= ЭКСПЕДИЦИЯ: ПРОГРЕСС, СОХРАНЕНИЕ И КЭШ СЕССИИ ================= */
+/* Единое хранилище localStorage (открытия, миссии, фото, пробы, маячки, туман карты),
+   устойчивое к переполнению квоты, плюс эфемерное состояние сессии.
+   Остальные модули экспедиции работают с ним только через OC._ExpStore. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
@@ -24572,6 +24575,32 @@ window.OC = window.OC || {};
       } catch (e2) { /* noop */ }
     }
   }
+
+  /* ---- Состояние текущей сессии (фильтры, режимы, зум, кэш PNG) ---- */
+  const sessionState = {
+    photoMode: false,
+    cinemaMode: false,
+    filterId: 'none',
+    zoomFov: 52,
+    sonarPingsByBiome: {},
+    pingKeysByBiome: {},
+    visitedZonesByBiome: {},
+    fullPngCache: {} // id -> full dataURL PNG в оперативной памяти текущей сессии
+  };
+
+  OC._ExpStore = {
+    getStore: () => store,
+    saveStore,
+    sessionState
+  };
+})(window.OC);
+
+// === ui/expedition/missions.js ===
+/* ================= ЭКСПЕДИЦИЯ: НАУЧНЫЕ МИССИИ ПО БИОМАМ ================= */
+/* Каталог целей (MISSIONS): что найти, каким ключом вида и в какой точке карты. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
 
   /* ---- Научные миссии по 3 биомам Земли ---- */
   const MISSIONS = [
@@ -24955,28 +24984,34 @@ window.OC = window.OC || {};
     }
   ];
 
-  const FILTERS = [
-    { id: 'none', label: 'Естеств.', css: '' },
-    { id: 'natgeo', label: 'NatGeo', css: 'contrast(1.14) saturate(1.24) brightness(1.03)' },
-    { id: 'abyss', label: 'Абиссаль', css: 'contrast(1.25) saturate(0.72) hue-rotate(-8deg) brightness(0.92)' },
-    { id: 'cousteau', label: 'Кусто 16мм', css: 'sepia(0.22) contrast(1.08) saturate(1.15) brightness(1.02)' },
-    { id: 'biolum', label: 'Неон Био', css: 'contrast(1.18) saturate(1.48) hue-rotate(8deg) brightness(1.06)' }
-  ];
+  OC._ExpMissions = { MISSIONS };
+})(window.OC);
 
-  const sessionState = {
-    photoMode: false,
-    cinemaMode: false,
-    filterId: 'none',
-    zoomFov: 52,
-    sonarPingsByBiome: {},
-    pingKeysByBiome: {},
-    visitedZonesByBiome: {},
-    fullPngCache: {} // id -> full dataURL PNG в оперативной памяти текущей сессии
-  };
+// === ui/expedition.js ===
+/* ================= ЭКСПЕДИЦИЯ: ФОТОКАМЕРА, ФИЛЬТРЫ И ЖУРНАЛ ОТКРЫТИЙ ================= */
+/* Режимы съёмки и кино, фильтры, зум, запись сонарных пингов, фото-галерея,
+   прогресс миссий, пробы, сводки по биомам и туман карты.
+   Хранилище — expedition/store.js, каталог миссий — expedition/missions.js,
+   научный отчёт — expedition/report.js. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+
+  const { getStore, saveStore, sessionState } = OC._ExpStore;
+  const { MISSIONS } = OC._ExpMissions;
+
+  /* Живая ссылка на хранилище прогресса (мутируется на месте) */
+  const storeRef = () => getStore();
+
+  function getActiveFilterCss() {
+    const f = FILTERS.find((x) => x.id === sessionState.filterId);
+    return f ? f.css : '';
+  }
 
   function getMissionDoneList(biomeId) {
-    if (!store.missionsDone[biomeId]) store.missionsDone[biomeId] = [];
-    return store.missionsDone[biomeId];
+    const st = storeRef();
+    if (!st.missionsDone[biomeId]) st.missionsDone[biomeId] = [];
+    return st.missionsDone[biomeId];
   }
 
   function scorePhoto(target, dayW, flashOn, depthM, biome) {
@@ -24991,11 +25026,6 @@ window.OC = window.OC || {};
     score += lit;
     if (depthM > 35 && flashOn) score += 2;
     return OC.clamp(Math.round(score), 42, 99);
-  }
-
-  function getActiveFilterCss() {
-    const f = FILTERS.find((x) => x.id === sessionState.filterId);
-    return f ? f.css : '';
   }
 
   function renderStampPreview(srcCanvas, stampText) {
@@ -25047,6 +25077,14 @@ window.OC = window.OC || {};
     }
   }
 
+  const FILTERS = [
+    { id: 'none', label: 'Естеств.', css: '' },
+    { id: 'natgeo', label: 'NatGeo', css: 'contrast(1.14) saturate(1.24) brightness(1.03)' },
+    { id: 'abyss', label: 'Абиссаль', css: 'contrast(1.25) saturate(0.72) hue-rotate(-8deg) brightness(0.92)' },
+    { id: 'cousteau', label: 'Кусто 16мм', css: 'sepia(0.22) contrast(1.08) saturate(1.15) brightness(1.02)' },
+    { id: 'biolum', label: 'Неон Био', css: 'contrast(1.18) saturate(1.48) hue-rotate(8deg) brightness(1.06)' }
+  ];
+
   OC.Expedition = {
     MISSIONS,
     FILTERS,
@@ -25073,36 +25111,36 @@ window.OC = window.OC || {};
     },
 
     getSavedDiscovered(biomeId) {
-      return Array.isArray(store.discovered[biomeId]) ? store.discovered[biomeId] : ['floor'];
+      return Array.isArray(storeRef().discovered[biomeId]) ? storeRef().discovered[biomeId] : ['floor'];
     },
 
     saveDiscovered(biomeId, setOrArr) {
-      store.discovered[biomeId] = Array.from(setOrArr);
+      storeRef().discovered[biomeId] = Array.from(setOrArr);
       saveStore();
     },
 
     getSavedQuality() {
-      return store.quality || null;
+      return storeRef().quality || null;
     },
 
     saveQuality(qId) {
-      store.quality = qId;
+      storeRef().quality = qId;
       saveStore();
     },
 
     setWaypoint(biomeId, x, z, label) {
-      store.waypoints[biomeId] = { x, z, label: label || 'Навигационная метка' };
+      storeRef().waypoints[biomeId] = { x, z, label: label || 'Навигационная метка' };
       saveStore();
-      return store.waypoints[biomeId];
+      return storeRef().waypoints[biomeId];
     },
 
     clearWaypoint(biomeId) {
-      delete store.waypoints[biomeId];
+      delete storeRef().waypoints[biomeId];
       saveStore();
     },
 
     getWaypoint(biomeId) {
-      return store.waypoints[biomeId] || null;
+      return storeRef().waypoints[biomeId] || null;
     },
 
     isPhotoMode: () => sessionState.photoMode,
@@ -25154,25 +25192,25 @@ window.OC = window.OC || {};
         ts: Date.now()
       };
 
-      store.photos.unshift(entry);
-      if (store.photos.length > 6) store.photos.length = 6;
+      storeRef().photos.unshift(entry);
+      if (storeRef().photos.length > 6) storeRef().photos.length = 6;
       saveStore();
       return Object.assign({}, entry, { downloadUrl: fullPng || previewUrl });
     },
 
     getPhotoDownloadUrl(photoId) {
       if (sessionState.fullPngCache[photoId]) return sessionState.fullPngCache[photoId];
-      const found = store.photos.find((p) => p.id === photoId);
+      const found = storeRef().photos.find((p) => p.id === photoId);
       return found ? found.dataUrl : '';
     },
 
     getPhotos(biomeId) {
-      if (!biomeId) return store.photos.slice();
-      return store.photos.filter((p) => p.biomeId === biomeId);
+      if (!biomeId) return storeRef().photos.slice();
+      return storeRef().photos.filter((p) => p.biomeId === biomeId);
     },
 
     clearPhotos() {
-      store.photos = [];
+      storeRef().photos = [];
       sessionState.fullPngCache = {};
       saveStore();
     },
@@ -25183,7 +25221,7 @@ window.OC = window.OC || {};
       const doneList = getMissionDoneList(biomeId);
       const discoveredArr = this.getSavedDiscovered(biomeId);
       const discoveredSet = new Set(discoveredArr);
-      const photosInBiome = store.photos.filter((p) => p.biomeId === biomeId);
+      const photosInBiome = storeRef().photos.filter((p) => p.biomeId === biomeId);
       const pingKeys = sessionState.pingKeysByBiome[biomeId] || [];
       if (!sessionState.visitedZonesByBiome[biomeId]) sessionState.visitedZonesByBiome[biomeId] = [];
       const visitedZones = sessionState.visitedZonesByBiome[biomeId];
@@ -25235,36 +25273,36 @@ window.OC = window.OC || {};
     },
 
     getAllSummary() {
-      const doneTotal = Object.values(store.missionsDone).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0);
+      const doneTotal = Object.values(storeRef().missionsDone).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0);
       return {
         missionsDone: doneTotal,
         missionsTotal: MISSIONS.length,
-        photosCount: store.photos.length,
-        samplesCount: Array.isArray(store.samples) ? store.samples.length : 0
+        photosCount: storeRef().photos.length,
+        samplesCount: Array.isArray(storeRef().samples) ? storeRef().samples.length : 0
       };
     },
 
     addSample(entry) {
       if (!entry) return null;
-      if (!Array.isArray(store.samples)) store.samples = [];
-      const existingIdx = store.samples.findIndex((s) => s.biomeId === entry.biomeId && s.species === entry.species);
-      if (existingIdx >= 0) store.samples.splice(existingIdx, 1);
-      store.samples.unshift(entry);
-      if (store.samples.length > 36) store.samples.length = 36;
+      if (!Array.isArray(storeRef().samples)) storeRef().samples = [];
+      const existingIdx = storeRef().samples.findIndex((s) => s.biomeId === entry.biomeId && s.species === entry.species);
+      if (existingIdx >= 0) storeRef().samples.splice(existingIdx, 1);
+      storeRef().samples.unshift(entry);
+      if (storeRef().samples.length > 36) storeRef().samples.length = 36;
       saveStore();
       return entry;
     },
 
     getSamples(biomeId) {
-      const list = Array.isArray(store.samples) ? store.samples : [];
+      const list = Array.isArray(storeRef().samples) ? storeRef().samples : [];
       if (!biomeId) return list.slice();
       return list.filter((s) => s.biomeId === biomeId);
     },
 
     clearSamples(biomeId) {
-      if (!Array.isArray(store.samples)) store.samples = [];
-      if (biomeId) store.samples = store.samples.filter((s) => s.biomeId !== biomeId);
-      else store.samples = [];
+      if (!Array.isArray(storeRef().samples)) storeRef().samples = [];
+      if (biomeId) storeRef().samples = storeRef().samples.filter((s) => s.biomeId !== biomeId);
+      else storeRef().samples = [];
       saveStore();
     },
 
@@ -25274,7 +25312,7 @@ window.OC = window.OC || {};
       const saved = this.getSavedDiscovered(biome.id);
       const discCount = saved.length || (biome.defaultDiscovered ? biome.defaultDiscovered.length : 1);
       const missionsTotal = MISSIONS.filter((m) => m.biomeId === biome.id).length;
-      const doneArr = store.missionsDone[biome.id];
+      const doneArr = storeRef().missionsDone[biome.id];
       return {
         discovered: Math.min(encKeys.length, discCount),
         speciesTotal: encKeys.length,
@@ -25284,24 +25322,41 @@ window.OC = window.OC || {};
     },
 
     getFogGrid(biomeId) {
-      if (!biomeId || !store.fogMaps) return '';
-      return store.fogMaps[biomeId] || '';
+      if (!biomeId || !storeRef().fogMaps) return '';
+      return storeRef().fogMaps[biomeId] || '';
     },
 
     setFogGrid(biomeId, encoded) {
       if (!biomeId) return;
-      if (!store.fogMaps) store.fogMaps = {};
-      store.fogMaps[biomeId] = encoded || '';
+      if (!storeRef().fogMaps) storeRef().fogMaps = {};
+      storeRef().fogMaps[biomeId] = encoded || '';
       saveStore();
     },
 
     clearFogGrid(biomeId) {
-      if (!store.fogMaps) return;
-      if (biomeId) delete store.fogMaps[biomeId];
-      else store.fogMaps = {};
+      if (!storeRef().fogMaps) return;
+      if (biomeId) delete storeRef().fogMaps[biomeId];
+      else storeRef().fogMaps = {};
       saveStore();
     }
   };
+
+  /* ---- Научный отчёт: реализация в expedition/report.js ---- */
+  OC.Expedition.buildScientificReport = (context) => OC.Expedition._buildReport(context);
+  OC.Expedition.formatReportMarkdown = (rep) => OC.Expedition._formatReportMd(rep);
+  OC.Expedition.exportReport = (format, context) => OC.Expedition._exportReport(format, context);
+  OC.Expedition.getLastExport = () => OC.Expedition._lastExport || null;
+})(window.OC);
+
+// === ui/expedition/report.js ===
+/* ================= ЭКСПЕДИЦИЯ: НАУЧНЫЙ ОТЧЁТ ================= */
+/* Сборка отчёта по всем биомам (виды, миссии, CTD, эко-лаб, гидрофон, перф)
+   и экспорт в Markdown/JSON. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+
+  const { getStore } = OC._ExpStore;
 
   let lastExportedReport = null;
 
@@ -25337,7 +25392,7 @@ window.OC = window.OC || {};
 
     const allSum = OC.Expedition.getAllSummary();
     const samples = OC.Expedition.getSamples();
-    const photos = store.photos.map((p) => ({
+    const photos = getStore().photos.map((p) => ({
       id: p.id,
       biomeId: p.biomeId,
       biomeName: p.biomeName,
@@ -25459,6 +25514,14 @@ window.OC = window.OC || {};
     return lastExportedReport;
   };
   OC.Expedition.getLastExport = () => lastExportedReport;
+  OC.Expedition._buildReport = buildReportObj;
+  OC.Expedition._formatReportMd = formatMarkdownReport;
+  OC.Expedition._exportReport = function (format, context) {
+    const rep = buildReportObj(context);
+    OC.Expedition._lastExport = rep;
+    if (format === 'json') return { format: 'json', report: rep, content: JSON.stringify(rep, null, 2) };
+    return { format: 'md', report: rep, content: formatMarkdownReport(rep) };
+  };
 })(window.OC);
 
 // === ui/minimap.js ===
