@@ -67,19 +67,26 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
+
       - name: Install Playwright & Chromium with system dependencies
         run: |
           npm install --no-save playwright
-          # CDN playwright иногда отдаёт обрыв соединения — до трёх попыток
-          for attempt in 1 2 3; do
-            if npx playwright install --with-deps chromium; then
+          # CDN playwright периодически обрывает соединение и умеет висеть:
+          # ограничиваем каждую попытку таймаутом, чтобы джоб падал быстро.
+          for attempt in 1 2; do
+            if timeout 420 npx playwright install --with-deps chromium; then
               echo "Playwright/Chromium установлены с попытки $attempt"
               exit 0
             fi
-            echo "Попытка $attempt не удалась, повтор через $((attempt * 15)) с"
-            sleep $((attempt * 15))
+            echo "Попытка $attempt не удалась (таймаут 420 с), повтор через 20 с"
+            sleep 20
           done
-          echo "Не удалось установить Playwright/Chromium после 3 попыток"
+          echo "::error title=Playwright install failed::Не удалось скачать Chromium с cdn.playwright.dev за 2 попытки"
           exit 1
 
       - name: Run Playwright WebGL SwiftShader E2E & FPS Profile
