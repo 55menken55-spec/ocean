@@ -168,7 +168,8 @@ src/
 # Собрать автономный оффлайн index.html (работает даже без сервера)
 python3 build.py
 
-# Сверить src/ с порядком модулей в build.py (пропуски, лишние файлы, дубли)
+# Сверить с ORDER: пропуски/лишние файлы, актуальность дерева README,
+# порядок объявления неймспейсов OC._* (ловит регрессии при разбиении модулей)
 python3 build.py --check
 
 # Запустить локальный сервер
@@ -190,7 +191,7 @@ python3 .agents/skills/validate_skills.py
 ### Автоматический CI (`.github/workflows/ci.yml`)
 
 При каждом `push` / Pull Request на GitHub запускаются два последовательных джоба:
-1. **`build-and-vm-verify`**: сверка `python3 build.py --check` (порядок модулей), актуальность `index.html` (`python3 build.py` + `git diff --exit-code index.html`), валидация 30 скилов, полный `node tests/verify.mjs` и 1000-кадровый E2E-прогон `node tests/verify_e2e.mjs`.
+1. **`build-and-vm-verify`**: сверка `python3 build.py --check` (порядок модулей, дерево README, неймспейсы `OC._*`), актуальность `index.html` (`python3 build.py` + `git diff --exit-code index.html`), валидация 30 скилов, полный `node tests/verify.mjs` и 1000-кадровый E2E-прогон `node tests/verify_e2e.mjs`.
 2. **`browser-webgl-e2e`**: установка временного Playwright + headless Chromium (`ANGLE SwiftShader`), поднятие HTTP-сервера на `:8080`, проверка нечёрной отрисовки WebGL-пикселей, горячих клавиш и публикация таблицы **FPS / p95 CPU / drawCalls** по всем 10 биомам прямо в **GitHub Actions Step Summary**. Дополнительно прогоняется **мобильный проход** (ландшафт `844×390`, DPR 2, `hasTouch`, `pointer: coarse`): проверяются сенсорный джойстик (`getVirtualInput`), четыре кнопки быстрых действий, кнопка-«глаз», отсутствие переполнения HUD в портретной и ландшафтной ориентации и живая телеметрия динамического разрешения.
 
 ---
