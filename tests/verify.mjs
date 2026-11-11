@@ -469,6 +469,33 @@ const _vCur2 = new T.Vector3();
 ventBiome.getCurrentAt(vSite.x, vCrater + 12, vSite.z, 1.0, _vCur2);
 assert(Math.abs(_vCur2.y) < 0.5, 'Volcano must be quiet when idle');
 
+// Dynamic currents: eruption upwelling bursts, vortex swirl around the cone, pulses on seismic
+const _vCur3 = new T.Vector3();
+OC.Volcano._forcePhase('seismic');
+OC.Volcano.update(0.5, 0, camera.position); // mid-progress pulse phase
+ventBiome.getCurrentAt(vSite.x, vCrater + 12, vSite.z, 1.0, _vCur3);
+const seisUp = _vCur3.y;
+OC.Volcano._forcePhase('eruption');
+ventBiome.getCurrentAt(vSite.x, vCrater + 12, vSite.z, 1.0, _vCur3);
+const erupUp = _vCur3.y;
+assert(erupUp > 1.5 && erupUp > seisUp, `Eruption upwelling burst expected >1.5 m/s & exceed seismic, got ${erupUp.toFixed(2)} vs ${seisUp.toFixed(2)}`);
+ventBiome.getCurrentAt(vSite.x + 130, vCrater, vSite.z, 1.0, _vCur3);
+const erupX = _vCur3.x, erupZ = _vCur3.z;
+const erupHoriz = Math.hypot(erupX, erupZ);
+const a = Math.atan2(0, 130); // angle from site to sample
+const tang = -Math.sin(a), tang2 = Math.cos(a);
+const swirlComp = Math.hypot(erupX * tang + erupZ * tang2, erupX * tang2 - erupZ * tang) / erupHoriz;
+assert(swirlComp > 0.3, `Eruption must add vortex swirl tangential component, got ${swirlComp.toFixed(2)} of ${erupHoriz.toFixed(2)}`);
+OC.Volcano._forcePhase('seismic');
+OC.Volcano.update(0.25, 0, camera.position);
+const c1 = ventBiome.getCurrentAt(vSite.x + 150, vCrater, vSite.z, 1.0, new T.Vector3());
+OC.Volcano.update(0.42, 0, camera.position);
+const c2 = ventBiome.getCurrentAt(vSite.x + 150, vCrater, vSite.z, 1.0, new T.Vector3());
+assert(Math.hypot(c1.x, c1.z) !== Math.hypot(c2.x, c2.z), 'Seismic currents must pulse with progress');
+OC.Volcano._forcePhase('idle');
+ventBiome.getCurrentAt(vSite.x + 130, vCrater, vSite.z, 1.0, _vCur3);
+assert(Math.abs(_vCur3.y) < 0.5, `Volcano must be quiet when idle, got ${_vCur3.y.toFixed(2)}`);
+
 // Fauna response: per-phase influence (agitation during precursor, flee during eruption)
 const schoolsSrc = groupSource('engine/fauna');
 assert(schoolsSrc.includes('ctx.volcano') && schoolsSrc.includes('volcInf'), 'schools.js must react to volcano influence via ctx.volcano');

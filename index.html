@@ -20714,26 +20714,36 @@ window.OC = window.OC || {};
   function getCurrentBoost(x, y, z, out) {
     const ph = state.phase;
     if (ph === 'idle') return out;
-    const inten = ph === 'eruption' ? 1.0
+    let inten = ph === 'eruption' ? 1.0
       : (ph === 'seismic' ? 0.3 + 0.4 * state.progress : Math.max(0, (1 - state.progress) * 0.8));
+    // Пульсация интенсивности (всплески): сильна на сейсмике, слаба на извержении
+    const pulse = ph === 'seismic' ? 1 + 0.45 * Math.sin(state.progress * Math.PI * 6)
+      : (ph === 'cooling' ? 1 + 0.25 * Math.sin(state.progress * Math.PI * 3) : 1.05);
+    inten *= pulse;
     const dx = x - SITE.x;
     const dz = z - SITE.z;
     const d = Math.hypot(dx, dz);
     if (d > 260) return out;
     const fl = biome.getHeight(x, z);
     const above = Math.max(0, y - fl);
+    const a = Math.atan2(dz, dx);
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
     if (d < 70) {
       // Конвективная струя над кратером + радиальный вынос
       const core = OC.smoothstep(70, 7, d) * OC.smoothstep(75, 9, above);
-      out.y += core * 3.4 * inten;
-      const a = Math.atan2(dz, dx);
-      out.x += Math.cos(a) * core * 0.85 * inten;
-      out.z += Math.sin(a) * core * 0.85 * inten;
+      out.y += core * (ph === 'eruption' ? 4.2 : 1.2 + 1.6 * inten) * pulse;
+      out.x += ca * core * 0.85 * inten;
+      out.z += sa * core * 0.85 * inten;
     } else {
-      const a = Math.atan2(dz, dx);
       const edge = OC.smoothstep(260, 130, d);
-      out.x += Math.cos(a) * edge * 0.6 * inten;
-      out.z += Math.sin(a) * edge * 0.6 * inten;
+      // Радиальный вынос + вихревой свёртывание (вращение вокруг конуса)
+      const swirl = ph === 'eruption' ? 0.9 * inten
+        : (ph === 'seismic' ? 0.35 * inten : Math.max(0, (1 - state.progress) * 0.5));
+      out.x += ca * edge * 0.6 * inten;
+      out.z += sa * edge * 0.6 * inten;
+      out.x += -sa * edge * swirl;
+      out.z += ca * edge * swirl;
     }
     return out;
   }
