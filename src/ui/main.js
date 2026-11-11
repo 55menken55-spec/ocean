@@ -123,7 +123,6 @@ window.OC = window.OC || {};
   let hudHidden = false;
   let subMode = false;
   let toastTimer = 0;
-  let pickedTime = 0;
   let activeBiome = null;
   let activeFauna = null;
   let uiHandles = null;
@@ -137,15 +136,12 @@ window.OC = window.OC || {};
   let lastEcoEventAt = -100;
   const ECO_LABELS = OC._HudPanels.ECO_LABELS;
   const _fwd = new T.Vector3();
-  const _zeroNdc = new T.Vector2(0, 0);
 
   function updateLensDroplets(dt, camPos, wState, biome) {
     OC._HudPanels.updateLensDroplets(lensCanvas, dt, camPos, wState, biome);
   }
 
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const raycaster = new T.Raycaster();
-  const ndc = new T.Vector2();
 
   function setBar(p) {
     if (loadingBar) loadingBar.style.width = (p * 100).toFixed(0) + '%';
@@ -163,36 +159,17 @@ window.OC = window.OC || {};
     return OC._HudPanels.formatHeading(yawRad);
   }
 
-  function isObjVisible(obj) {
-    for (let p = obj; p; p = p.parent) {
-      if (!p.visible) return false;
-    }
-    return true;
-  }
-
-  function detectCenterTarget(camera, biome, fauna) {
-    if (!camera || !biome) return null;
-    camera.getWorldDirection(_fwd);
-    let faunaHit = (fauna && fauna.scanCameraTarget) ? fauna.scanCameraTarget(camera.position, _fwd, 95) : null;
-
-    raycaster.setFromCamera(_zeroNdc, camera);
-    const hits = raycaster.intersectObjects(OC.getScene().children, true);
-    let rayHit = null;
-    for (const h of hits) {
-      if (!isObjVisible(h.object) || h.distance > 48) continue;
-      let o = h.object;
-      while (o && !o.userData.key && !o.userData.rovKey) o = o.parent;
-      if (o && o.userData.rovKey) continue;
-      const key = o && o.userData.key ? o.userData.key : null;
-      if (!key || key === 'bubbles' || key === 'plankton' || key === 'marine_snow') continue;
-      const enc = biome.encyclopedia[key];
-      rayHit = { hit: true, key, label: enc ? enc[0] : key, latin: enc ? enc[1] : '', dist: h.distance, align: 0.92 };
-      break;
-    }
-
-    if (faunaHit && (!rayHit || rayHit.key === 'floor' || faunaHit.dist <= rayHit.dist + 8)) return faunaHit;
-    return rayHit;
-  }
+  /* Пикинг сцены и карточки видов — ui/picking.js */
+  const picking = OC._ScenePicking.bind({
+    getScene: () => OC.getScene(),
+    getCamera: () => OC.getCamera(),
+    getCanvas: () => canvas,
+    toast
+  });
+  const detectCenterTarget = picking.detectCenterTarget;
+  const pickAt = picking.pickAt;
+  const showInfo = picking.showInfo;
+  const showRovPopup = picking.showRovPopup;
 
   function renderJournal() {
     OC._HudPanels.renderJournal({
@@ -206,40 +183,6 @@ window.OC = window.OC || {};
       switchBiome,
       toast
     });
-  }
-
-  function showInfo(key, cx, cy, biome) {
-    OC._HudPanels.showInfo(popup, key, cx, cy, biome);
-    pickedTime = performance.now();
-  }
-
-  function showRovPopup(cx, cy) {
-    OC._HudPanels.showRovPopup(popup, cx, cy);
-    pickedTime = performance.now();
-  }
-
-  function pickAt(cx, cy, biome) {
-    const rect = canvas.getBoundingClientRect();
-    ndc.x = ((cx - rect.left) / rect.width) * 2 - 1;
-    ndc.y = -((cy - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(ndc, OC.getCamera());
-    const hits = raycaster.intersectObjects(OC.getScene().children, true);
-    for (const h of hits) {
-      if (!isObjVisible(h.object)) continue;
-      let o = h.object;
-      while (o && !o.userData.key && !o.userData.rovKey) o = o.parent;
-      if (o && o.userData.rovKey) {
-        if (o.userData.rovKey === 'rov_nautilus') {
-          showRovPopup(cx, cy);
-          return;
-        }
-        continue;
-      }
-      const key = o && o.userData.key ? o.userData.key : null;
-      if (!key || key === 'bubbles' || key === 'plankton' || key === 'marine_snow') continue;
-      showInfo(key, cx, cy, biome);
-      return;
-    }
   }
 
   function drawEchosounder(camPos, yaw, biome, fauna, time) {
@@ -1041,9 +984,7 @@ window.OC = window.OC || {};
         fpsFrames = 0;
       }
 
-      if (popup && !popup.classList.contains('hidden') && now - pickedTime > 9500) {
-        popup.classList.add('hidden');
-      }
+      picking.autoHidePopup(now);
 
       // Плавный оптический зум объектива в режиме фотокамеры
       const wantFov = (OC.Expedition && OC.Expedition.isPhotoMode()) ? OC.Expedition.getZoomFov() : 60;

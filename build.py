@@ -50,6 +50,7 @@ ORDER = [
     'ui/panels_rov.js',
     'ui/panels_camera.js',
     'ui/panels_service.js',
+    'ui/picking.js',
     'ui/panels_options.js',
     'ui/panels_biomes.js',
     'ui/panels_touch.js',
