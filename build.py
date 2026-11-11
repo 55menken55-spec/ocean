@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
-"""Собирает автономный index.html: Three.js + модульная архитектура движка и биомов."""
+"""Собирает автономный index.html: Three.js + модульная архитектура движка и биомов.
+
+ORDER — единственный источник правды о порядке модулей. tests/verify.mjs читает
+этот же файл (python3 build.py --list), поэтому второй список не дублируется.
+
+    python3 build.py            собрать index.html
+    python3 build.py --check    сверить src/ с ORDER (лишние/отсутствующие/дубли)
+    python3 build.py --list     напечатать порядок модулей (JSON)
+"""
+import json
 import os
+import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, 'src')
@@ -97,23 +107,71 @@ ORDER = [
     'ui/main.js',
 ]
 
-with open(os.path.join(ROOT, 'three.min.js'), encoding='utf-8') as f:
-    three = f.read().replace('</script>', '<\\/script>')
+def list_modules():
+    """Порядок модулей в виде JSON — его использует tests/verify.mjs."""
+    print(json.dumps(ORDER))
 
-chunks = []
-for rel in ORDER:
-    p = os.path.join(SRC, rel)
-    with open(p, encoding='utf-8') as f:
-        chunks.append(f'// === {rel} ===\n' + f.read())
 
-src = '\n'.join(chunks).replace('</script>', '<\\/script>')
+def check(strict=True):
+    """Сверяет src/ с ORDER: пропуски, лишние файлы и дубли."""
+    problems = []
 
-with open(os.path.join(ROOT, 'template.html'), encoding='utf-8') as f:
-    tpl = f.read()
+    seen = set()
+    for rel in ORDER:
+        if rel in seen:
+            problems.append(f'дубль в ORDER: {rel}')
+        seen.add(rel)
+        if not os.path.isfile(os.path.join(SRC, rel)):
+            problems.append(f'в ORDER есть, файла нет: {rel}')
 
-out = tpl.replace('/*__THREE__*/', three).replace('/*__SRC__*/', src)
-out_path = os.path.join(ROOT, 'index.html')
-with open(out_path, 'w', encoding='utf-8') as f:
-    f.write(out)
+    on_disk = set()
+    for root, _, files in os.walk(SRC):
+        for f in files:
+            if f.endswith('.js'):
+                on_disk.add(os.path.relpath(os.path.join(root, f), SRC).replace(os.sep, '/'))
+    for rel in sorted(on_disk - seen):
+        problems.append(f'файл не попал в ORDER: {rel}')
 
-print(f'OK -> {out_path} ({round(len(out) / 1024)} KB, {len(ORDER)} modules)')
+    if problems:
+        print('ORDER рассинхронизирован:')
+        for p_ in problems:
+            print('  -', p_)
+        if strict:
+            sys.exit(1)
+        return False
+    print(f'ORDER ok: {len(ORDER)} модулей, лишних файлов в src/ нет.')
+    return True
+
+
+def main(argv):
+    if '--list' in argv:
+        list_modules()
+        return
+    if '--check' in argv:
+        check()
+        return
+
+    with open(os.path.join(ROOT, 'three.min.js'), encoding='utf-8') as f:
+        three = f.read().replace('</script>', '<\\/script>')
+
+    chunks = []
+    for rel in ORDER:
+        p_ = os.path.join(SRC, rel)
+        with open(p_, encoding='utf-8') as f:
+            chunks.append(f'// === {rel} ===\n' + f.read())
+
+    src = '\n'.join(chunks).replace('</script>', '<\\/script>')
+
+    with open(os.path.join(ROOT, 'template.html'), encoding='utf-8') as f:
+        tpl = f.read()
+
+    out = tpl.replace('/*__THREE__*/', three).replace('/*__SRC__*/', src)
+    out_path = os.path.join(ROOT, 'index.html')
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write(out)
+
+    print(f'OK -> {out_path} ({round(len(out) / 1024)} KB, {len(ORDER)} modules)')
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
