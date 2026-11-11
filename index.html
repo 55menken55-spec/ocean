@@ -1711,6 +1711,23 @@ window.OC = window.OC || {};
     const sector = Math.floor((((localPhase + 0.125) % 1) * 4));
     const season = SEASONS[sector];
     const warmFactor = -Math.cos(localPhase * TAU);
+    const winterFactor = 0.5 + 0.5 * Math.cos(localPhase * TAU);
+    const isAmazon = biome && biome.id === 'amazon_igapo';
+    const isGalapagos = biome && biome.id === 'galapagos_upwelling';
+    const isBaikal = biome && biome.id === 'baikal';
+    const isArctic = biome && biome.id === 'arctic_sea';
+    const isKelp = biome && biome.id === 'kelp_forest';
+    const isDeep = biome && (biome.id === 'hydrothermal_vents' || biome.id === 'mariana_trench' || biome.id === 'brine_pool');
+    const floodFactor = isAmazon ? 0.5 + 0.5 * Math.cos((localPhase - 0.34) * TAU) : 0;
+    const upwellingFactor = isGalapagos ? 1.0 - warmFactor * 0.28 : 1.0;
+    const iceFactor = isBaikal ? winterFactor : (isArctic ? 0.68 + winterFactor * 0.32 : 0);
+    const currentFactor = isGalapagos
+      ? 0.78 + upwellingFactor * 0.22
+      : (isAmazon ? 0.84 + floodFactor * 0.28 : (isKelp ? 1.0 + warmFactor * 0.1 : (biome && biome.id === 'great_barrier_reef' ? 1.0 + warmFactor * 0.045 : 1.0)));
+    const faunaActivity = isGalapagos
+      ? 0.82 + upwellingFactor * 0.2
+      : (isKelp ? 0.92 + warmFactor * 0.08 : (isAmazon ? 0.92 + floodFactor * 0.12 : (isDeep ? 1.0 : 1.0 + warmFactor * 0.035)));
+    const productivityFactor = isKelp ? 0.88 + (0.5 + 0.5 * warmFactor) * 0.24 : 1.0;
     return {
       id: season.id,
       label: season.label,
@@ -1719,9 +1736,25 @@ window.OC = window.OC || {};
       localPhase,
       hemisphere: climate.hemisphere,
       warmFactor,
+      winterFactor,
+      iceFactor,
+      floodFactor,
+      waterLevelM: isAmazon ? (floodFactor - 0.5) * 2.2 : 0,
+      turbidityAdd: isAmazon ? 0.0003 + floodFactor * 0.0016 : 0,
+      waterTint: isAmazon ? floodFactor * 0.08 : 0,
+      upwellingFactor,
+      currentFactor,
+      faunaActivity,
+      productivityFactor,
       lightFactor: 1 + warmFactor * climate.lightAmplitude,
       progress: localPhase
     };
+  }
+
+  function getUpwellingFactor(biome) {
+    const id = typeof biome === 'string' ? biome : (biome && biome.id);
+    if (id !== 'galapagos_upwelling') return 1.0;
+    return 1.0 + Math.cos(phase * TAU) * 0.28;
   }
 
   function getTemperatureDelta(biome, depthM) {
@@ -1777,7 +1810,8 @@ window.OC = window.OC || {};
       return true;
     },
     getState,
-    getTemperatureDelta
+    getTemperatureDelta,
+    getUpwellingFactor
   };
 })(window.OC);
 
@@ -3351,7 +3385,7 @@ window.OC = window.OC || {};
     schools: [
       { key: 'fish_garibaldi', n: 28, cx: landmarks[2].x, cz: landmarks[2].z, radius: 26, yDepth: -14, yAmp: 3, spread: 8, speed: 4.5, scale: 0.62, diel: 'diurnal', shyness: 0.45, curious: 0.25,
         geoOpts: { len: 0.95, height: 0.56, width: 0.22, colA: 0xff5a12, colB: 0xff8a24, finCol: 0xff6b1a } },
-      { key: 'fish_rockfish', n: 36, cx: spawnX + 35, cz: spawnZ - 25, radius: 34, yDepth: -12, yAmp: 4.5, spread: 10, speed: 4.8, scale: 0.68, diel: 'diurnal', shyness: 0.55,
+      { key: 'fish_rockfish', n: 36, cx: spawnX + 35, cz: spawnZ - 25, radius: 34, yDepth: -12, yAmp: 4.5, seasonalDepth: 3, spread: 10, speed: 4.8, scale: 0.68, diel: 'diurnal', shyness: 0.55,
         geoOpts: { len: 1.15, height: 0.48, width: 0.22, colA: 0x5c5b34, colB: 0x9b8e58, finCol: 0x454428, stripes: 0.35 } },
       { key: 'fish_rockfish', n: 32, cx: -320, cz: -120, radius: 32, yDepth: -10, yAmp: 4, spread: 9, speed: 5.0, scale: 0.65, diel: 'diurnal', shyness: 0.55,
         geoOpts: { len: 1.15, height: 0.48, width: 0.22, colA: 0x705638, colB: 0xb28f60, finCol: 0x55402a, stripes: 0.4 } },
@@ -4378,9 +4412,9 @@ window.OC = window.OC || {};
   const FAUNA_PLAN = {
     cleaningStations: [],
     schools: [
-      { key: 'fish_arctic_cod', n: 75, cx: spawnX + 30, cz: spawnZ - 15, radius: 34, yDepth: -6.5, yAmp: 3, spread: 9, speed: 5.8, scale: 0.56, diel: 'cathemeral', shyness: 0.72,
+      { key: 'fish_arctic_cod', n: 75, cx: spawnX + 30, cz: spawnZ - 15, radius: 34, yDepth: -6.5, yAmp: 3, seasonalDepth: 4, spread: 9, speed: 5.8, scale: 0.56, diel: 'cathemeral', shyness: 0.72,
         geoOpts: { len: 1.05, height: 0.34, width: 0.16, colA: 0x455c72, colB: 0xd6e6f2, finCol: 0x8ea6ba } },
-      { key: 'fish_arctic_cod', n: 65, cx: landmarks[1].x - 20, cz: landmarks[1].z + 30, radius: 38, yDepth: -11, yAmp: 4, spread: 10, speed: 6.0, scale: 0.58, diel: 'cathemeral', shyness: 0.72,
+      { key: 'fish_arctic_cod', n: 65, cx: landmarks[1].x - 20, cz: landmarks[1].z + 30, radius: 38, yDepth: -11, yAmp: 4, seasonalDepth: 5, spread: 10, speed: 6.0, scale: 0.58, diel: 'cathemeral', shyness: 0.72,
         geoOpts: { len: 1.05, height: 0.34, width: 0.16, colA: 0x455c72, colB: 0xd6e6f2, finCol: 0x8ea6ba } },
       { key: 'fish_sculpin', n: 26, cx: landmarks[3].x, cz: landmarks[3].z, radius: 26, yDepth: -20, yAmp: 2, spread: 8, speed: 3.4, scale: 0.72, diel: 'cathemeral', shyness: 0.4,
         geoOpts: { len: 1.0, height: 0.44, width: 0.28, colA: 0x4d4338, colB: 0x9c8266, finCol: 0x73624d, stripes: 0.45 } },
@@ -6921,7 +6955,8 @@ window.OC = window.OC || {};
     const wx = x - wallCurve(z);
     // Глубинное экваториальное течение Кромвеля ударяется о склон и мощно устремляется вверх (апвеллинг)
     const onWall = OC.smoothstep(-40, 120, wx) * OC.smoothstep(380, 150, wx);
-    const upSurge = onWall * (0.42 + 0.35 * Math.sin(time * 0.4 + z * 0.015));
+    const seasonalUpwelling = OC.Seasons ? OC.Seasons.getUpwellingFactor('galapagos_upwelling') : 1.0;
+    const upSurge = onWall * (0.42 + 0.35 * Math.sin(time * 0.4 + z * 0.015)) * seasonalUpwelling;
     const vx = 0.55 + 0.32 * onWall + Math.sin(time * 0.25 + z * 0.01) * 0.14;
     const vz = 0.38 + Math.cos(time * 0.22 + x * 0.01) * 0.18;
     const vy = upSurge - (y > -3.0 ? 0.18 : 0.0);
@@ -7231,9 +7266,9 @@ window.OC = window.OC || {};
       { cx: 285, cz: -45, r: 72, y: -4.5, count: 5, speed: 7.4, variant: 'spinner' }
     ],
     schools: [
-      { key: 'sardine_baitball', n: 180, cx: 145, cz: -25, radius: 34, yDepth: -14, yAmp: 4.5, spread: 7.5, speed: 7.8, scale: 0.36, diel: 'diurnal', shyness: 0.85,
+      { key: 'sardine_baitball', n: 180, cx: 145, cz: -25, radius: 34, yDepth: -14, yAmp: 4.5, seasonalDepth: 5, spread: 7.5, speed: 7.8, scale: 0.36, diel: 'diurnal', shyness: 0.85,
         geoOpts: { len: 0.92, height: 0.24, width: 0.13, colA: 0x3b6c94, colB: 0xdff2fb, finCol: 0x90b8cc } },
-      { key: 'sardine_baitball', n: 140, cx: -145, cz: 12, radius: 24, yDepth: -6, yAmp: 2.4, spread: 6.2, speed: 7.2, scale: 0.35, diel: 'diurnal', shyness: 0.85,
+      { key: 'sardine_baitball', n: 140, cx: -145, cz: 12, radius: 24, yDepth: -6, yAmp: 2.4, seasonalDepth: 3, spread: 6.2, speed: 7.2, scale: 0.35, diel: 'diurnal', shyness: 0.85,
         geoOpts: { len: 0.92, height: 0.24, width: 0.13, colA: 0x3b6c94, colB: 0xdff2fb, finCol: 0x90b8cc } },
       { key: 'tuna_yellowfin', n: 32, cx: 340, cz: -65, radius: 52, yDepth: -24, yAmp: 6, spread: 13, speed: 10.6, scale: 0.82, predator: true, diel: 'diurnal', shyness: 0.2,
         geoOpts: { len: 1.55, height: 0.48, width: 0.24, colA: 0x22385c, colB: 0xe6eff6, finCol: 0xf6c924 } },
@@ -7399,14 +7434,14 @@ window.OC = window.OC || {};
     return ZONES[0];
   }
 
-  function getCurrentAt(x, y, z, flowMult, out) {
-    const m = flowMult || 1.0;
+  function getCurrentAt(x, y, z, time, out) {
+    const t = Number.isFinite(time) ? time : 0;
     const conf = getConfluenceBlend(x, z);
     const cz = channelCenterZ(x);
     const inChan = 1.0 - OC.smoothstep(30, 145, Math.abs(z - cz));
-    const vx = (0.28 + 0.72 * inChan + 0.45 * conf) * m;
-    const vz = (Math.cos(x * 0.0045 + 0.6) * 0.32 + Math.sin(z * 0.02 + x * 0.01) * 0.08) * m;
-    const vy = Math.sin(x * 0.025 + z * 0.02) * 0.03 * m;
+    const vx = 0.28 + 0.72 * inChan + 0.45 * conf + Math.sin(t * 0.07 + z * 0.013) * 0.055;
+    const vz = Math.cos(x * 0.0045 + 0.6) * 0.32 + Math.sin(z * 0.02 + x * 0.01 + t * 0.04) * 0.08;
+    const vy = Math.sin(x * 0.025 + z * 0.02 + t * 0.03) * 0.03;
     return out.set(vx, vy, vz);
   }
 
@@ -7681,9 +7716,9 @@ window.OC = window.OC || {};
       { cx: -120, cz: -40, r: 75, y: 12.5, count: 6, speed: 10.5, variant: 'tropical' }
     ],
     schools: [
-      { key: 'neon_tetra', n: 120, cx: -110, cz: 122, radius: 22, yDepth: -3.8, yAmp: 1.8, spread: 5.5, speed: 5.4, scale: 0.28, biolum: true, diel: 'diurnal', shyness: 0.75,
+      { key: 'neon_tetra', n: 120, cx: -110, cz: 122, radius: 22, yDepth: -3.8, yAmp: 1.8, seasonalDepth: 1.2, spread: 5.5, speed: 5.4, scale: 0.28, biolum: true, diel: 'diurnal', shyness: 0.75,
         geoOpts: { len: 0.72, height: 0.24, width: 0.12, colA: 0x16c8ff, colB: 0xff2e3b, finCol: 0x80eaff, stripes: 0.4 } },
-      { key: 'neon_tetra', n: 95, cx: -22, cz: 46, radius: 24, yDepth: -4.0, yAmp: 1.9, spread: 5.2, speed: 5.2, scale: 0.28, biolum: true, diel: 'diurnal', shyness: 0.75,
+      { key: 'neon_tetra', n: 95, cx: -22, cz: 46, radius: 24, yDepth: -4.0, yAmp: 1.9, seasonalDepth: 1.5, spread: 5.2, speed: 5.2, scale: 0.28, biolum: true, diel: 'diurnal', shyness: 0.75,
         geoOpts: { len: 0.72, height: 0.24, width: 0.12, colA: 0x16c8ff, colB: 0xff2e3b, finCol: 0x80eaff, stripes: 0.4 } },
       { key: 'piranha', n: 48, cx: 18, cz: 8, radius: 34, yDepth: -8.5, yAmp: 3.2, spread: 7.8, speed: 7.4, scale: 0.56, predator: true, diel: 'diurnal', shyness: 0.25,
         geoOpts: { len: 0.88, height: 0.52, width: 0.18, colA: 0x627278, colB: 0xd93022, finCol: 0xff5a36 } },
@@ -7855,6 +7890,19 @@ window.OC = window.OC || {};
         add('charophyte_bed', x, h - 0.08, z, OC.lerp(0.72, 1.45, rng()), 0x9ebd72);
       }
     }
+    // Редкие сезонные льдины на глубокой кромке прибрежья; летом их материал тает почти до нуля.
+    for (let i = 0, n = Math.round(5 * density); i < n; i++) {
+      const x = x0 + rng() * chunkSize, z = z0 + rng() * chunkSize;
+      const depth = -getHeight(x, z);
+      if (depth < 8 || depth > 70 || getRiftDistance(x, z) < 455) continue;
+      let nearLandmark = false;
+      for (let j = 0; j < landmarks.length; j++) {
+        if (Math.hypot(x - landmarks[j].x, z - landmarks[j].z) < 36) { nearLandmark = true; break; }
+      }
+      if (!nearLandmark && rng() < 0.46) {
+        add('ice_floe', x, 0.04, z, OC.lerp(0.62, 1.08, rng()), rng() < 0.5 ? 0xf4fbff : 0xdff4ff);
+      }
+    }
     return items;
   }
 
@@ -7910,11 +7958,11 @@ window.OC = window.OC || {};
   const FAUNA_PLAN = {
     cleaningStations: [],
     schools: [
-      { key: 'fish_omul', n: 54, cx: -470, cz: -345, radius: 34, yDepth: -12, yAmp: 8, spread: 12, speed: 5.2, scale: 0.72, diel: 'cathemeral', shyness: 0.58,
+      { key: 'fish_omul', n: 54, cx: -470, cz: -345, radius: 34, yDepth: -12, yAmp: 8, seasonalDepth: 6, spread: 12, speed: 5.2, scale: 0.72, diel: 'cathemeral', shyness: 0.58,
         geoOpts: { len: 1.4, height: 0.55, width: 0.24, colA: 0x718b8b, colB: 0xc2d9cf, finCol: 0x506a70, stripes: 0.2 } },
-      { key: 'fish_omul', n: 42, cx: -360, cz: -90, radius: 42, yDepth: -65, yAmp: 18, spread: 14, speed: 6.1, scale: 0.76, diel: 'cathemeral', shyness: 0.62,
+      { key: 'fish_omul', n: 42, cx: -360, cz: -90, radius: 42, yDepth: -65, yAmp: 18, seasonalDepth: 12, spread: 14, speed: 6.1, scale: 0.76, diel: 'cathemeral', shyness: 0.62,
         geoOpts: { len: 1.4, height: 0.55, width: 0.24, colA: 0x718b8b, colB: 0xc2d9cf, finCol: 0x506a70, stripes: 0.2 } },
-      { key: 'fish_golomyanka', n: 62, cx: -70, cz: 70, radius: 54, yDepth: -420, yAmp: 170, dvmAmp: 105, spread: 18, speed: 4.5, scale: 0.54, diel: 'nocturnal', shyness: 0.42,
+      { key: 'fish_golomyanka', n: 62, cx: -70, cz: 70, radius: 54, yDepth: -420, yAmp: 170, dvmAmp: 105, seasonalDepth: 24, spread: 18, speed: 4.5, scale: 0.54, diel: 'nocturnal', shyness: 0.42,
         geoOpts: { len: 1.15, height: 0.48, width: 0.18, colA: 0x8db6c5, colB: 0xe2f0ef, finCol: 0x7cabbc } },
       { key: 'fish_grayling', n: 30, cx: -500, cz: -560, radius: 30, yDepth: -6, yAmp: 2.4, spread: 8, speed: 4.4, scale: 0.65, diel: 'diurnal', shyness: 0.38,
         geoOpts: { len: 1.15, height: 0.5, width: 0.22, colA: 0x546b74, colB: 0xb7c5b3, finCol: 0x667d88, stripes: 0.18 } }
@@ -8000,7 +8048,8 @@ window.OC = window.OC || {};
       if (state.onThunder) state.onThunder();
     },
 
-    update(dt, time, camPos, biome) {
+    update(dt, time, camPos, biome, waterLevel) {
+      const seaY = Number.isFinite(waterLevel) ? waterLevel : (biome && Number.isFinite(biome.seaLevel) ? biome.seaLevel : 0);
       const noSurface = !!(biome && biome.noSurface);
       const isArctic = !!(biome && biome.hasAurora);
 
@@ -8059,10 +8108,10 @@ window.OC = window.OC || {};
 
       // Капли на объективе / маске при выныривании или под дождём над водой
       if (camPos) {
-        if (camPos.y < -0.25) {
+        if (camPos.y < seaY - 0.25) {
           state.droplets = Math.min(1.0, state.droplets + dt * 2.5);
         } else {
-          const rainKeep = (!isArctic && !underCaveRoof && state.precip > 0.3) ? state.precip * 0.52 : 0.0;
+          const rainKeep = (!isArctic && !underCaveRoof && camPos.y > seaY + 0.15 && state.precip > 0.3) ? state.precip * 0.52 : 0.0;
           state.droplets = Math.max(rainKeep, state.droplets - dt * 0.24);
         }
       }
@@ -8646,11 +8695,12 @@ window.OC = window.OC || {};
         uCamPos: { value: new T.Vector3() },
         uPrecip: { value: 0.0 },
         uSnowMode: { value: 0.0 },
+        uWaterLevel: { value: 0.0 },
         uScale: { value: 1.0 }
       },
       vertexShader: `
         attribute float aPhase, aSize;
-        uniform float uTime, uPrecip, uSnowMode, uScale;
+        uniform float uTime, uPrecip, uSnowMode, uWaterLevel, uScale;
         uniform vec3 uCamPos;
         varying float vAlpha;
         void main(){
@@ -8662,7 +8712,7 @@ window.OC = window.OC || {};
           p.z += cos(uTime * 1.1 + aPhase) * mix(0.2, 2.1, uSnowMode);
           vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
           vec3 worldP = uCamPos + rel;
-          float aboveWater = step(0.15, worldP.y);
+          float aboveWater = step(uWaterLevel + 0.15, worldP.y);
           vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
           gl_PointSize = aboveWater * aSize * uScale * mix(95.0, 165.0, uSnowMode) / max(1.5, -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
@@ -8924,6 +8974,7 @@ window.OC = window.OC || {};
   const _stormCol = new T.Color(0x283848);
   const _lightCol = new T.Color(0xdcf0ff);
   const _algalCol = new T.Color(0x1f5a38);
+  const _seasonWaterCol = new T.Color(0x735c31);
 
   const causticU = {
     uTime: OC.uTime,
@@ -9590,13 +9641,15 @@ window.OC = window.OC || {};
 
     const biome = OC.Biomes.getActive();
     const season = OC.Seasons ? OC.Seasons.getState(biome) : null;
-    const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
+    const waterLevel = (biome && Number.isFinite(biome.seaLevel) ? biome.seaLevel : 0) + (season ? season.waterLevelM : 0);
+    const relativeY = camPos.y - waterLevel;
+    const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome, waterLevel) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
     const lab = OC.EcoLab ? OC.EcoLab.update(dt, biome, pal.dayW) : null;
     causticU.uBleach.value = lab ? lab.bleaching : 0.0;
     const opt = biome
-      ? biome.getOpticalProfile(camPos.x, camPos.y, camPos.z, pal.dayW)
+      ? biome.getOpticalProfile(camPos.x, relativeY, camPos.z, pal.dayW)
       : {
-          aboveWater: camPos.y > 0.25,
+          aboveWater: relativeY > 0.25,
           fogColor: pal.skyMid,
           fogDensity: 0.007,
           causticStrength: pal.caustic,
@@ -9620,13 +9673,19 @@ window.OC = window.OC || {};
       pal.fogCol.lerp(_algalCol, algalMix);
     }
     const labFogDelta = lab ? ((biome && biome.noSurface ? lab.turbidityAdd * 0.35 : lab.turbidityAdd) - lab.clarityBonus) : 0;
+    const seasonFogAdd = season && !opt.aboveWater && !(biome && biome.noSurface)
+      ? season.turbidityAdd * OC.smoothstep(-28.0, 0.0, relativeY)
+      : 0;
     const siltFogAdd = (OC.faunaInfo && OC.faunaInfo.siltTurbidity) ? OC.faunaInfo.siltTurbidity * 0.011 : 0;
-    pal.fogDen = Math.max(0.0015, opt.fogDensity + shallowTurb * 0.0045 + labFogDelta + siltFogAdd);
+    pal.fogDen = Math.max(0.0015, opt.fogDensity + shallowTurb * 0.0045 + labFogDelta + seasonFogAdd + siltFogAdd);
     pal.bioGlow = opt.bioGlow;
     const bloomAtten = lab ? (1.0 - lab.algalTint * 0.42) : 1.0;
     pal.sunAtten = opt.sunAtten * stormAtten * bloomAtten;
     if (opt.aboveTop) pal.aboveTop.copy(opt.aboveTop);
     if (opt.waterColor) pal.water.copy(opt.waterColor);
+    if (season && season.waterTint > 0.001 && !opt.aboveWater) {
+      pal.water.lerp(_seasonWaterCol, season.waterTint);
+    }
     if (lab && lab.algalTint > 0.01 && !(biome && biome.noSurface)) {
       pal.water.lerp(_algalCol, lab.algalTint * 0.38);
     }
@@ -9706,7 +9765,7 @@ window.OC = window.OC || {};
     }
 
     /* купол неба */
-    const aboveMix = (biome && biome.noSurface) ? 0.0 : OC.smoothstep(-0.3, 0.5, camPos.y);
+    const aboveMix = (biome && biome.noSurface) ? 0.0 : OC.smoothstep(-0.3, 0.5, relativeY);
     skyMat.uniforms.uTop.value.copy(pal.skyTop);
     skyMat.uniforms.uMid.value.copy(opt.fogColor);
     if (algalMix > 0.001) skyMat.uniforms.uMid.value.lerp(_algalCol, algalMix);
@@ -9731,7 +9790,7 @@ window.OC = window.OC || {};
     causticU.uWaveAmp.value = wState.waveAmp;
     if (biome && biome.getCurrentAt) {
       biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
-      const currMult = lab ? lab.currentMult : 1.0;
+      const currMult = (lab ? lab.currentMult : 1.0) * (season ? season.currentFactor : 1.0);
       causticU.uCurrent.value.set(_worldCurr.x * currMult, _worldCurr.z * currMult);
     }
 
@@ -9740,13 +9799,14 @@ window.OC = window.OC || {};
     if (surfacePlane.visible) {
       const snap = 44;
       surfacePlane.position.x = Math.round(camPos.x / snap) * snap;
+      surfacePlane.position.y = waterLevel;
       surfacePlane.position.z = Math.round(camPos.z / snap) * snap;
       surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
       surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
       surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);
       surfaceMat.uniforms.uSunDir.value.copy(sunDir);
       surfaceMat.uniforms.uDayW.value = pal.dayW;
-      surfaceMat.uniforms.uCamY.value = camPos.y;
+      surfaceMat.uniforms.uCamY.value = relativeY;
       surfaceMat.uniforms.uWaveAmp.value = wState.waveAmp;
       surfaceMat.uniforms.uStorm.value = wState.stormMix;
       surfaceMat.uniforms.uLightning.value = wState.lightning;
@@ -9757,7 +9817,7 @@ window.OC = window.OC || {};
 
     /* объёмные 3D-конусы солнечных лучей, ориентированные по преломлённому солнцу */
     const rayIntensity = opt.rayStrength * (1.0 - wState.stormMix * 0.65) * bloomAtten;
-    raysState.raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && rayIntensity > 0.02;
+    raysState.raysGroup.visible = !(biome && biome.noSurface) && relativeY < 0.2 && rayIntensity > 0.02;
     if (raysState.raysGroup.visible) {
       if (biome && biome.getCenoteShafts) {
         const shafts = biome.getCenoteShafts();
@@ -9790,11 +9850,14 @@ window.OC = window.OC || {};
     /* надводные осадки (штормовой дождь / арктический снегопад) */
     const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
     if (precipFx) {
-      precipFx.points.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && camPos.y > -12.0;
+      precipFx.points.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && relativeY > -12.0;
       if (precipFx.points.visible) {
         precipFx.mat.uniforms.uCamPos.value.copy(camPos);
         precipFx.mat.uniforms.uPrecip.value = wState.precip;
-        precipFx.mat.uniforms.uSnowMode.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
+        precipFx.mat.uniforms.uWaterLevel.value = waterLevel;
+        precipFx.mat.uniforms.uSnowMode.value = biome && biome.hasAurora
+          ? (season ? 0.56 + season.winterFactor * 0.44 : 1.0)
+          : (biome && biome.id === 'baikal' && season ? season.iceFactor : 0.0);
       }
     }
 
@@ -9814,11 +9877,11 @@ window.OC = window.OC || {};
     }
 
     /* параметры постпроцессинга подводной оптики (Bloom, хроматика, капли на линзе) */
-    const camAboveNow = !noSurf && !underCaveRoof && camPos.y > -0.18;
-    if (!noSurf && !underCaveRoof && ((camAboveNow && !prevCamAboveWater) || (camPos.y > -0.18 && camPos.y < 1.35) || (camAboveNow && wState.precip > 0.12))) {
+    const camAboveNow = !noSurf && !underCaveRoof && relativeY > -0.18;
+    if (!noSurf && !underCaveRoof && ((camAboveNow && !prevCamAboveWater) || (relativeY > -0.18 && relativeY < 1.35) || (camAboveNow && wState.precip > 0.12))) {
       lensWetness = Math.min(1.0, lensWetness + dt * 3.8);
     } else {
-      const dryRate = camPos.y < -0.5 ? 0.42 : 0.24;
+      const dryRate = relativeY < -0.5 ? 0.42 : 0.24;
       lensWetness = Math.max(0.0, lensWetness - dt * dryRate);
     }
     prevCamAboveWater = camAboveNow;
@@ -9826,16 +9889,16 @@ window.OC = window.OC || {};
     if (postFx && postFx.mat) {
       const qCur = OC.Quality.get ? OC.Quality.get() : null;
       const bScale = qCur && typeof qCur.bloomScale === 'number' ? qCur.bloomScale : 1.0;
-      const depthM = (biome && biome.depthOffset ? biome.depthOffset : 0) + Math.max(0, -camPos.y);
+      const depthM = (biome && biome.depthOffset ? biome.depthOffset : 0) + Math.max(0, -relativeY);
       const depthRatio = OC.clamp(depthM / 120, 0, 1);
-      const baseBloom = (0.16 + (opt.bioGlow || 0) * 0.20 + (wState.lightning || 0) * 0.24 + (camPos.y > 0 ? 0.08 : 0.0)) * bScale;
+      const baseBloom = (0.16 + (opt.bioGlow || 0) * 0.20 + (wState.lightning || 0) * 0.24 + (relativeY > 0 ? 0.08 : 0.0)) * bScale;
       postFx.mat.uniforms.uBloomAmt.value = baseBloom;
-      postFx.mat.uniforms.uChromaAmt.value = (subViewportOptics ? 0.0032 : 0.0014) + depthRatio * 0.0010 + (camPos.y < 0 ? 0.0005 : 0.0);
+      postFx.mat.uniforms.uChromaAmt.value = (subViewportOptics ? 0.0032 : 0.0014) + depthRatio * 0.0010 + (relativeY < 0 ? 0.0005 : 0.0);
       postFx.mat.uniforms.uWetness.value = lensWetness;
       postFx.mat.uniforms.uVignette.value = (subViewportOptics ? 0.36 : 0.19) + depthRatio * 0.14;
       postFx.mat.uniforms.uDepthRatio.value = noSurf ? depthRatio * 0.85 : depthRatio * 0.45;
       const flashRatio = OC.clamp(flashlight.intensity / 4.2, 0, 1);
-      const darkWater = (noSurf || camPos.y < 0.2) ? (1.0 - pal.dayW * opt.sunAtten * 0.65) : 0.0;
+      const darkWater = (noSurf || relativeY < 0.2) ? (1.0 - pal.dayW * opt.sunAtten * 0.65) : 0.0;
       postFx.mat.uniforms.uFlashGlow.value = flashRatio * darkWater * (0.45 + depthRatio * 0.55);
     }
   };
@@ -11751,6 +11814,13 @@ window.OC = window.OC || {};
     OC.withSway(topPlate, () => 0);
     OC.xform(topPlate, { p: [0, 0.12, 0] });
     list.push(topPlate);
+    if (rng() < 0.36) {
+      const hole = new T.CylinderGeometry(r * 0.18, r * 0.2, 0.08, 9);
+      OC.geoPrep(hole);
+      OC.paint(hole, 0x123b4b);
+      OC.xform(hole, { p: [0, 0.83, 0] });
+      list.push(hole);
+    }
 
     // Подводный ледовый киль (-0.5 .. -4.8 м под водой)
     const keelDepth = OC.lerp(2.6, 5.4, rng());
@@ -12572,6 +12642,9 @@ window.OC = window.OC || {};
         metalness: 0.08,
         emissive: new T.Color(0x0c3452),
         emissiveIntensity: 0.38,
+        transparent: true,
+        opacity: 1.0,
+        depthWrite: false,
         side: T.DoubleSide
       }), { causticStrength: 0.52, swayAmp: 0 });
 
@@ -12857,6 +12930,8 @@ window.OC = window.OC || {};
   let cacheComplete = false;
   let totalVisibleInstances = 0;
   let qualityHookBound = false;
+  let lastIceOpacity = -1;
+  let lastKelpProductivity = -1;
 
   const _pos = new T.Vector3();
   const _quat = new T.Quaternion();
@@ -12867,6 +12942,31 @@ window.OC = window.OC || {};
 
   function chunkKey(cx, cz) {
     return cx + ',' + cz;
+  }
+
+  function updateSeasonalAppearance() {
+    if (!biomeRef || !OC.Seasons) return;
+    const season = OC.Seasons.getState(biomeRef);
+    const iceOpacity = biomeRef.id === 'baikal'
+      ? 0.04 + season.iceFactor * 0.96
+      : 0.82 + season.winterFactor * 0.18;
+    if (Math.abs(iceOpacity - lastIceOpacity) > 0.01) {
+      for (let i = 0; i < pools.length; i++) {
+        const pool = pools[i];
+        if (pool.species === 'ice_floe' || pool.species === 'iceberg' || pool.species === 'brinicle') {
+          pool.mesh.material.opacity = iceOpacity;
+          pool.mesh.visible = pool.count > 0 && iceOpacity > 0.015;
+        }
+      }
+      lastIceOpacity = iceOpacity;
+    }
+    if (biomeRef.id === 'kelp_forest' && Math.abs(season.productivityFactor - lastKelpProductivity) > 0.01) {
+      const factor = season.productivityFactor;
+      for (let i = 0; i < pools.length; i++) {
+        if (pools[i].species === 'kelp' || pools[i].species === 'kelp_giant') pools[i].mesh.material.color.setScalar(factor);
+      }
+      lastKelpProductivity = factor;
+    }
   }
 
   function buildChunkData(cx, cz, density) {
@@ -12968,6 +13068,8 @@ window.OC = window.OC || {};
     init(scene, biome, spawnPos) {
       sceneRef = scene;
       biomeRef = biome;
+      lastIceOpacity = -1;
+      lastKelpProductivity = -1;
       chunkSize = biome.chunkSize || 150;
       chunkHalfCount = Math.round(biome.worldRadius / chunkSize);
 
@@ -13058,6 +13160,7 @@ window.OC = window.OC || {};
 
     update(camPos) {
       if (!biomeRef) return;
+      updateSeasonalAppearance();
       const q = OC.Quality.get();
       const cacheMoved = Math.hypot(camPos.x - lastCacheCheckPos.x, camPos.z - lastCacheCheckPos.z);
 
@@ -13481,6 +13584,10 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
         if (ctx && ctx.fishActivity !== undefined) {
           activity *= ctx.fishActivity;
           if (ctx.fishActivity < 0.72) depthShift -= (0.72 - ctx.fishActivity) * 4.0;
+        }
+        if (ctx && ctx.season) {
+          activity *= ctx.season.faunaActivity || 1.0;
+          if (opts.seasonalDepth) depthShift -= ctx.season.warmFactor * opts.seasonalDepth;
         }
 
         // Охота хищных стай (барракуды) на ближайший косяк жертв
@@ -19013,7 +19120,9 @@ window.OC = window.OC || {};
         const patrolX = o.cx + Math.cos(a) * o.r;
         const patrolZ = o.cz + Math.sin(a) * o.r * 0.62;
         const floor = biome.getHeight(patrolX, patrolZ);
-        const patrolY = Math.max(floor + 5, o.y + Math.sin(time * 0.42 + phase) * 2.6);
+        const seasonState = OC.Seasons ? OC.Seasons.getState(biome) : null;
+        const winterSurfaceY = seasonState && o.y > -50 ? OC.lerp(o.y, -3.5, seasonState.iceFactor * 0.72) : o.y;
+        const patrolY = Math.max(floor + 5, winterSurfaceY + Math.sin(time * 0.42 + phase) * 2.6);
         const lunge = huntTarget && huntTimer > 0 ? 1 - OC.clamp(huntTimer / 4.2, 0, 1) : 0;
         const x = huntTarget && huntTimer > 0 ? OC.lerp(patrolX, huntTarget.x, lunge) : patrolX;
         const z = huntTarget && huntTimer > 0 ? OC.lerp(patrolZ, huntTarget.z, lunge) : patrolZ;
@@ -20406,6 +20515,7 @@ window.OC = window.OC || {};
 
           lastCamPos.copy(camPos);
           updateCtx.dayW = dayW;
+          updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;
           const ecoState = OC.EcoLab ? OC.EcoLab.getState() : null;
@@ -23177,8 +23287,9 @@ window.OC = window.OC || {};
   function computeWaterColumn(biome, x, z, craftDepthM, labState) {
     const fl = biome.getHeight(x, z);
     const off = biome.depthOffset || 0;
+    const seasonWaterLevel = OC.Seasons ? OC.Seasons.getState(biome).waterLevelM : 0;
     const minDepthM = off > 0 ? off : 0;
-    const maxDepthM = Math.max(minDepthM + 10, off + (off > 0 ? -fl : Math.max(4, -fl)));
+    const maxDepthM = Math.max(minDepthM + 10, off + (off > 0 ? -fl : Math.max(4, seasonWaterLevel - fl)));
     const binsCount = 24;
     const deltaT = labState ? labState.tempDelta : 0;
     const labO2 = labState ? labState.dissolvedO2 : 7.2;
@@ -23193,7 +23304,7 @@ window.OC = window.OC || {};
     for (let i = 0; i < binsCount; i++) {
       const f = i / (binsCount - 1);
       const d = OC.lerp(minDepthM, maxDepthM, f);
-      const yAtD = off > 0 ? -(d - off) : -d;
+      const yAtD = off > 0 ? -(d - off) : seasonWaterLevel - d;
       const zone = biome.getZoneAt(x, yAtD, z);
       const baseT = biome.getTemperatureAt
         ? biome.getTemperatureAt(x, d, zone)
@@ -23272,7 +23383,7 @@ window.OC = window.OC || {};
     return {
       biomeId: biome.id,
       biomeName: biome.name,
-      zoneName: biome.getZoneAt(x, off > 0 ? -(craftDepthM - off) : -craftDepthM, z).shortName,
+      zoneName: biome.getZoneAt(x, off > 0 ? -(craftDepthM - off) : seasonWaterLevel - craftDepthM, z).shortName,
       x: Number(x.toFixed(0)),
       z: Number(z.toFixed(0)),
       minDepthM: Number(minDepthM.toFixed(1)),
@@ -23468,7 +23579,8 @@ window.OC = window.OC || {};
       lastCtdCast = null;
       if (biome && pos) {
         const off = biome.depthOffset || 0;
-        const d = off + (off > 0 ? -pos.y : Math.max(0, -pos.y));
+        const seasonWaterLevel = OC.Seasons ? OC.Seasons.getState(biome).waterLevelM : 0;
+        const d = off + (off > 0 ? -pos.y : Math.max(0, seasonWaterLevel - pos.y));
         lastCtdCast = computeWaterColumn(biome, pos.x, pos.z, d, OC.EcoLab ? OC.EcoLab.getState() : null);
       }
     },
@@ -23494,7 +23606,8 @@ window.OC = window.OC || {};
     runCtdCast(biome, pos, labState) {
       if (!biome || !pos) return null;
       const off = biome.depthOffset || 0;
-      const d = off + (off > 0 ? -pos.y : Math.max(0, -pos.y));
+      const seasonWaterLevel = OC.Seasons ? OC.Seasons.getState(biome).waterLevelM : 0;
+      const d = off + (off > 0 ? -pos.y : Math.max(0, seasonWaterLevel - pos.y));
       lastCtdCast = computeWaterColumn(biome, pos.x, pos.z, d, labState);
       if (OC.sound && OC.sound.ctdCast) OC.sound.ctdCast();
       return lastCtdCast;
@@ -25220,6 +25333,9 @@ window.OC = window.OC || {};
     update(dt, time, camera, reduced) {
       pollGamepad(dt, _gpOut);
       const gpOut = _gpOut;
+      const activeBiome = getBiome();
+      const seasonState = OC.Seasons ? OC.Seasons.getState(activeBiome) : null;
+      const waterLevel = (activeBiome && Number.isFinite(activeBiome.seaLevel) ? activeBiome.seaLevel : 0) + (seasonState ? seasonState.waterLevelM : 0);
       const kLook = Math.min(1, dt * (state.mode === 'cinema' ? 2.6 : 8.5));
       state.yaw += (state.targetYaw - state.yaw) * kLook;
       state.pitch += (state.targetPitch - state.pitch) * kLook;
@@ -25356,10 +25472,10 @@ window.OC = window.OC || {};
         }
 
         // Приливные и прибойные течения океана (сносят батискаф в Проходе и над Гребнем)
-        if (!reduced && getBiome() && getBiome().getCurrentAt && (state.pos.y < -0.25 || getBiome().noSurface)) {
-          getBiome().getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
+        if (!reduced && activeBiome && activeBiome.getCurrentAt && (state.pos.y < waterLevel - 0.25 || activeBiome.noSurface)) {
+          activeBiome.getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
           const flowMult = OC.EcoLab ? OC.EcoLab.getState().currentMult : 1.0;
-          _curr.multiplyScalar(flowMult);
+          _curr.multiplyScalar(flowMult * (seasonState ? seasonState.currentFactor : 1.0));
           state.vel.addScaledVector(_curr, 1.45 * dt);
         } else {
           _curr.set(0, 0, 0);
@@ -29731,7 +29847,8 @@ window.OC = window.OC || {};
         if (!biome) return null;
         const zone = biome.getZoneAt(craftPos.x, craftPos.y, craftPos.z);
         const depthOffset = biome.depthOffset || 0;
-        const depthM = depthOffset + (depthOffset > 0 ? -craftPos.y : Math.max(0, -craftPos.y));
+        const seasonWaterLevel = (Number.isFinite(biome.seaLevel) ? biome.seaLevel : 0) + (OC.Seasons ? OC.Seasons.getState(biome).waterLevelM : 0);
+        const depthM = depthOffset + (depthOffset > 0 ? -craftPos.y : Math.max(0, seasonWaterLevel - craftPos.y));
         const rawTemp = biome.getTemperatureAt
           ? biome.getTemperatureAt(craftPos.x, depthM, zone)
           : (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065));
@@ -29765,7 +29882,7 @@ window.OC = window.OC || {};
 
         /* --- Телеметрия зоны и глубины --- */
         if (teleZone) teleZone.textContent = zone.shortName;
-        if (teleDepth) teleDepth.textContent = (!biome.noSurface && craftPos.y > 0.1) ? ('+' + craftPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
+        if (teleDepth) teleDepth.textContent = (!biome.noSurface && craftPos.y > seasonWaterLevel + 0.1) ? ('+' + (craftPos.y - seasonWaterLevel).toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
         if (teleTemp) teleTemp.textContent = tempC + ' °C';
         if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
         if (teleWeatherWrap && teleWeatherSep && teleWeather && OC.Weather) {
@@ -31551,7 +31668,8 @@ window.OC = window.OC || {};
 
       if (OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen() && activeBiome) {
         const hOffset = activeBiome.depthOffset || 0;
-        const hDepth = hOffset + (hOffset > 0 ? -craftPos.y : Math.max(0, -craftPos.y));
+        const hSeasonLevel = OC.Seasons ? OC.Seasons.getState(activeBiome).waterLevelM : 0;
+        const hDepth = hOffset + (hOffset > 0 ? -craftPos.y : Math.max(0, hSeasonLevel - craftPos.y));
         OC.Hydrophone.update(rawDt, activeBiome, activeFauna, craftPos, OC.Navigation.getYaw(), hDepth, wState.stormMix || 0);
       }
 
@@ -31615,7 +31733,8 @@ window.OC = window.OC || {};
         }
         const palSnap = OC.getPalette();
         const daySnap = palSnap && typeof palSnap.dayW === 'number' ? palSnap.dayW : 1.0;
-        const depthSnap = (activeBiome.depthOffset || 0) + ((activeBiome.depthOffset || 0) > 0 ? -camPos.y : Math.max(0, -camPos.y));
+        const seasonLevel = OC.Seasons ? OC.Seasons.getState(activeBiome).waterLevelM : 0;
+        const depthSnap = (activeBiome.depthOffset || 0) + ((activeBiome.depthOffset || 0) > 0 ? -camPos.y : Math.max(0, seasonLevel - camPos.y));
         const tgt = detectCenterTarget(camera, activeBiome, activeFauna);
         const ph = OC.Expedition.recordPhoto(canvas, activeBiome, tgt, depthSnap, daySnap, flashOn);
         const isNewAtlas = OC.Atlas.discover(ph.key);

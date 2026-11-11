@@ -77,7 +77,8 @@ window.OC = window.OC || {};
         if (!biome) return null;
         const zone = biome.getZoneAt(craftPos.x, craftPos.y, craftPos.z);
         const depthOffset = biome.depthOffset || 0;
-        const depthM = depthOffset + (depthOffset > 0 ? -craftPos.y : Math.max(0, -craftPos.y));
+        const seasonWaterLevel = (Number.isFinite(biome.seaLevel) ? biome.seaLevel : 0) + (OC.Seasons ? OC.Seasons.getState(biome).waterLevelM : 0);
+        const depthM = depthOffset + (depthOffset > 0 ? -craftPos.y : Math.max(0, seasonWaterLevel - craftPos.y));
         const rawTemp = biome.getTemperatureAt
           ? biome.getTemperatureAt(craftPos.x, depthM, zone)
           : (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065));
@@ -111,7 +112,7 @@ window.OC = window.OC || {};
 
         /* --- Телеметрия зоны и глубины --- */
         if (teleZone) teleZone.textContent = zone.shortName;
-        if (teleDepth) teleDepth.textContent = (!biome.noSurface && craftPos.y > 0.1) ? ('+' + craftPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
+        if (teleDepth) teleDepth.textContent = (!biome.noSurface && craftPos.y > seasonWaterLevel + 0.1) ? ('+' + (craftPos.y - seasonWaterLevel).toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
         if (teleTemp) teleTemp.textContent = tempC + ' °C';
         if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
         if (teleWeatherWrap && teleWeatherSep && teleWeather && OC.Weather) {

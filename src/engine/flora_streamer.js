@@ -21,6 +21,8 @@ window.OC = window.OC || {};
   let cacheComplete = false;
   let totalVisibleInstances = 0;
   let qualityHookBound = false;
+  let lastIceOpacity = -1;
+  let lastKelpProductivity = -1;
 
   const _pos = new T.Vector3();
   const _quat = new T.Quaternion();
@@ -31,6 +33,31 @@ window.OC = window.OC || {};
 
   function chunkKey(cx, cz) {
     return cx + ',' + cz;
+  }
+
+  function updateSeasonalAppearance() {
+    if (!biomeRef || !OC.Seasons) return;
+    const season = OC.Seasons.getState(biomeRef);
+    const iceOpacity = biomeRef.id === 'baikal'
+      ? 0.04 + season.iceFactor * 0.96
+      : 0.82 + season.winterFactor * 0.18;
+    if (Math.abs(iceOpacity - lastIceOpacity) > 0.01) {
+      for (let i = 0; i < pools.length; i++) {
+        const pool = pools[i];
+        if (pool.species === 'ice_floe' || pool.species === 'iceberg' || pool.species === 'brinicle') {
+          pool.mesh.material.opacity = iceOpacity;
+          pool.mesh.visible = pool.count > 0 && iceOpacity > 0.015;
+        }
+      }
+      lastIceOpacity = iceOpacity;
+    }
+    if (biomeRef.id === 'kelp_forest' && Math.abs(season.productivityFactor - lastKelpProductivity) > 0.01) {
+      const factor = season.productivityFactor;
+      for (let i = 0; i < pools.length; i++) {
+        if (pools[i].species === 'kelp' || pools[i].species === 'kelp_giant') pools[i].mesh.material.color.setScalar(factor);
+      }
+      lastKelpProductivity = factor;
+    }
   }
 
   function buildChunkData(cx, cz, density) {
@@ -132,6 +159,8 @@ window.OC = window.OC || {};
     init(scene, biome, spawnPos) {
       sceneRef = scene;
       biomeRef = biome;
+      lastIceOpacity = -1;
+      lastKelpProductivity = -1;
       chunkSize = biome.chunkSize || 150;
       chunkHalfCount = Math.round(biome.worldRadius / chunkSize);
 
@@ -222,6 +251,7 @@ window.OC = window.OC || {};
 
     update(camPos) {
       if (!biomeRef) return;
+      updateSeasonalAppearance();
       const q = OC.Quality.get();
       const cacheMoved = Math.hypot(camPos.x - lastCacheCheckPos.x, camPos.z - lastCacheCheckPos.z);
 

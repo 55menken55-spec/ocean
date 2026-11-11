@@ -766,7 +766,8 @@ window.OC = window.OC || {};
 
       if (OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen() && activeBiome) {
         const hOffset = activeBiome.depthOffset || 0;
-        const hDepth = hOffset + (hOffset > 0 ? -craftPos.y : Math.max(0, -craftPos.y));
+        const hSeasonLevel = OC.Seasons ? OC.Seasons.getState(activeBiome).waterLevelM : 0;
+        const hDepth = hOffset + (hOffset > 0 ? -craftPos.y : Math.max(0, hSeasonLevel - craftPos.y));
         OC.Hydrophone.update(rawDt, activeBiome, activeFauna, craftPos, OC.Navigation.getYaw(), hDepth, wState.stormMix || 0);
       }
 
@@ -830,7 +831,8 @@ window.OC = window.OC || {};
         }
         const palSnap = OC.getPalette();
         const daySnap = palSnap && typeof palSnap.dayW === 'number' ? palSnap.dayW : 1.0;
-        const depthSnap = (activeBiome.depthOffset || 0) + ((activeBiome.depthOffset || 0) > 0 ? -camPos.y : Math.max(0, -camPos.y));
+        const seasonLevel = OC.Seasons ? OC.Seasons.getState(activeBiome).waterLevelM : 0;
+        const depthSnap = (activeBiome.depthOffset || 0) + ((activeBiome.depthOffset || 0) > 0 ? -camPos.y : Math.max(0, seasonLevel - camPos.y));
         const tgt = detectCenterTarget(camera, activeBiome, activeFauna);
         const ph = OC.Expedition.recordPhoto(canvas, activeBiome, tgt, depthSnap, daySnap, flashOn);
         const isNewAtlas = OC.Atlas.discover(ph.key);

@@ -190,8 +190,9 @@ window.OC = window.OC || {};
   function computeWaterColumn(biome, x, z, craftDepthM, labState) {
     const fl = biome.getHeight(x, z);
     const off = biome.depthOffset || 0;
+    const seasonWaterLevel = OC.Seasons ? OC.Seasons.getState(biome).waterLevelM : 0;
     const minDepthM = off > 0 ? off : 0;
-    const maxDepthM = Math.max(minDepthM + 10, off + (off > 0 ? -fl : Math.max(4, -fl)));
+    const maxDepthM = Math.max(minDepthM + 10, off + (off > 0 ? -fl : Math.max(4, seasonWaterLevel - fl)));
     const binsCount = 24;
     const deltaT = labState ? labState.tempDelta : 0;
     const labO2 = labState ? labState.dissolvedO2 : 7.2;
@@ -206,7 +207,7 @@ window.OC = window.OC || {};
     for (let i = 0; i < binsCount; i++) {
       const f = i / (binsCount - 1);
       const d = OC.lerp(minDepthM, maxDepthM, f);
-      const yAtD = off > 0 ? -(d - off) : -d;
+      const yAtD = off > 0 ? -(d - off) : seasonWaterLevel - d;
       const zone = biome.getZoneAt(x, yAtD, z);
       const baseT = biome.getTemperatureAt
         ? biome.getTemperatureAt(x, d, zone)
@@ -285,7 +286,7 @@ window.OC = window.OC || {};
     return {
       biomeId: biome.id,
       biomeName: biome.name,
-      zoneName: biome.getZoneAt(x, off > 0 ? -(craftDepthM - off) : -craftDepthM, z).shortName,
+      zoneName: biome.getZoneAt(x, off > 0 ? -(craftDepthM - off) : seasonWaterLevel - craftDepthM, z).shortName,
       x: Number(x.toFixed(0)),
       z: Number(z.toFixed(0)),
       minDepthM: Number(minDepthM.toFixed(1)),

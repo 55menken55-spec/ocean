@@ -1472,6 +1472,31 @@ const springBefore = baikal.getTemperatureAt(0, 0, baikal.getZoneAt(0, 0, 0));
 OC.Seasons.setPhase(0.251);
 const springAfter = baikal.getTemperatureAt(0, 0, baikal.getZoneAt(0, 0, 0));
 assert(Math.abs(springAfter - springBefore) < 0.1, 'Seasonal temperature transitions must be continuous, without boundary jumps');
+OC.Seasons.setPhase(0.0);
+const baikalIceWinter = OC.Seasons.getState(baikal).iceFactor;
+const arcticIceWinter = OC.Seasons.getState(OC.Biomes.get('arctic_sea')).iceFactor;
+const galapagosColdUpwelling = OC.Seasons.getState(OC.Biomes.get('galapagos_upwelling')).upwellingFactor;
+const deepVents = OC.Biomes.get('hydrothermal_vents');
+const deepWinterActivity = OC.Seasons.getState(deepVents).faunaActivity;
+const deepWinterDelta = OC.Seasons.getTemperatureDelta(deepVents, 2500);
+OC.Seasons.setPhase(0.5);
+const baikalIceSummer = OC.Seasons.getState(baikal).iceFactor;
+const arcticIceSummer = OC.Seasons.getState(OC.Biomes.get('arctic_sea')).iceFactor;
+const galapagosWarmUpwelling = OC.Seasons.getState(OC.Biomes.get('galapagos_upwelling')).upwellingFactor;
+const deepSummerActivity = OC.Seasons.getState(deepVents).faunaActivity;
+const deepSummerDelta = OC.Seasons.getTemperatureDelta(deepVents, 2500);
+assert(baikalIceWinter > 0.99 && baikalIceSummer < 0.01 && arcticIceWinter > arcticIceSummer, 'Seasonal ice cover must recede on Baikal while remaining perennial but variable in Arctic waters');
+assert(galapagosColdUpwelling > galapagosWarmUpwelling && Math.abs(deepSummerDelta - deepWinterDelta) < 0.0001 && deepSummerActivity === deepWinterActivity, 'Cold-season upwelling must strengthen while abyssal temperature and fauna activity stay stable');
+OC.Seasons.setPhase(0.84);
+const amazonFlood = OC.Seasons.getState(amzBiome);
+OC.Seasons.setPhase(0.34);
+const amazonLowWater = OC.Seasons.getState(amzBiome);
+assert(amazonFlood.waterLevelM > amazonLowWater.waterLevelM && amazonFlood.turbidityAdd > amazonLowWater.turbidityAdd, 'Amazon seasonal flood must raise water and softly increase suspended sediment');
+OC.Seasons.setPhase(0.5);
+const kelpSummerProductivity = OC.Seasons.getState(OC.Biomes.get('kelp_forest')).productivityFactor;
+OC.Seasons.setPhase(0.0);
+const kelpWinterProductivity = OC.Seasons.getState(OC.Biomes.get('kelp_forest')).productivityFactor;
+assert(kelpSummerProductivity > kelpWinterProductivity, 'Kelp forest productivity should peak in the warm season');
 OC.Seasons.setPhase(0.5);
 assert(OC.Seasons.selectSeason('winter', baikal) && !OC.Seasons.isAutoAdvance(), 'Selecting a season must pause the annual cycle for manual control');
 for (let seasonStep = 0; seasonStep < 7; seasonStep++) OC.Seasons.update(0.25);
@@ -1483,6 +1508,14 @@ OC.Seasons.setPhase(savedSeasonPhase);
 assert(baikal && baikal.minimapTheme === 'baikal' && baikal.noSurface === false, 'Baikal must register as a surface freshwater biome with its own minimap theme');
 assert(baikal.zones.length === 5 && baikal.landmarks.length === 6 && baikal.tourLegs.length === 6, 'Baikal must expose 5 zones, 6 landmarks and 6 guided tour legs');
 assert(baikal.getHeight(0, 80) < -1500 && baikal.getHeight(-520, -420) > -15, 'Baikal bathymetry must include both the deep rift and shallow Academy Bay');
+let baikalSeasonalIceCount = 0;
+for (let cz = -8; cz < 8; cz++) {
+  for (let cx = -8; cx < 8; cx++) {
+    const items = baikal.generateChunkFlora(cx, cz, 150, 1, OC.mulberry32(((cx * 73856093) ^ (cz * 19349663) ^ 0x51a7) >>> 0));
+    baikalSeasonalIceCount += items.filter((item) => item.species === 'ice_floe').length;
+  }
+}
+assert(baikalSeasonalIceCount > 0, 'Baikal shoreline flora stream must seed seasonal ice floes');
 const baikalShallowOptics = baikal.getOpticalProfile(-520, -8, -420, 1);
 const baikalDeepOptics = baikal.getOpticalProfile(0, -900, 80, 1);
 assert(baikalShallowOptics.fogDensity < baikalDeepOptics.fogDensity && baikalShallowOptics.causticStrength > baikalDeepOptics.causticStrength, 'Baikal clear-water optics must fade with depth');
@@ -1501,7 +1534,10 @@ assert(ctdBaikal.pH > 6 && ctdBaikal.pH < 9, 'Baikal CTD must include measured w
 const baikalFauna = OC.FaunaEngine.init(scene, baikal);
 assert(baikalFauna.agents.some((a) => a.key === 'seal_baikal') && baikalFauna.agents.some((a) => a.key === 'fish_golomyanka') && baikalFauna.agents.some((a) => a.key === 'methane_seep_baikal'), 'Baikal fauna plan must include nerpa, golomyanka and scannable seep locations');
 const golomyankaPlan = baikal.faunaPlan.schools.find((school) => school.key === 'fish_golomyanka');
-assert(golomyankaPlan && golomyankaPlan.diel === 'nocturnal' && golomyankaPlan.dvmAmp >= 100, 'Golomyanka must use the existing nocturnal diel vertical migration system');
+assert(golomyankaPlan && golomyankaPlan.diel === 'nocturnal' && golomyankaPlan.dvmAmp >= 100 && golomyankaPlan.seasonalDepth === 24, 'Golomyanka must combine nocturnal DVM with a seasonal depth migration');
+assert(OC.Biomes.get('arctic_sea').faunaPlan.schools.some((school) => school.key === 'fish_arctic_cod' && school.seasonalDepth > 0), 'Arctic cod schools must migrate with seasonal ice and temperature');
+assert(OC.Biomes.get('amazon_igapo').faunaPlan.schools.some((school) => school.key === 'neon_tetra' && school.seasonalDepth > 0), 'Amazon fish must respond to seasonal flood levels');
+assert(OC.Biomes.get('galapagos_upwelling').faunaPlan.schools.some((school) => school.key === 'sardine_baitball' && school.seasonalDepth > 0), 'Galapagos baitballs must shift depth with seasonal upwelling');
 baikalFauna.update(1 / 60, OC.uTime.value, new T.Vector3(baikal.spawn.pos[0], baikal.spawn.pos[1], baikal.spawn.pos[2]), 0, false);
 assert(OC.faunaInfo.hydratePlumesActive, 'Baikal methane seeps must activate the existing low-cost gas plume system');
 const testSeal = OC._FaunaBuilders.makeBaikalSeal(scene, baikal, { cx: -40, cz: 80, r: 0, y: -360, scale: 1 });

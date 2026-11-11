@@ -67,6 +67,7 @@ window.OC = window.OC || {};
   const _stormCol = new T.Color(0x283848);
   const _lightCol = new T.Color(0xdcf0ff);
   const _algalCol = new T.Color(0x1f5a38);
+  const _seasonWaterCol = new T.Color(0x735c31);
 
   const causticU = {
     uTime: OC.uTime,
@@ -733,13 +734,15 @@ window.OC = window.OC || {};
 
     const biome = OC.Biomes.getActive();
     const season = OC.Seasons ? OC.Seasons.getState(biome) : null;
-    const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
+    const waterLevel = (biome && Number.isFinite(biome.seaLevel) ? biome.seaLevel : 0) + (season ? season.waterLevelM : 0);
+    const relativeY = camPos.y - waterLevel;
+    const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome, waterLevel) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
     const lab = OC.EcoLab ? OC.EcoLab.update(dt, biome, pal.dayW) : null;
     causticU.uBleach.value = lab ? lab.bleaching : 0.0;
     const opt = biome
-      ? biome.getOpticalProfile(camPos.x, camPos.y, camPos.z, pal.dayW)
+      ? biome.getOpticalProfile(camPos.x, relativeY, camPos.z, pal.dayW)
       : {
-          aboveWater: camPos.y > 0.25,
+          aboveWater: relativeY > 0.25,
           fogColor: pal.skyMid,
           fogDensity: 0.007,
           causticStrength: pal.caustic,
@@ -763,13 +766,19 @@ window.OC = window.OC || {};
       pal.fogCol.lerp(_algalCol, algalMix);
     }
     const labFogDelta = lab ? ((biome && biome.noSurface ? lab.turbidityAdd * 0.35 : lab.turbidityAdd) - lab.clarityBonus) : 0;
+    const seasonFogAdd = season && !opt.aboveWater && !(biome && biome.noSurface)
+      ? season.turbidityAdd * OC.smoothstep(-28.0, 0.0, relativeY)
+      : 0;
     const siltFogAdd = (OC.faunaInfo && OC.faunaInfo.siltTurbidity) ? OC.faunaInfo.siltTurbidity * 0.011 : 0;
-    pal.fogDen = Math.max(0.0015, opt.fogDensity + shallowTurb * 0.0045 + labFogDelta + siltFogAdd);
+    pal.fogDen = Math.max(0.0015, opt.fogDensity + shallowTurb * 0.0045 + labFogDelta + seasonFogAdd + siltFogAdd);
     pal.bioGlow = opt.bioGlow;
     const bloomAtten = lab ? (1.0 - lab.algalTint * 0.42) : 1.0;
     pal.sunAtten = opt.sunAtten * stormAtten * bloomAtten;
     if (opt.aboveTop) pal.aboveTop.copy(opt.aboveTop);
     if (opt.waterColor) pal.water.copy(opt.waterColor);
+    if (season && season.waterTint > 0.001 && !opt.aboveWater) {
+      pal.water.lerp(_seasonWaterCol, season.waterTint);
+    }
     if (lab && lab.algalTint > 0.01 && !(biome && biome.noSurface)) {
       pal.water.lerp(_algalCol, lab.algalTint * 0.38);
     }
@@ -849,7 +858,7 @@ window.OC = window.OC || {};
     }
 
     /* купол неба */
-    const aboveMix = (biome && biome.noSurface) ? 0.0 : OC.smoothstep(-0.3, 0.5, camPos.y);
+    const aboveMix = (biome && biome.noSurface) ? 0.0 : OC.smoothstep(-0.3, 0.5, relativeY);
     skyMat.uniforms.uTop.value.copy(pal.skyTop);
     skyMat.uniforms.uMid.value.copy(opt.fogColor);
     if (algalMix > 0.001) skyMat.uniforms.uMid.value.lerp(_algalCol, algalMix);
@@ -874,7 +883,7 @@ window.OC = window.OC || {};
     causticU.uWaveAmp.value = wState.waveAmp;
     if (biome && biome.getCurrentAt) {
       biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
-      const currMult = lab ? lab.currentMult : 1.0;
+      const currMult = (lab ? lab.currentMult : 1.0) * (season ? season.currentFactor : 1.0);
       causticU.uCurrent.value.set(_worldCurr.x * currMult, _worldCurr.z * currMult);
     }
 
@@ -883,13 +892,14 @@ window.OC = window.OC || {};
     if (surfacePlane.visible) {
       const snap = 44;
       surfacePlane.position.x = Math.round(camPos.x / snap) * snap;
+      surfacePlane.position.y = waterLevel;
       surfacePlane.position.z = Math.round(camPos.z / snap) * snap;
       surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
       surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
       surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);
       surfaceMat.uniforms.uSunDir.value.copy(sunDir);
       surfaceMat.uniforms.uDayW.value = pal.dayW;
-      surfaceMat.uniforms.uCamY.value = camPos.y;
+      surfaceMat.uniforms.uCamY.value = relativeY;
       surfaceMat.uniforms.uWaveAmp.value = wState.waveAmp;
       surfaceMat.uniforms.uStorm.value = wState.stormMix;
       surfaceMat.uniforms.uLightning.value = wState.lightning;
@@ -900,7 +910,7 @@ window.OC = window.OC || {};
 
     /* объёмные 3D-конусы солнечных лучей, ориентированные по преломлённому солнцу */
     const rayIntensity = opt.rayStrength * (1.0 - wState.stormMix * 0.65) * bloomAtten;
-    raysState.raysGroup.visible = !(biome && biome.noSurface) && camPos.y < 0.2 && rayIntensity > 0.02;
+    raysState.raysGroup.visible = !(biome && biome.noSurface) && relativeY < 0.2 && rayIntensity > 0.02;
     if (raysState.raysGroup.visible) {
       if (biome && biome.getCenoteShafts) {
         const shafts = biome.getCenoteShafts();
@@ -933,11 +943,14 @@ window.OC = window.OC || {};
     /* надводные осадки (штормовой дождь / арктический снегопад) */
     const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
     if (precipFx) {
-      precipFx.points.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && camPos.y > -12.0;
+      precipFx.points.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && relativeY > -12.0;
       if (precipFx.points.visible) {
         precipFx.mat.uniforms.uCamPos.value.copy(camPos);
         precipFx.mat.uniforms.uPrecip.value = wState.precip;
-        precipFx.mat.uniforms.uSnowMode.value = (biome && biome.hasAurora) ? 1.0 : 0.0;
+        precipFx.mat.uniforms.uWaterLevel.value = waterLevel;
+        precipFx.mat.uniforms.uSnowMode.value = biome && biome.hasAurora
+          ? (season ? 0.56 + season.winterFactor * 0.44 : 1.0)
+          : (biome && biome.id === 'baikal' && season ? season.iceFactor : 0.0);
       }
     }
 
@@ -957,11 +970,11 @@ window.OC = window.OC || {};
     }
 
     /* параметры постпроцессинга подводной оптики (Bloom, хроматика, капли на линзе) */
-    const camAboveNow = !noSurf && !underCaveRoof && camPos.y > -0.18;
-    if (!noSurf && !underCaveRoof && ((camAboveNow && !prevCamAboveWater) || (camPos.y > -0.18 && camPos.y < 1.35) || (camAboveNow && wState.precip > 0.12))) {
+    const camAboveNow = !noSurf && !underCaveRoof && relativeY > -0.18;
+    if (!noSurf && !underCaveRoof && ((camAboveNow && !prevCamAboveWater) || (relativeY > -0.18 && relativeY < 1.35) || (camAboveNow && wState.precip > 0.12))) {
       lensWetness = Math.min(1.0, lensWetness + dt * 3.8);
     } else {
-      const dryRate = camPos.y < -0.5 ? 0.42 : 0.24;
+      const dryRate = relativeY < -0.5 ? 0.42 : 0.24;
       lensWetness = Math.max(0.0, lensWetness - dt * dryRate);
     }
     prevCamAboveWater = camAboveNow;
@@ -969,16 +982,16 @@ window.OC = window.OC || {};
     if (postFx && postFx.mat) {
       const qCur = OC.Quality.get ? OC.Quality.get() : null;
       const bScale = qCur && typeof qCur.bloomScale === 'number' ? qCur.bloomScale : 1.0;
-      const depthM = (biome && biome.depthOffset ? biome.depthOffset : 0) + Math.max(0, -camPos.y);
+      const depthM = (biome && biome.depthOffset ? biome.depthOffset : 0) + Math.max(0, -relativeY);
       const depthRatio = OC.clamp(depthM / 120, 0, 1);
-      const baseBloom = (0.16 + (opt.bioGlow || 0) * 0.20 + (wState.lightning || 0) * 0.24 + (camPos.y > 0 ? 0.08 : 0.0)) * bScale;
+      const baseBloom = (0.16 + (opt.bioGlow || 0) * 0.20 + (wState.lightning || 0) * 0.24 + (relativeY > 0 ? 0.08 : 0.0)) * bScale;
       postFx.mat.uniforms.uBloomAmt.value = baseBloom;
-      postFx.mat.uniforms.uChromaAmt.value = (subViewportOptics ? 0.0032 : 0.0014) + depthRatio * 0.0010 + (camPos.y < 0 ? 0.0005 : 0.0);
+      postFx.mat.uniforms.uChromaAmt.value = (subViewportOptics ? 0.0032 : 0.0014) + depthRatio * 0.0010 + (relativeY < 0 ? 0.0005 : 0.0);
       postFx.mat.uniforms.uWetness.value = lensWetness;
       postFx.mat.uniforms.uVignette.value = (subViewportOptics ? 0.36 : 0.19) + depthRatio * 0.14;
       postFx.mat.uniforms.uDepthRatio.value = noSurf ? depthRatio * 0.85 : depthRatio * 0.45;
       const flashRatio = OC.clamp(flashlight.intensity / 4.2, 0, 1);
-      const darkWater = (noSurf || camPos.y < 0.2) ? (1.0 - pal.dayW * opt.sunAtten * 0.65) : 0.0;
+      const darkWater = (noSurf || relativeY < 0.2) ? (1.0 - pal.dayW * opt.sunAtten * 0.65) : 0.0;
       postFx.mat.uniforms.uFlashGlow.value = flashRatio * darkWater * (0.45 + depthRatio * 0.55);
     }
   };

@@ -169,7 +169,8 @@ window.OC = window.OC || {};
       lastCtdCast = null;
       if (biome && pos) {
         const off = biome.depthOffset || 0;
-        const d = off + (off > 0 ? -pos.y : Math.max(0, -pos.y));
+        const seasonWaterLevel = OC.Seasons ? OC.Seasons.getState(biome).waterLevelM : 0;
+        const d = off + (off > 0 ? -pos.y : Math.max(0, seasonWaterLevel - pos.y));
         lastCtdCast = computeWaterColumn(biome, pos.x, pos.z, d, OC.EcoLab ? OC.EcoLab.getState() : null);
       }
     },
@@ -195,7 +196,8 @@ window.OC = window.OC || {};
     runCtdCast(biome, pos, labState) {
       if (!biome || !pos) return null;
       const off = biome.depthOffset || 0;
-      const d = off + (off > 0 ? -pos.y : Math.max(0, -pos.y));
+      const seasonWaterLevel = OC.Seasons ? OC.Seasons.getState(biome).waterLevelM : 0;
+      const d = off + (off > 0 ? -pos.y : Math.max(0, seasonWaterLevel - pos.y));
       lastCtdCast = computeWaterColumn(biome, pos.x, pos.z, d, labState);
       if (OC.sound && OC.sound.ctdCast) OC.sound.ctdCast();
       return lastCtdCast;

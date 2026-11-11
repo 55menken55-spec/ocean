@@ -31,6 +31,13 @@ window.OC = window.OC || {};
     OC.withSway(topPlate, () => 0);
     OC.xform(topPlate, { p: [0, 0.12, 0] });
     list.push(topPlate);
+    if (rng() < 0.36) {
+      const hole = new T.CylinderGeometry(r * 0.18, r * 0.2, 0.08, 9);
+      OC.geoPrep(hole);
+      OC.paint(hole, 0x123b4b);
+      OC.xform(hole, { p: [0, 0.83, 0] });
+      list.push(hole);
+    }
 
     // Подводный ледовый киль (-0.5 .. -4.8 м под водой)
     const keelDepth = OC.lerp(2.6, 5.4, rng());

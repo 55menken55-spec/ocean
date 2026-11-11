@@ -359,6 +359,9 @@ window.OC = window.OC || {};
     update(dt, time, camera, reduced) {
       pollGamepad(dt, _gpOut);
       const gpOut = _gpOut;
+      const activeBiome = getBiome();
+      const seasonState = OC.Seasons ? OC.Seasons.getState(activeBiome) : null;
+      const waterLevel = (activeBiome && Number.isFinite(activeBiome.seaLevel) ? activeBiome.seaLevel : 0) + (seasonState ? seasonState.waterLevelM : 0);
       const kLook = Math.min(1, dt * (state.mode === 'cinema' ? 2.6 : 8.5));
       state.yaw += (state.targetYaw - state.yaw) * kLook;
       state.pitch += (state.targetPitch - state.pitch) * kLook;
@@ -495,10 +498,10 @@ window.OC = window.OC || {};
         }
 
         // Приливные и прибойные течения океана (сносят батискаф в Проходе и над Гребнем)
-        if (!reduced && getBiome() && getBiome().getCurrentAt && (state.pos.y < -0.25 || getBiome().noSurface)) {
-          getBiome().getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
+        if (!reduced && activeBiome && activeBiome.getCurrentAt && (state.pos.y < waterLevel - 0.25 || activeBiome.noSurface)) {
+          activeBiome.getCurrentAt(state.pos.x, state.pos.y, state.pos.z, time, _curr);
           const flowMult = OC.EcoLab ? OC.EcoLab.getState().currentMult : 1.0;
-          _curr.multiplyScalar(flowMult);
+          _curr.multiplyScalar(flowMult * (seasonState ? seasonState.currentFactor : 1.0));
           state.vel.addScaledVector(_curr, 1.45 * dt);
         } else {
           _curr.set(0, 0, 0);

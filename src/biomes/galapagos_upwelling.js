@@ -139,7 +139,8 @@ window.OC = window.OC || {};
     const wx = x - wallCurve(z);
     // Глубинное экваториальное течение Кромвеля ударяется о склон и мощно устремляется вверх (апвеллинг)
     const onWall = OC.smoothstep(-40, 120, wx) * OC.smoothstep(380, 150, wx);
-    const upSurge = onWall * (0.42 + 0.35 * Math.sin(time * 0.4 + z * 0.015));
+    const seasonalUpwelling = OC.Seasons ? OC.Seasons.getUpwellingFactor('galapagos_upwelling') : 1.0;
+    const upSurge = onWall * (0.42 + 0.35 * Math.sin(time * 0.4 + z * 0.015)) * seasonalUpwelling;
     const vx = 0.55 + 0.32 * onWall + Math.sin(time * 0.25 + z * 0.01) * 0.14;
     const vz = 0.38 + Math.cos(time * 0.22 + x * 0.01) * 0.18;
     const vy = upSurge - (y > -3.0 ? 0.18 : 0.0);
@@ -449,9 +450,9 @@ window.OC = window.OC || {};
       { cx: 285, cz: -45, r: 72, y: -4.5, count: 5, speed: 7.4, variant: 'spinner' }
     ],
     schools: [
-      { key: 'sardine_baitball', n: 180, cx: 145, cz: -25, radius: 34, yDepth: -14, yAmp: 4.5, spread: 7.5, speed: 7.8, scale: 0.36, diel: 'diurnal', shyness: 0.85,
+      { key: 'sardine_baitball', n: 180, cx: 145, cz: -25, radius: 34, yDepth: -14, yAmp: 4.5, seasonalDepth: 5, spread: 7.5, speed: 7.8, scale: 0.36, diel: 'diurnal', shyness: 0.85,
         geoOpts: { len: 0.92, height: 0.24, width: 0.13, colA: 0x3b6c94, colB: 0xdff2fb, finCol: 0x90b8cc } },
-      { key: 'sardine_baitball', n: 140, cx: -145, cz: 12, radius: 24, yDepth: -6, yAmp: 2.4, spread: 6.2, speed: 7.2, scale: 0.35, diel: 'diurnal', shyness: 0.85,
+      { key: 'sardine_baitball', n: 140, cx: -145, cz: 12, radius: 24, yDepth: -6, yAmp: 2.4, seasonalDepth: 3, spread: 6.2, speed: 7.2, scale: 0.35, diel: 'diurnal', shyness: 0.85,
         geoOpts: { len: 0.92, height: 0.24, width: 0.13, colA: 0x3b6c94, colB: 0xdff2fb, finCol: 0x90b8cc } },
       { key: 'tuna_yellowfin', n: 32, cx: 340, cz: -65, radius: 52, yDepth: -24, yAmp: 6, spread: 13, speed: 10.6, scale: 0.82, predator: true, diel: 'diurnal', shyness: 0.2,
         geoOpts: { len: 1.55, height: 0.48, width: 0.24, colA: 0x22385c, colB: 0xe6eff6, finCol: 0xf6c924 } },

@@ -504,9 +504,9 @@ window.OC = window.OC || {};
   const FAUNA_PLAN = {
     cleaningStations: [],
     schools: [
-      { key: 'fish_arctic_cod', n: 75, cx: spawnX + 30, cz: spawnZ - 15, radius: 34, yDepth: -6.5, yAmp: 3, spread: 9, speed: 5.8, scale: 0.56, diel: 'cathemeral', shyness: 0.72,
+      { key: 'fish_arctic_cod', n: 75, cx: spawnX + 30, cz: spawnZ - 15, radius: 34, yDepth: -6.5, yAmp: 3, seasonalDepth: 4, spread: 9, speed: 5.8, scale: 0.56, diel: 'cathemeral', shyness: 0.72,
         geoOpts: { len: 1.05, height: 0.34, width: 0.16, colA: 0x455c72, colB: 0xd6e6f2, finCol: 0x8ea6ba } },
-      { key: 'fish_arctic_cod', n: 65, cx: landmarks[1].x - 20, cz: landmarks[1].z + 30, radius: 38, yDepth: -11, yAmp: 4, spread: 10, speed: 6.0, scale: 0.58, diel: 'cathemeral', shyness: 0.72,
+      { key: 'fish_arctic_cod', n: 65, cx: landmarks[1].x - 20, cz: landmarks[1].z + 30, radius: 38, yDepth: -11, yAmp: 4, seasonalDepth: 5, spread: 10, speed: 6.0, scale: 0.58, diel: 'cathemeral', shyness: 0.72,
         geoOpts: { len: 1.05, height: 0.34, width: 0.16, colA: 0x455c72, colB: 0xd6e6f2, finCol: 0x8ea6ba } },
       { key: 'fish_sculpin', n: 26, cx: landmarks[3].x, cz: landmarks[3].z, radius: 26, yDepth: -20, yAmp: 2, spread: 8, speed: 3.4, scale: 0.72, diel: 'cathemeral', shyness: 0.4,
         geoOpts: { len: 1.0, height: 0.44, width: 0.28, colA: 0x4d4338, colB: 0x9c8266, finCol: 0x73624d, stripes: 0.45 } },

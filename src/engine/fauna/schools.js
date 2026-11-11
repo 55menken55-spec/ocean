@@ -324,6 +324,10 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
           activity *= ctx.fishActivity;
           if (ctx.fishActivity < 0.72) depthShift -= (0.72 - ctx.fishActivity) * 4.0;
         }
+        if (ctx && ctx.season) {
+          activity *= ctx.season.faunaActivity || 1.0;
+          if (opts.seasonalDepth) depthShift -= ctx.season.warmFactor * opts.seasonalDepth;
+        }
 
         // Охота хищных стай (барракуды) на ближайший косяк жертв
         if (isPredator && preyCenters && preyCenters.length) {

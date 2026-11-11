@@ -413,7 +413,7 @@ window.OC = window.OC || {};
     schools: [
       { key: 'fish_garibaldi', n: 28, cx: landmarks[2].x, cz: landmarks[2].z, radius: 26, yDepth: -14, yAmp: 3, spread: 8, speed: 4.5, scale: 0.62, diel: 'diurnal', shyness: 0.45, curious: 0.25,
         geoOpts: { len: 0.95, height: 0.56, width: 0.22, colA: 0xff5a12, colB: 0xff8a24, finCol: 0xff6b1a } },
-      { key: 'fish_rockfish', n: 36, cx: spawnX + 35, cz: spawnZ - 25, radius: 34, yDepth: -12, yAmp: 4.5, spread: 10, speed: 4.8, scale: 0.68, diel: 'diurnal', shyness: 0.55,
+      { key: 'fish_rockfish', n: 36, cx: spawnX + 35, cz: spawnZ - 25, radius: 34, yDepth: -12, yAmp: 4.5, seasonalDepth: 3, spread: 10, speed: 4.8, scale: 0.68, diel: 'diurnal', shyness: 0.55,
         geoOpts: { len: 1.15, height: 0.48, width: 0.22, colA: 0x5c5b34, colB: 0x9b8e58, finCol: 0x454428, stripes: 0.35 } },
       { key: 'fish_rockfish', n: 32, cx: -320, cz: -120, radius: 32, yDepth: -10, yAmp: 4, spread: 9, speed: 5.0, scale: 0.65, diel: 'diurnal', shyness: 0.55,
         geoOpts: { len: 1.15, height: 0.48, width: 0.22, colA: 0x705638, colB: 0xb28f60, finCol: 0x55402a, stripes: 0.4 } },

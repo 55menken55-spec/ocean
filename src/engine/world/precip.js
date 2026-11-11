@@ -33,11 +33,12 @@ window.OC = window.OC || {};
         uCamPos: { value: new T.Vector3() },
         uPrecip: { value: 0.0 },
         uSnowMode: { value: 0.0 },
+        uWaterLevel: { value: 0.0 },
         uScale: { value: 1.0 }
       },
       vertexShader: `
         attribute float aPhase, aSize;
-        uniform float uTime, uPrecip, uSnowMode, uScale;
+        uniform float uTime, uPrecip, uSnowMode, uWaterLevel, uScale;
         uniform vec3 uCamPos;
         varying float vAlpha;
         void main(){
@@ -49,7 +50,7 @@ window.OC = window.OC || {};
           p.z += cos(uTime * 1.1 + aPhase) * mix(0.2, 2.1, uSnowMode);
           vec3 rel = mod(p - uCamPos + box * 0.5, box) - box * 0.5;
           vec3 worldP = uCamPos + rel;
-          float aboveWater = step(0.15, worldP.y);
+          float aboveWater = step(uWaterLevel + 0.15, worldP.y);
           vec4 mvPosition = modelViewMatrix * vec4(worldP, 1.0);
           gl_PointSize = aboveWater * aSize * uScale * mix(95.0, 165.0, uSnowMode) / max(1.5, -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;

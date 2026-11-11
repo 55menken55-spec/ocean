@@ -118,14 +118,14 @@ window.OC = window.OC || {};
     return ZONES[0];
   }
 
-  function getCurrentAt(x, y, z, flowMult, out) {
-    const m = flowMult || 1.0;
+  function getCurrentAt(x, y, z, time, out) {
+    const t = Number.isFinite(time) ? time : 0;
     const conf = getConfluenceBlend(x, z);
     const cz = channelCenterZ(x);
     const inChan = 1.0 - OC.smoothstep(30, 145, Math.abs(z - cz));
-    const vx = (0.28 + 0.72 * inChan + 0.45 * conf) * m;
-    const vz = (Math.cos(x * 0.0045 + 0.6) * 0.32 + Math.sin(z * 0.02 + x * 0.01) * 0.08) * m;
-    const vy = Math.sin(x * 0.025 + z * 0.02) * 0.03 * m;
+    const vx = 0.28 + 0.72 * inChan + 0.45 * conf + Math.sin(t * 0.07 + z * 0.013) * 0.055;
+    const vz = Math.cos(x * 0.0045 + 0.6) * 0.32 + Math.sin(z * 0.02 + x * 0.01 + t * 0.04) * 0.08;
+    const vy = Math.sin(x * 0.025 + z * 0.02 + t * 0.03) * 0.03;
     return out.set(vx, vy, vz);
   }
 
@@ -400,9 +400,9 @@ window.OC = window.OC || {};
       { cx: -120, cz: -40, r: 75, y: 12.5, count: 6, speed: 10.5, variant: 'tropical' }
     ],
     schools: [
-      { key: 'neon_tetra', n: 120, cx: -110, cz: 122, radius: 22, yDepth: -3.8, yAmp: 1.8, spread: 5.5, speed: 5.4, scale: 0.28, biolum: true, diel: 'diurnal', shyness: 0.75,
+      { key: 'neon_tetra', n: 120, cx: -110, cz: 122, radius: 22, yDepth: -3.8, yAmp: 1.8, seasonalDepth: 1.2, spread: 5.5, speed: 5.4, scale: 0.28, biolum: true, diel: 'diurnal', shyness: 0.75,
         geoOpts: { len: 0.72, height: 0.24, width: 0.12, colA: 0x16c8ff, colB: 0xff2e3b, finCol: 0x80eaff, stripes: 0.4 } },
-      { key: 'neon_tetra', n: 95, cx: -22, cz: 46, radius: 24, yDepth: -4.0, yAmp: 1.9, spread: 5.2, speed: 5.2, scale: 0.28, biolum: true, diel: 'diurnal', shyness: 0.75,
+      { key: 'neon_tetra', n: 95, cx: -22, cz: 46, radius: 24, yDepth: -4.0, yAmp: 1.9, seasonalDepth: 1.5, spread: 5.2, speed: 5.2, scale: 0.28, biolum: true, diel: 'diurnal', shyness: 0.75,
         geoOpts: { len: 0.72, height: 0.24, width: 0.12, colA: 0x16c8ff, colB: 0xff2e3b, finCol: 0x80eaff, stripes: 0.4 } },
       { key: 'piranha', n: 48, cx: 18, cz: 8, radius: 34, yDepth: -8.5, yAmp: 3.2, spread: 7.8, speed: 7.4, scale: 0.56, predator: true, diel: 'diurnal', shyness: 0.25,
         geoOpts: { len: 0.88, height: 0.52, width: 0.18, colA: 0x627278, colB: 0xd93022, finCol: 0xff5a36 } },

@@ -64,6 +64,9 @@ window.OC = window.OC || {};
         metalness: 0.08,
         emissive: new T.Color(0x0c3452),
         emissiveIntensity: 0.38,
+        transparent: true,
+        opacity: 1.0,
+        depthWrite: false,
         side: T.DoubleSide
       }), { causticStrength: 0.52, swayAmp: 0 });
 

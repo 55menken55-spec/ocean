@@ -45,6 +45,23 @@ window.OC = window.OC || {};
     const sector = Math.floor((((localPhase + 0.125) % 1) * 4));
     const season = SEASONS[sector];
     const warmFactor = -Math.cos(localPhase * TAU);
+    const winterFactor = 0.5 + 0.5 * Math.cos(localPhase * TAU);
+    const isAmazon = biome && biome.id === 'amazon_igapo';
+    const isGalapagos = biome && biome.id === 'galapagos_upwelling';
+    const isBaikal = biome && biome.id === 'baikal';
+    const isArctic = biome && biome.id === 'arctic_sea';
+    const isKelp = biome && biome.id === 'kelp_forest';
+    const isDeep = biome && (biome.id === 'hydrothermal_vents' || biome.id === 'mariana_trench' || biome.id === 'brine_pool');
+    const floodFactor = isAmazon ? 0.5 + 0.5 * Math.cos((localPhase - 0.34) * TAU) : 0;
+    const upwellingFactor = isGalapagos ? 1.0 - warmFactor * 0.28 : 1.0;
+    const iceFactor = isBaikal ? winterFactor : (isArctic ? 0.68 + winterFactor * 0.32 : 0);
+    const currentFactor = isGalapagos
+      ? 0.78 + upwellingFactor * 0.22
+      : (isAmazon ? 0.84 + floodFactor * 0.28 : (isKelp ? 1.0 + warmFactor * 0.1 : (biome && biome.id === 'great_barrier_reef' ? 1.0 + warmFactor * 0.045 : 1.0)));
+    const faunaActivity = isGalapagos
+      ? 0.82 + upwellingFactor * 0.2
+      : (isKelp ? 0.92 + warmFactor * 0.08 : (isAmazon ? 0.92 + floodFactor * 0.12 : (isDeep ? 1.0 : 1.0 + warmFactor * 0.035)));
+    const productivityFactor = isKelp ? 0.88 + (0.5 + 0.5 * warmFactor) * 0.24 : 1.0;
     return {
       id: season.id,
       label: season.label,
@@ -53,9 +70,25 @@ window.OC = window.OC || {};
       localPhase,
       hemisphere: climate.hemisphere,
       warmFactor,
+      winterFactor,
+      iceFactor,
+      floodFactor,
+      waterLevelM: isAmazon ? (floodFactor - 0.5) * 2.2 : 0,
+      turbidityAdd: isAmazon ? 0.0003 + floodFactor * 0.0016 : 0,
+      waterTint: isAmazon ? floodFactor * 0.08 : 0,
+      upwellingFactor,
+      currentFactor,
+      faunaActivity,
+      productivityFactor,
       lightFactor: 1 + warmFactor * climate.lightAmplitude,
       progress: localPhase
     };
+  }
+
+  function getUpwellingFactor(biome) {
+    const id = typeof biome === 'string' ? biome : (biome && biome.id);
+    if (id !== 'galapagos_upwelling') return 1.0;
+    return 1.0 + Math.cos(phase * TAU) * 0.28;
   }
 
   function getTemperatureDelta(biome, depthM) {
@@ -111,6 +144,7 @@ window.OC = window.OC || {};
       return true;
     },
     getState,
-    getTemperatureDelta
+    getTemperatureDelta,
+    getUpwellingFactor
   };
 })(window.OC);

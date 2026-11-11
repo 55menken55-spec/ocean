@@ -123,6 +123,19 @@ window.OC = window.OC || {};
         add('charophyte_bed', x, h - 0.08, z, OC.lerp(0.72, 1.45, rng()), 0x9ebd72);
       }
     }
+    // Редкие сезонные льдины на глубокой кромке прибрежья; летом их материал тает почти до нуля.
+    for (let i = 0, n = Math.round(5 * density); i < n; i++) {
+      const x = x0 + rng() * chunkSize, z = z0 + rng() * chunkSize;
+      const depth = -getHeight(x, z);
+      if (depth < 8 || depth > 70 || getRiftDistance(x, z) < 455) continue;
+      let nearLandmark = false;
+      for (let j = 0; j < landmarks.length; j++) {
+        if (Math.hypot(x - landmarks[j].x, z - landmarks[j].z) < 36) { nearLandmark = true; break; }
+      }
+      if (!nearLandmark && rng() < 0.46) {
+        add('ice_floe', x, 0.04, z, OC.lerp(0.62, 1.08, rng()), rng() < 0.5 ? 0xf4fbff : 0xdff4ff);
+      }
+    }
     return items;
   }
 
@@ -178,11 +191,11 @@ window.OC = window.OC || {};
   const FAUNA_PLAN = {
     cleaningStations: [],
     schools: [
-      { key: 'fish_omul', n: 54, cx: -470, cz: -345, radius: 34, yDepth: -12, yAmp: 8, spread: 12, speed: 5.2, scale: 0.72, diel: 'cathemeral', shyness: 0.58,
+      { key: 'fish_omul', n: 54, cx: -470, cz: -345, radius: 34, yDepth: -12, yAmp: 8, seasonalDepth: 6, spread: 12, speed: 5.2, scale: 0.72, diel: 'cathemeral', shyness: 0.58,
         geoOpts: { len: 1.4, height: 0.55, width: 0.24, colA: 0x718b8b, colB: 0xc2d9cf, finCol: 0x506a70, stripes: 0.2 } },
-      { key: 'fish_omul', n: 42, cx: -360, cz: -90, radius: 42, yDepth: -65, yAmp: 18, spread: 14, speed: 6.1, scale: 0.76, diel: 'cathemeral', shyness: 0.62,
+      { key: 'fish_omul', n: 42, cx: -360, cz: -90, radius: 42, yDepth: -65, yAmp: 18, seasonalDepth: 12, spread: 14, speed: 6.1, scale: 0.76, diel: 'cathemeral', shyness: 0.62,
         geoOpts: { len: 1.4, height: 0.55, width: 0.24, colA: 0x718b8b, colB: 0xc2d9cf, finCol: 0x506a70, stripes: 0.2 } },
-      { key: 'fish_golomyanka', n: 62, cx: -70, cz: 70, radius: 54, yDepth: -420, yAmp: 170, dvmAmp: 105, spread: 18, speed: 4.5, scale: 0.54, diel: 'nocturnal', shyness: 0.42,
+      { key: 'fish_golomyanka', n: 62, cx: -70, cz: 70, radius: 54, yDepth: -420, yAmp: 170, dvmAmp: 105, seasonalDepth: 24, spread: 18, speed: 4.5, scale: 0.54, diel: 'nocturnal', shyness: 0.42,
         geoOpts: { len: 1.15, height: 0.48, width: 0.18, colA: 0x8db6c5, colB: 0xe2f0ef, finCol: 0x7cabbc } },
       { key: 'fish_grayling', n: 30, cx: -500, cz: -560, radius: 30, yDepth: -6, yAmp: 2.4, spread: 8, speed: 4.4, scale: 0.65, diel: 'diurnal', shyness: 0.38,
         geoOpts: { len: 1.15, height: 0.5, width: 0.22, colA: 0x546b74, colB: 0xb7c5b3, finCol: 0x667d88, stripes: 0.18 } }

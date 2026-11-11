@@ -59,7 +59,8 @@ window.OC = window.OC || {};
       if (state.onThunder) state.onThunder();
     },
 
-    update(dt, time, camPos, biome) {
+    update(dt, time, camPos, biome, waterLevel) {
+      const seaY = Number.isFinite(waterLevel) ? waterLevel : (biome && Number.isFinite(biome.seaLevel) ? biome.seaLevel : 0);
       const noSurface = !!(biome && biome.noSurface);
       const isArctic = !!(biome && biome.hasAurora);
 
@@ -118,10 +119,10 @@ window.OC = window.OC || {};
 
       // Капли на объективе / маске при выныривании или под дождём над водой
       if (camPos) {
-        if (camPos.y < -0.25) {
+        if (camPos.y < seaY - 0.25) {
           state.droplets = Math.min(1.0, state.droplets + dt * 2.5);
         } else {
-          const rainKeep = (!isArctic && !underCaveRoof && state.precip > 0.3) ? state.precip * 0.52 : 0.0;
+          const rainKeep = (!isArctic && !underCaveRoof && camPos.y > seaY + 0.15 && state.precip > 0.3) ? state.precip * 0.52 : 0.0;
           state.droplets = Math.max(rainKeep, state.droplets - dt * 0.24);
         }
       }
