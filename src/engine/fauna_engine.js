@@ -156,6 +156,44 @@ window.OC = window.OC || {};
       };
 
       activeSchoolsRef = schools;
+
+      /* ============ УРОВНИ РЕДКОСТИ СОБЫТИЙ И ПРЕДВЕСТНИКИ ============
+         common  — видно сразу, предвестника нет (выпрыг кита, порпойзинг, DVM, муть)
+         rare    — предвестник ~30 с: стаи нервничают, гидрофон ловит звуки
+         unique  — предвестник ~60 с: звук, тревога стай (нерест кораллов)
+         Текстовых анонсов «скоро начнётся» нет — игрок сам замечает предвестники.
+         ================================================================= */
+      const EVENT_RARITY = {
+        breach: 'common',
+        porpoising: 'common',
+        dvm: 'common',
+        silt_out: 'common',
+        hunt: 'rare',
+        baitball: 'rare',
+        cleaning: 'rare',
+        coral_spawn: 'unique'
+      };
+      const HERALD_SECONDS = { common: 0, rare: 30, unique: 60 };
+
+      // Детерминированный сид на тип события (воспроизводимо по сессии)
+      function heraldSeed(type) {
+        let h = 0;
+        for (let i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) | 0;
+        return h >>> 0;
+      }
+
+      // Состояние предвестника по типам событий
+      const heraldState = {};
+      for (const k of Object.keys(EVENT_RARITY)) {
+        heraldState[k] = {
+          phase: 'idle',      // idle | herald | active | cooldown
+          timer: 0,           // секунды до конца текущей фазы
+          progress: 0,        // 0..1 внутри фазы предвестника
+          cooldownUntil: 0,   // время, когда следующий предвестник может начаться
+          rng: OC.mulberry32(heraldSeed(k))
+        };
+      }
+
       OC.faunaInfo = {
         schoolFish: 0,
         schools: schools.length,
@@ -164,6 +202,7 @@ window.OC = window.OC || {};
         vessel: primaryVessel ? primaryVessel.shipInfo : null,
         shadowCaster: _shadowCaster,
         activeEvent: null,
+        herald: null,         // {type, rarity, progress} или null
         dvmPhase: 'day_deep',
         dvmShiftM: -5.5,
         coralSpawnIntensity: 0,
@@ -261,6 +300,62 @@ window.OC = window.OC || {};
           }
           splashSystem.update(dt);
 
+          // --- Предвестники событий (без текстовых анонсов, без календаря) ---
+          const now = time;
+
+          // Обновляем таймеры фаз предвестников
+          for (const k of Object.keys(heraldState)) {
+            const st = heraldState[k];
+            if (st.timer > 0) {
+              st.timer -= dt;
+              if (st.timer <= 0) {
+                st.timer = 0;
+                if (st.phase === 'herald') st.phase = 'active';
+                else if (st.phase === 'active') st.phase = 'cooldown';
+                else if (st.phase === 'cooldown') st.phase = 'idle';
+              }
+              const hs = HERALD_SECONDS[EVENT_RARITY[k]];
+              st.progress = hs > 0 ? 1.0 - Math.max(0, st.timer) / hs : 0;
+            }
+          }
+
+          // Пытаемся начать новый предвестник для редких/уникальных событий
+          for (const k of Object.keys(EVENT_RARITY)) {
+            const st = heraldState[k];
+            const rarity = EVENT_RARITY[k];
+            const heraldSec = HERALD_SECONDS[rarity];
+            if (heraldSec === 0) continue; // common — без предвестника
+            if (st.phase !== 'idle') continue;
+            if (now < st.cooldownUntil) continue;
+            // Детерминированный шанс на старт предвестника (~раз в 4–8 мин в среднем)
+            if (st.rng() < 0.002) {
+              st.phase = 'herald';
+              st.timer = heraldSec;
+              st.cooldownUntil = now + heraldSec + 45 + st.rng() * 90; // пауза 45–135 с после события
+              // subtle audio cue: гидрофон ловит отдалённый звук
+              const sound = OC.sound;
+              if (sound && !sound.muted && sound.ctx && sound.ctx.state === 'running') {
+                if (rarity === 'unique') sound.whale();
+                else sound.sonarPing(60, false);
+              }
+            }
+          }
+
+          // Текущий активный предвестник (для faunaInfo и потенциальных визуальных намёков)
+          let currentHerald = null;
+          for (const k of Object.keys(heraldState)) {
+            const st = heraldState[k];
+            if (st.phase === 'herald' || st.phase === 'active') {
+              currentHerald = {
+                type: k,
+                rarity: EVENT_RARITY[k],
+                progress: st.progress
+              };
+              break; // только один предвестник одновременно
+            }
+          }
+          OC.faunaInfo.herald = currentHerald;
+
           // Классифицируем ключевое природное событие в радиусе видимости
           let ev = null;
           for (let i = 0; i < whalesList.length; i++) {
@@ -316,6 +411,21 @@ window.OC = window.OC || {};
             ev = 'dvm';
           }
           OC.faunaInfo.activeEvent = ev;
+
+          // Переходы фаз предвестника → событие → пауза
+          if (ev) {
+            const st = heraldState[ev];
+            if (st) {
+              if (st.phase === 'herald') st.phase = 'active';
+              if (st.phase === 'active') st.timer = 0; // событие началось, удерживаем фазу active
+            }
+          } else {
+            // События сейчас нет — если был active, уходим в cooldown
+            for (const k of Object.keys(heraldState)) {
+              const st = heraldState[k];
+              if (st.phase === 'active') st.phase = 'cooldown';
+            }
+          }
 
           bubbleMat.uniforms.uCamPos.value.copy(camPos);
           planktonMat.uniforms.uCamPos.value.copy(camPos);
