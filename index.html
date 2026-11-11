@@ -20016,16 +20016,20 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
-// === engine/audio.js ===
-/* ================= ПРОЦЕДУРНЫЙ ЗВУК ОКЕАНА (С УЧЁТОМ ЗОНЫ И ГЛУБИНЫ) ================= */
+// === engine/audio/core.js ===
+/* ================= ЗВУК: ЯДРО WEBAUDIO ================= */
+/* Контекст, мастер-шина с анализатором, плавные фейды, микс по глубине/зоне/погоде,
+   мьют и спектр для гидрофона и полосы-индикатора. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
-  const S = {
+  /* Состояние звуковой шины: единственная точка правды для всех audio/* модулей */
+  const S = OC._SoundState = OC._SoundState || {
     ctx: null, master: null, muted: false, started: false,
     timers: [], deepFilter: null, reefGain: null, abyssGain: null,
     currentZoneId: 'crest', currentDepth: 8, currentDayW: 1.0, currentBiomeId: 'great_barrier_reef'
   };
+  OC.sound = S;
 
   function rnd(a, b) { return a + Math.random() * (b - a); }
 
@@ -20146,6 +20150,70 @@ window.OC = window.OC || {};
     }
   };
 
+  S.toggle = function () {
+    if (!S.ctx) { const ok = S.ensure(); if (!ok) return false; return true; }
+    S.muted = !S.muted;
+    S.fade(1, 0.5);
+    return !S.muted;
+  };
+
+  S.getSpectrumData = function () {
+    if (!S.analyser || !S.freqData || S.muted || !S.ctx || S.ctx.state !== 'running') return null;
+    S.analyser.getByteFrequencyData(S.freqData);
+    return S.freqData;
+  };
+
+  S.getSampleRate = () => (S.ctx ? S.ctx.sampleRate : 44100);
+
+  S.isOn = () => S.started && !S.muted;
+})(window.OC);
+
+// === engine/audio/ambience.js ===
+/* ================= ЗВУК: ФОНОВЫЕ ШУМЫ СРЕДЫ ================= */
+/* Пузырьки, щелчки рачков (snapping shrimp), капель в сеноте, треск пакового льда
+   и скрип корпуса затонувшего судна. Все — процедурные, без сэмплов. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const S = OC._SoundState;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+
+  function noiseBuffer(ctx) {
+    const len = ctx.sampleRate * 4;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        const white = Math.random() * 2 - 1;
+        last = (last + 0.022 * white) / 1.022;
+        d[i] = last * 3.1;
+      }
+    }
+    return buf;
+  }
+
+  function loopNoise(ctx, dest, type, freq, gain) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = type; f.frequency.value = freq; f.Q.value = 0.65;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.05 + Math.random() * 0.05;
+    lfoGain.gain.value = gain * 0.45;
+    lfo.connect(lfoGain);
+    lfoGain.connect(g.gain);
+    lfo.start();
+    src.connect(f); f.connect(g); g.connect(dest);
+    src.start();
+    return { src, f, g };
+  }
+
   S.scheduleBubble = function () {
     if (!S.ctx) return;
     const t = setTimeout(() => {
@@ -20179,6 +20247,7 @@ window.OC = window.OC || {};
   };
 
   /* Биологический треск рачков-щелкунов на мелководных кораллах или треск пакового льда в Арктике */
+
   S.scheduleShrimp = function () {
     if (!S.ctx) return;
     const nightBoost = S.currentDayW < 0.45 ? 0.65 : 1.0;
@@ -20196,6 +20265,26 @@ window.OC = window.OC || {};
     }, rnd(220, 1050) * nightBoost);
     S.timers.push(t);
   };
+
+  S.shrimpSnap = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(rnd(2200, 3800), now);
+    osc.frequency.exponentialRampToValueAtTime(900, now + 0.018);
+    const amp = S.currentDayW < 0.45 ? 0.013 : 0.009;
+    g.gain.setValueAtTime(amp, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
+    osc.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.9, 0.9); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
+    osc.start(now); osc.stop(now + 0.03);
+  };
+
+  /* Глубоководный скрип корпуса батискафа под высоким давлением (> 48 м) */
 
   S.caveDrip = function () {
     const ctx = S.ctx;
@@ -20237,25 +20326,6 @@ window.OC = window.OC || {};
     osc.start(now); osc.stop(now + 0.18);
   };
 
-  S.shrimpSnap = function () {
-    const ctx = S.ctx;
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(rnd(2200, 3800), now);
-    osc.frequency.exponentialRampToValueAtTime(900, now + 0.018);
-    const amp = S.currentDayW < 0.45 ? 0.013 : 0.009;
-    g.gain.setValueAtTime(amp, now);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
-    osc.connect(g);
-    if (pan) { pan.pan.value = rnd(-0.9, 0.9); g.connect(pan); pan.connect(S.master); }
-    else g.connect(S.master);
-    osc.start(now); osc.stop(now + 0.03);
-  };
-
-  /* Глубоководный скрип корпуса батискафа под высоким давлением (> 48 м) */
   S.scheduleCreak = function () {
     if (!S.ctx) return;
     const t = setTimeout(() => {
@@ -20288,6 +20358,53 @@ window.OC = window.OC || {};
   };
 
   /* Активный сонар-пинг батискафа + задержка отражённого эха (1480 м/с) */
+})(window.OC);
+
+// === engine/audio/calls.js ===
+/* ================= ЗВУК: ПОЗЫВНЫЕ МЕГАФАУНЫ И ГРОЗА ================= */
+/* Сонарный пинг, пение горбатого кита, трель белухи, всплеск выпрыга и раскат грома. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const S = OC._SoundState;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+
+  function noiseBuffer(ctx) {
+    const len = ctx.sampleRate * 4;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        const white = Math.random() * 2 - 1;
+        last = (last + 0.022 * white) / 1.022;
+        d[i] = last * 3.1;
+      }
+    }
+    return buf;
+  }
+
+  function loopNoise(ctx, dest, type, freq, gain) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = type; f.frequency.value = freq; f.Q.value = 0.65;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.05 + Math.random() * 0.05;
+    lfoGain.gain.value = gain * 0.45;
+    lfo.connect(lfoGain);
+    lfoGain.connect(g.gain);
+    lfo.start();
+    src.connect(f); f.connect(g); g.connect(dest);
+    src.start();
+    return { src, f, g };
+  }
+
   S.sonarPing = function (rangeMeters, hasEcho) {
     if (S.muted) return false;
     if (!S.ctx && !S.ensure()) return false;
@@ -20392,6 +20509,107 @@ window.OC = window.OC || {};
     else g.connect(S.master);
   };
 
+  S.whaleSplash = function (dist) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const atten = OC.clamp(1.0 - (dist || 40) / 360, 0.15, 1.0);
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 1.9;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.65));
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(920, now);
+    lp.frequency.exponentialRampToValueAtTime(160, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.18 * atten, now + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(g); g.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.05);
+  };
+
+  S.thunder = function () {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 2.6;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      last = (last + 0.04 * (Math.random() * 2 - 1)) / 1.04;
+      d[i] = last * 3.5;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(185, now);
+    lp.frequency.exponentialRampToValueAtTime(62, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.14, now + 0.16);
+    g.gain.exponentialRampToValueAtTime(0.075, now + 0.85);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(g); g.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.05);
+  };
+})(window.OC);
+
+// === engine/audio/ui_sfx.js ===
+/* ================= ЗВУК: ИНТЕРФЕЙСНЫЕ СИГНАЛЫ ================= */
+/* Затвор фотокамеры, аккорд выполненной миссии, перезвон этапа тура, глобус,
+   сервопривод ROV и запуск CTD-зонда. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const S = OC._SoundState;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+
+  function noiseBuffer(ctx) {
+    const len = ctx.sampleRate * 4;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        const white = Math.random() * 2 - 1;
+        last = (last + 0.022 * white) / 1.022;
+        d[i] = last * 3.1;
+      }
+    }
+    return buf;
+  }
+
+  function loopNoise(ctx, dest, type, freq, gain) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = type; f.frequency.value = freq; f.Q.value = 0.65;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.05 + Math.random() * 0.05;
+    lfoGain.gain.value = gain * 0.45;
+    lfo.connect(lfoGain);
+    lfoGain.connect(g.gain);
+    lfo.start();
+    src.connect(f); f.connect(g); g.connect(dest);
+    src.start();
+    return { src, f, g };
+  }
+
   S.shutter = function () {
     if (S.muted) return;
     if (!S.ctx && !S.ensure()) return;
@@ -20435,33 +20653,158 @@ window.OC = window.OC || {};
     });
   };
 
-  S.thunder = function () {
+  S.tourChime = function (stepIdx) {
     if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
     const ctx = S.ctx;
     const now = ctx.currentTime;
-    const dur = 2.6;
+    const scale = [392.0, 440.0, 493.88, 523.25, 587.33];
+    const base = scale[(stepIdx || 0) % scale.length];
+    [base, base * 1.5].forEach((freq, i) => {
+      const t = now + i * 0.08;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(i === 0 ? 0.036 : 0.024, t + 0.025);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+      o.connect(g); g.connect(S.master);
+      o.start(t); o.stop(t + 0.58);
+    });
+  };
+
+  S.globeWhoosh = function () {
+    if (S.muted) return;
+    if (!S.ctx && !S.ensure()) return;
+    if (S.ctx.state === 'suspended') S.ctx.resume();
+    if (!S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const dur = 0.65;
     const len = Math.floor(ctx.sampleRate * dur);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    let last = 0;
     for (let i = 0; i < len; i++) {
-      last = (last + 0.04 * (Math.random() * 2 - 1)) / 1.04;
-      d[i] = last * 3.5;
+      const env = Math.sin((i / len) * Math.PI);
+      d[i] = (Math.random() * 2 - 1) * env;
     }
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(185, now);
-    lp.frequency.exponentialRampToValueAtTime(62, now + dur);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(220, now);
+    bp.frequency.exponentialRampToValueAtTime(680, now + dur * 0.65);
+    bp.frequency.exponentialRampToValueAtTime(320, now + dur);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.linearRampToValueAtTime(0.14, now + 0.16);
-    g.gain.exponentialRampToValueAtTime(0.075, now + 0.85);
+    g.gain.linearRampToValueAtTime(0.06, now + 0.18);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(lp); lp.connect(g); g.connect(S.master);
-    src.start(now); src.stop(now + dur + 0.05);
+    src.connect(bp); bp.connect(g); g.connect(S.master);
+    src.start(now); src.stop(now + dur + 0.04);
   };
+
+  S.rovServo = function (captured) {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    // Гидравлический привод манипулятора (приглушённый сервомотор под водой)
+    const o = ctx.createOscillator();
+    const lp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(145, now);
+    o.frequency.linearRampToValueAtTime(290, now + 0.22);
+    o.frequency.linearRampToValueAtTime(175, now + 0.56);
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(520, now);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.028, now + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+    o.connect(lp); lp.connect(g); g.connect(S.master);
+    o.start(now); o.stop(now + 0.65);
+
+    if (captured) {
+      [587.33, 880.0].forEach((freq, i) => {
+        const t = now + 0.42 + i * 0.09;
+        const c = ctx.createOscillator();
+        const cg = ctx.createGain();
+        c.type = 'sine';
+        c.frequency.setValueAtTime(freq, t);
+        cg.gain.setValueAtTime(0.0001, t);
+        cg.gain.linearRampToValueAtTime(0.038, t + 0.015);
+        cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+        c.connect(cg); cg.connect(S.master);
+        c.start(t); c.stop(t + 0.30);
+      });
+    }
+  };
+
+  S.ctdCast = function () {
+    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    [980, 1320, 1760].forEach((freq, i) => {
+      const t = now + i * 0.075;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, t);
+      o.frequency.exponentialRampToValueAtTime(freq * 1.08, t + 0.14);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.032, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      o.connect(g); g.connect(S.master);
+      o.start(t); o.stop(t + 0.24);
+    });
+  };
+})(window.OC);
+
+// === engine/audio/species_voice.js ===
+/* ================= ЗВУК: ГОЛОСА 221 ВИДА ================= */
+/* Человекочитаемые подписи и процедурный синтез голоса по ключу вида:
+   киты, дельфины, льды, гидротермы, пещеры, речные рыбы и рифовые жители. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const S = OC._SoundState;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+
+  function noiseBuffer(ctx) {
+    const len = ctx.sampleRate * 4;
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        const white = Math.random() * 2 - 1;
+        last = (last + 0.022 * white) / 1.022;
+        d[i] = last * 3.1;
+      }
+    }
+    return buf;
+  }
+
+  function loopNoise(ctx, dest, type, freq, gain) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx);
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = type; f.frequency.value = freq; f.Q.value = 0.65;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.05 + Math.random() * 0.05;
+    lfoGain.gain.value = gain * 0.45;
+    lfo.connect(lfoGain);
+    lfoGain.connect(g.gain);
+    lfo.start();
+    src.connect(f); f.connect(g); g.connect(dest);
+    src.start();
+    return { src, f, g };
+  }
 
   S.getVoiceLabel = function (key) {
     if (!key) return 'Звук среды';
@@ -20930,156 +21273,18 @@ window.OC = window.OC || {};
       return false;
     }
   };
+})(window.OC);
 
-  S.whaleSplash = function (dist) {
-    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
-    const atten = OC.clamp(1.0 - (dist || 40) / 360, 0.15, 1.0);
-    const ctx = S.ctx;
-    const now = ctx.currentTime;
-    const dur = 1.9;
-    const len = Math.floor(ctx.sampleRate * dur);
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.65));
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(920, now);
-    lp.frequency.exponentialRampToValueAtTime(160, now + dur);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, now);
-    g.gain.linearRampToValueAtTime(0.18 * atten, now + 0.05);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(lp); lp.connect(g); g.connect(S.master);
-    src.start(now); src.stop(now + dur + 0.05);
-  };
-
-  S.tourChime = function (stepIdx) {
-    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
-    const ctx = S.ctx;
-    const now = ctx.currentTime;
-    const scale = [392.0, 440.0, 493.88, 523.25, 587.33];
-    const base = scale[(stepIdx || 0) % scale.length];
-    [base, base * 1.5].forEach((freq, i) => {
-      const t = now + i * 0.08;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(freq, t);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(i === 0 ? 0.036 : 0.024, t + 0.025);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
-      o.connect(g); g.connect(S.master);
-      o.start(t); o.stop(t + 0.58);
-    });
-  };
-
-  S.globeWhoosh = function () {
-    if (S.muted) return;
-    if (!S.ctx && !S.ensure()) return;
-    if (S.ctx.state === 'suspended') S.ctx.resume();
-    if (!S.ctx || S.ctx.state !== 'running') return;
-    const ctx = S.ctx;
-    const now = ctx.currentTime;
-    const dur = 0.65;
-    const len = Math.floor(ctx.sampleRate * dur);
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      const env = Math.sin((i / len) * Math.PI);
-      d[i] = (Math.random() * 2 - 1) * env;
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.Q.value = 1.4;
-    bp.frequency.setValueAtTime(220, now);
-    bp.frequency.exponentialRampToValueAtTime(680, now + dur * 0.65);
-    bp.frequency.exponentialRampToValueAtTime(320, now + dur);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, now);
-    g.gain.linearRampToValueAtTime(0.06, now + 0.18);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(bp); bp.connect(g); g.connect(S.master);
-    src.start(now); src.stop(now + dur + 0.04);
-  };
-
-  S.rovServo = function (captured) {
-    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
-    const ctx = S.ctx;
-    const now = ctx.currentTime;
-    // Гидравлический привод манипулятора (приглушённый сервомотор под водой)
-    const o = ctx.createOscillator();
-    const lp = ctx.createBiquadFilter();
-    const g = ctx.createGain();
-    o.type = 'sawtooth';
-    o.frequency.setValueAtTime(145, now);
-    o.frequency.linearRampToValueAtTime(290, now + 0.22);
-    o.frequency.linearRampToValueAtTime(175, now + 0.56);
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(520, now);
-    g.gain.setValueAtTime(0.0001, now);
-    g.gain.linearRampToValueAtTime(0.028, now + 0.05);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
-    o.connect(lp); lp.connect(g); g.connect(S.master);
-    o.start(now); o.stop(now + 0.65);
-
-    if (captured) {
-      [587.33, 880.0].forEach((freq, i) => {
-        const t = now + 0.42 + i * 0.09;
-        const c = ctx.createOscillator();
-        const cg = ctx.createGain();
-        c.type = 'sine';
-        c.frequency.setValueAtTime(freq, t);
-        cg.gain.setValueAtTime(0.0001, t);
-        cg.gain.linearRampToValueAtTime(0.038, t + 0.015);
-        cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
-        c.connect(cg); cg.connect(S.master);
-        c.start(t); c.stop(t + 0.30);
-      });
-    }
-  };
-
-  S.ctdCast = function () {
-    if (S.muted || !S.ctx || S.ctx.state !== 'running') return;
-    const ctx = S.ctx;
-    const now = ctx.currentTime;
-    [980, 1320, 1760].forEach((freq, i) => {
-      const t = now + i * 0.075;
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(freq, t);
-      o.frequency.exponentialRampToValueAtTime(freq * 1.08, t + 0.14);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.032, t + 0.015);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-      o.connect(g); g.connect(S.master);
-      o.start(t); o.stop(t + 0.24);
-    });
-  };
-
-  S.toggle = function () {
-    if (!S.ctx) { const ok = S.ensure(); if (!ok) return false; return true; }
-    S.muted = !S.muted;
-    S.fade(1, 0.5);
-    return !S.muted;
-  };
-
-  S.getSpectrumData = function () {
-    if (!S.analyser || !S.freqData || S.muted || !S.ctx || S.ctx.state !== 'running') return null;
-    S.analyser.getByteFrequencyData(S.freqData);
-    return S.freqData;
-  };
-
-  S.getSampleRate = () => (S.ctx ? S.ctx.sampleRate : 44100);
-
-  S.isOn = () => S.started && !S.muted;
-  OC.sound = S;
+// === engine/audio.js ===
+/* ================= ПРОЦЕДУРНЫЙ ЗВУК ОКЕАНА (С УЧЁТОМ ЗОНЫ И ГЛУБИНЫ) ================= */
+/* Точка входа: шина OС.sound создаётся в audio/core.js, синтез разложен по группам —
+   audio/core.js (контекст, микс, мьют), audio/ambience.js (шум среды),
+   audio/calls.js (мегафауна и гроза), audio/ui_sfx.js (сигналы интерфейса),
+   audio/species_voice.js (голоса 221 вида). */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  OC.sound = OC._SoundState;
 })(window.OC);
 
 // === engine/rov/model.js ===

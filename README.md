@@ -128,7 +128,8 @@ src/
 │   ├── fauna/               # 3D-животные по акваториям: schools, reef_life, rays_sharks, whales,
 │   │                        # polar, abyss, brine_cave, surface_birds, cetaceans, galapagos,
 │   │                        # amazon_river и systems (частицы/эффекты)
-│   ├── audio.js             # Процедурный WebAudio океан (AnalyserNode, прибой, гром, лёд, косатки, затвор)
+│   ├── audio.js             # Реестр звуковой шины OC.sound (точка входа)
+│   ├── audio/               # core (микс/мьют), ambience (шум среды), calls (киты, гроза), ui_sfx, species_voice
 │   ├── rov.js               # Оркестровка ROV: анимация, режимы, публичный API
 │   ├── rov/                 # Модель аппарата и рука, кабель-трос, буи, кильватер/течения, пробы и CTD
 │   ├── sonar.js             # 3D-мультилучевой батиметрический сонар (1496 точек + свод пещер и изогипсы)
