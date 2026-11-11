@@ -49,6 +49,7 @@ ORDER = [
     'ui/hud_panels.js',
     'ui/panels_rov.js',
     'ui/panels_camera.js',
+    'ui/panels_options.js',
     'ui/main.js',
 ]
 

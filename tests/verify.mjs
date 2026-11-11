@@ -49,6 +49,7 @@ const SRC_ORDER = [
   'src/ui/hud_panels.js',
   'src/ui/panels_rov.js',
   'src/ui/panels_camera.js',
+  'src/ui/panels_options.js',
   'src/ui/main.js',
 ];
 
