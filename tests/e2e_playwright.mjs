@@ -324,6 +324,47 @@ try {
     assert(modalHud.closed.rail > 0.95 && modalHud.closed.brand > 0.95,
       `HUD не вернулся после закрытия модалки: ${JSON.stringify(modalHud.closed)}`);
 
+    enterStage('hud-layering');
+    // Панели-окна обязаны быть выше ВСЕГО HUD-хрома: иначе иконки и джойстик
+    // рисуются поверх открытой панели (было: panel 25 < rail 30, stick 26, actions 27)
+    const layerReport = await mobilePage.evaluate(() => {
+      const zOf = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        let node = el, z = null;
+        while (node && node !== document.documentElement) {
+          const v = getComputedStyle(node).zIndex;
+          if (v && v !== 'auto') { z = parseInt(v, 10); break; }
+          node = node.parentElement;
+        }
+        return z;
+      };
+      const panel = zOf('#panel');
+      const hud = {
+        rail: zOf('#topright'),
+        joystick: zOf('.touch-nav'),
+        touchActions: zOf('#touch-actions'),
+        camPreview: zOf('.cam-preview'),
+        resBadge: zOf('.res-badge'),
+        minimap: zOf('.minimap-box'),
+        sonar: zOf('.sonar-box'),
+        hydro: zOf('.hydro-box'),
+        telemetry: zOf('.telemetry'),
+      };
+      const offenders = Object.entries(hud)
+        .filter(([, z]) => z !== null && z >= panel)
+        .map(([k, z]) => `${k}=${z}`);
+      return { panel, offenders };
+    });
+    assert.equal(layerReport.offenders.length, 0,
+      `HUD-элементы перекрывают панель (panel z=${layerReport.panel}): ${layerReport.offenders.join(', ')}`);
+    // и модалки по-прежнему выше панелей
+    const modalZ = await mobilePage.evaluate(() => {
+      const m = document.getElementById('atlas-modal');
+      return m ? parseInt(getComputedStyle(m).zIndex, 10) : null;
+    });
+    assert.ok(modalZ > layerReport.panel, `Модалка (z=${modalZ}) должна быть выше панелей (z=${layerReport.panel})`);
+
     enterStage('panel-under-rail');
     // «Настройки и зоны» и «Эко-лаборатория» не должны заезжать под рейл иконок
     const panelHits = [];

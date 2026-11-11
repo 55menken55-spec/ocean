@@ -1585,6 +1585,19 @@ for (const sel of ['lab-panel', 'rov-panel']) {
   assert(re.test(tplV5), `panel .${sel} must account for the icon rail height`);
 }
 assert(railsSrc.includes('syncRailMetrics'), 'ui/rails.js must publish measured rail height');
+/* Панели-окна должны быть выше HUD-хрома, но ниже модалок */
+const panelZ = (tplV5.match(/\.panel\{[^}]*z-index:(\d+)/) || [])[1];
+assert(panelZ, '.panel must declare a z-index');
+for (const [name, re] of Object.entries({
+  rail: /\.topright\{[^}]*z-index:(\d+)/,
+  joystick: /\.touch-nav\{[^}]*z-index:(\d+)/,
+  touchActions: /\.touch-actions\{[^}]*z-index:(\d+)/,
+})) {
+  const z = (tplV5.match(re) || [])[1];
+  assert(z && Number(z) < Number(panelZ), `HUD ${name} (z=${z}) must stay below panels (z=${panelZ})`);
+}
+{ const mz = (tplV5.match(/\.atlas-modal\{[^}]*z-index:(\d+)/) || [])[1];
+  assert(mz && Number(mz) > Number(panelZ), `modals (z=${mz}) must stay above panels (z=${panelZ})`); }
 for (const fn of ['setCollapsed', 'setModalOpen', 'isModalOpen']) {
   assert(railsSrc.includes(fn), `ui/rails.js must expose ${fn}`);
 }

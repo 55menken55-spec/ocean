@@ -89,8 +89,12 @@
   :root{--rail-bottom:0px;--rail-top:18px}
   /* Панель всегда начинается ниже фактического низа рейла иконок
      (высоту измеряет ui/rails.js и пишет в --rail-bottom) */
-  .panel{position:fixed;right:18px;top:calc(var(--rail-top) + var(--rail-bottom) + 14px);z-index:25;width:308px;padding:16px;border-radius:18px;
-    background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  /* Панели — это выдвижные окна: они обязаны быть выше всего HUD-хрома
+     (рейл 30, джойстик 26, быстрые действия 27, камера-превью 32),
+     иначе иконки и джойстик рисуются поверх открытой панели.
+     Модалки (70) и тосты (60) остаются выше. */
+  .panel{position:fixed;right:18px;top:calc(var(--rail-top) + var(--rail-bottom) + 14px);z-index:55;width:308px;padding:16px;border-radius:18px;
+    background:rgba(6,22,38,.94);border:1px solid var(--glass-brd);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     box-shadow:0 24px 60px rgba(0,0,0,.48);transition:transform .4s cubic-bezier(.2,.8,.2,1),opacity .3s;
     max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 46px);overflow-y:auto;scrollbar-width:thin}
   .panel.closed{transform:translateX(120%);opacity:0;pointer-events:none}
