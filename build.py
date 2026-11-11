@@ -10,6 +10,7 @@ ORDER — единственный источник правды о порядк
 """
 import json
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -182,6 +183,40 @@ def check_readme(strict=True):
     return True
 
 
+def check_namespaces(strict=True):
+    """Порядок модулей должен гарантировать, что каждый OC._* неймспейс
+    объявлен раньше первого чтения. Именно на этом мы дважды спотыкались:
+    audio.js читал OC._SoundState до audio/core.js, а регистрация GBR —
+    OC._GbrEncyclopedia до того, как модуль группы успевал выполниться."""
+    define = {}
+    first_read = {}
+    for idx, rel in enumerate(ORDER):
+        code = open(os.path.join(SRC, rel), encoding='utf-8').read()
+        for m in re.finditer(r'\bOC\.(_[A-Z]\w*)\s*=', code):
+            define.setdefault(m.group(1), idx)
+        for m in re.finditer(r'\bOC\.(_[A-Z]\w*)\b', code):
+            first_read.setdefault(m.group(1), idx)
+
+    problems = []
+    for name, idx in sorted(define.items()):
+        read_idx = first_read.get(name)
+        if read_idx is not None and read_idx < idx:
+            problems.append(f'{name}: читается в {ORDER[read_idx]}, объявлен только в {ORDER[idx]}')
+    for name, idx in sorted(first_read.items()):
+        if name not in define:
+            problems.append(f'{name}: используется в {ORDER[idx]}, но нигде не объявлен')
+
+    if problems:
+        print('Порядок неймспейсов OC._* нарушен:')
+        for p_ in problems:
+            print('  -', p_)
+        if strict:
+            sys.exit(1)
+        return False
+    print(f'Namespaces ok: {len(define)} неймспейсов OC._* объявлены до первого чтения.')
+    return True
+
+
 def main(argv):
     if '--list' in argv:
         list_modules()
@@ -189,6 +224,7 @@ def main(argv):
     if '--check' in argv:
         check()
         check_readme()
+        check_namespaces()
         return
 
     with open(os.path.join(ROOT, 'three.min.js'), encoding='utf-8') as f:
