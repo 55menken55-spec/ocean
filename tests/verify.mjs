@@ -51,6 +51,7 @@ const SRC_ORDER = [
   'src/ui/panels_camera.js',
   'src/ui/panels_service.js',
   'src/ui/picking.js',
+  'src/ui/telemetry.js',
   'src/ui/panels_options.js',
   'src/ui/panels_biomes.js',
   'src/ui/panels_touch.js',

@@ -22,7 +22,6 @@ window.OC = window.OC || {};
   const subPhaseEl = document.getElementById('sub-phase');
   const sonarCanvas = document.getElementById('sonar-canvas');
   const sonarReadout = document.getElementById('sonar-readout');
-  const mapCovEl = document.getElementById('map-cov');
   const hydroCanvas = document.getElementById('hydro-canvas');
   const hydroDb = document.getElementById('hydro-db');
   const hydroSource = document.getElementById('hydro-source');
@@ -132,9 +131,6 @@ window.OC = window.OC || {};
   let journalTab = 'missions';
   let lastEvalCtx = { zoneId: '', depthM: 0, currentKnots: 0, dayW: 1.0, flashOn: false };
   let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
-  let lastEcoEvent = null;
-  let lastEcoEventAt = -100;
-  const ECO_LABELS = OC._HudPanels.ECO_LABELS;
   const _fwd = new T.Vector3();
 
   function updateLensDroplets(dt, camPos, wState, biome) {
@@ -466,7 +462,8 @@ window.OC = window.OC || {};
     OC.Navigation.setBiome(next);
     OC.Minimap.setBiome(next);
     if (OC.Sonar) OC.Sonar.clear();
-    if (mapCovEl && OC.Minimap.getCoverage) mapCovEl.textContent = OC.Minimap.getCoverage() + '%';
+    const covEl = document.getElementById('map-cov');
+    if (covEl && OC.Minimap.getCoverage) covEl.textContent = OC.Minimap.getCoverage() + '%';
     OC.Atlas.setBiome(next);
     if (OC.ROV) OC.ROV.resetForBiome(next, sp);
 
@@ -670,7 +667,7 @@ window.OC = window.OC || {};
   function runLoop(renderer, scene, camera) {
     lastRendererRef = renderer;
     let last = performance.now();
-    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0, wasInBrine = false, lastBrineToastAt = -100, wasInHalocline = false, lastHaloToastAt = -100, lastTetherWarnAt = -100;
+    let time = 0, fpsAcc = 0, fpsFrames = 0, hudTimer = 0;
 
     function resize() {
       const w = window.innerWidth, h = window.innerHeight;
@@ -696,6 +693,35 @@ window.OC = window.OC || {};
         if (!hiddenPaused) last = performance.now();
       });
     }
+
+    /* Телеметрия HUD — ui/telemetry.js */
+    const telemetry = OC._HudTelemetry.bind({
+      toast,
+      getBiome: () => activeBiome,
+      getFauna: () => activeFauna,
+      isSubMode: () => subMode,
+      formatHeading: (yaw) => formatHeading(yaw),
+      drawEchosounder: (p, y, b, f, t) => drawEchosounder(p, y, b, f, t),
+      detectCenterTarget: (c, b, f) => detectCenterTarget(c, b, f),
+      onMissionsEvaluated: (biome, evalCtx) => {
+        lastEvalCtx = evalCtx;
+        const mRes = OC.Expedition.evaluateMissions(biome, lastEvalCtx);
+        if (mRes.newlyCompleted.length) {
+          if (OC.sound && OC.sound.missionChime) OC.sound.missionChime();
+          toast('Миссия выполнена: ' + mRes.newlyCompleted[0].title + '!');
+          if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
+        }
+      },
+      syncClock: (t) => { if (optHud) optHud.syncClock(t, autoCycle); },
+      onLabUpdate: (labState, panelOpen) => {
+        if (panelOpen && uiHandles && uiHandles.updateLabDisplay) uiHandles.updateLabDisplay();
+        if (labState.statusTone !== lastLabTone) {
+          if (labState.statusTone === 'crit') toast('Внимание: ' + labState.statusLabel + '!');
+          else if (lastLabTone === 'crit' && labState.statusTone === 'warn') toast('Экосистема начинает восстановление');
+          lastLabTone = labState.statusTone;
+        }
+      }
+    });
 
     function frame(now) {
       requestAnimationFrame(frame);
@@ -740,220 +766,7 @@ window.OC = window.OC || {};
       hudTimer += rawDt;
       if (hudTimer > 0.14 && activeBiome) {
         hudTimer = 0;
-        if (OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen()) {
-          const hs = OC.Hydrophone.getState();
-          if (hydroDb) hydroDb.textContent = hs.dbSPL.toFixed(1) + ' dB';
-          if (hydroSource) hydroSource.textContent = hs.dominantLabel;
-          if (hydroBand) hydroBand.textContent = hs.bandLabel;
-          if (hydroBearingEl) {
-            if (hs.targetPos) {
-              const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-              const dName = dirs[Math.round(hs.bearingDeg / 45) % 8];
-              const relSign = hs.relBearingDeg >= 0 ? ('+' + hs.relBearingDeg) : String(hs.relBearingDeg);
-              hydroBearingEl.textContent = String(hs.bearingDeg).padStart(3, '0') + '° (' + dName + ') · курс ' + relSign + '°';
-            } else {
-              hydroBearingEl.textContent = 'Всенаправленный фон';
-            }
-          }
-          if (hydroTrackBtn) hydroTrackBtn.disabled = !hs.targetPos;
-        }
-        const biome = activeBiome;
-        const zone = biome.getZoneAt(craftPos.x, craftPos.y, craftPos.z);
-        const depthOffset = biome.depthOffset || 0;
-        const depthM = depthOffset + (depthOffset > 0 ? -craftPos.y : Math.max(0, -craftPos.y));
-        const rawTemp = biome.getTemperatureAt
-          ? biome.getTemperatureAt(craftPos.x, depthM, zone)
-          : (depthOffset > 0 ? zone.tempC : (zone.tempC - Math.max(0, depthM - 15) * 0.065));
-        const labState = OC.EcoLab ? OC.EcoLab.getState() : null;
-        const adjTemp = labState ? Math.max(-1.9, rawTemp + labState.tempDelta) : rawTemp;
-        const tempC = adjTemp.toFixed(1);
-        const pal = OC.getPalette();
-        const dayW = pal && typeof pal.dayW === 'number' ? pal.dayW : 1.0;
-        const curr = OC.Navigation.getCurrent ? OC.Navigation.getCurrent() : null;
-        const cKnots = curr ? curr.length() * 1.94384 : 0;
-
-        if (teleZone) teleZone.textContent = zone.shortName;
-        if (teleDepth) teleDepth.textContent = (!biome.noSurface && craftPos.y > 0.1) ? ('+' + craftPos.y.toFixed(1) + ' м над водой') : (depthM.toFixed(1) + ' м');
-        if (teleTemp) teleTemp.textContent = tempC + ' °C';
-        if (teleHeading) teleHeading.textContent = formatHeading(OC.Navigation.getYaw());
-        if (teleWeatherWrap && teleWeatherSep && teleWeather && OC.Weather) {
-          if (biome.noSurface) {
-            teleWeatherSep.classList.add('tele-wp-hide');
-            teleWeatherWrap.classList.add('tele-wp-hide');
-          } else {
-            teleWeatherSep.classList.remove('tele-wp-hide');
-            teleWeatherWrap.classList.remove('tele-wp-hide');
-            teleWeather.textContent = OC.Weather.getLabel(biome);
-          }
-        }
-
-        // Навигационный маячок в телеметрии + авто-прибытие
-        if (OC.Expedition) {
-          const wp = OC.Expedition.getWaypoint(biome.id);
-          if (wp) {
-            const wpDx = wp.x - craftPos.x;
-            const wpDz = wp.z - craftPos.z;
-            const wpDist = Math.hypot(wpDx, wpDz);
-            if (wpDist < 24) {
-              OC.Expedition.clearWaypoint(biome.id);
-              toast('Вы прибыли к маячку: ' + wp.label);
-              if (teleWpSep) teleWpSep.classList.add('tele-wp-hide');
-              if (teleWpWrap) teleWpWrap.classList.add('tele-wp-hide');
-            } else {
-              const deg = ((Math.round(Math.atan2(wpDx, -wpDz) * 180 / Math.PI) % 360) + 360) % 360;
-              const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-              const dStr = dirs[Math.round(deg / 45) % 8];
-              if (teleWpSep) teleWpSep.classList.remove('tele-wp-hide');
-              if (teleWpWrap) teleWpWrap.classList.remove('tele-wp-hide');
-              if (teleWp) teleWp.textContent = Math.round(wpDist) + ' м · ' + dStr;
-            }
-          } else {
-            if (teleWpSep) teleWpSep.classList.add('tele-wp-hide');
-            if (teleWpWrap) teleWpWrap.classList.add('tele-wp-hide');
-          }
-
-          // Обновление видоискателя фотокамеры и оценка научных миссий
-          if (OC.Expedition.isPhotoMode() && camTargetEl) {
-            const tgt = detectCenterTarget(camera, biome, activeFauna);
-            camTargetEl.textContent = tgt
-              ? ('В фокусе: ' + tgt.label + ' (' + tgt.dist.toFixed(0) + ' м)')
-              : 'Наведите центр рамки на вид или коралл';
-          }
-
-          lastEvalCtx = { zoneId: zone.id, depthM, currentKnots: cKnots, dayW, flashOn };
-          const mRes = OC.Expedition.evaluateMissions(biome, lastEvalCtx);
-          if (mRes.newlyCompleted.length) {
-            if (OC.sound && OC.sound.missionChime) OC.sound.missionChime();
-            toast('Миссия выполнена: ' + mRes.newlyCompleted[0].title + '!');
-            if (journalModal && !journalModal.classList.contains('hidden')) renderJournal();
-          }
-        }
-
-        OC.sound.update(depthM, zone.id, dayW, biome.id, wState.stormMix || 0);
-        OC.Minimap.update(craftPos, OC.Navigation.getYaw());
-        if (mapCovEl && OC.Minimap.getCoverage) mapCovEl.textContent = OC.Minimap.getCoverage() + '%';
-
-        const ecoEv = OC.faunaInfo ? OC.faunaInfo.activeEvent : null;
-        if (ecoEv && (ecoEv !== lastEcoEvent || OC.uTime.value - lastEcoEventAt > 20) && OC.uTime.value > 5) {
-          lastEcoEvent = ecoEv;
-          lastEcoEventAt = OC.uTime.value;
-          if (ECO_LABELS[ecoEv]) toast(ECO_LABELS[ecoEv]);
-        } else if (!ecoEv) {
-          lastEcoEvent = null;
-        }
-
-        const inBrineNow = !!(OC.Navigation.isInBrine && OC.Navigation.isInBrine());
-        if (inBrineNow && !wasInBrine && time - lastBrineToastAt > 8) {
-          lastBrineToastAt = time;
-          toast('Галоклин рассола (230‰): архимедова плавучесть выталкивает батискаф!');
-        }
-        wasInBrine = inBrineNow;
-
-        const inHaloNow = !!(OC.Navigation.isInHalocline && OC.Navigation.isInHalocline());
-        if (inHaloNow && !wasInHalocline && time - lastHaloToastAt > 8) {
-          lastHaloToastAt = time;
-          toast('Галоклин Анхелиты (0‰ / 35‰): пресная вода переходит в облако H₂S!');
-        }
-        wasInHalocline = inHaloNow;
-
-        if (subMode) {
-          const flHere = biome.getHeight(craftPos.x, craftPos.z);
-          const clearance = Math.max(0, craftPos.y - flHere);
-          const atm = (1 + depthM / 10.08).toFixed(2);
-          const knots = (camSpeed * 1.94384).toFixed(1);
-          const pitchDeg = OC.Navigation.getPitch() * 180 / Math.PI;
-          if (subHorizon) subHorizon.style.transform = 'translateY(' + OC.clamp(-pitchDeg * 1.1, -36, 36).toFixed(1) + 'px)';
-          if (subPressure) subPressure.textContent = atm + ' атм';
-          if (subClearance) {
-            subClearance.textContent = clearance.toFixed(1) + ' м';
-            subClearance.classList.toggle('warn', clearance < 3.5);
-          }
-          if (subSpeedEl) subSpeedEl.textContent = knots + ' уз';
-          if (subCurrentEl) {
-            subCurrentEl.textContent = cKnots.toFixed(1) + ' уз';
-            subCurrentEl.classList.toggle('warn', cKnots > 1.8);
-          }
-          if (subPhaseEl) {
-            const inCaveCeiling = !!(biome.getCeilingHeight && biome.getCeilingHeight(craftPos.x, craftPos.z) < 25.0);
-            const fInfo = OC.faunaInfo || {};
-            let phaseLabel = dayW < 0.35 ? 'Ночь · Био + DVM' : (dayW < 0.7 ? 'Сумерки' : 'День');
-            if (fInfo.siltTurbidity && fInfo.siltTurbidity > 0.35) phaseLabel = 'Взвесь грунта · Silt-out';
-            else if (inBrineNow) phaseLabel = 'Галоклин · Рассол 230‰';
-            else if (inHaloNow) phaseLabel = 'Галоклин сенота · Облако H₂S';
-            else if (fInfo.thermoclineActive) phaseLabel = 'Термоклин · Оптическая дымка';
-            else if (inCaveCeiling) phaseLabel = 'Карстовая пещера · Свод';
-            else if (biome.noSurface) {
-              phaseLabel = biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
-                : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м');
-            } else if (fInfo.coralSpawnIntensity > 0.35) phaseLabel = 'Ночь · Нерест кораллов';
-            else if (fInfo.dvmPhase === 'dusk_ascent') phaseLabel = 'Сумерки · Миграция DVM';
-            else if (biome.hasAurora) {
-              phaseLabel = dayW < 0.42 ? 'Полярная ночь · Сияние' : (dayW < 0.72 ? 'Полярные сумерки' : 'Полярный день');
-            }
-            subPhaseEl.textContent = phaseLabel;
-          }
-          drawEchosounder(craftPos, OC.Navigation.getYaw(), biome, activeFauna, time);
-        }
-
-        if (OC.ROV && OC.ROV.getTetherState) {
-          const tSt = OC.ROV.getTetherState();
-          if (tSt.active && tSt.tensionPct >= 88 && time - lastTetherWarnAt > 10) {
-            lastTetherWarnAt = time;
-            toast('Натяжение кабель-троса ' + tSt.tensionPct + '% (' + tSt.lengthM + '/' + tSt.maxLengthM + ' м) — вернитесь ближе к ' + tSt.anchorLabel + '!');
-          }
-          if (rovPanel && !rovPanel.classList.contains('closed') && rovTetherLabel) {
-            if (tSt.active) {
-              rovTetherLabel.textContent = 'Кабель (' + tSt.anchorLabel + '): ' + tSt.lengthM + ' / ' + tSt.maxLengthM + ' м · ' + tSt.tensionPct + '% (' + tSt.status + ')';
-              rovTetherLabel.classList.toggle('warn', tSt.tensionPct >= 62 && tSt.tensionPct < 88);
-              rovTetherLabel.classList.toggle('crit', tSt.tensionPct >= 88);
-            } else {
-              rovTetherLabel.textContent = 'Кабель-трос: свёрнут (вкл. Y)';
-              rovTetherLabel.classList.remove('warn', 'crit');
-            }
-          }
-        }
-
-        if (OC.ROV && rovPanel && !rovPanel.classList.contains('closed')) {
-          OC.Navigation.getForward(_fwd);
-          OC.ROV.scanTarget(biome, craftPos, _fwd, _rovScanOut);
-          if (rovTargetLabel) {
-            const distPart = _rovScanOut.dist > 0 ? (' (' + _rovScanOut.dist.toFixed(1) + ' м)') : '';
-            rovTargetLabel.textContent = 'Захват: ' + _rovScanOut.label + distPart;
-          }
-          if (rovFlowLabel) {
-            rovFlowLabel.textContent = 'Вектор течения: ' + cKnots.toFixed(2) + ' уз · Глубина ' + depthM.toFixed(1) + ' м';
-          }
-          if (rovCtdChart) OC.ROV.drawCtdChart(rovCtdChart, depthM);
-        }
-
-        const t = OC.getTimeOfDay();
-        optHud.syncClock(t, autoCycle);
-
-        const tStats = OC.Terrain.getStats();
-        const fStats = OC.FloraStreamer.getStats();
-        if (statChunks) statChunks.textContent = tStats.visible + ' / ' + tStats.total;
-        if (statCorals) statCorals.textContent = fStats.activeInstances;
-        if (statFish && OC.faunaInfo) statFish.textContent = OC.faunaInfo.schoolFish;
-        if (statBig && OC.faunaInfo) statBig.textContent = OC.faunaInfo.big;
-
-        if (guideProgBar && OC.Navigation.getMode() === 'tour') {
-          const tSt = OC.Navigation.getTourState();
-          if (tSt && tSt.active) guideProgBar.style.width = `${(tSt.progress * 100).toFixed(1)}%`;
-        }
-
-        if (labState) {
-          if (labPanel && !labPanel.classList.contains('closed') && uiHandles && uiHandles.updateLabDisplay) {
-            uiHandles.updateLabDisplay();
-          }
-          if (labState.statusTone !== lastLabTone) {
-            if (labState.statusTone === 'crit') {
-              toast('Внимание: ' + labState.statusLabel + '!');
-            } else if (lastLabTone === 'crit' && labState.statusTone === 'warn') {
-              toast('Экосистема начинает восстановление');
-            }
-            lastLabTone = labState.statusTone;
-          }
-        }
+        telemetry.update(time, craftPos, camSpeed, flashOn);
       }
 
       fpsAcc += rawDt;

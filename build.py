@@ -51,6 +51,7 @@ ORDER = [
     'ui/panels_camera.js',
     'ui/panels_service.js',
     'ui/picking.js',
+    'ui/telemetry.js',
     'ui/panels_options.js',
     'ui/panels_biomes.js',
     'ui/panels_touch.js',
