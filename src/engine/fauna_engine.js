@@ -847,6 +847,8 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makePinkDolphin(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'arapaima') {
           OC._FaunaBuilders.makeArapaima(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'seal_baikal') {
+          OC._FaunaBuilders.makeBaikalSeal(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 0, y: 0, scale: 0.8 });
         } else if (key === 'electric_eel') {
           OC._FaunaBuilders.makeElectricEel(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'river_stingray') {

@@ -295,6 +295,14 @@ window.OC = window.OC || {};
         driftwood_snag: {
           mat: matRigid, maxInstances: 780, cullDist: 460,
           geos: [need('buildDriftwoodSnag')(rng), need('buildDriftwoodSnag')(rng)]
+        },
+        baikal_sponge: {
+          mat: matSoft, maxInstances: 1100, cullDist: 430,
+          geos: [need('buildBaikalSponge')(rng), need('buildBaikalSponge')(rng)]
+        },
+        charophyte_bed: {
+          mat: matPlant, maxInstances: 1450, cullDist: 360,
+          geos: [need('buildCharophyteBed')(rng), need('buildCharophyteBed')(rng)]
         }
       };
 

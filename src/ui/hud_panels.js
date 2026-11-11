@@ -24,7 +24,8 @@ window.OC = window.OC || {};
     brine_pool: 'Соляной бассейн',
     cenote_caves: 'Сеноты Юкатана',
     galapagos_upwelling: 'Галапагосы',
-    amazon_igapo: 'Амазония'
+    amazon_igapo: 'Амазония',
+    baikal: 'Байкал'
   };
 
   const BIOME_REGION = {
@@ -37,7 +38,8 @@ window.OC = window.OC || {};
     brine_pool: 'Мексиканский залив · 650 м',
     cenote_caves: 'Юкатан · Сак-Актун 58 м',
     galapagos_upwelling: 'Эквадор · Апвеллинг',
-    amazon_igapo: 'Рио-Негру · Игапо 28 м'
+    amazon_igapo: 'Рио-Негру · Игапо 28 м',
+    baikal: 'Сибирь · Байкальский рифт 1 642 м'
   };
 
   // Капли воды на стекле маски при выныривании или шторме (fixed pool, без GC)

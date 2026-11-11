@@ -349,7 +349,7 @@ console.log('   Option 2 ocean currents, particle/sway advection, #sub-current H
 
 // G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea, Wreck Atoll, Mariana Trench, Brine Pool, Cenote Caves & Galapagos Upwelling) & clean switching
 const allBiomes = OC.Biomes.list();
-assert(allBiomes.length === 10, `Expected 10 registered ocean biomes, got ${allBiomes.length}`);
+assert(allBiomes.length === 11, `Expected 11 registered aquatic biomes, got ${allBiomes.length}`);
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
 assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
@@ -473,7 +473,7 @@ console.log('   Multi-biome hot-switching & runtime quality preset switching (lo
 
 // H) Verify Direction 1 + All 10 Biome Missions (Camera, 40 Scientific Missions, Minimap Waypoints, Persistence)
 assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-assert.equal(OC.Expedition.MISSIONS.length, 40, `Expected 40 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+assert.equal(OC.Expedition.MISSIONS.length, 44, `Expected 44 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
 for (const b of OC.Biomes.list()) {
   const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
   assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
@@ -773,7 +773,7 @@ OC.Globe.init({
 });
 
 const beacons = OC.Globe.getBeacons();
-assert.equal(beacons.length, 10, '3D Globe must expose 10 expedition beacons');
+assert.equal(beacons.length, 11, '3D Globe must expose 11 expedition beacons');
 let totalTourStages = 0;
 for (const b of OC.Biomes.list()) {
   assert(b.globe && Number.isFinite(b.globe.lat) && Number.isFinite(b.globe.lon), `Biome ${b.id} missing globe coordinates`);
@@ -787,7 +787,7 @@ for (const b of OC.Biomes.list()) {
   const sum = OC.Expedition.getBiomeSummary(b);
   assert(sum.speciesTotal === Object.keys(b.encyclopedia).length && sum.missionsTotal === 4, `getBiomeSummary mismatch for ${b.id}`);
 }
-assert(totalTourStages === 52, `Expected 52 total guided tour stages across 10 biomes, got ${totalTourStages}`);
+assert(totalTourStages === 58, `Expected 58 total guided tour stages across 11 biomes, got ${totalTourStages}`);
 
 for (const bc of beacons) {
   const rad = Math.hypot(bc.x, bc.y, bc.z);
@@ -1453,8 +1453,31 @@ const ctdAmz = OC.ROV.runCtdCast(amzBiome, new T.Vector3(15, -10, 2), OC.EcoLab.
 assert(ctdAmz && ctdAmz.surfaceTemp > 26 && ctdAmz.maxDepthM <= 30, `Amazon CTD cast mismatch: ${JSON.stringify(ctdAmz)}`);
 const resAmz = OC.Expedition.evaluateMissions(amzBiome, { zoneId: 'whitewater_confluence', depthM: 6, currentKnots: 0.9, dayW: 0.9, flashOn: false });
 assert(resAmz.list.find((m) => m.id === 'amz_confluence').done, 'amz_confluence mission must complete inside whitewater_confluence zone');
+console.log('   10th Biome "Амазония: Лес Игапо" (Rio Negro blackwater, Encontro das Aguas, Pink Dolphin, Arapaima, Electric Eel, Victoria amazonica) verified.');
+
+// AB) Verify 11th Biome: Lake Baikal's clear-water rift, endemic fauna, and sponge reefs
+const baikal = OC.Biomes.setActive('baikal');
+assert(baikal && baikal.minimapTheme === 'baikal' && baikal.noSurface === false, 'Baikal must register as a surface freshwater biome with its own minimap theme');
+assert(baikal.zones.length === 5 && baikal.landmarks.length === 6 && baikal.tourLegs.length === 6, 'Baikal must expose 5 zones, 6 landmarks and 6 guided tour legs');
+assert(baikal.getHeight(0, 80) < -1500 && baikal.getHeight(-520, -420) > -15, 'Baikal bathymetry must include both the deep rift and shallow Academy Bay');
+const baikalShallowOptics = baikal.getOpticalProfile(-520, -8, -420, 1);
+const baikalDeepOptics = baikal.getOpticalProfile(0, -900, 80, 1);
+assert(baikalShallowOptics.fogDensity < baikalDeepOptics.fogDensity && baikalShallowOptics.causticStrength > baikalDeepOptics.causticStrength, 'Baikal clear-water optics must fade with depth');
+for (const k of ['baikal_sponge', 'charophyte_bed', 'fish_omul', 'fish_golomyanka', 'fish_grayling', 'seal_baikal', 'methane_seep_baikal']) {
+  assert(baikal.encyclopedia[k], `Baikal encyclopedia missing key ${k}`);
+  assert(OC.sound.getVoiceLabel(k).length > 4, `Baikal acoustic label missing for ${k}`);
+  const preview = OC.FaunaEngine.createPreviewMesh(k, baikal);
+  assert(preview && preview.children.length > 0, `Baikal Atlas preview missing for ${k}`);
+}
+const ctdBaikal = OC.ROV.runCtdCast(baikal, new T.Vector3(0, -900, 80), OC.EcoLab.getState());
+assert(ctdBaikal && ctdBaikal.maxDepthM > 1500 && ctdBaikal.bottomTemp >= 3.2 && ctdBaikal.bottomTemp < 4.0, `Baikal CTD profile mismatch: ${JSON.stringify(ctdBaikal)}`);
+const baikalFauna = OC.FaunaEngine.init(scene, baikal);
+assert(baikalFauna.agents.some((a) => a.key === 'seal_baikal') && baikalFauna.agents.some((a) => a.key === 'fish_golomyanka') && baikalFauna.agents.some((a) => a.key === 'methane_seep_baikal'), 'Baikal fauna plan must include nerpa, golomyanka and scannable seep locations');
+baikalFauna.update(1 / 60, OC.uTime.value, new T.Vector3(baikal.spawn.pos[0], baikal.spawn.pos[1], baikal.spawn.pos[2]), 0, false);
+assert(OC.faunaInfo.hydratePlumesActive, 'Baikal methane seeps must activate the existing low-cost gas plume system');
+assert.equal(OC.Expedition.MISSIONS.filter((m) => m.biomeId === 'baikal').length, 4, 'Baikal must provide four expedition goals');
 OC.Biomes.setActive('great_barrier_reef');
-console.log(`   10th Biome "Амазония: Лес Игапо" (Rio Negro blackwater, Encontro das Aguas, Pink Dolphin, Arapaima, Electric Eel, Victoria amazonica, 40 missions) verified.`);
+console.log('   11th Biome "Озеро Байкал" (1,642 m rift, clear-water optics, Baikal sponge, omul, golomyanka, nerpa, methane seeps, CTD and 4 missions) verified.');
 
 // AB) Verify Stage 2 Underwater Optical Shader FX (WebGLRenderTarget Post-Processing, Chromatic Aberration, Lens Wetness & Overhead Shadows)
 assert(typeof OC.renderWorld === 'function' && typeof OC.resizeWorld === 'function' && typeof OC.getPostFxState === 'function', 'world.js must expose OC.renderWorld, OC.resizeWorld & OC.getPostFxState');
@@ -1517,11 +1540,11 @@ console.log(`   Stage 3 ROV & Marine Science (Umbilical Tether ${tNear.lengthM}m
 // AD) Verify Stage 4 Scientific Report Export (.MD & .JSON) & Adaptive Auto-LOD Controller
 assert(typeof OC.Expedition.buildScientificReport === 'function' && typeof OC.Expedition.exportReport === 'function', 'OC.Expedition must expose scientific report builder & exporter');
 const repMd = OC.Expedition.exportReport('md', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
-assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 10 биомам'), 'Markdown report must summarize all 10 biomes & CTD data');
+assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 11 биомам'), 'Markdown report must summarize all 11 biomes & CTD data');
 const repJson = OC.Expedition.exportReport('json', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
 const parsedRep = JSON.parse(repJson.content);
-assert.equal(parsedRep.biomes.length, 10, 'JSON scientific report must contain all 10 biomes');
-assert(parsedRep.summary.missionsTotal === 40 && parsedRep.summary.speciesTotal === 221, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
+assert.equal(parsedRep.biomes.length, 11, 'JSON scientific report must contain all 11 biomes');
+assert(parsedRep.summary.missionsTotal === 44 && parsedRep.summary.speciesTotal === 230, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
 
 assert(typeof OC.Quality.evaluateAutoLod === 'function' && typeof OC.Quality.setAutoLod === 'function' && typeof OC.Quality.getAutoLodState === 'function', 'OC.Quality must expose adaptive Auto-LOD controller');
 OC.Quality.set('high');

@@ -448,16 +448,16 @@ assert.equal(OC.ROV.getBuoys().length, 0, 'ROV buoy recall must clear active buo
 
 // Stage 4 E2E checks: Scientific Report Export & Adaptive Auto-LOD inside production bundle
 const repE2E = OC.Expedition.exportReport('md', { perfStats: OC.getPerfStats(), mapCoveragePct: OC.Minimap.getCoverage() });
-assert(repE2E && repE2E.content.includes('Большой Барьерный риф') && repE2E.report.biomes.length === 10, 'E2E production scientific report export must include all 10 biomes');
+assert(repE2E && repE2E.content.includes('Большой Барьерный риф') && repE2E.report.biomes.length === 11, 'E2E production scientific report export must include all 11 biomes');
 OC.Quality.setAutoLod(true);
 for (let i = 0; i < 3; i++) OC.Quality.evaluateAutoLod(44.0, 1.0);
 assert.equal(OC.Quality.getId(), 'medium', 'Production Auto-LOD must downgrade high -> medium under simulated frame pressure');
 OC.Quality.set('high');
 stepFrames(2);
 
-console.log('3) Profiling 10 biomes × 100 continuous frames (1000 frames + 3D Multibeam Sonar scans)...');
+console.log('3) Profiling 11 biomes × 100 continuous frames (1100 frames + 3D Multibeam Sonar scans)...');
 const biomeList = OC.Biomes.list();
-assert.equal(biomeList.length, 10, 'All 10 biomes must be registered in production bundle');
+assert.equal(biomeList.length, 11, 'All 11 biomes must be registered in production bundle');
 
 const perfTable = [];
 for (const b of biomeList) {
@@ -486,4 +486,4 @@ for (const row of perfTable) {
 assert.equal(pageErrors.length, 0, `Production bundle logged runtime errors:\n${pageErrors.join('\n')}`);
 assert.equal(glErrors.length, 0, `WebGL shader compilation errors:\n${glErrors.join('\n')}`);
 assert(compiledShaders.length >= 10, `Expected >= 10 compiled GLSL shaders captured by WebGL spy, got ${compiledShaders.length}`);
-console.log(`ALL E2E PRODUCTION BUNDLE CHECKS PASSED! (${compiledShaders.length} GLSL shaders validated, 0 runtime errors across 1000 frames).`);
+console.log(`ALL E2E PRODUCTION BUNDLE CHECKS PASSED! (${compiledShaders.length} GLSL shaders validated, 0 runtime errors across 1100 frames).`);

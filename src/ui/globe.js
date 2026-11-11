@@ -429,8 +429,8 @@ window.OC = window.OC || {};
       it.hit = hit;
     }
 
-    // Соединяем 8 точек планеты дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea'];
+    // Соединяем точки всех биомов дугами глобальной экспедиции
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea', 'amazon_igapo', 'baikal'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);

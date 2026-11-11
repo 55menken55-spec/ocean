@@ -383,6 +383,43 @@ window.OC = window.OC || {};
       landmarkId: 'victoria_lagoon',
       goal: 1,
       progress: (ctx) => ctx.hasPhotoOrPing(['arapaima', 'electric_eel', 'river_stingray', 'victoria_lily']) ? 1 : 0
+    },
+    // --- Байкал: Большой рифт и эндемичные виды ---
+    {
+      id: 'baik_discoveries',
+      biomeId: 'baikal',
+      title: 'Натуралист Байкальского рифта',
+      desc: 'Изучите 6 видов и геологических объектов озера Байкал.',
+      landmarkId: 'baikal_academy_bay',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'baik_nerpa',
+      biomeId: 'baikal',
+      title: 'Единственный пресноводный тюлень',
+      desc: 'Сфотографируйте или обнаружьте сонаром байкальскую нерпу.',
+      landmarkId: 'baikal_academy_bay',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['seal_baikal']) ? 1 : 0
+    },
+    {
+      id: 'baik_sponge_reef',
+      biomeId: 'baikal',
+      title: 'Живой губочный риф',
+      desc: 'Найдите сад байкальских губок и зафиксируйте эндемичную Lubomirskia baicalensis.',
+      landmarkId: 'baikal_sponge_garden',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('baikal_sponge_reef') && ctx.hasPhotoOrPing(['baikal_sponge']) ? 1 : 0
+    },
+    {
+      id: 'baik_rift_depth',
+      biomeId: 'baikal',
+      title: 'В бездну Большого рифта',
+      desc: 'Опуститесь глубже 1 000 м и просканируйте глубоководную голомянку.',
+      landmarkId: 'baikal_golomyanka_depth',
+      goal: 1,
+      progress: (ctx) => ctx.depthM >= 1000 && ctx.hasPhotoOrPing(['fish_golomyanka']) ? 1 : 0
     }
   ];
 

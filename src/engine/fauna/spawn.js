@@ -128,6 +128,19 @@ window.OC = window.OC || {};
         agents.push(OC._FaunaBuilders.makeClione(faunaGroup, cl));
       }
 
+      for (const seal of (plan.baikalSeals || [])) {
+        const a = OC._FaunaBuilders.makeBaikalSeal(faunaGroup, biome, seal);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const seep of (plan.seepTargets || [])) {
+        const p = new T.Vector3(seep.x, biome.getHeight(seep.x, seep.z) + 1.0, seep.z);
+        const target = { key: 'methane_seep_baikal', getPosition: () => p, update() {} };
+        agents.push(target);
+        sonarTargets.push(target);
+      }
+
       for (const wr of (plan.wrecks || [])) {
         const a = OC._FaunaBuilders.makeShipwreck(faunaGroup, biome, wr);
         agents.push(a);

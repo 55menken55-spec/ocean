@@ -100,6 +100,9 @@ window.OC = window.OC || {};
     if (key === 'electric_eel') return { mode: 'eel', minHz: 260, maxHz: 920, label: 'Разряд электрического угря' };
     if (key === 'piranha') return { mode: 'pulse', minHz: 110, maxHz: 340, label: 'Барабанный стук стаи пираний' };
     if (key === 'arapaima' || key === 'river_stingray') return { mode: 'swim', minHz: 80, maxHz: 360, label: key === 'arapaima' ? 'Глоток воздуха арапаимы' : 'Скольжение ската моторо' };
+    if (key === 'seal_baikal') return { mode: 'pulse', minHz: 240, maxHz: 1280, label: 'Позыв нерпы подо льдом' };
+    if (key === 'fish_omul' || key === 'fish_grayling' || key === 'fish_golomyanka' || key === 'baikal_sponge' || key === 'charophyte_bed') return { mode: 'bio', minHz: 180, maxHz: 950, label: 'Биоакустика Байкальского рифта' };
+    if (key === 'methane_seep_baikal') return { mode: 'rumble', minHz: 35, maxHz: 240, label: 'Метановый сип Байкала' };
     if (key === 'galapagos_penguin' || key === 'sea_lion' || key === 'dugong') return { mode: 'pulse', minHz: 320, maxHz: 1450, label: key === 'galapagos_penguin' ? 'Треск погони пингвина' : 'Подводный клич' };
     if (key === 'vent_chimney' || key === 'volcanic_fumarole' || key === 'serpentinite_vent' || key === 'methane_hydrate' || key === 'brine_pool_lake' || key === 'halocline_layer') {
       return { mode: 'rumble', minHz: 40, maxHz: 260, label: key === 'volcanic_fumarole' ? 'Кипение фумарол' : 'Гул сипа / термоисточника' };

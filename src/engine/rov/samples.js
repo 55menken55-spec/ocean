@@ -20,7 +20,7 @@ window.OC = window.OC || {};
   const KARST_SPECIES = new Set(['stalactite', 'stalagmite']);
   const VOLCANIC_SPECIES = new Set(['galapagos_barnacle', 'darwins_arch']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag', 'charophyte_bed']);
 
 
     function scanManipulatorTarget(biome, pos, fwd, out) {
@@ -59,7 +59,7 @@ window.OC = window.OC || {};
       out.label = floorEnc ? floorEnc[0] : 'Донный осадок';
       out.latin = floorEnc ? floorEnc[1] : 'Керн морского дна';
       out.dist = Math.max(1.0, clearance);
-      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : 0xe8d9b5));
+      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : (biome.id === 'baikal' ? 0x71857d : 0xe8d9b5)));
       return out;
     }
 
@@ -141,6 +141,10 @@ window.OC = window.OC || {};
         category = 'Ботаническая проба';
         chemNote = `Фотосинтез · O₂ ${o2.toFixed(1)} мг/л`;
         colorHex = 0x5be8b0;
+      } else if (sp === 'baikal_sponge') {
+        category = 'Пресноводный губочный био-риф';
+        chemNote = 'Кремнистый скелет · эндемик Байкала · пресная вода';
+        colorHex = 0x88b89b;
       } else {
         category = 'Образец бентоса';
         chemNote = sp === 'hadal_sponge'
@@ -159,7 +163,9 @@ window.OC = window.OC || {};
               ? `Базальт и оливковый песок · ${depthM.toFixed(0)} м`
               : (biome.id === 'hydrothermal_vents'
                 ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-                : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`)))));
+                : (biome.id === 'arctic_sea'
+                  ? `Полярный ил · ${waterTemp.toFixed(1)} °C`
+                  : (biome.id === 'baikal' ? `Диатомовый ил рифта · ${depthM.toFixed(0)} м · пресная вода` : `Карбонатный ил · ${pH.toFixed(2)} pH`))))));
     }
 
     return {
@@ -217,6 +223,8 @@ window.OC = window.OC || {};
       } else if (biome.id === 'amazon_igapo') {
         // Пресноводная пойма Амазонии: слабый прогрев у поверхности и постепенное снижение на дне канала
         Tval -= OC.smoothstep(2, 26, d) * 1.9;
+      } else if (biome.id === 'baikal') {
+        // Байкал использует собственный сезонный профиль getTemperatureAt и холодную изотерму глубин.
       } else if (!biome.noSurface && !biome.hasAurora) {
         const thermoDrop = OC.smoothstep(18, 65, d) * 3.8;
         Tval -= thermoDrop;

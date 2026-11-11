@@ -7588,6 +7588,215 @@ window.OC = window.OC || {};
   });
 })(window.OC);
 
+// === biomes/baikal.js ===
+/* ================= БИОМ 11: ОЗЕРО БАЙКАЛ — РИФТОВАЯ ПРЕСНОВОДНАЯ БЕЗДНА ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const _a = new T.Color();
+  const _b = new T.Color();
+  const _c = new T.Color();
+  const _fog = new T.Color();
+  const _water = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _horizon = new T.Color();
+
+  const ZONES = [
+    { id: 'baikal_littoral', name: 'Мелководья и бухта Академическая', shortName: 'Прибрежье', color: '#7fd9cf', depthLabel: '0 – 25 м', tempC: 9.5,
+      description: 'Прозрачное прибрежье с зарослями харовых водорослей, валунами и зарождающимися колониями байкальских губок.' },
+    { id: 'baikal_sponge_reef', name: 'Подводные губочные рифы', shortName: 'Губочные рифы', color: '#56b8a9', depthLabel: '8 – 120 м', tempC: 4.2,
+      description: 'Древовидные пресноводные губки Lubomirskia baicalensis фильтруют холодную воду на скальных уступах.' },
+    { id: 'baikal_shelf', name: 'Ступени Большого Байкальского рифта', shortName: 'Рифтовый склон', color: '#4789b5', depthLabel: '120 – 700 м', tempC: 3.5,
+      description: 'Крутые уступы разлома, обвальные осыпи и глубокие каньоны, ведущие к центральной котловине.' },
+    { id: 'baikal_abyss', name: 'Центральная котловина', shortName: 'Байкальская бездна', color: '#304b84', depthLabel: '700 – 1 642 м', tempC: 3.4,
+      description: 'Тектоническая впадина глубиной более полутора километров с холодной прозрачной водой, голомянкой и глубоководными бокоплавами.' },
+    { id: 'baikal_seep', name: 'Метановые сипы и грязевые вулканы', shortName: 'Метановые сипы', color: '#82c7dc', depthLabel: '850 – 1 450 м', tempC: 3.6,
+      description: 'Пузырьковые выходы газа отмечают активные разломы и поддерживают локальные сообщества микроорганизмов.' }
+  ];
+
+  function riftAxisX(z) { return Math.sin(z * 0.0027 + 0.4) * 38 + Math.sin(z * 0.006) * 12; }
+  function getRiftDistance(x, z) { return Math.abs(x - riftAxisX(z)); }
+
+  function getHeight(x, z) {
+    const d = getRiftDistance(x, z);
+    const basin = 790 + 850 * Math.exp(-Math.pow((z - 80) / 480, 2));
+    const riftMask = 1 - OC.smoothstep(68, 610, d);
+    let h = -2.5 - (basin - 2.5) * riftMask;
+    const ridges = OC.fbm2(x * 0.006, z * 0.006, 4) * 26 + OC.ridged2(x * 0.017, z * 0.017, 3) * 10;
+    const shelf = OC.smoothstep(600, 390, d);
+    h += ridges * shelf;
+
+    // Береговые террасы, моренные гряды и обвальные конусы у склона рифта.
+    const shelfNoise = OC.fbm2(x * 0.012, z * 0.012, 3) * 7;
+    if (d > 450) h += OC.smoothstep(450, 720, d) * (1.8 + shelfNoise);
+    const canyonX = riftAxisX(z) - 155 + Math.sin(z * 0.012) * 28;
+    const canyonD = Math.abs(x - canyonX);
+    if (canyonD < 95 && d > 170) h -= (1 - OC.smoothstep(12, 95, canyonD)) * 95;
+
+    // Пологое мелководье залива у северо-западной экспедиционной стоянки.
+    const bayD = Math.hypot(x + 520, z + 420);
+    if (bayD < 190) h = OC.lerp(h, -5.5 + OC.fbm2(x * 0.025, z * 0.025, 2) * 1.3, OC.smoothstep(215, 105, bayD));
+    return OC.clamp(h, -1642, 3.2);
+  }
+
+  function safeY(x, z, wantedY, clearance) {
+    return Math.max(wantedY, getHeight(x, z) + (clearance || 3));
+  }
+
+  function getZoneAt(x, y, z) {
+    const d = getRiftDistance(x, z);
+    const depth = Math.max(0, -y);
+    if (depth > 820 && (Math.hypot(x - 130, z - 170) < 125 || Math.hypot(x + 110, z - 280) < 95)) return ZONES[4];
+    if (depth < 24 && d > 450) return ZONES[0];
+    if (depth < 145 && d > 320) return ZONES[1];
+    if (depth > 700) return ZONES[3];
+    return ZONES[2];
+  }
+
+  function getTemperatureAt(x, depthM, zone) {
+    const depth = Math.max(0, depthM);
+    const nearSurface = 9.8 * (1 - OC.smoothstep(16, 95, depth));
+    const seasonal = Math.sin(x * 0.001) * 0.35;
+    return OC.clamp(3.35 + nearSurface + seasonal, 3.2, 12.2);
+  }
+
+  function getCurrentAt(x, y, z, time, out) {
+    const d = getRiftDistance(x, z);
+    const along = 0.12 + 0.28 * (1 - OC.smoothstep(80, 580, d));
+    const eddy = Math.sin(z * 0.008 + x * 0.003) * 0.12;
+    return out.set(along + eddy, Math.sin(time * 0.13 + z * 0.02) * 0.018, Math.cos(x * 0.009 - z * 0.004) * 0.17);
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const d = getRiftDistance(x, z);
+    const depth = OC.clamp(-y / 1642, 0, 1);
+    _a.setHex(0x52685b); // glacial moraine and rocky shallows
+    _b.setHex(0x827b68); // sedimented shelf
+    _c.setHex(0x252e40); // dark rift basalt
+    out.copy(_a).lerp(_b, OC.smoothstep(90, 580, d) * 0.66).lerp(_c, depth * 0.8);
+    out.offsetHSL(0.015, 0.08, (OC.noise2(x * 0.045, z * 0.045) - 0.5) * 0.11);
+    return out;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const day = OC.clamp(dayW, 0, 1);
+    const depth = Math.max(0, -y);
+    const d = OC.clamp(depth / 1642, 0, 1);
+    if (y > 0.15) {
+      _skyTop.setHex(0x4f9db7).lerp(new T.Color(0x0b1a2b), 1 - day);
+      _skyBot.setHex(0xc6e5e8).lerp(new T.Color(0x162c43), 1 - day);
+      _horizon.setHex(0xb4d4d5).lerp(new T.Color(0x10253b), 1 - day);
+      _water.setHex(0x78c8cf);
+      return { aboveWater: true, fogColor: _horizon, fogDensity: 0.0011, waterColor: _water, skyTop: _skyTop, skyBot: _skyBot,
+        causticStrength: 0, rayStrength: 0, sunAtten: 1, bioGlow: 0 };
+    }
+    _fog.setHex(0x398b9f).lerp(new T.Color(0x07152e), OC.clamp(d * 1.25, 0, 1));
+    _fog.multiplyScalar(0.22 + day * 0.78);
+    _water.setHex(0x2e90a8).lerp(new T.Color(0x101d43), d * 0.86);
+    const clarity = Math.exp(-depth * 0.0042);
+    return { aboveWater: false, fogColor: _fog, fogDensity: 0.0012 + d * 0.0045, waterColor: _water,
+      causticStrength: OC.clamp(day * clarity * 0.82, 0, 0.82), rayStrength: OC.clamp(day * clarity * 0.72, 0, 0.72),
+      sunAtten: OC.clamp(clarity * day, 0.025, 1), bioGlow: OC.clamp((1 - day) * 0.38 + d * 0.24, 0, 0.62) };
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize, z0 = cz * chunkSize;
+    const add = (species, x, y, z, scale, tint) => items.push({ species, x, y, z, ry: rng() * Math.PI * 2, scale, tint });
+    for (let i = 0, n = Math.round(13 * density); i < n; i++) {
+      const x = x0 + rng() * chunkSize, z = z0 + rng() * chunkSize;
+      const h = getHeight(x, z), d = getRiftDistance(x, z), depth = -h;
+      if (depth > 5 && depth < 165 && d > 250 && d < 655) {
+        add('baikal_sponge', x, h - 0.12, z, OC.lerp(0.68, 1.55, rng()), rng() < 0.5 ? 0xb8c5a4 : 0x718e8a);
+      } else if (depth > 0.6 && depth < 18 && d > 475) {
+        add('charophyte_bed', x, h - 0.08, z, OC.lerp(0.72, 1.45, rng()), 0x9ebd72);
+      }
+    }
+    return items;
+  }
+
+  const spawn = { pos: [-620, safeY(-620, -420, -2.5, 2.5), -420], yaw: 0.25, pitch: 0.02 };
+  const landmarks = [
+    { id: 'baikal_academy_bay', name: 'Бухта Академическая', zoneId: 'baikal_littoral', x: -520, y: safeY(-520, -420, -2.5, 3), z: -420, yaw: 0.3, pitch: 0.02,
+      description: 'Светлое прибрежье Байкала: гладкие гранитные валуны, харовые луга и первые пресноводные губки на камнях.' },
+    { id: 'baikal_sponge_garden', name: 'Сады байкальских губок', zoneId: 'baikal_sponge_reef', x: -560, y: safeY(-560, -180, -45, 4), z: -180, yaw: 0.55, pitch: -0.12,
+      description: 'Зелёные древовидные колонии Lubomirskia baicalensis фильтруют чистую холодную воду над каменистой террасой.' },
+    { id: 'baikal_olkhon_gate', name: 'Ольхонские ворота', zoneId: 'baikal_shelf', x: -330, y: safeY(-330, 60, -480, 18), z: 60, yaw: 1.1, pitch: -0.18,
+      description: 'Сужение между скальными стенами и осыпями, где склон обрывается в центральный рифт.' },
+    { id: 'baikal_fault_canyon', name: 'Каньон Большого Байкальского разлома', zoneId: 'baikal_shelf', x: -370, y: safeY(-370, 300, -760, 22), z: 300, yaw: 0.85, pitch: -0.3,
+      description: 'Ступенчатый сброс с обвальными конусами и холодной пелагической водой, уходящей в темноту.' },
+    { id: 'baikal_golomyanka_depth', name: 'Центральная котловина', zoneId: 'baikal_abyss', x: 0, y: -1120, z: 80, yaw: 0.2, pitch: -0.28,
+      description: 'Открытая глубоководная толща над дном Байкала: здесь держатся пелагическая голомянка и прозрачные рачки-бокоплавы.' },
+    { id: 'baikal_methane_seep', name: 'Метановые сипы Посольской банки', zoneId: 'baikal_seep', x: 130, y: -840, z: 170, yaw: -0.5, pitch: -0.15,
+      description: 'Тихие струи газа поднимаются из осадков вдоль активного разлома, отмечая молодую тектоническую впадину.' }
+  ];
+  const tourLegs = landmarks.map((lm, i) => ({
+    pos: [lm.x, lm.y, lm.z], look: [lm.x + (i % 2 ? -24 : 24), lm.y - 12, lm.z + 18], duration: 8,
+    title: lm.name,
+    fact: [
+      'Байкал содержит около пятой части мировых запасов незамёрзшей поверхностной пресной воды и остаётся самым глубоким озером планеты.',
+      'Байкальские губки — эндемики озера; их разветвлённые колонии живут в прозрачной холодной воде и фильтруют взвесь.',
+      'Ольхонские ворота лежат среди активной рифтовой системы, где земная кора растягивается и формирует озёрную котловину.',
+      'Склоны Байкальского рифта состоят из ступенчатых тектонических уступов и осыпей, а не из единого плавного конуса.',
+      'Голомянка — живородящая полупрозрачная рыба, приспособленная к холодной воде и большому диапазону глубин.',
+      'Газовые сипы под Байкалом связаны с геологически активными осадками и локальными сообществами микробов.'
+    ][i]
+  }));
+
+  const ENCYCLOPEDIA = {
+    floor: ['Ил и обломки Большого Байкальского рифта', 'Baikal Rift Sediment', 'Геология', 'Рифтовый склон', '0 – 1 642 м',
+      'Ледниковые валуны, тонкий диатомовый ил и осыпи гранитно-гнейсовых склонов в тектонической котловине.' ],
+    baikal_sponge: ['Байкальская губка', 'Lubomirskia baicalensis', 'Беспозвоночные', 'Губочные рифы', '5 – 160 м',
+      'Эндемичная пресноводная губка, образующая зелёные ветвистые колонии на каменистых склонах и фильтрующая воду.' ],
+    charophyte_bed: ['Харовые водоросли Байкала', 'Chara baicalensis', 'Флора', 'Прибрежье', '1 – 18 м',
+      'Подводные луга холодноводных харовых водорослей на светлых прибрежных террасах.' ],
+    fish_omul: ['Байкальский омуль', 'Coregonus migratorius', 'Рыбы', 'Прибрежье и котловина', '10 – 500 м',
+      'Эндемичный сиг Байкала, совершающий сезонные кормовые перемещения между прибрежными и глубокими водами.' ],
+    fish_golomyanka: ['Большая голомянка', 'Comephorus baikalensis', 'Рыбы', 'Центральная котловина', '50 – 1 200 м',
+      'Полупрозрачная живородящая рыба с высоким содержанием жира, важная добыча байкальской нерпы.' ],
+    fish_grayling: ['Байкальский хариус', 'Thymallus baicalensis', 'Рыбы', 'Прибрежье', '2 – 80 м',
+      'Холодноводная рыба каменистых берегов и притоков с высоким спинным плавником.' ],
+    seal_baikal: ['Байкальская нерпа', 'Pusa sibirica', 'Млекопитающие', 'Бухты и центральная котловина', '0 – 500 м',
+      'Единственный пресноводный тюлень, полностью живущий во внутренних водах; охотится преимущественно на голомянку и бычков.' ],
+    methane_seep_baikal: ['Метановый сип', 'Baikal gas seep', 'Геология', 'Метановые сипы', '850 – 1 450 м',
+      'Пузырьковый выход газа из донных осадков вдоль активных разломов Байкальского рифта.' ],
+    research_vessel: ['НИС «Академик Коптюг»', 'R/V Akademik Koptyug', 'Экспедиция', 'Бухта Академическая', '+18 .. -3 м',
+      'Байкальское научно-исследовательское судно для лимнологических наблюдений, отбора проб и картирования рифтового дна.' ]
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [],
+    schools: [
+      { key: 'fish_omul', n: 54, cx: -470, cz: -345, radius: 34, yDepth: -12, yAmp: 8, spread: 12, speed: 5.2, scale: 0.72, diel: 'cathemeral', shyness: 0.58,
+        geoOpts: { len: 1.4, height: 0.55, width: 0.24, colA: 0x718b8b, colB: 0xc2d9cf, finCol: 0x506a70, stripes: 0.2 } },
+      { key: 'fish_omul', n: 42, cx: -360, cz: -90, radius: 42, yDepth: -65, yAmp: 18, spread: 14, speed: 6.1, scale: 0.76, diel: 'cathemeral', shyness: 0.62,
+        geoOpts: { len: 1.4, height: 0.55, width: 0.24, colA: 0x718b8b, colB: 0xc2d9cf, finCol: 0x506a70, stripes: 0.2 } },
+      { key: 'fish_golomyanka', n: 62, cx: -70, cz: 70, radius: 54, yDepth: -420, yAmp: 170, spread: 18, speed: 4.5, scale: 0.54, diel: 'nocturnal', shyness: 0.42,
+        geoOpts: { len: 1.15, height: 0.48, width: 0.18, colA: 0x8db6c5, colB: 0xe2f0ef, finCol: 0x7cabbc } },
+      { key: 'fish_grayling', n: 30, cx: -500, cz: -560, radius: 30, yDepth: -6, yAmp: 2.4, spread: 8, speed: 4.4, scale: 0.65, diel: 'diurnal', shyness: 0.38,
+        geoOpts: { len: 1.15, height: 0.5, width: 0.22, colA: 0x546b74, colB: 0xb7c5b3, finCol: 0x667d88, stripes: 0.18 } }
+    ],
+    baikalSeals: [
+      { cx: -455, cz: -290, r: 52, y: -12, scale: 1.0 },
+      { cx: 70, cz: 40, r: 94, y: -210, scale: 1.18 }
+    ],
+    seepTargets: [{ x: 130, z: 170 }, { x: -110, z: 280 }, { x: 235, z: -310 }],
+    vessels: [{ x: -615, z: -408, yaw: 0.25, variant: 'expedition', name: 'НИС «Академик Коптюг»' }]
+  };
+
+  OC.Biomes.register({
+    id: 'baikal', name: 'Озеро Байкал: Большой рифт', region: 'Южная Сибирь · Россия',
+    subtitle: 'Пресноводная рифтовая бездна · 0 – 1 642 м', worldRadius: 1200, chunkSize: 150,
+    noSurface: false, seaLevel: 0, depthOffset: 0, minimapTheme: 'baikal',
+    globe: { lat: 53.5, lon: 108.0, coordLabel: '53.5° с.ш., 108.0° в.д.', ocean: 'Озеро Байкал · Восточная Сибирь', depthSpan: '0 – 1 642 м', tempSpan: '3.2 – 12.2 °C', color: '#56c7d4',
+      summary: 'Прозрачная пресная вода, подводные губочные рифы, эндемичные омуль и голомянка, байкальская нерпа и ступенчатые склоны активного рифта.' },
+    spawn, zones: ZONES, landmarks, tourLegs, faunaPlan: FAUNA_PLAN, encyclopedia: ENCYCLOPEDIA,
+    getHeight, getZoneAt, getTemperatureAt, getCurrentAt, getTerrainColor, getOpticalProfile, generateChunkFlora
+  });
+})(window.OC);
+
 // === engine/weather.js ===
 /* ================= ДИНАМИЧЕСКАЯ СИСТЕМА ПОГОДЫ: ШТИЛЬ, ЗЫБЬ, ШТОРМ, ПУРГА И МОЛНИИ ================= */
 window.OC = window.OC || {};
@@ -12085,6 +12294,73 @@ window.OC = window.OC || {};
   BUILDERS.buildDriftwoodSnag = buildDriftwoodSnag;
 })(window.OC);
 
+// === engine/flora/baikal.js ===
+/* ================= ПРОЦЕДУРНАЯ ФЛОРА: БАЙКАЛЬСКИЕ ГУБКИ И ХАРОВЫЕ ЛУГА ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const B = (OC._FloraBuilders = OC._FloraBuilders || {});
+
+  function buildBaikalSponge(rng) {
+    const parts = [];
+    const dark = new T.Color(0x3c7068);
+    const light = new T.Color(0xb2c394);
+    const stems = 5 + Math.floor(rng() * 4);
+    for (let i = 0; i < stems; i++) {
+      const a = rng() * Math.PI * 2;
+      const r = rng() * 0.58;
+      const h = 0.7 + rng() * 1.65;
+      const tube = new T.CylinderGeometry(0.075 + rng() * 0.035, 0.18 + rng() * 0.08, h, 7, 3, true);
+      const pos = tube.attributes.position;
+      for (let j = 0; j < pos.count; j++) {
+        const yy = pos.getY(j) / h + 0.5;
+        const bend = Math.sin(yy * 2.3 + a) * yy * 0.22;
+        pos.setX(j, pos.getX(j) + bend);
+        pos.setZ(j, pos.getZ(j) + Math.cos(yy * 2.1 + a) * yy * 0.16);
+      }
+      tube.computeVertexNormals();
+      OC.geoPrep(tube);
+      OC.paint(tube, (x, y, z, c) => c.copy(dark).lerp(light, OC.clamp((y / h) * 0.55 + 0.35 + rng() * 0.08, 0, 1)));
+      OC.xform(tube, { p: [Math.cos(a) * r, h * 0.5, Math.sin(a) * r] });
+      parts.push(tube);
+      const cap = new T.SphereGeometry(0.11, 7, 5);
+      OC.geoPrep(cap);
+      OC.paint(cap, light);
+      OC.xform(cap, { s: [1, 0.52, 1], p: [Math.cos(a) * r, h + 0.45, Math.sin(a) * r] });
+      parts.push(cap);
+    }
+    return OC.mergeGeometries(parts);
+  }
+  B.buildBaikalSponge = buildBaikalSponge;
+
+  function buildCharophyteBed(rng) {
+    const parts = [];
+    const dark = new T.Color(0x486b4d);
+    const bright = new T.Color(0xa3be79);
+    for (let i = 0; i < 16; i++) {
+      const a = rng() * Math.PI * 2;
+      const r = Math.sqrt(rng()) * 1.25;
+      const h = 0.35 + rng() * 0.8;
+      const stem = new T.CylinderGeometry(0.018, 0.035, h, 4, 4);
+      OC.geoPrep(stem);
+      OC.paint(stem, (x, y, z, c) => c.copy(dark).lerp(bright, OC.clamp(y / h + 0.5, 0, 1)));
+      OC.xform(stem, { r: [(rng() - 0.5) * 0.35, a, (rng() - 0.5) * 0.35], p: [Math.cos(a) * r, h * 0.5, Math.sin(a) * r] });
+      parts.push(stem);
+      for (let j = 0; j < 3; j++) {
+        const branch = new T.ConeGeometry(0.025, 0.28 + rng() * 0.12, 4);
+        OC.geoPrep(branch);
+        OC.paint(branch, bright);
+        const y = h * (0.25 + j * 0.22);
+        OC.xform(branch, { r: [0.35, a + j * 2.1, 0.42], p: [Math.cos(a) * r, y, Math.sin(a) * r] });
+        parts.push(branch);
+      }
+    }
+    return OC.mergeGeometries(parts);
+  }
+  B.buildCharophyteBed = buildCharophyteBed;
+})(window.OC);
+
 // === engine/flora_library.js ===
 /* ================= БИБЛИОТЕКА ПРОТОТИПОВ ФЛОРА: МАТЕРИАЛЫ И РЕЕСТР ================= */
 /* Сами геометрии вынесены в engine/flora/*.js (7 тематических модулей) и публикуются
@@ -12383,6 +12659,14 @@ window.OC = window.OC || {};
         driftwood_snag: {
           mat: matRigid, maxInstances: 780, cullDist: 460,
           geos: [need('buildDriftwoodSnag')(rng), need('buildDriftwoodSnag')(rng)]
+        },
+        baikal_sponge: {
+          mat: matSoft, maxInstances: 1100, cullDist: 430,
+          geos: [need('buildBaikalSponge')(rng), need('buildBaikalSponge')(rng)]
+        },
+        charophyte_bed: {
+          mat: matPlant, maxInstances: 1450, cullDist: 360,
+          geos: [need('buildCharophyteBed')(rng), need('buildCharophyteBed')(rng)]
         }
       };
 
@@ -12735,6 +13019,31 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 (function (OC) {
   'use strict';
   const T = THREE;
+  const ECO_STORAGE_KEY = 'oc_ocean_ecosystem_v1';
+  const ECO_RECOVERY_PER_SEC = 0.00045; // ~37 минут до полного восстановления без новых потерь
+  let ecoPopulations = null;
+  let lastEcoSave = 0;
+
+  function getEcoPopulations() {
+    if (ecoPopulations) return ecoPopulations;
+    ecoPopulations = {};
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const saved = JSON.parse(localStorage.getItem(ECO_STORAGE_KEY) || '{}');
+        if (saved && typeof saved === 'object' && !Array.isArray(saved)) ecoPopulations = saved;
+      }
+    } catch (e) { /* повреждённое или недоступное хранилище не блокирует симуляцию */ }
+    return ecoPopulations;
+  }
+
+  function saveEcoPopulations(force) {
+    const now = Date.now();
+    if (!force && now - lastEcoSave < 15000) return;
+    lastEcoSave = now;
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(ECO_STORAGE_KEY, JSON.stringify(getEcoPopulations()));
+    } catch (e) { /* симуляция продолжает работать и без сохранения */ }
+  }
 
   function makeFishGeo(opts) {
     const o = Object.assign({
@@ -12903,6 +13212,41 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     let huntCooldown = 8 + rng() * 14;
     let huntTarget = null;
     let schoolPanic = 0;
+    let qualityScale = OC.Quality.get().fishScale;
+    const populationKey = biome.id + '|' + (opts.key || 'fish_blue') + '|' + Math.round(cx) + '|' + Math.round(cz);
+    const populationStore = getEcoPopulations();
+    let populationState = isPrey ? populationStore[populationKey] : null;
+    if (!populationState || !Number.isFinite(populationState.ratio)) {
+      populationState = { ratio: 1, updatedAt: Date.now() };
+      if (isPrey) populationStore[populationKey] = populationState;
+    } else {
+      const elapsed = OC.clamp((Date.now() - (populationState.updatedAt || Date.now())) / 1000, 0, 30 * 24 * 60 * 60);
+      populationState.ratio = OC.clamp(populationState.ratio + elapsed * ECO_RECOVERY_PER_SEC, 0, 1);
+      populationState.updatedAt = Date.now();
+    }
+
+    function syncSchoolCount() {
+      const nextN = isPrey
+        ? OC.clamp(Math.round(Math.max(6, baseN * qualityScale) * populationState.ratio), 0, maxN)
+        : OC.clamp(Math.round(baseN * qualityScale), 6, maxN);
+      if (nextN !== n) {
+        n = nextN;
+        mesh.count = n;
+      }
+    }
+
+    function applyPredation() {
+      if (!isPrey || populationState.ratio <= 0) return;
+      const now = Date.now();
+      const elapsed = OC.clamp((now - (populationState.updatedAt || now)) / 1000, 0, 30 * 24 * 60 * 60);
+      populationState.ratio = OC.clamp(populationState.ratio + elapsed * ECO_RECOVERY_PER_SEC - 0.055, 0, 1);
+      populationState.updatedAt = now;
+      syncSchoolCount();
+      saveEcoPopulations(true);
+    }
+
+    syncSchoolCount();
+    if (isPrey) anchor.applyPredation = applyPredation;
 
     // Если это семья рыб-клоунов, ставим реальную актинию-хозяина прямо на дно в центре территории
     if (isHostAnemone) {
@@ -12939,11 +13283,18 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
       center: anchor,
       getPosition: () => anchor,
       setQualityScale(mult) {
-        n = OC.clamp(Math.round(baseN * mult), 6, maxN);
-        mesh.count = n;
+        qualityScale = mult;
+        syncSchoolCount();
       },
       getCount: () => n,
       update(dt, time, camPos, ctx) {
+        if (isPrey && populationState.ratio < 1) {
+          const simDt = Math.max(0, Math.min(0.25, dt || 0));
+          populationState.ratio = Math.min(1, populationState.ratio + simDt * ECO_RECOVERY_PER_SEC);
+          populationState.updatedAt = Date.now();
+          syncSchoolCount();
+          saveEcoPopulations(false);
+        }
         const distCam = Math.hypot(anchor.x - camPos.x, anchor.z - camPos.z);
         if (distCam > 540) {
           mesh.visible = false;
@@ -13005,6 +13356,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
               if (bestP) {
                 huntTarget = bestP;
                 huntTimer = 4.6;
+                if (bestP.applyPredation) bestP.applyPredation();
               }
               huntCooldown = 15 + ((frameIdx * 7) % 10);
             }
@@ -14169,6 +14521,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
               if (bestP) {
                 lungeTarget = bestP;
                 lungeTimer = 4.6;
+                if (bestP.applyPredation) bestP.applyPredation();
               }
               lungeCooldown = (dayW < 0.45 ? 10 : 16) + Math.random() * 12;
             }
@@ -14344,7 +14697,11 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
                 const d = Math.hypot(pr.x - group.position.x, pr.z - group.position.z);
                 if (d < bestD) { bestD = d; bestP = pr; }
               }
-              if (bestP) { lungeTarget = bestP; lungeTimer = 4.6; }
+              if (bestP) {
+                lungeTarget = bestP;
+                lungeTimer = 4.6;
+                if (bestP.applyPredation) bestP.applyPredation();
+              }
               lungeCooldown = 16 + Math.random() * 10;
             }
           }
@@ -18426,6 +18783,63 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeRiverStingray = makeRiverStingray;
 })(window.OC);
 
+// === engine/fauna/baikal.js ===
+/* ================= ФАУНА БАЙКАЛА: НЕРПА И ГЛУБОКОВОДНЫЕ СООБЩЕСТВА ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const B = (OC._FaunaBuilders = OC._FaunaBuilders || {});
+
+  function makeBaikalSeal(scene, biome, opts) {
+    const o = Object.assign({ cx: 0, cz: 0, r: 48, y: -12, scale: 1 }, opts || {});
+    const pieces = [];
+    const addEllipsoid = (radius, scale, position, color) => {
+      const g = new T.SphereGeometry(radius, 10, 7);
+      g.scale(scale[0], scale[1], scale[2]);
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const shade = OC.clamp(0.82 + y * 0.18 + Math.sin(x * 5 + z * 4) * 0.07, 0.58, 1.0);
+        c.setHex(color).multiplyScalar(shade);
+      });
+      OC.xform(g, { p: position });
+      pieces.push(g);
+    };
+    // Компактный тюлений силуэт: обтекаемое тело, короткая морда, ласты и пятнистая спина.
+    addEllipsoid(1, [2.0, 0.68, 0.72], [0, 0, 0], 0x829296);
+    addEllipsoid(0.58, [1.0, 0.78, 0.86], [1.48, 0.12, 0], 0x9ca9a4);
+    addEllipsoid(0.34, [1.12, 0.42, 0.48], [1.92, -0.02, 0], 0xb5bdb2);
+    addEllipsoid(0.34, [1.6, 0.2, 0.48], [-1.55, 0.02, 0], 0x667b82);
+    addEllipsoid(0.42, [0.32, 0.15, 1.0], [-0.12, -0.52, 0.72], 0x617980);
+    addEllipsoid(0.42, [0.32, 0.15, 1.0], [-0.12, -0.52, -0.72], 0x617980);
+    const body = OC.mergeGeometries(pieces);
+    const mesh = new T.Mesh(body, OC._FaunaCtx.creatureMat);
+    mesh.scale.setScalar(o.scale);
+    mesh.userData.key = 'seal_baikal';
+    scene.add(mesh);
+
+    let phase = (o.cx * 0.01 + o.cz * 0.02) % (Math.PI * 2);
+    return {
+      key: 'seal_baikal',
+      getPosition: () => mesh.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(o.cx - camPos.x, o.cz - camPos.z) > 520) { mesh.visible = false; return; }
+        mesh.visible = true;
+        phase += dt * 0.16;
+        const a = phase + time * 0.045;
+        const x = o.cx + Math.cos(a) * o.r;
+        const z = o.cz + Math.sin(a) * o.r * 0.62;
+        const floor = biome.getHeight(x, z);
+        const y = Math.max(floor + 5, o.y + Math.sin(time * 0.42 + phase) * 2.6);
+        mesh.position.set(x, y, z);
+        mesh.rotation.y = Math.atan2(Math.cos(a) * 0.62, -Math.sin(a));
+        mesh.rotation.z = Math.sin(time * 0.6 + phase) * 0.035;
+      }
+    };
+  }
+  B.makeBaikalSeal = makeBaikalSeal;
+})(window.OC);
+
 // === engine/fauna/particles.js ===
 /* ================= ЧАСТИЦЫ СРЕДЫ: ПЛАНКТОН, СНЕГ, ПУЗЫРЬКИ, НЕРЕСТ КОРАЛЛОВ ================= */
 /* Камера-относительные поля частиц (планктон, морской снег, пузырьки) и ночной
@@ -19101,7 +19515,7 @@ window.OC = window.OC || {};
 
   const makeHydratePlumeSystem = function (scene, biome, texHard) {
     const id = biome ? biome.id : '';
-    const hasHydrates = (id === 'brine_pool' || id === 'mariana_trench');
+    const hasHydrates = (id === 'brine_pool' || id === 'mariana_trench' || id === 'baikal');
     if (!hasHydrates) {
       return { hasHydrates: false, update() {}, setScale() {} };
     }
@@ -19110,6 +19524,8 @@ window.OC = window.OC || {};
     const sources = [];
     if (id === 'brine_pool') {
       sources.push([-140, -110], [190, 120], [-20, 200], [110, -210], [-250, 50]);
+    } else if (id === 'baikal') {
+      sources.push([130, 170], [-110, 280], [235, -310]);
     } else {
       sources.push([-80, 120], [160, -140], [-220, -60], [60, 230]);
     }
@@ -19144,7 +19560,7 @@ window.OC = window.OC || {};
         {
           uTex: { value: texHard },
           uTime: OC.uTime,
-          uColor: { value: new T.Color(id === 'brine_pool' ? 0xb4f2ff : 0x8effd8) },
+          uColor: { value: new T.Color(id === 'brine_pool' ? 0xb4f2ff : (id === 'baikal' ? 0x82d8d0 : 0x8effd8)) },
           uScale: { value: 1.0 }
         }
       ]),
@@ -19181,7 +19597,7 @@ window.OC = window.OC || {};
 
     const pts = new T.Points(geo, mat);
     pts.frustumCulled = false;
-    pts.userData.key = id === 'brine_pool' ? 'methane_hydrate' : 'serpentinite_vent';
+    pts.userData.key = id === 'brine_pool' ? 'methane_hydrate' : (id === 'baikal' ? 'methane_seep_baikal' : 'serpentinite_vent');
     scene.add(pts);
 
     return {
@@ -19340,6 +19756,19 @@ window.OC = window.OC || {};
 
       for (const cl of (plan.cliones || [])) {
         agents.push(OC._FaunaBuilders.makeClione(faunaGroup, cl));
+      }
+
+      for (const seal of (plan.baikalSeals || [])) {
+        const a = OC._FaunaBuilders.makeBaikalSeal(faunaGroup, biome, seal);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const seep of (plan.seepTargets || [])) {
+        const p = new T.Vector3(seep.x, biome.getHeight(seep.x, seep.z) + 1.0, seep.z);
+        const target = { key: 'methane_seep_baikal', getPosition: () => p, update() {} };
+        agents.push(target);
+        sonarTargets.push(target);
       }
 
       for (const wr of (plan.wrecks || [])) {
@@ -19677,6 +20106,7 @@ window.OC = window.OC || {};
       const _toTarget = new T.Vector3();
       const _currFlow = new T.Vector3();
       const _flowAccum = new T.Vector3();
+      let faunaCountRefreshTimer = 0;
 
       function refreshFaunaCounts() {
         let total = 0;
@@ -19692,6 +20122,51 @@ window.OC = window.OC || {};
       };
 
       activeSchoolsRef = schools;
+
+      /* ============ ПОСЛЕДСТВИЯ СОБЫТИЙ В МИРЕ ============
+         Используются только существующие системы частиц (benthicSilt, splashSystem, coralSpawnSys)
+         — без новых draw calls. Каждое событие оставляет след в мире, пока активно.
+         ===================================================== */
+      let consequenceEvent = null;   // тип события, которое сейчас «разворачивается»
+      let consequenceAccum = 0;      // накопитель для дозированных выбросов частиц
+
+      /* ============ УРОВНИ РЕДКОСТИ СОБЫТИЙ И ПРЕДВЕСТНИКИ ============
+         common  — видно сразу, предвестника нет (выпрыг кита, порпойзинг, DVM, муть)
+         rare    — предвестник ~30 с: стаи нервничают, гидрофон ловит звуки
+         unique  — предвестник ~60 с: звук, тревога стай (нерест кораллов)
+         Текстовых анонсов «скоро начнётся» нет — игрок сам замечает предвестники.
+         ================================================================= */
+      const EVENT_RARITY = {
+        breach: 'common',
+        porpoising: 'common',
+        dvm: 'common',
+        silt_out: 'common',
+        hunt: 'rare',
+        baitball: 'rare',
+        cleaning: 'rare',
+        coral_spawn: 'unique'
+      };
+      const HERALD_SECONDS = { common: 0, rare: 30, unique: 60 };
+
+      // Детерминированный сид на тип события (воспроизводимо по сессии)
+      function heraldSeed(type) {
+        let h = 0;
+        for (let i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) | 0;
+        return h >>> 0;
+      }
+
+      // Состояние предвестника по типам событий
+      const heraldState = {};
+      for (const k of Object.keys(EVENT_RARITY)) {
+        heraldState[k] = {
+          phase: 'idle',      // idle | herald | active | cooldown
+          timer: 0,           // секунды до конца текущей фазы
+          progress: 0,        // 0..1 внутри фазы предвестника
+          cooldownUntil: 0,   // время, когда следующий предвестник может начаться
+          rng: OC.mulberry32(heraldSeed(k))
+        };
+      }
+
       OC.faunaInfo = {
         schoolFish: 0,
         schools: schools.length,
@@ -19700,6 +20175,7 @@ window.OC = window.OC || {};
         vessel: primaryVessel ? primaryVessel.shipInfo : null,
         shadowCaster: _shadowCaster,
         activeEvent: null,
+        herald: null,         // {type, rarity, progress} или null
         dvmPhase: 'day_deep',
         dvmShiftM: -5.5,
         coralSpawnIntensity: 0,
@@ -19761,7 +20237,7 @@ window.OC = window.OC || {};
           preyCentersBuf.length = 0;
           for (let i = 0; i < preySchools.length; i++) {
             const ps = preySchools[i];
-            if (ps.mesh && ps.mesh.visible && ps.center) preyCentersBuf.push(ps.center);
+            if (ps.mesh && ps.mesh.visible && ps.getCount() > 0 && ps.center) preyCentersBuf.push(ps.center);
           }
 
           // Клиенты станций чистки и выбор ближайшей мегафауны для тени на мелководном дне
@@ -19795,21 +20271,83 @@ window.OC = window.OC || {};
           for (let i = 0; i < agents.length; i++) {
             agents[i].update(dt, time, camPos, updateCtx);
           }
+          faunaCountRefreshTimer += dt;
+          if (faunaCountRefreshTimer >= 1) {
+            faunaCountRefreshTimer %= 1;
+            refreshFaunaCounts();
+          }
           splashSystem.update(dt);
 
-          // Классифицируем ключевое природное событие в радиусе видимости
+          // --- Предвестники событий (без текстовых анонсов, без календаря) ---
+          const now = time;
+
+          // Обновляем таймеры фаз предвестников
+          for (const k of Object.keys(heraldState)) {
+            const st = heraldState[k];
+            if (st.timer > 0) {
+              st.timer -= dt;
+              if (st.timer <= 0) {
+                st.timer = 0;
+                if (st.phase === 'herald') st.phase = 'active';
+                else if (st.phase === 'active') st.phase = 'cooldown';
+                else if (st.phase === 'cooldown') st.phase = 'idle';
+              }
+              const hs = HERALD_SECONDS[EVENT_RARITY[k]];
+              st.progress = hs > 0 ? 1.0 - Math.max(0, st.timer) / hs : 0;
+            }
+          }
+
+          // Пытаемся начать новый предвестник для редких/уникальных событий
+          for (const k of Object.keys(EVENT_RARITY)) {
+            const st = heraldState[k];
+            const rarity = EVENT_RARITY[k];
+            const heraldSec = HERALD_SECONDS[rarity];
+            if (heraldSec === 0) continue; // common — без предвестника
+            if (st.phase !== 'idle') continue;
+            if (now < st.cooldownUntil) continue;
+            // Детерминированный шанс на старт предвестника (~раз в 4–8 мин в среднем)
+            if (st.rng() < 0.002) {
+              st.phase = 'herald';
+              st.timer = heraldSec;
+              st.cooldownUntil = now + heraldSec + 45 + st.rng() * 90; // пауза 45–135 с после события
+              // subtle audio cue: гидрофон ловит отдалённый звук
+              const sound = OC.sound;
+              if (sound && !sound.muted && sound.ctx && sound.ctx.state === 'running') {
+                if (rarity === 'unique') sound.whale();
+                else sound.sonarPing(60, false);
+              }
+            }
+          }
+
+          // Текущий активный предвестник (для faunaInfo и потенциальных визуальных намёков)
+          let currentHerald = null;
+          for (const k of Object.keys(heraldState)) {
+            const st = heraldState[k];
+            if (st.phase === 'herald' || st.phase === 'active') {
+              currentHerald = {
+                type: k,
+                rarity: EVENT_RARITY[k],
+                progress: st.progress
+              };
+              break; // только один предвестник одновременно
+            }
+          }
+          OC.faunaInfo.herald = currentHerald;
+
+          // Позиция текущего события для последствий в мире
+          let eventPos = null;
           let ev = null;
           for (let i = 0; i < whalesList.length; i++) {
             if (whalesList[i].isBreaching()) {
               const p = whalesList[i].getPosition();
-              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 420) { ev = 'breach'; break; }
+              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 420) { ev = 'breach'; eventPos = p; break; }
             }
           }
           if (!ev) {
             for (let i = 0; i < huntingAgents.length; i++) {
               if (huntingAgents[i].isHunting()) {
                 const p = huntingAgents[i].getPosition();
-                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 160) { ev = 'hunt'; break; }
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 160) { ev = 'hunt'; eventPos = p; break; }
               }
             }
           }
@@ -19817,21 +20355,21 @@ window.OC = window.OC || {};
             for (let i = 0; i < preySchools.length; i++) {
               if (preySchools[i].getPanic && preySchools[i].getPanic() > 0.5) {
                 const p = preySchools[i].center;
-                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 140) { ev = 'baitball'; break; }
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 140) { ev = 'baitball'; eventPos = p; break; }
               }
             }
           }
           if (!ev && cleanClientsBuf.length > 0) {
             for (let i = 0; i < cleanClientsBuf.length; i++) {
               const p = cleanClientsBuf[i];
-              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 120) { ev = 'cleaning'; break; }
+              if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 120) { ev = 'cleaning'; eventPos = p; break; }
             }
           }
           if (!ev) {
             for (let i = 0; i < surfaceJumpers.length; i++) {
               if (surfaceJumpers[i].isPorpoising && surfaceJumpers[i].isPorpoising()) {
                 const p = surfaceJumpers[i].getPosition();
-                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 190) { ev = 'porpoising'; break; }
+                if (Math.hypot(p.x - camPos.x, p.z - camPos.z) < 190) { ev = 'porpoising'; eventPos = p; break; }
               }
             }
           }
@@ -19852,6 +20390,64 @@ window.OC = window.OC || {};
             ev = 'dvm';
           }
           OC.faunaInfo.activeEvent = ev;
+
+          // Переходы фаз предвестника → событие → пауза
+          if (ev) {
+            const st = heraldState[ev];
+            if (st) {
+              if (st.phase === 'herald') st.phase = 'active';
+              if (st.phase === 'active') st.timer = 0; // событие началось, удерживаем фазу active
+            }
+          } else {
+            // События сейчас нет — если был active, уходим в cooldown
+            for (const k of Object.keys(heraldState)) {
+              const st = heraldState[k];
+              if (st.phase === 'active') st.phase = 'cooldown';
+            }
+          }
+
+          // --- Последствия событий в мире (без новых draw calls) ---
+          if (ev) {
+            consequenceAccum += dt;
+            const isNew = ev !== consequenceEvent;
+            if (isNew) consequenceEvent = ev;
+
+            if (ev === 'hunt') {
+              // Охота: косяк рассыпается, чешуя и муть в воде. Дозированный выброс бентоса.
+              if (isNew || consequenceAccum >= 0.35) {
+                consequenceAccum = 0;
+                benthicSilt.kick(eventPos, 0.7);
+                if (camPos.y > -4.0) splashSystem.emit(eventPos, 0.5);
+              }
+            } else if (ev === 'baitball') {
+              // Baitball: стая сжата в шар, взвесь у дна.
+              if (isNew || consequenceAccum >= 0.7) {
+                consequenceAccum = 0;
+                benthicSilt.kick(eventPos, 0.5);
+              }
+            } else if (ev === 'coral_spawn' && coralSpawnSys) {
+              // Нерест кораллов: вода розовеет, гаметы вспыхивают, видимость падает.
+              coralSpawnSys.mat.uniforms.uIntensity.value = OC.clamp(coralSpawnIntensity * 1.8, 0, 1);
+            } else if (ev === 'breach' && camPos.y > -4.0) {
+              // Выпрыг кита: всплеск у поверхности (уже есть через onSplash, здесь добавочный).
+              if (isNew || consequenceAccum >= 0.5) {
+                consequenceAccum = 0;
+                splashSystem.emit(eventPos, 0.9);
+              }
+            } else if (ev === 'cleaning') {
+              // Симбиоз чистильщиков: биолюминесцентный шлейф через biolumTrail уже активен,
+              // плюс небольшой выброс частиц у станции чистки.
+              if (isNew || consequenceAccum >= 1.0) {
+                consequenceAccum = 0;
+                benthicSilt.kick(eventPos, 0.3);
+              }
+            }
+          } else if (consequenceEvent !== null) {
+            // Событие закончилось — сбрасываем оставшиеся эффекты
+            if (coralSpawnSys) coralSpawnSys.mat.uniforms.uIntensity.value = coralSpawnIntensity;
+            consequenceEvent = null;
+            consequenceAccum = 0;
+          }
 
           bubbleMat.uniforms.uCamPos.value.copy(camPos);
           planktonMat.uniforms.uCamPos.value.copy(camPos);
@@ -20216,6 +20812,8 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makePinkDolphin(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'arapaima') {
           OC._FaunaBuilders.makeArapaima(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'seal_baikal') {
+          OC._FaunaBuilders.makeBaikalSeal(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 0, y: 0, scale: 0.8 });
         } else if (key === 'electric_eel') {
           OC._FaunaBuilders.makeElectricEel(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'river_stingray') {
@@ -20965,6 +21563,9 @@ window.OC = window.OC || {};
     if (key === 'electric_eel') return 'Биоэлектрический импульс угря';
     if (key === 'piranha') return 'Барабанный стук стаи пираний';
     if (key === 'arapaima' || key === 'river_stingray') return key === 'arapaima' ? 'Глоток воздуха гигантской арапаимы' : 'Скольжение ската моторо';
+    if (key === 'seal_baikal') return 'Подводный позыв нерпы';
+    if (key === 'fish_omul' || key === 'fish_grayling' || key === 'fish_golomyanka' || key === 'baikal_sponge' || key === 'charophyte_bed') return 'Биоакустика Байкальского рифта';
+    if (key === 'methane_seep_baikal') return 'Пузырьковый гул байкальского сипа';
     if (key === 'neon_tetra' || key === 'angelfish' || key === 'igapo_tree' || key === 'victoria_lily') return 'Тропическая речная биоакустика Игапо';
     if (key === 'volcanic_fumarole') return 'Пузырьковая вулканическая фумарола';
     if (key === 'vent_chimney' || key === 'vent_shrimp' || key === 'riftia_worms' || key === 'vent_mussels') return 'Шум рифта и креветок';
@@ -22215,7 +22816,7 @@ window.OC = window.OC || {};
   const KARST_SPECIES = new Set(['stalactite', 'stalagmite']);
   const VOLCANIC_SPECIES = new Set(['galapagos_barnacle', 'darwins_arch']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag', 'charophyte_bed']);
 
 
     function scanManipulatorTarget(biome, pos, fwd, out) {
@@ -22254,7 +22855,7 @@ window.OC = window.OC || {};
       out.label = floorEnc ? floorEnc[0] : 'Донный осадок';
       out.latin = floorEnc ? floorEnc[1] : 'Керн морского дна';
       out.dist = Math.max(1.0, clearance);
-      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : 0xe8d9b5));
+      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : (biome.id === 'baikal' ? 0x71857d : 0xe8d9b5)));
       return out;
     }
 
@@ -22336,6 +22937,10 @@ window.OC = window.OC || {};
         category = 'Ботаническая проба';
         chemNote = `Фотосинтез · O₂ ${o2.toFixed(1)} мг/л`;
         colorHex = 0x5be8b0;
+      } else if (sp === 'baikal_sponge') {
+        category = 'Пресноводный губочный био-риф';
+        chemNote = 'Кремнистый скелет · эндемик Байкала · пресная вода';
+        colorHex = 0x88b89b;
       } else {
         category = 'Образец бентоса';
         chemNote = sp === 'hadal_sponge'
@@ -22354,7 +22959,9 @@ window.OC = window.OC || {};
               ? `Базальт и оливковый песок · ${depthM.toFixed(0)} м`
               : (biome.id === 'hydrothermal_vents'
                 ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
-                : (biome.id === 'arctic_sea' ? `Полярный ил · ${waterTemp.toFixed(1)} °C` : `Карбонатный ил · ${pH.toFixed(2)} pH`)))));
+                : (biome.id === 'arctic_sea'
+                  ? `Полярный ил · ${waterTemp.toFixed(1)} °C`
+                  : (biome.id === 'baikal' ? `Диатомовый ил рифта · ${depthM.toFixed(0)} м · пресная вода` : `Карбонатный ил · ${pH.toFixed(2)} pH`))))));
     }
 
     return {
@@ -22412,6 +23019,8 @@ window.OC = window.OC || {};
       } else if (biome.id === 'amazon_igapo') {
         // Пресноводная пойма Амазонии: слабый прогрев у поверхности и постепенное снижение на дне канала
         Tval -= OC.smoothstep(2, 26, d) * 1.9;
+      } else if (biome.id === 'baikal') {
+        // Байкал использует собственный сезонный профиль getTemperatureAt и холодную изотерму глубин.
       } else if (!biome.noSurface && !biome.hasAurora) {
         const thermoDrop = OC.smoothstep(18, 65, d) * 3.8;
         Tval -= thermoDrop;
@@ -23407,6 +24016,9 @@ window.OC = window.OC || {};
     if (key === 'electric_eel') return { mode: 'eel', minHz: 260, maxHz: 920, label: 'Разряд электрического угря' };
     if (key === 'piranha') return { mode: 'pulse', minHz: 110, maxHz: 340, label: 'Барабанный стук стаи пираний' };
     if (key === 'arapaima' || key === 'river_stingray') return { mode: 'swim', minHz: 80, maxHz: 360, label: key === 'arapaima' ? 'Глоток воздуха арапаимы' : 'Скольжение ската моторо' };
+    if (key === 'seal_baikal') return { mode: 'pulse', minHz: 240, maxHz: 1280, label: 'Позыв нерпы подо льдом' };
+    if (key === 'fish_omul' || key === 'fish_grayling' || key === 'fish_golomyanka' || key === 'baikal_sponge' || key === 'charophyte_bed') return { mode: 'bio', minHz: 180, maxHz: 950, label: 'Биоакустика Байкальского рифта' };
+    if (key === 'methane_seep_baikal') return { mode: 'rumble', minHz: 35, maxHz: 240, label: 'Метановый сип Байкала' };
     if (key === 'galapagos_penguin' || key === 'sea_lion' || key === 'dugong') return { mode: 'pulse', minHz: 320, maxHz: 1450, label: key === 'galapagos_penguin' ? 'Треск погони пингвина' : 'Подводный клич' };
     if (key === 'vent_chimney' || key === 'volcanic_fumarole' || key === 'serpentinite_vent' || key === 'methane_hydrate' || key === 'brine_pool_lake' || key === 'halocline_layer') {
       return { mode: 'rumble', minHz: 40, maxHz: 260, label: key === 'volcanic_fumarole' ? 'Кипение фумарол' : 'Гул сипа / термоисточника' };
@@ -25058,6 +25670,43 @@ window.OC = window.OC || {};
       landmarkId: 'victoria_lagoon',
       goal: 1,
       progress: (ctx) => ctx.hasPhotoOrPing(['arapaima', 'electric_eel', 'river_stingray', 'victoria_lily']) ? 1 : 0
+    },
+    // --- Байкал: Большой рифт и эндемичные виды ---
+    {
+      id: 'baik_discoveries',
+      biomeId: 'baikal',
+      title: 'Натуралист Байкальского рифта',
+      desc: 'Изучите 6 видов и геологических объектов озера Байкал.',
+      landmarkId: 'baikal_academy_bay',
+      goal: 6,
+      progress: (ctx) => ctx.discoveredCount
+    },
+    {
+      id: 'baik_nerpa',
+      biomeId: 'baikal',
+      title: 'Единственный пресноводный тюлень',
+      desc: 'Сфотографируйте или обнаружьте сонаром байкальскую нерпу.',
+      landmarkId: 'baikal_academy_bay',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['seal_baikal']) ? 1 : 0
+    },
+    {
+      id: 'baik_sponge_reef',
+      biomeId: 'baikal',
+      title: 'Живой губочный риф',
+      desc: 'Найдите сад байкальских губок и зафиксируйте эндемичную Lubomirskia baicalensis.',
+      landmarkId: 'baikal_sponge_garden',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('baikal_sponge_reef') && ctx.hasPhotoOrPing(['baikal_sponge']) ? 1 : 0
+    },
+    {
+      id: 'baik_rift_depth',
+      biomeId: 'baikal',
+      title: 'В бездну Большого рифта',
+      desc: 'Опуститесь глубже 1 000 м и просканируйте глубоководную голомянку.',
+      landmarkId: 'baikal_golomyanka_depth',
+      goal: 1,
+      progress: (ctx) => ctx.depthM >= 1000 && ctx.hasPhotoOrPing(['fish_golomyanka']) ? 1 : 0
     }
   ];
 
@@ -25553,7 +26202,7 @@ window.OC = window.OC || {};
       lines.push(`- Состояние: **${rep.ecoLab.statusLabel}** · ΔT: ${rep.ecoLab.tempDeltaC >= 0 ? '+' : ''}${rep.ecoLab.tempDeltaC} °C · pH: ${rep.ecoLab.pH} · Обесцвечивание: ${rep.ecoLab.bleachingPct}%`);
       lines.push('');
     }
-    lines.push('## Сводка по 10 биомам планеты');
+    lines.push('## Сводка по 11 биомам планеты');
     lines.push('| Биом | Регион | Глубины | Виды | Миссии |');
     lines.push('|---|---|---|---|---|');
     for (const b of rep.biomes) {
@@ -25685,6 +26334,14 @@ window.OC = window.OC || {};
       if (y > -56) return [24, 78, 134];   // моренный склон
       if (y > -92) return [13, 44, 96];    // полярный жёлоб
       return [6, 20, 54];
+    }
+    if (theme === 'baikal') {
+      if (y > -8) return [103, 191, 171];       // прибрежные террасы и бухты
+      if (y > -45) return [62, 156, 157];      // харовые луга и губочные сады
+      if (y > -260) return [42, 124, 158];     // верх рифтового склона
+      if (y > -700) return [31, 80, 137];     // ступени Большого рифта
+      if (y > -1250) return [21, 48, 105];    // глубокая котловина
+      return [10, 22, 62];                    // ось Байкальской бездны
     }
     if (theme === 'atoll') {
       if (y > 1.2) return [72, 148, 86];   // зелёные шапки известняковых островков
@@ -27161,8 +27818,8 @@ window.OC = window.OC || {};
       it.hit = hit;
     }
 
-    // Соединяем 8 точек планеты дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea'];
+    // Соединяем точки всех биомов дугами глобальной экспедиции
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea', 'amazon_igapo', 'baikal'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);
@@ -27511,7 +28168,8 @@ window.OC = window.OC || {};
     brine_pool: 'Соляной бассейн',
     cenote_caves: 'Сеноты Юкатана',
     galapagos_upwelling: 'Галапагосы',
-    amazon_igapo: 'Амазония'
+    amazon_igapo: 'Амазония',
+    baikal: 'Байкал'
   };
 
   const BIOME_REGION = {
@@ -27524,7 +28182,8 @@ window.OC = window.OC || {};
     brine_pool: 'Мексиканский залив · 650 м',
     cenote_caves: 'Юкатан · Сак-Актун 58 м',
     galapagos_upwelling: 'Эквадор · Апвеллинг',
-    amazon_igapo: 'Рио-Негру · Игапо 28 м'
+    amazon_igapo: 'Рио-Негру · Игапо 28 м',
+    baikal: 'Сибирь · Байкальский рифт 1 642 м'
   };
 
   // Капли воды на стекле маски при выныривании или шторме (fixed pool, без GC)

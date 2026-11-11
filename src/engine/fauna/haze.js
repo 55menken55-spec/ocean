@@ -243,7 +243,7 @@ window.OC = window.OC || {};
 
   const makeHydratePlumeSystem = function (scene, biome, texHard) {
     const id = biome ? biome.id : '';
-    const hasHydrates = (id === 'brine_pool' || id === 'mariana_trench');
+    const hasHydrates = (id === 'brine_pool' || id === 'mariana_trench' || id === 'baikal');
     if (!hasHydrates) {
       return { hasHydrates: false, update() {}, setScale() {} };
     }
@@ -252,6 +252,8 @@ window.OC = window.OC || {};
     const sources = [];
     if (id === 'brine_pool') {
       sources.push([-140, -110], [190, 120], [-20, 200], [110, -210], [-250, 50]);
+    } else if (id === 'baikal') {
+      sources.push([130, 170], [-110, 280], [235, -310]);
     } else {
       sources.push([-80, 120], [160, -140], [-220, -60], [60, 230]);
     }
@@ -286,7 +288,7 @@ window.OC = window.OC || {};
         {
           uTex: { value: texHard },
           uTime: OC.uTime,
-          uColor: { value: new T.Color(id === 'brine_pool' ? 0xb4f2ff : 0x8effd8) },
+          uColor: { value: new T.Color(id === 'brine_pool' ? 0xb4f2ff : (id === 'baikal' ? 0x82d8d0 : 0x8effd8)) },
           uScale: { value: 1.0 }
         }
       ]),
@@ -323,7 +325,7 @@ window.OC = window.OC || {};
 
     const pts = new T.Points(geo, mat);
     pts.frustumCulled = false;
-    pts.userData.key = id === 'brine_pool' ? 'methane_hydrate' : 'serpentinite_vent';
+    pts.userData.key = id === 'brine_pool' ? 'methane_hydrate' : (id === 'baikal' ? 'methane_seep_baikal' : 'serpentinite_vent');
     scene.add(pts);
 
     return {
