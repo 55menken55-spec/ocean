@@ -240,15 +240,20 @@ window.OC = window.OC || {};
   const _cDeepLimestone = new T.Color(0x283a4d);
   const _cCaySand = new T.Color(0xf4ead2);
 
-  function getTerrainColor(x, y, z, out) {
+  function getTerrainColor(x, y, z, out, slopeHint) {
     const u = x - shelfOffset(z);
     const ripple = Math.sin(x * 0.52 + z * 0.31) * 0.5 + Math.sin(z * 0.77 - x * 0.24) * 0.5;
     const micro = OC.noise2(x * 0.06, z * 0.06);
 
-    // Проверка на крутизну (скалы / рифовые уступы / стенки бомми и обрыва)
-    const dh = Math.abs(getHeight(x + 2.5, z) - getHeight(x - 2.5, z)) +
-               Math.abs(getHeight(x, z + 2.5) - getHeight(x, z - 2.5));
-    const slope = OC.clamp(dh * 0.22, 0, 1);
+    // Проверка на крутизну (из предвычисленной сетки террейна или через локальный градиент)
+    let slope = slopeHint;
+    if (slope === undefined) {
+      const dh = Math.abs(getHeight(x + 2.5, z) - getHeight(x - 2.5, z)) +
+                 Math.abs(getHeight(x, z + 2.5) - getHeight(x, z - 2.5));
+      slope = OC.clamp(dh * 0.22, 0, 1);
+    } else {
+      slope = OC.clamp(slope * 1.15, 0, 1);
+    }
 
     if (y > 0.15) {
       // Надводная часть: коралловый островок или мангровый берег

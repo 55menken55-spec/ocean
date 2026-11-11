@@ -15,8 +15,10 @@ window.OC = window.OC || {};
   const poolLookup = new Map();      // "species:variant" -> pool
 
   const lastRebuildPos = new T.Vector3(1e9, 1e9, 1e9);
+  const lastCacheCheckPos = new T.Vector3(1e9, 1e9, 1e9);
   let lastDensity = -1;
   let dirtyRebuild = false;
+  let cacheComplete = false;
   let totalVisibleInstances = 0;
   let qualityHookBound = false;
 
@@ -92,6 +94,8 @@ window.OC = window.OC || {};
           if (!pool) continue;
           const cull = Math.min(activeR, pool.cullDist);
           if (d2 > cull * cull) continue;
+          // Плавное дистанционное прореживание мелкого бентоса в дальнем кольце (>58% дальности)
+          if (pool.cullDist <= 340 && (i & 1) === 1 && d2 > (cull * 0.58) ** 2) continue;
           if (pool.count >= pool.maxCount) continue;
 
           const idx = pool.count++;
@@ -112,8 +116,11 @@ window.OC = window.OC || {};
       const p = pools[i];
       p.mesh.count = p.count;
       p.mesh.visible = p.count > 0;
-      p.mesh.instanceMatrix.needsUpdate = true;
-      if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+      if (p.count > 0) {
+        p.mesh.instanceMatrix.needsUpdate = true;
+        if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+      }
+      p.prevCount = p.count;
     }
 
     totalVisibleInstances = total;
@@ -147,6 +154,8 @@ window.OC = window.OC || {};
       poolLookup.clear();
       chunkFloraCache.clear();
       dirtyRebuild = false;
+      cacheComplete = false;
+      lastCacheCheckPos.set(1e9, 1e9, 1e9);
 
       group = new T.Group();
       scene.add(group);
@@ -174,7 +183,8 @@ window.OC = window.OC || {};
             mesh,
             maxCount: perVarMax,
             cullDist: spec.cullDist || 500,
-            count: 0
+            count: 0,
+            prevCount: 0
           };
           pools.push(pObj);
           poolLookup.set(species + ':' + v, pObj);
@@ -204,6 +214,7 @@ window.OC = window.OC || {};
             chunkFloraCache.clear();
             lastDensity = preset.floraDensity;
           }
+          cacheComplete = false;
           dirtyRebuild = true;
         });
       }
@@ -212,38 +223,46 @@ window.OC = window.OC || {};
     update(camPos) {
       if (!biomeRef) return;
       const q = OC.Quality.get();
-      const t0 = performance.now();
-      const budgetMs = 3.5;
+      const cacheMoved = Math.hypot(camPos.x - lastCacheCheckPos.x, camPos.z - lastCacheCheckPos.z);
 
-      const cacheR = q.floraCacheRadius;
-      const minCx = Math.max(-chunkHalfCount, Math.floor((camPos.x - cacheR) / chunkSize));
-      const maxCx = Math.min(chunkHalfCount - 1, Math.floor((camPos.x + cacheR) / chunkSize));
-      const minCz = Math.max(-chunkHalfCount, Math.floor((camPos.z - cacheR) / chunkSize));
-      const maxCz = Math.min(chunkHalfCount - 1, Math.floor((camPos.z + cacheR) / chunkSize));
+      if (!cacheComplete || cacheMoved > 18) {
+        const t0 = performance.now();
+        const budgetMs = 3.5;
 
-      // Собираем недостающие чанки по близости к камере
-      const missing = [];
-      for (let cz = minCz; cz <= maxCz; cz++) {
-        for (let cx = minCx; cx <= maxCx; cx++) {
-          const k = chunkKey(cx, cz);
-          if (chunkFloraCache.has(k)) continue;
-          const wx = (cx + 0.5) * chunkSize;
-          const wz = (cz + 0.5) * chunkSize;
-          const d2 = (wx - camPos.x) ** 2 + (wz - camPos.z) ** 2;
-          if (d2 <= cacheR * cacheR) missing.push({ cx, cz, d2 });
+        const cacheR = q.floraCacheRadius;
+        const minCx = Math.max(-chunkHalfCount, Math.floor((camPos.x - cacheR) / chunkSize));
+        const maxCx = Math.min(chunkHalfCount - 1, Math.floor((camPos.x + cacheR) / chunkSize));
+        const minCz = Math.max(-chunkHalfCount, Math.floor((camPos.z - cacheR) / chunkSize));
+        const maxCz = Math.min(chunkHalfCount - 1, Math.floor((camPos.z + cacheR) / chunkSize));
+
+        // Собираем недостающие чанки по близости к камере
+        const missing = [];
+        for (let cz = minCz; cz <= maxCz; cz++) {
+          for (let cx = minCx; cx <= maxCx; cx++) {
+            const k = chunkKey(cx, cz);
+            if (chunkFloraCache.has(k)) continue;
+            const wx = (cx + 0.5) * chunkSize;
+            const wz = (cz + 0.5) * chunkSize;
+            const d2 = (wx - camPos.x) ** 2 + (wz - camPos.z) ** 2;
+            if (d2 <= cacheR * cacheR) missing.push({ cx, cz, d2 });
+          }
         }
-      }
 
-      if (missing.length) {
-        missing.sort((a, b) => a.d2 - b.d2);
-        let builtAny = false;
-        for (let i = 0; i < missing.length; i++) {
-          const m = missing[i];
-          chunkFloraCache.set(chunkKey(m.cx, m.cz), buildChunkData(m.cx, m.cz, q.floraDensity));
-          builtAny = true;
-          if (performance.now() - t0 > budgetMs) break;
+        if (missing.length) {
+          missing.sort((a, b) => a.d2 - b.d2);
+          let builtCount = 0;
+          for (let i = 0; i < missing.length; i++) {
+            const m = missing[i];
+            chunkFloraCache.set(chunkKey(m.cx, m.cz), buildChunkData(m.cx, m.cz, q.floraDensity));
+            builtCount++;
+            if (performance.now() - t0 > budgetMs) break;
+          }
+          if (builtCount > 0) dirtyRebuild = true;
+          cacheComplete = builtCount >= missing.length;
+        } else {
+          cacheComplete = true;
         }
-        if (builtAny) dirtyRebuild = true;
+        lastCacheCheckPos.copy(camPos);
       }
 
       const movedDist = Math.hypot(camPos.x - lastRebuildPos.x, camPos.z - lastRebuildPos.z);

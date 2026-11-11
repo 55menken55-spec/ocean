@@ -25,6 +25,10 @@ ORDER = [
     'engine/terrain.js',
     'engine/flora_library.js',
     'engine/flora_streamer.js',
+    'engine/fauna/schools.js',
+    'engine/fauna/pelagic.js',
+    'engine/fauna/abyss_polar.js',
+    'engine/fauna/surface_expedition.js',
     'engine/fauna_engine.js',
     'engine/audio.js',
     'engine/rov.js',
@@ -35,6 +39,7 @@ ORDER = [
     'ui/minimap.js',
     'ui/atlas.js',
     'ui/globe.js',
+    'ui/hud_panels.js',
     'ui/main.js',
 ]
 

@@ -15,7 +15,7 @@ window.OC = window.OC || {};
 
     function branch(p0, dir, len, rad, depth) {
       const p1 = p0.clone().addScaledVector(dir, len);
-      const geo = new T.CylinderGeometry(rad * 0.58, rad, len, 5, 1, false);
+      const geo = new T.CylinderGeometry(rad * 0.58, rad, len, 4, 1, false);
       geo.translate(0, len * 0.5, 0);
       tmpQ.setFromUnitVectors(up, dir.clone().normalize());
       geo.applyMatrix4(new T.Matrix4().makeRotationFromQuaternion(tmpQ));
@@ -89,7 +89,7 @@ window.OC = window.OC || {};
 
   /* ---- 3. Мозговой коралл (Platygyra) ---- */
   function buildBrain(hue, rng) {
-    const g = new T.SphereGeometry(1, 20, 14);
+    const g = new T.SphereGeometry(1, 14, 10);
     const p = g.attributes.position;
     const freq = 8 + Math.floor(rng() * 4);
     for (let i = 0; i < p.count; i++) {
@@ -120,7 +120,7 @@ window.OC = window.OC || {};
     for (let i = 0; i < nLobes; i++) {
       const h = i === 0 ? OC.lerp(3.2, 4.4, rng()) : OC.lerp(1.6, 3.0, rng());
       const r = i === 0 ? OC.lerp(1.3, 1.8, rng()) : OC.lerp(0.7, 1.2, rng());
-      const g = new T.SphereGeometry(1, 14, 10);
+      const g = new T.SphereGeometry(1, 10, 8);
       const p = g.attributes.position;
       for (let k = 0; k < p.count; k++) {
         const vx = p.getX(k), vy = p.getY(k), vz = p.getZ(k);
@@ -223,12 +223,12 @@ window.OC = window.OC || {};
     const list = [];
     const stalkCol = COL().setHSL(hue, 0.45, 0.72);
     const puffCol = COL().setHSL((hue + 0.05) % 1, 0.92, 0.64);
-    const nArms = 6;
+    const nArms = 5;
     for (let i = 0; i < nArms; i++) {
       const a = (i / nArms) * 6.28 + rng() * 0.5;
       const h = OC.lerp(1.4, 2.5, rng());
       const tilt = OC.lerp(0.25, 0.65, rng());
-      const st = new T.CylinderGeometry(0.12, 0.24, h, 6);
+      const st = new T.CylinderGeometry(0.12, 0.24, h, 5);
       OC.geoPrep(st);
       st.translate(0, h * 0.5, 0);
       OC.paint(st, (x, y, z, c) => c.copy(stalkCol).lerp(puffCol, OC.clamp(y / h, 0, 1) * 0.6));
@@ -239,8 +239,8 @@ window.OC = window.OC || {};
       const dx = Math.cos(a) * Math.sin(tilt) * h * 0.85;
       const dz = Math.sin(a) * Math.sin(tilt) * h * 0.85;
       const dy = Math.cos(tilt) * h;
-      for (let k = 0; k < 3; k++) {
-        const pf = new T.IcosahedronGeometry(OC.lerp(0.28, 0.46, rng()), 1);
+      for (let k = 0; k < 2; k++) {
+        const pf = new T.IcosahedronGeometry(OC.lerp(0.32, 0.5, rng()), 0);
         OC.geoPrep(pf);
         OC.paint(pf, puffCol);
         OC.withSway(pf, () => 0.55);
@@ -350,19 +350,19 @@ window.OC = window.OC || {};
     const tColB = COL().setHSL((hueT + 0.09) % 1, 0.95, 0.82);
 
     const bodyH = 0.85;
-    const g = new T.CylinderGeometry(1.05, 0.7, bodyH, 10);
+    const g = new T.CylinderGeometry(1.05, 0.7, bodyH, 8);
     OC.geoPrep(g);
     g.translate(0, bodyH * 0.5, 0);
     OC.paint(g, baseCol);
     OC.withSway(g, () => 0);
     list.push(g);
 
-    const nT = 28;
+    const nT = 18;
     for (let i = 0; i < nT; i++) {
       const a = rng() * 6.28;
       const rr = Math.sqrt(rng()) * 1.05;
       const len = OC.lerp(1.0, 2.1, rng());
-      const tg = new T.CylinderGeometry(0.05, 0.1, len, 4, 2);
+      const tg = new T.CylinderGeometry(0.06, 0.12, len, 4, 1);
       OC.geoPrep(tg);
       tg.translate(0, len * 0.5, 0);
       OC.paint(tg, (x, y, z, c) => c.copy(tColA).lerp(tColB, OC.clamp(y / len, 0, 1)));
@@ -629,7 +629,7 @@ window.OC = window.OC || {};
       const r = 0.05 + 0.72 * Math.pow(t, 1.45);
       pts.push(new T.Vector3(Math.cos(a) * r, Math.sin(a) * r, t * 1.15));
     }
-    const g = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 64, 0.14, 6, false);
+    const g = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 28, 0.15, 5, false);
     OC.geoPrep(g);
     OC.paint(g, (x, y, z, c) => {
       const band = Math.sin(Math.atan2(y, x) * 3 + z * 3.5);
@@ -687,18 +687,18 @@ window.OC = window.OC || {};
     calyx.translate(0, 0.14, 0);
     list.push(calyx);
 
-    const arms = 12;
+    const arms = 9;
     for (let i = 0; i < arms; i++) {
       const a = (i / arms) * Math.PI * 2 + (rng() - 0.5) * 0.25;
       const len = OC.lerp(0.95, 1.45, rng());
       const pts = [];
-      for (let s = 0; s <= 5; s++) {
-        const t = s / 5;
+      for (let s = 0; s <= 4; s++) {
+        const t = s / 4;
         const rad = 0.12 + t * len * 0.72;
         const arch = Math.sin(t * Math.PI * 0.72) * len * 0.85;
         pts.push(new T.Vector3(Math.cos(a) * rad, 0.18 + arch, Math.sin(a) * rad));
       }
-      const arm = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 7, 0.035, 4, false);
+      const arm = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 5, 0.038, 3, false);
       OC.geoPrep(arm);
       OC.paint(arm, (x, y, z, c) => c.copy(c1).lerp(c2, OC.clamp(y / 1.2, 0, 1)));
       OC.withSway(arm, (x, y, z) => OC.clamp((y - 0.12) / 1.2, 0, 1));
@@ -2064,91 +2064,91 @@ window.OC = window.OC || {};
 
       const prototypes = {
         coral_staghorn: {
-          mat: matCoralRigid, maxInstances: 2000, cullDist: 580,
+          mat: matCoralRigid, maxInstances: 2000, cullDist: 460,
           geos: [buildStaghorn(0.94, rng), buildStaghorn(0.55, rng), buildStaghorn(0.76, rng), buildStaghorn(0.11, rng)]
         },
         coral_table: {
-          mat: matCoralRigid, maxInstances: 1700, cullDist: 640,
+          mat: matCoralRigid, maxInstances: 1700, cullDist: 560,
           geos: [buildTable(0.09, rng), buildTable(0.44, rng), buildTable(0.86, rng), buildTable(0.96, rng)]
         },
         coral_brain: {
-          mat: matCoralRigid, maxInstances: 1600, cullDist: 560,
+          mat: matCoralRigid, maxInstances: 1600, cullDist: 440,
           geos: [buildBrain(0.14, rng), buildBrain(0.24, rng), buildBrain(0.95, rng)]
         },
         coral_bommie: {
-          mat: matCoralRigid, maxInstances: 520, cullDist: 700,
+          mat: matCoralRigid, maxInstances: 520, cullDist: 640,
           geos: [buildBommie(0.11, rng), buildBommie(0.48, rng)]
         },
         coral_plate: {
-          mat: matCoralRigid, maxInstances: 1050, cullDist: 580,
+          mat: matCoralRigid, maxInstances: 1050, cullDist: 480,
           geos: [buildPlateCoral(0.08, rng), buildPlateCoral(0.82, rng)]
         },
         coral_crust: {
-          mat: matCoralRigid, maxInstances: 2400, cullDist: 340,
+          mat: matCoralRigid, maxInstances: 2400, cullDist: 230,
           geos: [buildCrustCoral(0.94, rng), buildCrustCoral(0.09, rng), buildCrustCoral(0.76, rng)]
         },
         coral_fan: {
-          mat: matCoralSoft, maxInstances: 980, cullDist: 540,
+          mat: matCoralSoft, maxInstances: 980, cullDist: 460,
           geos: [buildSeaFan(0.88, rng), buildSeaFan(0.02, rng), buildSeaFan(0.74, rng)]
         },
         coral_soft: {
-          mat: matCoralSoft, maxInstances: 980, cullDist: 500,
+          mat: matCoralSoft, maxInstances: 980, cullDist: 420,
           geos: [buildSoftCoral(0.91, rng), buildSoftCoral(0.78, rng), buildSoftCoral(0.07, rng)]
         },
         coral_black: {
-          mat: matSoft, maxInstances: 650, cullDist: 500,
+          mat: matSoft, maxInstances: 650, cullDist: 420,
           geos: [buildBlackCoral(rng), buildBlackCoral(rng)]
         },
         crinoid: {
-          mat: matSoft, maxInstances: 1100, cullDist: 300,
+          mat: matSoft, maxInstances: 1100, cullDist: 230,
           geos: [buildCrinoid(0.11, rng), buildCrinoid(0.96, rng), buildCrinoid(0.78, rng)]
         },
         sponge_tube: {
-          mat: matRigid, maxInstances: 700, cullDist: 500,
+          mat: matRigid, maxInstances: 700, cullDist: 420,
           geos: [buildTubeSponge(0.05, 0.13, rng), buildTubeSponge(0.78, 0.88, rng)]
         },
         sponge_barrel: {
-          mat: matRigid, maxInstances: 650, cullDist: 560,
+          mat: matRigid, maxInstances: 650, cullDist: 480,
           geos: [buildBarrelSponge(0.06, rng), buildBarrelSponge(0.84, rng)]
         },
         anemone: {
-          mat: matCoralSoft, maxInstances: 900, cullDist: 440,
+          mat: matCoralSoft, maxInstances: 900, cullDist: 340,
           geos: [buildAnemone(0.74, 0.92, rng), buildAnemone(0.58, 0.50, rng), buildAnemone(0.95, 0.08, rng)]
         },
         giant_clam: {
-          mat: matClam, maxInstances: 760, cullDist: 460,
+          mat: matClam, maxInstances: 760, cullDist: 310,
           geos: [buildGiantClam(0.56, rng), buildGiantClam(0.78, rng)]
         },
         seagrass: {
-          mat: matPlant, maxInstances: 2600, cullDist: 450,
+          mat: matPlant, maxInstances: 2600, cullDist: 290,
           geos: [buildSeagrass(0.24, rng), buildSeagrass(0.28, rng)]
         },
         kelp: {
-          mat: matPlant, maxInstances: 520, cullDist: 540,
+          mat: matPlant, maxInstances: 520, cullDist: 480,
           geos: [buildKelp(0.14, rng), buildKelp(0.18, rng)]
         },
         mangrove: {
-          mat: matSoft, maxInstances: 1150, cullDist: 780,
+          mat: matSoft, maxInstances: 1150, cullDist: 680,
           geos: [buildMangrove(rng), buildMangrove(rng)]
         },
         island_palm: {
-          mat: matFoliage, maxInstances: 180, cullDist: 950,
+          mat: matFoliage, maxInstances: 180, cullDist: 920,
           geos: [buildIslandPalm(rng), buildIslandPalm(rng)]
         },
         urchin: {
-          mat: matRigid, maxInstances: 650, cullDist: 280,
+          mat: matRigid, maxInstances: 650, cullDist: 190,
           geos: [buildUrchin()]
         },
         starfish_blue: {
-          mat: matRigid, maxInstances: 480, cullDist: 280,
+          mat: matRigid, maxInstances: 480, cullDist: 190,
           geos: [buildStarfish(5, 0.58, false)]
         },
         starfish_cots: {
-          mat: matRigid, maxInstances: 480, cullDist: 300,
+          mat: matRigid, maxInstances: 480, cullDist: 210,
           geos: [buildStarfish(11, 0.94, true)]
         },
         shell_triton: {
-          mat: matClam, maxInstances: 440, cullDist: 280,
+          mat: matClam, maxInstances: 440, cullDist: 190,
           geos: [buildTritonShell()]
         },
         kelp_giant: {

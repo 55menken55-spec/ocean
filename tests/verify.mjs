@@ -25,6 +25,10 @@ const SRC_ORDER = [
   'src/engine/terrain.js',
   'src/engine/flora_library.js',
   'src/engine/flora_streamer.js',
+  'src/engine/fauna/schools.js',
+  'src/engine/fauna/pelagic.js',
+  'src/engine/fauna/abyss_polar.js',
+  'src/engine/fauna/surface_expedition.js',
   'src/engine/fauna_engine.js',
   'src/engine/audio.js',
   'src/engine/rov.js',
@@ -35,6 +39,7 @@ const SRC_ORDER = [
   'src/ui/minimap.js',
   'src/ui/atlas.js',
   'src/ui/globe.js',
+  'src/ui/hud_panels.js',
   'src/ui/main.js',
 ];
 
@@ -279,7 +284,13 @@ for (const spKey in floraProtos) {
 // Verify world.js water foam + volumetric beam + marine snow contracts exist
 const worldSrc = fs.readFileSync(path.join(ROOT, 'src/engine/world.js'), 'utf8');
 assert(worldSrc.includes('uFoamTex') && worldSrc.includes('flashBeamMat'), 'world.js missing uFoamTex surf foam or flashBeamMat cone');
-const faunaSrc = fs.readFileSync(path.join(ROOT, 'src/engine/fauna_engine.js'), 'utf8');
+const faunaSrc = [
+  'src/engine/fauna_engine.js',
+  'src/engine/fauna/schools.js',
+  'src/engine/fauna/pelagic.js',
+  'src/engine/fauna/abyss_polar.js',
+  'src/engine/fauna/surface_expedition.js'
+].map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')).join('\n');
 assert(faunaSrc.includes('marine_snow'), 'fauna_engine.js missing marine_snow deep particle layer');
 
 // Verify all placed visible fauna/flora objects have encyclopedia keys
@@ -649,8 +660,8 @@ assert.equal(OC.Navigation.getGamepadActive(), false);
 console.log(`   Direction 4 3D Atlas (${previewTestedCount} species meshes & voices), Cinema mode, 5 color filters, Virtual Stick & Gamepad verified.`);
 
 // K) Verify Direction 5 (Living Ecosystem AI: Predator Lunges, Baitball Panic, Whale Breaching & Splash GPU Pool, Porpoising, Cleaning Symbiosis, Phototaxis, Active Sonar Reaction)
-assert(faunaSrc.includes('makeSplashSystem') && faunaSrc.includes('lungeTimer') && faunaSrc.includes('notifySonarPing') && faunaSrc.includes('cleanClients'), 'fauna_engine.js missing Direction 5 ecosystem AI features');
-const mainSrc = fs.readFileSync(path.join(ROOT, 'src/ui/main.js'), 'utf8');
+assert(faunaSrc.includes('makeSplashSystem') && faunaSrc.includes('lungeTimer') && faunaSrc.includes('notifySonarPing') && faunaSrc.includes('cleanClients'), 'fauna_engine modules missing Direction 5 ecosystem AI features');
+const mainSrc = fs.readFileSync(path.join(ROOT, 'src/ui/main.js'), 'utf8') + '\n' + fs.readFileSync(path.join(ROOT, 'src/ui/hud_panels.js'), 'utf8');
 assert(mainSrc.includes('notifySonarPing') && mainSrc.includes('ECO_LABELS'), 'main.js missing sonar pulse propagation or ecosystem observer HUD labels');
 assert(typeof OC.sound.whaleSplash === 'function', 'OC.sound.whaleSplash required');
 OC.sound.whaleSplash(45);

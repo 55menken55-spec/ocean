@@ -13,8 +13,19 @@ window.OC = window.OC || {};
   let chunkRadiusCount = 8; // [-8 .. 7] = 16x16 для 2400 м при chunkSize=150
   let chunkSize = 150;
   let initialized = false;
+  let needsRebuildScan = true;
+  let lastScanX = 1e9;
+  let lastScanZ = 1e9;
+  let lastScanQuality = '';
+  let heightGridBuf = new Float32Array(64 * 64);
 
   const _tmpCol = new T.Color();
+
+  function getHeightGridBuf(stride) {
+    const need = stride * stride;
+    if (heightGridBuf.length < need) heightGridBuf = new Float32Array(need);
+    return heightGridBuf;
+  }
 
   function chunkKey(cx, cz) {
     return cx + ',' + cz;
@@ -24,7 +35,21 @@ window.OC = window.OC || {};
   function buildChunkGeometry(cx, cz, segs) {
     const x0 = cx * chunkSize;
     const z0 = cz * chunkSize;
+    const step = chunkSize / segs;
+    const inv2Step = 1 / (2 * step);
     const n = segs + 1;
+    const stride = n + 2; // +1 ячейка с каждой стороны для идентичных бесшовных нормалей
+    const hBuf = getHeightGridBuf(stride);
+
+    for (let gz = 0; gz < stride; gz++) {
+      const z = z0 + (gz - 1) * step;
+      const row = gz * stride;
+      for (let gx = 0; gx < stride; gx++) {
+        const x = x0 + (gx - 1) * step;
+        hBuf[row + gx] = biomeRef.getHeight(x, z);
+      }
+    }
+
     const gridCount = n * n;
     const skirtVerts = n * 4 * 2; // 4 ребра * (верх+низ)
     const totalVerts = gridCount + skirtVerts;
@@ -33,13 +58,13 @@ window.OC = window.OC || {};
     const norm = new Float32Array(totalVerts * 3);
     const col = new Float32Array(totalVerts * 3);
 
-    const eps = Math.max(1.2, chunkSize / segs * 0.45);
-
     for (let iz = 0; iz <= segs; iz++) {
-      const z = z0 + (iz / segs) * chunkSize;
+      const z = z0 + iz * step;
+      const gRow = (iz + 1) * stride;
       for (let ix = 0; ix <= segs; ix++) {
-        const x = x0 + (ix / segs) * chunkSize;
-        const y = biomeRef.getHeight(x, z);
+        const x = x0 + ix * step;
+        const gIdx = gRow + (ix + 1);
+        const y = hBuf[gIdx];
         const idx = iz * n + ix;
         const p3 = idx * 3;
 
@@ -47,20 +72,21 @@ window.OC = window.OC || {};
         pos[p3 + 1] = y;
         pos[p3 + 2] = z;
 
-        // Точные непрерывные нормали из аналитической высоты (без швов между чанками)
-        const hL = biomeRef.getHeight(x - eps, z);
-        const hR = biomeRef.getHeight(x + eps, z);
-        const hD = biomeRef.getHeight(x, z - eps);
-        const hU = biomeRef.getHeight(x, z + eps);
-        let nx = hL - hR;
-        let ny = 2 * eps;
-        let nz = hD - hU;
-        const len = Math.hypot(nx, ny, nz) || 1;
+        // Непрерывные центральные разности из кэша высот (в 4.5x меньше вызовов getHeight без швов)
+        const hL = hBuf[gIdx - 1];
+        const hR = hBuf[gIdx + 1];
+        const hD = hBuf[gIdx - stride];
+        const hU = hBuf[gIdx + stride];
+        const nx = (hL - hR) * inv2Step;
+        const ny = 1.0;
+        const nz = (hD - hU) * inv2Step;
+        const gradMag = Math.hypot(nx, nz);
+        const len = Math.hypot(gradMag, ny) || 1;
         norm[p3] = nx / len;
         norm[p3 + 1] = ny / len;
         norm[p3 + 2] = nz / len;
 
-        biomeRef.getTerrainColor(x, y, z, _tmpCol);
+        biomeRef.getTerrainColor(x, y, z, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
         col[p3] = _tmpCol.r;
         col[p3 + 1] = _tmpCol.g;
         col[p3 + 2] = _tmpCol.b;
@@ -125,7 +151,11 @@ window.OC = window.OC || {};
   function buildCeilingChunkGeometry(cx, cz, segs) {
     const x0 = cx * chunkSize;
     const z0 = cz * chunkSize;
+    const step = chunkSize / segs;
+    const inv2Step = 1 / (2 * step);
     const n = segs + 1;
+    const stride = n + 2;
+    const hBuf = getHeightGridBuf(stride);
     const gridCount = n * n;
     const skirtVerts = n * 4 * 2;
     const totalVerts = gridCount + skirtVerts;
@@ -135,34 +165,47 @@ window.OC = window.OC || {};
     const col = new Float32Array(totalVerts * 3);
     const openMask = new Uint8Array(gridCount);
 
-    const eps = Math.max(1.2, chunkSize / segs * 0.45);
-    const sampleCeil = (sx, sz) => Math.min(22.0, biomeRef.getCeilingHeight(sx, sz));
     let anyClosed = false;
-
-    for (let iz = 0; iz <= segs; iz++) {
-      const z = z0 + (iz / segs) * chunkSize;
-      for (let ix = 0; ix <= segs; ix++) {
-        const x = x0 + (ix / segs) * chunkSize;
+    for (let gz = 0; gz < stride; gz++) {
+      const z = z0 + (gz - 1) * step;
+      const row = gz * stride;
+      for (let gx = 0; gx < stride; gx++) {
+        const x = x0 + (gx - 1) * step;
         const rawY = biomeRef.getCeilingHeight(x, z);
         const y = Math.min(22.0, rawY);
-        const idx = iz * n + ix;
-        const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(x, z) : (rawY > 38.0);
-        openMask[idx] = isOpen ? 1 : 0;
-        if (!isOpen) anyClosed = true;
+        hBuf[row + gx] = y;
+        if (gx >= 1 && gx <= n && gz >= 1 && gz <= n) {
+          const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(x, z) : (rawY > 38.0);
+          openMask[(gz - 1) * n + (gx - 1)] = isOpen ? 1 : 0;
+          if (!isOpen) anyClosed = true;
+        }
+      }
+    }
 
+    if (!anyClosed) return null;
+
+    for (let iz = 0; iz <= segs; iz++) {
+      const z = z0 + iz * step;
+      const gRow = (iz + 1) * stride;
+      for (let ix = 0; ix <= segs; ix++) {
+        const x = x0 + ix * step;
+        const gIdx = gRow + (ix + 1);
+        const y = hBuf[gIdx];
+        const idx = iz * n + ix;
         const p3 = idx * 3;
+
         pos[p3] = x;
         pos[p3 + 1] = y;
         pos[p3 + 2] = z;
 
         // Нормали потолка пещеры смотрят вниз и внутрь каверны
-        const hL = sampleCeil(x - eps, z);
-        const hR = sampleCeil(x + eps, z);
-        const hD = sampleCeil(x, z - eps);
-        const hU = sampleCeil(x, z + eps);
-        const nx = hR - hL;
-        const ny = -2 * eps;
-        const nz = hU - hD;
+        const hL = hBuf[gIdx - 1];
+        const hR = hBuf[gIdx + 1];
+        const hD = hBuf[gIdx - stride];
+        const hU = hBuf[gIdx + stride];
+        const nx = (hR - hL) * inv2Step;
+        const ny = -1.0;
+        const nz = (hU - hD) * inv2Step;
         const len = Math.hypot(nx, ny, nz) || 1;
         norm[p3] = nx / len;
         norm[p3 + 1] = ny / len;
@@ -175,8 +218,6 @@ window.OC = window.OC || {};
         col[p3 + 2] = _tmpCol.b;
       }
     }
-
-    if (!anyClosed) return null;
 
     const indices = [];
     for (let iz = 0; iz < segs; iz++) {
@@ -368,11 +409,24 @@ window.OC = window.OC || {};
         }
       }
       initialized = true;
+      needsRebuildScan = true;
+      lastScanX = 1e9;
+      lastScanZ = 1e9;
+      lastScanQuality = q.id;
     },
 
     update(camPos) {
       if (!initialized) return;
       const q = OC.Quality.get();
+      if (!needsRebuildScan && lastScanQuality === q.id) {
+        const dx = camPos.x - lastScanX;
+        const dz = camPos.z - lastScanZ;
+        if (dx * dx + dz * dz < 100) return; // < 10 м без смены качества: чанки актуальны
+      }
+      lastScanX = camPos.x;
+      lastScanZ = camPos.z;
+      lastScanQuality = q.id;
+
       const t0 = performance.now();
       const budgetMs = 3.5;
 
@@ -395,13 +449,20 @@ window.OC = window.OC || {};
         }
       });
 
-      if (!candidates.length) return;
+      if (!candidates.length) {
+        needsRebuildScan = false;
+        return;
+      }
+      needsRebuildScan = true;
       candidates.sort((a, b) => a.priority - b.priority);
 
+      let built = 0;
       for (let i = 0; i < candidates.length; i++) {
         createOrUpdateChunk(candidates[i].rec, candidates[i].target);
+        built++;
         if (performance.now() - t0 > budgetMs) break;
       }
+      if (built >= candidates.length) needsRebuildScan = false;
     },
 
     getStats() {
