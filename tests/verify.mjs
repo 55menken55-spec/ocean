@@ -1585,6 +1585,17 @@ for (const sel of ['lab-panel', 'rov-panel']) {
   assert(re.test(tplV5), `panel .${sel} must account for the icon rail height`);
 }
 assert(railsSrc.includes('syncRailMetrics'), 'ui/rails.js must publish measured rail height');
+/* CI: установка Chromium не должна выедать бюджет джоба (15 мин) */
+{
+  const ci = fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  const budgets = [...ci.matchAll(/timeout-minutes:\s*(\d+)/g)].map((m) => Number(m[1]));
+  const jobBudget = Math.min(...budgets);
+  const cap = Number((ci.match(/timeout (\d+) npx playwright install/) || [])[1] || 0);
+  const attempts = Number(((ci.match(/for attempt in 1 (\d+)/) || [])[1]) || 0) + 1;
+  assert(cap > 0, 'ci.yml must cap each Chromium install attempt');
+  assert(cap * attempts + attempts * 20 < jobBudget * 60,
+    `Chromium install budget (${cap}s x ${attempts}) must fit the ${jobBudget}-minute job`);
+}
 /* Панели-окна должны быть выше HUD-хрома, но ниже модалок */
 const panelZ = (tplV5.match(/\.panel\{[^}]*z-index:(\d+)/) || [])[1];
 assert(panelZ, '.panel must declare a z-index');

@@ -76,17 +76,19 @@ jobs:
       - name: Install Playwright & Chromium with system dependencies
         run: |
           npm install --no-save playwright
-          # CDN playwright периодически обрывает соединение и умеет висеть:
-          # ограничиваем каждую попытку таймаутом, чтобы джоб падал быстро.
+          # CDN playwright периодически обрывает соединение и умеет висеть.
+          # Бюджет джоба — 15 мин, из них ~5 оставляем на прогон тестов,
+          # поэтому каждая попытка ограничена 180 с: за это время 100 МБ
+          # либо скачиваются, либо соединение мертво. Две попытки + пауза = ~7 мин.
           for attempt in 1 2; do
-            if timeout 420 npx playwright install --with-deps chromium; then
+            if timeout 180 npx playwright install --with-deps chromium; then
               echo "Playwright/Chromium установлены с попытки $attempt"
               exit 0
             fi
-            echo "Попытка $attempt не удалась (таймаут 420 с), повтор через 20 с"
-            sleep 20
+            echo "Попытка $attempt не удалась (таймаут 180 с), повтор через 15 с"
+            sleep 15
           done
-          echo "::error title=Playwright install failed::Не удалось скачать Chromium с cdn.playwright.dev за 2 попытки"
+          echo "::error title=Playwright install skipped (CDN unreachable)::cdn.playwright.dev не отдал Chromium за 2 попытки по 180 с — это внешняя недоступность CDN, не ошибка кода"
           exit 1
 
       - name: Run Playwright WebGL SwiftShader E2E & FPS Profile
