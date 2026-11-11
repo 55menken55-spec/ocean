@@ -1578,6 +1578,13 @@ const railGroupCount = (tplV5.match(/class="icon-group"/g) || []).length;
 assert(railGroupCount === 4, `rail must expose 4 logical icon groups, found ${railGroupCount}`);
 assert(tplV5.includes('body.modal-open'), 'template.html must hide HUD while a modal is open (body.modal-open)');
 const railsSrc = groupSource('ui/rails');
+assert(tplV5.includes('--rail-bottom'), 'template.html must expose measured rail height as --rail-bottom');
+assert(/\.panel\{[^}]*var\(--rail-bottom\)/.test(tplV5), 'panels must be offset below the icon rail via --rail-bottom');
+for (const sel of ['lab-panel', 'rov-panel']) {
+  const re = new RegExp('\\.' + sel + '\\{[^}]*var\\(--rail-bottom\\)');
+  assert(re.test(tplV5), `panel .${sel} must account for the icon rail height`);
+}
+assert(railsSrc.includes('syncRailMetrics'), 'ui/rails.js must publish measured rail height');
 for (const fn of ['setCollapsed', 'setModalOpen', 'isModalOpen']) {
   assert(railsSrc.includes(fn), `ui/rails.js must expose ${fn}`);
 }

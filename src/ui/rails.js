@@ -27,6 +27,15 @@ window.OC = window.OC || {};
     } catch (e) { /* приватный режим — состояние просто не сохранится */ }
   }
 
+  /* Высота рейла зависит от количества групп, ширины экрана и состояния:
+     сообщаем её CSS-переменной, чтобы панели вставали ровно под иконками. */
+  function syncRailMetrics() {
+    if (!railEl || typeof document === 'undefined' || !document.documentElement) return;
+    const collapsed = isCollapsed();
+    const h = collapsed ? 0 : Math.ceil(railEl.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--rail-bottom', (collapsed ? 0 : h) + 'px');
+  }
+
   function applyCollapsed(collapsed) {
     if (!railEl || !railEl.dataset) return;
     railEl.dataset.collapsed = collapsed ? 'true' : 'false';
@@ -34,6 +43,7 @@ window.OC = window.OC || {};
       toggleEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       toggleEl.title = collapsed ? 'Развернуть панель инструментов (\\)' : 'Свернуть панель инструментов (\\)';
     }
+    syncRailMetrics();
   }
 
   function setCollapsed(v, persist) {
@@ -83,6 +93,13 @@ window.OC = window.OC || {};
       });
     }
 
+    window.addEventListener('resize', syncRailMetrics);
+    window.addEventListener('orientationchange', () => setTimeout(syncRailMetrics, 120));
+    /* Группы переносятся по строкам по-разному в зависимости от ширины */
+    if (typeof ResizeObserver !== 'undefined' && railEl) {
+      try { new ResizeObserver(syncRailMetrics).observe(railEl); } catch (e) { /* старые браузеры */ }
+    }
+
     window.addEventListener('keydown', (e) => {
       if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
       if (e.key === '\\' || e.code === 'Backslash') {
@@ -100,6 +117,7 @@ window.OC = window.OC || {};
     toggle: () => setCollapsed(!isCollapsed()),
     /* Модалки сообщают о себе — открытие/закрытие скрывает и возвращает HUD */
     setModalOpen,
-    isModalOpen
+    isModalOpen,
+    syncRailMetrics
   };
 })(window.OC);

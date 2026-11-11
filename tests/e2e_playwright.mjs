@@ -324,6 +324,38 @@ try {
     assert(modalHud.closed.rail > 0.95 && modalHud.closed.brand > 0.95,
       `HUD не вернулся после закрытия модалки: ${JSON.stringify(modalHud.closed)}`);
 
+    enterStage('panel-under-rail');
+    // «Настройки и зоны» и «Эко-лаборатория» не должны заезжать под рейл иконок
+    const panelHits = [];
+    for (const vp of [{ w: 1280, h: 800 }, { w: 1024, h: 768 }, { w: 844, h: 390 }]) {
+      await mobilePage.setViewportSize({ width: vp.w, height: vp.h });
+      await mobilePage.waitForTimeout(320);
+      for (const panelId of ['panel', 'lab-panel']) {
+        const bad = await mobilePage.evaluate(({ panelId, w, h }) => {
+          const railEl = document.getElementById('topright');
+          const panelEl = document.getElementById(panelId);
+          if (!railEl || !panelEl) return [{ reason: 'missing element' }];
+          const openIt = () => panelEl.classList.remove('closed');
+          // рейл разворачиваем — это самый плотный случай
+          if (window.OC && window.OC.UI && window.OC.UI.Rail) window.OC.UI.Rail.setCollapsed(false, false);
+          openIt();
+          const r = railEl.getBoundingClientRect();
+          const p = panelEl.getBoundingClientRect();
+          const ox = Math.min(r.right, p.right) - Math.max(r.left, p.left);
+          const oy = Math.min(r.bottom, p.bottom) - Math.max(r.top, p.top);
+          const hits = [];
+          if (ox > 2 && oy > 2) hits.push({ kind: 'rail-vs-panel', ox: Math.round(ox), oy: Math.round(oy), railBottom: Math.round(r.bottom), panelTop: Math.round(p.top) });
+          if (p.bottom > h + 2 || p.top < -2) hits.push({ kind: 'panel-offscreen', top: Math.round(p.top), bottom: Math.round(p.bottom) });
+          return hits;
+        }, { panelId, w: vp.w, h: vp.h });
+        if (bad.length) panelHits.push({ viewport: `${vp.w}x${vp.h}`, panel: panelId, hits: bad });
+        await mobilePage.evaluate((id) => document.getElementById(id).classList.add('closed'), panelId);
+      }
+    }
+    await mobilePage.setViewportSize({ width: 844, height: 390 });
+    await mobilePage.waitForTimeout(300);
+    assert.equal(panelHits.length, 0, `Панели перекрываются рейлом: ${JSON.stringify(panelHits)}`);
+
     enterStage('hud-overlap');
     // Ни один элемент HUD не должен наезжать на другой на типовых ширинах
     const overlaps = [];

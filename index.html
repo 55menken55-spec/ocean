@@ -86,10 +86,13 @@
   .icon-btn.on,.icon-btn.open{background:rgba(88,224,255,.2);border-color:rgba(88,224,255,.72);color:#fff}
 
   /* ---------- Боковая панель ---------- */
-  .panel{position:fixed;right:18px;top:72px;z-index:25;width:308px;padding:16px;border-radius:18px;
+  :root{--rail-bottom:0px;--rail-top:18px}
+  /* Панель всегда начинается ниже фактического низа рейла иконок
+     (высоту измеряет ui/rails.js и пишет в --rail-bottom) */
+  .panel{position:fixed;right:18px;top:calc(var(--rail-top) + var(--rail-bottom) + 14px);z-index:25;width:308px;padding:16px;border-radius:18px;
     background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
     box-shadow:0 24px 60px rgba(0,0,0,.48);transition:transform .4s cubic-bezier(.2,.8,.2,1),opacity .3s;
-    max-height:calc(100vh - 104px);overflow-y:auto;scrollbar-width:thin}
+    max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 46px);overflow-y:auto;scrollbar-width:thin}
   .panel.closed{transform:translateX(120%);opacity:0;pointer-events:none}
   .panel h2{margin:0 0 10px;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600}
   .panel .group{margin-bottom:15px;padding-bottom:13px;border-bottom:1px solid rgba(140,225,255,.1)}
@@ -446,7 +449,7 @@
   }
 
   /* ---------- Экологическая лаборатория ---------- */
-  .lab-panel{width:334px;max-height:calc(100vh - 180px)}
+  .lab-panel{width:334px;max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 60px)}
   .lab-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
   .lab-head h2{margin:0}
   .lab-hero{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;
@@ -470,7 +473,7 @@
   input[type=range].lab-range{background:rgba(130,222,255,.22);margin:2px 0 0}
 
   /* ---------- Панель 3D-ROV, CTD и проб ---------- */
-  .rov-panel{width:338px;max-height:calc(100vh - 180px)}
+  .rov-panel{width:338px;max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 60px)}
   .rov-target-box{padding:8px 10px;border-radius:10px;background:rgba(3,16,30,.72);
     border:1px solid rgba(130,222,255,.18);font-size:11px;line-height:1.45;margin-bottom:10px}
   .rov-target-box b{color:var(--ok);display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -505,6 +508,7 @@
     .touch-nav{display:flex}
     /* Компактный HUD планшета: верхние кнопки уходят под сейф-зону, телеметрия сжимается */
     .topright{right:12px;top:calc(10px + env(safe-area-inset-top, 0px));gap:6px;
+      --rail-top:calc(10px + env(safe-area-inset-top, 0px));
       max-width:calc(100vw - 24px);justify-content:flex-end}
     .icon-group{gap:6px}
     .telemetry{bottom:calc(10px + env(safe-area-inset-bottom, 0px));font-size:10px;
@@ -521,7 +525,6 @@
        рейл переносится в два ряда, телеметрия уходит вниз по центру. */
     .icon-rail{max-width:400px}
     .telemetry{top:auto;bottom:14px;left:50%;transform:translateX(-50%);max-width:min(60vw, 560px)}
-    .panel{top:calc(126px + env(safe-area-inset-top, 0px))}
     .brand{max-width:calc(100vw - 460px)}
   }
   @media (max-width:1100px){
@@ -535,11 +538,12 @@
     .brand h1{font-size:13px;letter-spacing:.1em}
     .brand p{font-size:8.5px}
     .topright{right:10px;top:calc(8px + env(safe-area-inset-top, 0px));gap:5px}
+    :root{--rail-top:calc(8px + env(safe-area-inset-top, 0px))}
     .icon-btn{width:38px;height:38px;font-size:14px;border-radius:11px}
     .rail-toggle{width:24px;height:38px}
     .icon-group{padding:2px}
-    .panel{right:10px;top:calc(64px + env(safe-area-inset-top, 0px));width:min(300px, calc(100vw - 20px));
-      max-height:calc(100vh - 120px)}
+    .panel{right:10px;width:min(300px, calc(100vw - 20px));
+      max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 60px)}
     .panel.lab-panel,.panel.rov-panel{left:10px;right:10px;width:auto}
     .status{display:none}
     .telemetry{max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;border-radius:14px}
@@ -571,11 +575,12 @@
   }
   @media (orientation:landscape) and (max-height:560px){
     .brand p,.brand .line{display:none}
-    .panel{top:52px;max-height:calc(100vh - 62px)}
+    .panel{max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 20px)}
     .touch-nav{bottom:10px}
     /* Ландшафт телефона: развёрнутый рейл занимает два ряда сверху,
        поэтому быстрые действия начинаются под ним, а не под кнопкой «›» */
-    .touch-actions{bottom:auto;top:calc(108px + env(safe-area-inset-top, 0px));right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px}
+    .touch-actions{bottom:auto;right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px;
+      top:calc(var(--rail-top) + var(--rail-bottom) + 52px)}
     .telemetry{bottom:8px}
   }
 </style>
@@ -29559,6 +29564,15 @@ window.OC = window.OC || {};
     } catch (e) { /* приватный режим — состояние просто не сохранится */ }
   }
 
+  /* Высота рейла зависит от количества групп, ширины экрана и состояния:
+     сообщаем её CSS-переменной, чтобы панели вставали ровно под иконками. */
+  function syncRailMetrics() {
+    if (!railEl || typeof document === 'undefined' || !document.documentElement) return;
+    const collapsed = isCollapsed();
+    const h = collapsed ? 0 : Math.ceil(railEl.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--rail-bottom', (collapsed ? 0 : h) + 'px');
+  }
+
   function applyCollapsed(collapsed) {
     if (!railEl || !railEl.dataset) return;
     railEl.dataset.collapsed = collapsed ? 'true' : 'false';
@@ -29566,6 +29580,7 @@ window.OC = window.OC || {};
       toggleEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       toggleEl.title = collapsed ? 'Развернуть панель инструментов (\\)' : 'Свернуть панель инструментов (\\)';
     }
+    syncRailMetrics();
   }
 
   function setCollapsed(v, persist) {
@@ -29615,6 +29630,13 @@ window.OC = window.OC || {};
       });
     }
 
+    window.addEventListener('resize', syncRailMetrics);
+    window.addEventListener('orientationchange', () => setTimeout(syncRailMetrics, 120));
+    /* Группы переносятся по строкам по-разному в зависимости от ширины */
+    if (typeof ResizeObserver !== 'undefined' && railEl) {
+      try { new ResizeObserver(syncRailMetrics).observe(railEl); } catch (e) { /* старые браузеры */ }
+    }
+
     window.addEventListener('keydown', (e) => {
       if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
       if (e.key === '\\' || e.code === 'Backslash') {
@@ -29632,7 +29654,8 @@ window.OC = window.OC || {};
     toggle: () => setCollapsed(!isCollapsed()),
     /* Модалки сообщают о себе — открытие/закрытие скрывает и возвращает HUD */
     setModalOpen,
-    isModalOpen
+    isModalOpen,
+    syncRailMetrics
   };
 })(window.OC);
 
