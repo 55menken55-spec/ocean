@@ -9754,15 +9754,17 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
-// === engine/flora_library.js ===
-/* ================= БИБЛИОТЕКА ПРОЦЕДУРНЫХ ПРОТОТИПОВ ФЛОРЫ И БЕНТОСА ================= */
+// === engine/flora/reef_corals.js ===
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: кораллы, губки, иглокожие и мангры рифовых биомов ================= */
+/* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
+   Материалы и реестр прототипов живут в engine/flora_library.js. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
   const T = THREE;
   const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
 
-  /* ---- 1. Ветвистая акропора (Staghorn Acropora) ---- */
   function buildStaghorn(hue, rng) {
     const list = [];
     const baseCol = COL().setHSL(hue, 0.82, 0.36);
@@ -9799,8 +9801,8 @@ window.OC = window.OC || {};
     branch(new T.Vector3(0, 0, 0), new T.Vector3(0, 1, 0), OC.lerp(1.4, 2.0, rng()), OC.lerp(0.34, 0.48, rng()), 0);
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildStaghorn = buildStaghorn;
 
-  /* ---- 2. Столовидный коралл (Acropora hyacinthus) ---- */
   function buildTable(hue, rng) {
     const list = [];
     const discCol = COL().setHSL(hue, 0.74, 0.45);
@@ -9843,8 +9845,8 @@ window.OC = window.OC || {};
     plate(-1.4, 1.8, 0.9, OC.lerp(1.1, 1.6, rng()), 0.2);
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildTable = buildTable;
 
-  /* ---- 3. Мозговой коралл (Platygyra) ---- */
   function buildBrain(hue, rng) {
     const g = new T.SphereGeometry(1, 14, 10);
     const p = g.attributes.position;
@@ -9867,8 +9869,8 @@ window.OC = window.OC || {};
     OC.withSway(g, () => 0);
     return g;
   }
+  BUILDERS.buildBrain = buildBrain;
 
-  /* ---- 4. Массивный коралл Поритес / Бомми (Porites) ---- */
   function buildBommie(hue, rng) {
     const list = [];
     const c1 = COL().setHSL(hue, 0.52, 0.36);
@@ -9896,8 +9898,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildBommie = buildBommie;
 
-  /* ---- 5. Листовой пластинчатый коралл (Montipora / Turbinaria) ---- */
   function buildPlateCoral(hue, rng) {
     const list = [];
     const c1 = COL().setHSL(hue, 0.65, 0.34);
@@ -9926,8 +9928,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildPlateCoral = buildPlateCoral;
 
-  /* ---- 6. Веерная горгонария (Sea Fan) ---- */
   function buildSeaFan(hue, rng) {
     const list = [];
     const R = OC.lerp(2.4, 3.8, rng());
@@ -9974,8 +9976,8 @@ window.OC = window.OC || {};
     list.push(stem);
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildSeaFan = buildSeaFan;
 
-  /* ---- 7. Мягкий коралл Дендронефтия (Soft Coral) ---- */
   function buildSoftCoral(hue, rng) {
     const list = [];
     const stalkCol = COL().setHSL(hue, 0.45, 0.72);
@@ -10007,8 +10009,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildSoftCoral = buildSoftCoral;
 
-  /* ---- 8. Чёрный коралл (Antipatharia) ---- */
   function buildBlackCoral(rng) {
     const list = [];
     const baseC = COL(0x14171f);
@@ -10035,8 +10037,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildBlackCoral = buildBlackCoral;
 
-  /* ---- 9. Трубчатая губка (Aplysina) ---- */
   function buildTubeSponge(hueA, hueB, rng) {
     const list = [];
     const n = 5 + Math.floor(rng() * 4);
@@ -10064,8 +10066,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildTubeSponge = buildTubeSponge;
 
-  /* ---- 10. Гигантская бочковидная губка (Xestospongia) ---- */
   function buildBarrelSponge(hue, rng) {
     const h = OC.lerp(2.2, 3.2, rng());
     const r = OC.lerp(1.0, 1.45, rng());
@@ -10098,8 +10100,8 @@ window.OC = window.OC || {};
     OC.withSway(g, () => 0);
     return g;
   }
+  BUILDERS.buildBarrelSponge = buildBarrelSponge;
 
-  /* ---- 11. Актиния (тело + колышущиеся щупальца) ---- */
   function buildAnemone(hueB, hueT, rng) {
     const list = [];
     const baseCol = COL().setHSL(hueB, 0.52, 0.34);
@@ -10132,8 +10134,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildAnemone = buildAnemone;
 
-  /* ---- 12. Гигантская тридакна (Tridacna gigas) ---- */
   function buildGiantClam(mantleHue, rng) {
     const list = [];
     const shellCol = COL(0xd5ccb8);
@@ -10179,102 +10181,8 @@ window.OC = window.OC || {};
     list.push(mantle);
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildGiantClam = buildGiantClam;
 
-  /* ---- 13. Морская трава (Seagrass patch) ---- */
-  function buildSeagrass(hue, rng) {
-    const list = [];
-    const n = 26;
-    const c1 = COL().setHSL(hue, 0.62, 0.18);
-    const c2 = COL().setHSL(hue + 0.04, 0.78, 0.42);
-    for (let i = 0; i < n; i++) {
-      const a = rng() * 6.28;
-      const rr = Math.sqrt(rng()) * 3.8;
-      const h = OC.lerp(1.4, 3.2, rng());
-      const w = OC.lerp(0.08, 0.15, rng());
-      const segs = 4;
-      const pos = [], col = [], sw = [];
-      const bend = (rng() - 0.5) * 0.8;
-      for (let s = 0; s < segs; s++) {
-        const t0 = s / segs, t1 = (s + 1) / segs;
-        const y0 = h * t0, y1 = h * t1;
-        const x0 = bend * t0 * t0 * h * 0.22, x1 = bend * t1 * t1 * h * 0.22;
-        const w0 = w * (1 - t0 * 0.75), w1 = w * (1 - t1 * 0.75);
-        const quad = [
-          [x0 - w0, y0], [x0 + w0, y0], [x1 - w1, y1],
-          [x0 + w0, y0], [x1 + w1, y1], [x1 - w1, y1]
-        ];
-        for (const q of quad) {
-          pos.push(q[0], q[1], 0);
-          const t = q[1] / h;
-          const c = c1.clone().lerp(c2, t);
-          col.push(c.r, c.g, c.b);
-          sw.push(Math.pow(t, 1.55) * 0.65);
-        }
-      }
-      const g = new T.BufferGeometry();
-      g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
-      g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
-      g.setAttribute('aSway', new T.Float32BufferAttribute(sw, 1));
-      g.computeVertexNormals();
-      OC.xform(g, {
-        p: [Math.cos(a) * rr, 0, Math.sin(a) * rr],
-        r: [(rng() - 0.5) * 0.24, rng() * 6.28, (rng() - 0.5) * 0.24]
-      });
-      list.push(g);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 14. Ламинария / Саргассум (Kelp cluster) ---- */
-  function buildKelp(hue, rng) {
-    const list = [];
-    const nStrands = 3;
-    const c1 = COL().setHSL(hue, 0.6, 0.14);
-    const c2 = COL().setHSL(hue + 0.05, 0.8, 0.36);
-
-    for (let k = 0; k < nStrands; k++) {
-      const H = OC.lerp(9, 16, rng());
-      const segs = 10;
-      const wp = rng() * 6.28;
-      const bw = OC.lerp(0.45, 0.75, rng());
-      const pos = [], col = [], sw = [];
-      for (let s = 0; s < segs; s++) {
-        const t0 = s / segs, t1 = (s + 1) / segs;
-        const y0 = H * t0, y1 = H * t1;
-        const cu0 = Math.sin(t0 * 2.5 + wp) * t0 * 1.2;
-        const cu1 = Math.sin(t1 * 2.5 + wp) * t1 * 1.2;
-        const w0 = bw * (0.35 + 0.85 * Math.sin(t0 * Math.PI * 0.88));
-        const w1 = bw * (0.35 + 0.85 * Math.sin(t1 * Math.PI * 0.88));
-        const tw0 = Math.sin(t0 * 4.5 + wp) * 0.45;
-        const tw1 = Math.sin(t1 * 4.5 + wp) * 0.45;
-        const quad = [
-          [cu0 - w0 * Math.cos(tw0), y0, w0 * Math.sin(tw0)],
-          [cu0 + w0 * Math.cos(tw0), y0, -w0 * Math.sin(tw0)],
-          [cu1 - w1 * Math.cos(tw1), y1, w1 * Math.sin(tw1)],
-          [cu0 + w0 * Math.cos(tw0), y0, -w0 * Math.sin(tw0)],
-          [cu1 + w1 * Math.cos(tw1), y1, -w1 * Math.sin(tw1)],
-          [cu1 - w1 * Math.cos(tw1), y1, w1 * Math.sin(tw1)]
-        ];
-        for (const q of quad) {
-          pos.push(q[0], q[1], q[2]);
-          const t = q[1] / H;
-          const c = c1.clone().lerp(c2, Math.pow(t, 0.8));
-          col.push(c.r, c.g, c.b);
-          sw.push(Math.pow(t, 1.45));
-        }
-      }
-      const g = new T.BufferGeometry();
-      g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
-      g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
-      g.setAttribute('aSway', new T.Float32BufferAttribute(sw, 1));
-      g.computeVertexNormals();
-      OC.xform(g, { p: [(rng() - 0.5) * 1.6, 0, (rng() - 0.5) * 1.6], r: [0, rng() * 6.28, 0] });
-      list.push(g);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 15. Красные мангры (Rhizophora — корни в воде + крона над поверхностью) ---- */
   function buildMangrove(rng) {
     const list = [];
     const barkC = COL(0x5a4232);
@@ -10324,8 +10232,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildMangrove = buildMangrove;
 
-  /* ---- 16. Морской ёж (Diadema) ---- */
   function buildUrchin() {
     const list = [];
     const body = new T.SphereGeometry(0.48, 9, 7);
@@ -10349,8 +10257,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildUrchin = buildUrchin;
 
-  /* ---- 17. Звезда Линкия (Blue Starfish) и Терновый венец (COTS) ---- */
   function buildStarfish(arms, hue, spiky) {
     const list = [];
     const c1 = COL().setHSL(hue, 0.86, 0.42);
@@ -10376,8 +10284,8 @@ window.OC = window.OC || {};
     merged.translate(0, 0.08, 0);
     return merged;
   }
+  BUILDERS.buildStarfish = buildStarfish;
 
-  /* ---- 18. Раковина Тритонов рог (Charonia tritonis) ---- */
   function buildTritonShell() {
     const pts = [];
     for (let i = 0; i <= 54; i++) {
@@ -10396,8 +10304,8 @@ window.OC = window.OC || {};
     OC.xform(g, { r: [-Math.PI / 2, 0, 0], p: [0, 0.12, 0] });
     return g;
   }
+  BUILDERS.buildTritonShell = buildTritonShell;
 
-  /* ---- 19. Корковый коралл и известковый рифовый подлесок (Montipora / Porolithon) ---- */
   function buildCrustCoral(hue, rng) {
     const list = [];
     const c1 = COL().setHSL(hue, 0.56, 0.36);
@@ -10430,8 +10338,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildCrustCoral = buildCrustCoral;
 
-  /* ---- 20. Морская лилия-криноидея (Comanthina schlegeli) ---- */
   function buildCrinoid(hue, rng) {
     const list = [];
     const c1 = COL().setHSL(hue, 0.78, 0.42);
@@ -10475,8 +10383,240 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildCrinoid = buildCrinoid;
 
-  /* ---- 21. Кокосовая пальма и панданус кораллового островка (Sand Cay) ---- */
+  function buildWhipCoral(hue, rng) {
+    const list = [];
+    const baseCol = COL().setHSL(hue, 0.85, 0.42);
+    const tipCol = COL().setHSL((hue + 0.08) % 1, 0.95, 0.68);
+    const nWhips = 3;
+    for (let w = 0; w < nWhips; w++) {
+      const ox = (w - 1) * 0.28 + (rng() - 0.5) * 0.14;
+      const oz = (rng() - 0.5) * 0.28;
+      const h = OC.lerp(2.6, 4.4, rng());
+      const pts = [];
+      const turns = 2.6 + rng() * 1.4;
+      const ph = rng() * 6.28;
+      for (let k = 0; k <= 16; k++) {
+        const t = k / 16;
+        const rad = 0.08 + t * 0.36;
+        pts.push(new T.Vector3(
+          ox + Math.cos(t * turns * Math.PI * 2 + ph) * rad,
+          t * h,
+          oz + Math.sin(t * turns * Math.PI * 2 + ph) * rad
+        ));
+      }
+      const whip = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 22, 0.048, 5, false);
+      OC.geoPrep(whip);
+      OC.paint(whip, (x, y, z, c) => c.copy(baseCol).lerp(tipCol, OC.clamp(y / h, 0, 1)));
+      OC.withSway(whip, (x, y) => Math.pow(OC.clamp(y / h, 0, 1), 1.4) * 0.72);
+      list.push(whip);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildWhipCoral = buildWhipCoral;
+
+  function buildGoldSeaFan(rng) {
+    const list = [];
+    const cStem = COL(0xb87212);
+    const cFan = COL(0xf4ba2c);
+    const stem = new T.CylinderGeometry(0.08, 0.14, 0.65, 6);
+    OC.geoPrep(stem);
+    OC.paint(stem, cStem);
+    OC.withSway(stem, () => 0);
+    OC.xform(stem, { p: [0, 0.32, 0] });
+    list.push(stem);
+
+    const nRibs = 13;
+    for (let i = 0; i < nRibs; i++) {
+      const u = (i / (nRibs - 1)) * 2 - 1;
+      const ang = u * 1.05;
+      const len = OC.lerp(2.1, 3.0, Math.cos(u * 1.1)) * OC.lerp(0.9, 1.12, rng());
+      const rib = new T.CylinderGeometry(0.025, 0.055, len, 4);
+      OC.geoPrep(rib);
+      rib.translate(0, len * 0.5, 0);
+      OC.paint(rib, (x, y, z, c) => c.copy(cStem).lerp(cFan, OC.clamp(y / 2.8, 0, 1)));
+      OC.withSway(rib, (x, y) => Math.pow(OC.clamp(y / 3.0, 0, 1), 1.2) * 0.45);
+      OC.xform(rib, { r: [(rng() - 0.5) * 0.08, 0, -ang], p: [0, 0.55, 0] });
+      list.push(rib);
+    }
+    for (let ring = 1; ring <= 4; ring++) {
+      const r = ring * 0.58;
+      const arc = new T.TorusGeometry(r, 0.022, 4, 14, Math.PI * 0.78);
+      OC.geoPrep(arc);
+      OC.paint(arc, cFan);
+      OC.withSway(arc, () => Math.pow(ring / 4, 1.2) * 0.42);
+      OC.xform(arc, { r: [0, 0, Math.PI * 0.11], p: [0, 0.55, 0] });
+      list.push(arc);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildGoldSeaFan = buildGoldSeaFan;
+
+  function buildTubastraeaCoral(rng) {
+    const list = [];
+    const cBase = COL(0x7c2a12);
+    const cOrange = COL(0xf46818);
+    const cGold = COL(0xffc938);
+
+    const mound = OC.geoPrep(new T.SphereGeometry(0.42, 8, 6));
+    mound.scale(1.15, 0.62, 1.15);
+    OC.paint(mound, cBase);
+    OC.xform(mound, { p: [0, 0.14, 0] });
+    OC.withSway(mound, () => 0);
+    list.push(mound);
+
+    const nCups = 9;
+    for (let i = 0; i < nCups; i++) {
+      const a = (i / nCups) * Math.PI * 2 + rng() * 0.4;
+      const r = i === 0 ? 0.04 : OC.lerp(0.18, 0.36, rng());
+      const cupH = OC.lerp(0.18, 0.34, rng());
+      const cup = OC.geoPrep(new T.CylinderGeometry(0.11, 0.055, cupH, 7));
+      OC.paint(cup, (x, y, z, col) => {
+        const u = OC.clamp((y + cupH * 0.5) / cupH, 0, 1);
+        col.copy(cBase).lerp(cOrange, OC.smoothstep(0.15, 0.72, u)).lerp(cGold, OC.smoothstep(0.76, 1.0, u));
+      });
+      const tilt = i === 0 ? 0 : 0.48;
+      OC.xform(cup, { r: [Math.sin(a) * tilt, 0, -Math.cos(a) * tilt], p: [Math.cos(a) * r, 0.28, Math.sin(a) * r] });
+      OC.withSway(cup, () => 0);
+      list.push(cup);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildTubastraeaCoral = buildTubastraeaCoral;
+
+  function buildGalapagosBarnacle(rng) {
+    const list = [];
+    const cShell = COL(0xdfd3c8);
+    const cRidge = COL(0x9b5a68);
+    const cDark = COL(0x3a2a30);
+
+    const nShells = 6;
+    for (let i = 0; i < nShells; i++) {
+      const a = i === 0 ? 0 : (i / (nShells - 1)) * Math.PI * 2 + rng() * 0.35;
+      const dist = i === 0 ? 0 : OC.lerp(0.24, 0.42, rng());
+      const h = i === 0 ? OC.lerp(0.55, 0.82, rng()) : OC.lerp(0.28, 0.52, rng());
+      const rB = i === 0 ? 0.28 : OC.lerp(0.14, 0.22, rng());
+      const cone = OC.geoPrep(new T.CylinderGeometry(rB * 0.46, rB, h, 7));
+      OC.paint(cone, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        const rib = Math.sin(Math.atan2(z, x) * 6.0);
+        col.copy(cShell).lerp(cRidge, rib > 0.2 ? 0.55 : 0.15).lerp(cDark, u > 0.86 ? 0.75 : 0);
+      });
+      OC.xform(cone, { r: [(rng() - 0.5) * 0.22, rng() * 2, (rng() - 0.5) * 0.22], p: [Math.cos(a) * dist, h * 0.44, Math.sin(a) * dist] });
+      OC.withSway(cone, () => 0);
+      list.push(cone);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildGalapagosBarnacle = buildGalapagosBarnacle;
+})(window.OC);
+
+// === engine/flora/temperate_kelp.js ===
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: ламинария, морская трава и умеренные мелководья ================= */
+/* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
+   Материалы и реестр прототипов живут в engine/flora_library.js. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
+
+  function buildSeagrass(hue, rng) {
+    const list = [];
+    const n = 26;
+    const c1 = COL().setHSL(hue, 0.62, 0.18);
+    const c2 = COL().setHSL(hue + 0.04, 0.78, 0.42);
+    for (let i = 0; i < n; i++) {
+      const a = rng() * 6.28;
+      const rr = Math.sqrt(rng()) * 3.8;
+      const h = OC.lerp(1.4, 3.2, rng());
+      const w = OC.lerp(0.08, 0.15, rng());
+      const segs = 4;
+      const pos = [], col = [], sw = [];
+      const bend = (rng() - 0.5) * 0.8;
+      for (let s = 0; s < segs; s++) {
+        const t0 = s / segs, t1 = (s + 1) / segs;
+        const y0 = h * t0, y1 = h * t1;
+        const x0 = bend * t0 * t0 * h * 0.22, x1 = bend * t1 * t1 * h * 0.22;
+        const w0 = w * (1 - t0 * 0.75), w1 = w * (1 - t1 * 0.75);
+        const quad = [
+          [x0 - w0, y0], [x0 + w0, y0], [x1 - w1, y1],
+          [x0 + w0, y0], [x1 + w1, y1], [x1 - w1, y1]
+        ];
+        for (const q of quad) {
+          pos.push(q[0], q[1], 0);
+          const t = q[1] / h;
+          const c = c1.clone().lerp(c2, t);
+          col.push(c.r, c.g, c.b);
+          sw.push(Math.pow(t, 1.55) * 0.65);
+        }
+      }
+      const g = new T.BufferGeometry();
+      g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+      g.setAttribute('aSway', new T.Float32BufferAttribute(sw, 1));
+      g.computeVertexNormals();
+      OC.xform(g, {
+        p: [Math.cos(a) * rr, 0, Math.sin(a) * rr],
+        r: [(rng() - 0.5) * 0.24, rng() * 6.28, (rng() - 0.5) * 0.24]
+      });
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildSeagrass = buildSeagrass;
+
+  function buildKelp(hue, rng) {
+    const list = [];
+    const nStrands = 3;
+    const c1 = COL().setHSL(hue, 0.6, 0.14);
+    const c2 = COL().setHSL(hue + 0.05, 0.8, 0.36);
+
+    for (let k = 0; k < nStrands; k++) {
+      const H = OC.lerp(9, 16, rng());
+      const segs = 10;
+      const wp = rng() * 6.28;
+      const bw = OC.lerp(0.45, 0.75, rng());
+      const pos = [], col = [], sw = [];
+      for (let s = 0; s < segs; s++) {
+        const t0 = s / segs, t1 = (s + 1) / segs;
+        const y0 = H * t0, y1 = H * t1;
+        const cu0 = Math.sin(t0 * 2.5 + wp) * t0 * 1.2;
+        const cu1 = Math.sin(t1 * 2.5 + wp) * t1 * 1.2;
+        const w0 = bw * (0.35 + 0.85 * Math.sin(t0 * Math.PI * 0.88));
+        const w1 = bw * (0.35 + 0.85 * Math.sin(t1 * Math.PI * 0.88));
+        const tw0 = Math.sin(t0 * 4.5 + wp) * 0.45;
+        const tw1 = Math.sin(t1 * 4.5 + wp) * 0.45;
+        const quad = [
+          [cu0 - w0 * Math.cos(tw0), y0, w0 * Math.sin(tw0)],
+          [cu0 + w0 * Math.cos(tw0), y0, -w0 * Math.sin(tw0)],
+          [cu1 - w1 * Math.cos(tw1), y1, w1 * Math.sin(tw1)],
+          [cu0 + w0 * Math.cos(tw0), y0, -w0 * Math.sin(tw0)],
+          [cu1 + w1 * Math.cos(tw1), y1, -w1 * Math.sin(tw1)],
+          [cu1 - w1 * Math.cos(tw1), y1, w1 * Math.sin(tw1)]
+        ];
+        for (const q of quad) {
+          pos.push(q[0], q[1], q[2]);
+          const t = q[1] / H;
+          const c = c1.clone().lerp(c2, Math.pow(t, 0.8));
+          col.push(c.r, c.g, c.b);
+          sw.push(Math.pow(t, 1.45));
+        }
+      }
+      const g = new T.BufferGeometry();
+      g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+      g.setAttribute('aSway', new T.Float32BufferAttribute(sw, 1));
+      g.computeVertexNormals();
+      OC.xform(g, { p: [(rng() - 0.5) * 1.6, 0, (rng() - 0.5) * 1.6], r: [0, rng() * 6.28, 0] });
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildKelp = buildKelp;
+
   function buildIslandPalm(rng) {
     const list = [];
     const barkA = COL(0x70563f);
@@ -10549,8 +10689,8 @@ window.OC = window.OC || {};
 
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildIslandPalm = buildIslandPalm;
 
-  /* ---- 22. Гигантская калифорнийская ламинария (Macrocystis pyrifera) ---- */
   function buildGiantKelp(hueShift, rng) {
     const list = [];
     const cHold = COL(0x5a4c28);
@@ -10618,8 +10758,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildGiantKelp = buildGiantKelp;
 
-  /* ---- 23. Фиолетовый морской ёж и охристая звезда Монтерея ---- */
   function buildPurpleUrchin() {
     const list = [];
     const body = new T.SphereGeometry(0.42, 8, 6);
@@ -10643,8 +10783,53 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildPurpleUrchin = buildPurpleUrchin;
 
-  /* ---- 24. Гидротермальная сульфидная труба («чёрный курильщик») ---- */
+  function buildUlvaTurf(rng) {
+    const list = [];
+    const cGreen = COL(0x3cb846);
+    const cBright = COL(0x76e054);
+    const cRedTurf = COL(0x8c243a);
+    const isRed = rng() < 0.28;
+
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + rng() * 0.4;
+      const dist = OC.lerp(0.06, 0.36, rng());
+      const bw = OC.lerp(0.24, 0.42, rng());
+      const bh = OC.lerp(0.38, 0.72, rng());
+      const leaf = OC.geoPrep(new T.PlaneGeometry(bw, bh, 3, 4));
+      const lp = leaf.attributes.position;
+      for (let k = 0; k < lp.count; k++) {
+        const lx = lp.getX(k), ly = lp.getY(k);
+        const ruffle = Math.sin(ly * 7.5 + i * 1.3) * 0.08 + Math.cos(lx * 8.0) * 0.05;
+        lp.setZ(k, ruffle);
+      }
+      leaf.computeVertexNormals();
+      OC.paint(leaf, (x, y, z, col) => {
+        const u = OC.clamp((y + bh * 0.5) / bh, 0, 1);
+        if (isRed) col.copy(cRedTurf).offsetHSL(0, 0, u * 0.14);
+        else col.copy(cGreen).lerp(cBright, u);
+      });
+      OC.xform(leaf, { r: [0.32 * (rng() - 0.3), a, 0.25], p: [Math.cos(a) * dist, bh * 0.44, Math.sin(a) * dist] });
+      OC.withSway(leaf, (x, y) => Math.max(0, y) * 0.65);
+      list.push(leaf);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildUlvaTurf = buildUlvaTurf;
+})(window.OC);
+
+// === engine/flora/vents_abyss.js ===
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: гидротермальные курильщики, холодные сипы и абиссаль ================= */
+/* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
+   Материалы и реестр прототипов живут в engine/flora_library.js. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
+
   function buildVentChimney(rng) {
     const list = [];
     const ironDark = COL(0x1e2024);
@@ -10698,8 +10883,8 @@ window.OC = window.OC || {};
 
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildVentChimney = buildVentChimney;
 
-  /* ---- 25. Гигантские трубчатые черви рифтии (Riftia pachyptila) ---- */
   function buildRiftiaWorms(rng) {
     const list = [];
     const tubeA = COL(0xd9d5c8);
@@ -10736,8 +10921,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildRiftiaWorms = buildRiftiaWorms;
 
-  /* ---- 26. Колония глубоководных мидий Bathymodiolus ---- */
   function buildVentMussels(rng) {
     const list = [];
     const shellA = COL(0x7c5522);
@@ -10756,8 +10941,196 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildVentMussels = buildVentMussels;
 
-  /* ---- 27. Арктический паковый лёд и подлёдный ледовый киль (ставится на y = 0) ---- */
+  function buildOsedaxPlume(rng) {
+    const list = [];
+    const n = 9;
+    const cStem = COL(0xe8ded2);
+    const cPlume = COL(0xe23864);
+    const cTip = COL(0xff84a8);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283 + OC.lerp(-0.2, 0.2, rng());
+      const dist = OC.lerp(0.06, 0.34, rng());
+      const h = OC.lerp(0.32, 0.68, rng());
+      const tilt = OC.lerp(0.18, 0.45, rng());
+      const tube = OC.geoPrep(new T.CylinderGeometry(0.022, 0.032, h, 5));
+      OC.paint(tube, cStem);
+      OC.xform(tube, {
+        r: [Math.sin(a) * tilt, 0, Math.cos(a) * tilt],
+        p: [Math.cos(a) * dist, h * 0.45, Math.sin(a) * dist]
+      });
+      OC.withSway(tube, (x, y) => Math.max(0, y) * 0.4);
+      list.push(tube);
+
+      // Перистый малиновый плюмаж на вершине
+      const plume = OC.geoPrep(new T.ConeGeometry(0.085, 0.24, 6));
+      OC.paint(plume, (px, py, pz, col) => col.copy(py > 0.04 ? cTip : cPlume));
+      OC.xform(plume, {
+        r: [Math.PI + Math.sin(a) * tilt, 0, Math.cos(a) * tilt],
+        p: [Math.cos(a) * (dist + tilt * 0.16), h + 0.06, Math.sin(a) * (dist + tilt * 0.16)]
+      });
+      OC.withSway(plume, (x, y) => Math.max(0, y) * 0.72);
+      list.push(plume);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildOsedaxPlume = buildOsedaxPlume;
+
+  function buildHadalSponge(rng) {
+    const list = [];
+    const h = OC.lerp(1.4, 2.2, rng());
+    const bendX = OC.lerp(-0.22, 0.22, rng());
+    const bendZ = OC.lerp(-0.22, 0.22, rng());
+    const cStalk = COL(0xb9cfd8);
+    const cCup = COL(0xe2f0f5);
+    const cRim = COL(0x88b4cc);
+
+    const stalk = OC.geoPrep(new T.CylinderGeometry(0.038, 0.065, h, 7, 5));
+    const sp = stalk.attributes.position;
+    for (let i = 0; i < sp.count; i++) {
+      const y = sp.getY(i);
+      const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+      sp.setX(i, sp.getX(i) + bendX * u * u);
+      sp.setZ(i, sp.getZ(i) + bendZ * u * u);
+    }
+    stalk.computeVertexNormals();
+    OC.paint(stalk, (x, y, z, col) => col.copy(cStalk));
+    OC.xform(stalk, { p: [0, h * 0.5, 0] });
+    OC.withSway(stalk, (x, y) => Math.max(0, y) * 0.32);
+    list.push(stalk);
+
+    // Ажурный вогнутый диск-фильтратор на конце стебля
+    const cap = OC.geoPrep(new T.ConeGeometry(OC.lerp(0.38, 0.56, rng()), 0.28, 12, 1, true));
+    cap.rotateX(Math.PI);
+    OC.paint(cap, (x, y, z, col) => col.copy(y > 0.02 ? cRim : cCup));
+    OC.xform(cap, { r: [bendZ * 0.85, 0, -bendX * 0.85], p: [bendX, h + 0.08, bendZ] });
+    OC.withSway(cap, (x, y) => Math.max(0, y) * 0.36);
+    list.push(cap);
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildHadalSponge = buildHadalSponge;
+
+  function buildSerpentiniteVent(rng) {
+    const list = [];
+    const cBase = COL(0x4b5c64);
+    const cBody = COL(0xb8c8cc);
+    const cCrest = COL(0xe4eeef);
+    const spires = 3 + (rng() > 0.45 ? 1 : 0);
+    for (let i = 0; i < spires; i++) {
+      const h = i === 0 ? OC.lerp(4.4, 7.2, rng()) : OC.lerp(2.2, 4.0, rng());
+      const rBot = i === 0 ? OC.lerp(0.9, 1.35, rng()) : OC.lerp(0.45, 0.78, rng());
+      const rTop = rBot * 0.34;
+      const ox = i === 0 ? 0 : Math.cos(i * 2.2) * OC.lerp(0.7, 1.35, rng());
+      const oz = i === 0 ? 0 : Math.sin(i * 2.2) * OC.lerp(0.7, 1.35, rng());
+      const g = OC.geoPrep(new T.CylinderGeometry(rTop, rBot, h, 9, 5));
+      const p = g.attributes.position;
+      for (let v = 0; v < p.count; v++) {
+        const vx = p.getX(v), vy = p.getY(v), vz = p.getZ(v);
+        const shelf = 1.0 + 0.24 * Math.sin(vy * 3.1 + i) + 0.14 * Math.cos(vx * 3.4 - vz * 2.8);
+        p.setXYZ(v, vx * shelf, vy, vz * shelf);
+      }
+      g.computeVertexNormals();
+      OC.paint(g, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBase).lerp(cBody, OC.smoothstep(0.1, 0.6, u)).lerp(cCrest, OC.smoothstep(0.7, 1.0, u));
+      });
+      OC.xform(g, { p: [ox, h * 0.46, oz] });
+      OC.withSway(g, () => 0);
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildSerpentiniteVent = buildSerpentiniteVent;
+
+  function buildMethaneHydrate(rng) {
+    const list = [];
+    const cBase = COL(0x524c48);
+    const cIce = COL(0xf4cf76);
+    const cTip = COL(0xfff1c4);
+    const mound = OC.geoPrep(new T.DodecahedronGeometry(0.95, 1));
+    mound.scale(1.25, 0.55, 1.15);
+    OC.paint(mound, (x, y, z, col) => col.copy(y > 0.12 ? cIce : cBase));
+    OC.xform(mound, { p: [0, 0.25, 0] });
+    OC.withSway(mound, () => 0);
+    list.push(mound);
+
+    const nShards = 6;
+    for (let i = 0; i < nShards; i++) {
+      const a = (i / nShards) * 6.283 + rng() * 0.45;
+      const dist = OC.lerp(0.18, 0.68, rng());
+      const h = OC.lerp(0.75, 1.55, rng());
+      const r = OC.lerp(0.16, 0.34, rng());
+      const sh = OC.geoPrep(new T.CylinderGeometry(r * 0.28, r, h, 6, 1));
+      OC.paint(sh, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cIce).lerp(cTip, OC.smoothstep(0.35, 1.0, u));
+      });
+      OC.xform(sh, {
+        r: [Math.sin(a) * OC.lerp(0.18, 0.48, rng()), rng() * 1.4, Math.cos(a) * OC.lerp(0.18, 0.48, rng())],
+        p: [Math.cos(a) * dist, h * 0.45 + 0.18, Math.sin(a) * dist]
+      });
+      OC.withSway(sh, () => 0);
+      list.push(sh);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildMethaneHydrate = buildMethaneHydrate;
+
+  function buildColdTubeworm(rng) {
+    const list = [];
+    const n = 10;
+    const cBase = COL(0x4a4236);
+    const cTube = COL(0xc4b08e);
+    const cPlume = COL(0xd92658);
+    const cTip = COL(0xff8eb4);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283 + OC.lerp(-0.25, 0.25, rng());
+      const dist = OC.lerp(0.06, 0.48, rng());
+      const h = OC.lerp(1.1, 2.35, rng());
+      const bend = OC.lerp(0.24, 0.56, rng());
+      const seg = OC.geoPrep(new T.CylinderGeometry(0.036, 0.055, h, 6, 5));
+      const sp = seg.attributes.position;
+      for (let v = 0; v < sp.count; v++) {
+        const vx = sp.getX(v), vy = sp.getY(v), vz = sp.getZ(v);
+        const u = OC.clamp((vy + h * 0.5) / h, 0, 1);
+        const curve = Math.sin(u * 2.4 + i) * 0.14 + u * u * bend;
+        sp.setXYZ(v, vx + Math.cos(a) * curve, vy, vz + Math.sin(a) * curve);
+      }
+      seg.computeVertexNormals();
+      OC.paint(seg, (x, y, z, col) => {
+        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
+        col.copy(cBase).lerp(cTube, OC.smoothstep(0.08, 0.72, u));
+      });
+      OC.xform(seg, { p: [Math.cos(a) * dist * 0.4, h * 0.5, Math.sin(a) * dist * 0.4] });
+      OC.withSway(seg, (x, y) => Math.max(0, y) * 0.24);
+      list.push(seg);
+
+      const plume = OC.geoPrep(new T.ConeGeometry(0.095, 0.28, 7));
+      OC.paint(plume, (x, y, z, col) => col.copy(y > 0.04 ? cTip : cPlume));
+      OC.xform(plume, {
+        r: [Math.PI + Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35],
+        p: [Math.cos(a) * (dist * 0.4 + bend), h + 0.06, Math.sin(a) * (dist * 0.4 + bend)]
+      });
+      OC.withSway(plume, (x, y) => Math.max(0, y) * 0.35);
+      list.push(plume);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildColdTubeworm = buildColdTubeworm;
+})(window.OC);
+
+// === engine/flora/arctic_ice.js ===
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: арктический лёд, брайниклы и полярный бентос ================= */
+/* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
+   Материалы и реестр прототипов живут в engine/flora_library.js. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
+
   function buildIceFloe(rng) {
     const list = [];
     const snowCol = COL(0xf0f7fc);
@@ -10802,8 +11175,8 @@ window.OC = window.OC || {};
 
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildIceFloe = buildIceFloe;
 
-  /* ---- 28. Арктический айсберг (надводная башня + глубокий сапфировый киль, y = 0) ---- */
   function buildIceberg(rng) {
     const list = [];
     const snowCol = COL(0xf4f9ff);
@@ -10855,8 +11228,8 @@ window.OC = window.OC || {};
 
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildIceberg = buildIceberg;
 
-  /* ---- 29. Брайникл («ледяной палец смерти» под молодым паковым льдом) ---- */
   function buildBrinicle(rng) {
     const list = [];
     const iceTip = COL(0xeaf8ff);
@@ -10889,8 +11262,8 @@ window.OC = window.OC || {};
 
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildBrinicle = buildBrinicle;
 
-  /* ---- 30. Сахарная арктическая ламинария (Saccharina latissima) ---- */
   function buildArcticKelp(rng) {
     const list = [];
     const cHold = COL(0x3d3320);
@@ -10926,8 +11299,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildArcticKelp = buildArcticKelp;
 
-  /* ---- 31. Арктический мягкий коралл «морская клубника» (Gersemia rubiformis) ---- */
   function buildArcticSoftCoral(rng) {
     const list = [];
     const stalkCol = COL(0xb8465a);
@@ -10954,8 +11327,20 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildArcticSoftCoral = buildArcticSoftCoral;
+})(window.OC);
 
-  /* ---- 36. Золотистые саргассовы водоросли (Sargassum) ---- */
+// === engine/flora/wreck_tropic.js ===
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: затонувший корабль и саргассовые заросли атолла ================= */
+/* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
+   Материалы и реестр прототипов живут в engine/flora_library.js. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
+
   function buildSargassum(rng) {
     const list = [];
     const stemCol = COL(0x5d4416);
@@ -11016,8 +11401,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildSargassum = buildSargassum;
 
-  /* ---- 37. Кованый адмиралтейский якорь и цепь крушения ---- */
   function buildWreckAnchor(rng) {
     const list = [];
     const ironCol = COL(0x3a2a24);
@@ -11078,252 +11463,20 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildWreckAnchor = buildWreckAnchor;
+})(window.OC);
 
-  /* ---- 38. Спиральный хлыстовой коралл (Cirrhipathes) ---- */
-  function buildWhipCoral(hue, rng) {
-    const list = [];
-    const baseCol = COL().setHSL(hue, 0.85, 0.42);
-    const tipCol = COL().setHSL((hue + 0.08) % 1, 0.95, 0.68);
-    const nWhips = 3;
-    for (let w = 0; w < nWhips; w++) {
-      const ox = (w - 1) * 0.28 + (rng() - 0.5) * 0.14;
-      const oz = (rng() - 0.5) * 0.28;
-      const h = OC.lerp(2.6, 4.4, rng());
-      const pts = [];
-      const turns = 2.6 + rng() * 1.4;
-      const ph = rng() * 6.28;
-      for (let k = 0; k <= 16; k++) {
-        const t = k / 16;
-        const rad = 0.08 + t * 0.36;
-        pts.push(new T.Vector3(
-          ox + Math.cos(t * turns * Math.PI * 2 + ph) * rad,
-          t * h,
-          oz + Math.sin(t * turns * Math.PI * 2 + ph) * rad
-        ));
-      }
-      const whip = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 22, 0.048, 5, false);
-      OC.geoPrep(whip);
-      OC.paint(whip, (x, y, z, c) => c.copy(baseCol).lerp(tipCol, OC.clamp(y / h, 0, 1)));
-      OC.withSway(whip, (x, y) => Math.pow(OC.clamp(y / h, 0, 1), 1.4) * 0.72);
-      list.push(whip);
-    }
-    return OC.mergeGeometries(list);
-  }
+// === engine/flora/caves_brine.js ===
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: карст, сеноты и соляные шпили ================= */
+/* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
+   Материалы и реестр прототипов живут в engine/flora_library.js. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
 
-  /* ---- 39. Золотой веер крушений (Annella mollis) ---- */
-  function buildGoldSeaFan(rng) {
-    const list = [];
-    const cStem = COL(0xb87212);
-    const cFan = COL(0xf4ba2c);
-    const stem = new T.CylinderGeometry(0.08, 0.14, 0.65, 6);
-    OC.geoPrep(stem);
-    OC.paint(stem, cStem);
-    OC.withSway(stem, () => 0);
-    OC.xform(stem, { p: [0, 0.32, 0] });
-    list.push(stem);
-
-    const nRibs = 13;
-    for (let i = 0; i < nRibs; i++) {
-      const u = (i / (nRibs - 1)) * 2 - 1;
-      const ang = u * 1.05;
-      const len = OC.lerp(2.1, 3.0, Math.cos(u * 1.1)) * OC.lerp(0.9, 1.12, rng());
-      const rib = new T.CylinderGeometry(0.025, 0.055, len, 4);
-      OC.geoPrep(rib);
-      rib.translate(0, len * 0.5, 0);
-      OC.paint(rib, (x, y, z, c) => c.copy(cStem).lerp(cFan, OC.clamp(y / 2.8, 0, 1)));
-      OC.withSway(rib, (x, y) => Math.pow(OC.clamp(y / 3.0, 0, 1), 1.2) * 0.45);
-      OC.xform(rib, { r: [(rng() - 0.5) * 0.08, 0, -ang], p: [0, 0.55, 0] });
-      list.push(rib);
-    }
-    for (let ring = 1; ring <= 4; ring++) {
-      const r = ring * 0.58;
-      const arc = new T.TorusGeometry(r, 0.022, 4, 14, Math.PI * 0.78);
-      OC.geoPrep(arc);
-      OC.paint(arc, cFan);
-      OC.withSway(arc, () => Math.pow(ring / 4, 1.2) * 0.42);
-      OC.xform(arc, { r: [0, 0, Math.PI * 0.11], p: [0, 0.55, 0] });
-      list.push(arc);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 37. Черви-костоеды Osedax («зомби-черви» китового падения) ---- */
-  function buildOsedaxPlume(rng) {
-    const list = [];
-    const n = 9;
-    const cStem = COL(0xe8ded2);
-    const cPlume = COL(0xe23864);
-    const cTip = COL(0xff84a8);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * 6.283 + OC.lerp(-0.2, 0.2, rng());
-      const dist = OC.lerp(0.06, 0.34, rng());
-      const h = OC.lerp(0.32, 0.68, rng());
-      const tilt = OC.lerp(0.18, 0.45, rng());
-      const tube = OC.geoPrep(new T.CylinderGeometry(0.022, 0.032, h, 5));
-      OC.paint(tube, cStem);
-      OC.xform(tube, {
-        r: [Math.sin(a) * tilt, 0, Math.cos(a) * tilt],
-        p: [Math.cos(a) * dist, h * 0.45, Math.sin(a) * dist]
-      });
-      OC.withSway(tube, (x, y) => Math.max(0, y) * 0.4);
-      list.push(tube);
-
-      // Перистый малиновый плюмаж на вершине
-      const plume = OC.geoPrep(new T.ConeGeometry(0.085, 0.24, 6));
-      OC.paint(plume, (px, py, pz, col) => col.copy(py > 0.04 ? cTip : cPlume));
-      OC.xform(plume, {
-        r: [Math.PI + Math.sin(a) * tilt, 0, Math.cos(a) * tilt],
-        p: [Math.cos(a) * (dist + tilt * 0.16), h + 0.06, Math.sin(a) * (dist + tilt * 0.16)]
-      });
-      OC.withSway(plume, (x, y) => Math.max(0, y) * 0.72);
-      list.push(plume);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 38. Ультраабиссальная стебельчатая стеклянная губка Caulophacus ---- */
-  function buildHadalSponge(rng) {
-    const list = [];
-    const h = OC.lerp(1.4, 2.2, rng());
-    const bendX = OC.lerp(-0.22, 0.22, rng());
-    const bendZ = OC.lerp(-0.22, 0.22, rng());
-    const cStalk = COL(0xb9cfd8);
-    const cCup = COL(0xe2f0f5);
-    const cRim = COL(0x88b4cc);
-
-    const stalk = OC.geoPrep(new T.CylinderGeometry(0.038, 0.065, h, 7, 5));
-    const sp = stalk.attributes.position;
-    for (let i = 0; i < sp.count; i++) {
-      const y = sp.getY(i);
-      const u = OC.clamp((y + h * 0.5) / h, 0, 1);
-      sp.setX(i, sp.getX(i) + bendX * u * u);
-      sp.setZ(i, sp.getZ(i) + bendZ * u * u);
-    }
-    stalk.computeVertexNormals();
-    OC.paint(stalk, (x, y, z, col) => col.copy(cStalk));
-    OC.xform(stalk, { p: [0, h * 0.5, 0] });
-    OC.withSway(stalk, (x, y) => Math.max(0, y) * 0.32);
-    list.push(stalk);
-
-    // Ажурный вогнутый диск-фильтратор на конце стебля
-    const cap = OC.geoPrep(new T.ConeGeometry(OC.lerp(0.38, 0.56, rng()), 0.28, 12, 1, true));
-    cap.rotateX(Math.PI);
-    OC.paint(cap, (x, y, z, col) => col.copy(y > 0.02 ? cRim : cCup));
-    OC.xform(cap, { r: [bendZ * 0.85, 0, -bendX * 0.85], p: [bendX, h + 0.08, bendZ] });
-    OC.withSway(cap, (x, y) => Math.max(0, y) * 0.36);
-    list.push(cap);
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 39. Серпентинитовый карбонатный столб (холодные щелочные сипы Сирена) ---- */
-  function buildSerpentiniteVent(rng) {
-    const list = [];
-    const cBase = COL(0x4b5c64);
-    const cBody = COL(0xb8c8cc);
-    const cCrest = COL(0xe4eeef);
-    const spires = 3 + (rng() > 0.45 ? 1 : 0);
-    for (let i = 0; i < spires; i++) {
-      const h = i === 0 ? OC.lerp(4.4, 7.2, rng()) : OC.lerp(2.2, 4.0, rng());
-      const rBot = i === 0 ? OC.lerp(0.9, 1.35, rng()) : OC.lerp(0.45, 0.78, rng());
-      const rTop = rBot * 0.34;
-      const ox = i === 0 ? 0 : Math.cos(i * 2.2) * OC.lerp(0.7, 1.35, rng());
-      const oz = i === 0 ? 0 : Math.sin(i * 2.2) * OC.lerp(0.7, 1.35, rng());
-      const g = OC.geoPrep(new T.CylinderGeometry(rTop, rBot, h, 9, 5));
-      const p = g.attributes.position;
-      for (let v = 0; v < p.count; v++) {
-        const vx = p.getX(v), vy = p.getY(v), vz = p.getZ(v);
-        const shelf = 1.0 + 0.24 * Math.sin(vy * 3.1 + i) + 0.14 * Math.cos(vx * 3.4 - vz * 2.8);
-        p.setXYZ(v, vx * shelf, vy, vz * shelf);
-      }
-      g.computeVertexNormals();
-      OC.paint(g, (x, y, z, col) => {
-        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
-        col.copy(cBase).lerp(cBody, OC.smoothstep(0.1, 0.6, u)).lerp(cCrest, OC.smoothstep(0.7, 1.0, u));
-      });
-      OC.xform(g, { p: [ox, h * 0.46, oz] });
-      OC.withSway(g, () => 0);
-      list.push(g);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 40. Газовый гидрат метана («горящий лёд» CH4) ---- */
-  function buildMethaneHydrate(rng) {
-    const list = [];
-    const cBase = COL(0x524c48);
-    const cIce = COL(0xf4cf76);
-    const cTip = COL(0xfff1c4);
-    const mound = OC.geoPrep(new T.DodecahedronGeometry(0.95, 1));
-    mound.scale(1.25, 0.55, 1.15);
-    OC.paint(mound, (x, y, z, col) => col.copy(y > 0.12 ? cIce : cBase));
-    OC.xform(mound, { p: [0, 0.25, 0] });
-    OC.withSway(mound, () => 0);
-    list.push(mound);
-
-    const nShards = 6;
-    for (let i = 0; i < nShards; i++) {
-      const a = (i / nShards) * 6.283 + rng() * 0.45;
-      const dist = OC.lerp(0.18, 0.68, rng());
-      const h = OC.lerp(0.75, 1.55, rng());
-      const r = OC.lerp(0.16, 0.34, rng());
-      const sh = OC.geoPrep(new T.CylinderGeometry(r * 0.28, r, h, 6, 1));
-      OC.paint(sh, (x, y, z, col) => {
-        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
-        col.copy(cIce).lerp(cTip, OC.smoothstep(0.35, 1.0, u));
-      });
-      OC.xform(sh, {
-        r: [Math.sin(a) * OC.lerp(0.18, 0.48, rng()), rng() * 1.4, Math.cos(a) * OC.lerp(0.18, 0.48, rng())],
-        p: [Math.cos(a) * dist, h * 0.45 + 0.18, Math.sin(a) * dist]
-      });
-      OC.withSway(sh, () => 0);
-      list.push(sh);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 41. Вестиментифера холодных сипов (Lamellibrachia luymesi) ---- */
-  function buildColdTubeworm(rng) {
-    const list = [];
-    const n = 10;
-    const cBase = COL(0x4a4236);
-    const cTube = COL(0xc4b08e);
-    const cPlume = COL(0xd92658);
-    const cTip = COL(0xff8eb4);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * 6.283 + OC.lerp(-0.25, 0.25, rng());
-      const dist = OC.lerp(0.06, 0.48, rng());
-      const h = OC.lerp(1.1, 2.35, rng());
-      const bend = OC.lerp(0.24, 0.56, rng());
-      const seg = OC.geoPrep(new T.CylinderGeometry(0.036, 0.055, h, 6, 5));
-      const sp = seg.attributes.position;
-      for (let v = 0; v < sp.count; v++) {
-        const vx = sp.getX(v), vy = sp.getY(v), vz = sp.getZ(v);
-        const u = OC.clamp((vy + h * 0.5) / h, 0, 1);
-        const curve = Math.sin(u * 2.4 + i) * 0.14 + u * u * bend;
-        sp.setXYZ(v, vx + Math.cos(a) * curve, vy, vz + Math.sin(a) * curve);
-      }
-      seg.computeVertexNormals();
-      OC.paint(seg, (x, y, z, col) => {
-        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
-        col.copy(cBase).lerp(cTube, OC.smoothstep(0.08, 0.72, u));
-      });
-      OC.xform(seg, { p: [Math.cos(a) * dist * 0.4, h * 0.5, Math.sin(a) * dist * 0.4] });
-      OC.withSway(seg, (x, y) => Math.max(0, y) * 0.24);
-      list.push(seg);
-
-      const plume = OC.geoPrep(new T.ConeGeometry(0.095, 0.28, 7));
-      OC.paint(plume, (x, y, z, col) => col.copy(y > 0.04 ? cTip : cPlume));
-      OC.xform(plume, {
-        r: [Math.PI + Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35],
-        p: [Math.cos(a) * (dist * 0.4 + bend), h + 0.06, Math.sin(a) * (dist * 0.4 + bend)]
-      });
-      OC.withSway(plume, (x, y) => Math.max(0, y) * 0.35);
-      list.push(plume);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 42. Соляной кристалл галита / береговой торос (Halite Spire) ---- */
   function buildHaliteSpire(rng) {
     const list = [];
     const cSaltA = COL(0xdbf6fa);
@@ -11349,8 +11502,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildHaliteSpire = buildHaliteSpire;
 
-  /* ---- 43. Карстовый сталактит (свисает со свода пещеры вниз) ---- */
   function buildStalactite(rng) {
     const list = [];
     const cTop = COL(0x7c6a56);
@@ -11383,8 +11536,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildStalactite = buildStalactite;
 
-  /* ---- 44. Карстовый сталагмит / кальцитовая колонна (растёт вверх со дна) ---- */
   function buildStalagmite(rng) {
     const list = [];
     const cBase = COL(0x5e5346);
@@ -11418,8 +11571,8 @@ window.OC = window.OC || {};
     list.push(side);
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildStalagmite = buildStalagmite;
 
-  /* ---- 45. Воздушные корни и лианы сенота (Ficus / Philodendron) ---- */
   function buildCenoteVine(rng) {
     const list = [];
     const cBark = COL(0x5a432b);
@@ -11461,8 +11614,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildCenoteVine = buildCenoteVine;
 
-  /* ---- 46. Вулканическая CO2-фумарола (Рока Редонда) ---- */
   function buildVolcanicFumarole(rng) {
     const list = [];
     const cBasalt = COL(0x1f1e24);
@@ -11495,99 +11648,20 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildVolcanicFumarole = buildVolcanicFumarole;
+})(window.OC);
 
-  /* ---- 47. Неоново-оранжевый коралл-чашечка (Tubastraea coccinea) ---- */
-  function buildTubastraeaCoral(rng) {
-    const list = [];
-    const cBase = COL(0x7c2a12);
-    const cOrange = COL(0xf46818);
-    const cGold = COL(0xffc938);
+// === engine/flora/amazon_igapo.js ===
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: затопленный лес Игапо и чёрные воды Амазонии ================= */
+/* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
+   Материалы и реестр прототипов живут в engine/flora_library.js. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const COL = (c) => new T.Color(c);
+  const BUILDERS = (OC._FloraBuilders = OC._FloraBuilders || {});
 
-    const mound = OC.geoPrep(new T.SphereGeometry(0.42, 8, 6));
-    mound.scale(1.15, 0.62, 1.15);
-    OC.paint(mound, cBase);
-    OC.xform(mound, { p: [0, 0.14, 0] });
-    OC.withSway(mound, () => 0);
-    list.push(mound);
-
-    const nCups = 9;
-    for (let i = 0; i < nCups; i++) {
-      const a = (i / nCups) * Math.PI * 2 + rng() * 0.4;
-      const r = i === 0 ? 0.04 : OC.lerp(0.18, 0.36, rng());
-      const cupH = OC.lerp(0.18, 0.34, rng());
-      const cup = OC.geoPrep(new T.CylinderGeometry(0.11, 0.055, cupH, 7));
-      OC.paint(cup, (x, y, z, col) => {
-        const u = OC.clamp((y + cupH * 0.5) / cupH, 0, 1);
-        col.copy(cBase).lerp(cOrange, OC.smoothstep(0.15, 0.72, u)).lerp(cGold, OC.smoothstep(0.76, 1.0, u));
-      });
-      const tilt = i === 0 ? 0 : 0.48;
-      OC.xform(cup, { r: [Math.sin(a) * tilt, 0, -Math.cos(a) * tilt], p: [Math.cos(a) * r, 0.28, Math.sin(a) * r] });
-      OC.withSway(cup, () => 0);
-      list.push(cup);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 48. Вулканический морской жёлудь (Megabalanus galapaganus) ---- */
-  function buildGalapagosBarnacle(rng) {
-    const list = [];
-    const cShell = COL(0xdfd3c8);
-    const cRidge = COL(0x9b5a68);
-    const cDark = COL(0x3a2a30);
-
-    const nShells = 6;
-    for (let i = 0; i < nShells; i++) {
-      const a = i === 0 ? 0 : (i / (nShells - 1)) * Math.PI * 2 + rng() * 0.35;
-      const dist = i === 0 ? 0 : OC.lerp(0.24, 0.42, rng());
-      const h = i === 0 ? OC.lerp(0.55, 0.82, rng()) : OC.lerp(0.28, 0.52, rng());
-      const rB = i === 0 ? 0.28 : OC.lerp(0.14, 0.22, rng());
-      const cone = OC.geoPrep(new T.CylinderGeometry(rB * 0.46, rB, h, 7));
-      OC.paint(cone, (x, y, z, col) => {
-        const u = OC.clamp((y + h * 0.5) / h, 0, 1);
-        const rib = Math.sin(Math.atan2(z, x) * 6.0);
-        col.copy(cShell).lerp(cRidge, rib > 0.2 ? 0.55 : 0.15).lerp(cDark, u > 0.86 ? 0.75 : 0);
-      });
-      OC.xform(cone, { r: [(rng() - 0.5) * 0.22, rng() * 2, (rng() - 0.5) * 0.22], p: [Math.cos(a) * dist, h * 0.44, Math.sin(a) * dist] });
-      OC.withSway(cone, () => 0);
-      list.push(cone);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 49. Лавовый ковёр морского салата Ульва (Ulva lobata) ---- */
-  function buildUlvaTurf(rng) {
-    const list = [];
-    const cGreen = COL(0x3cb846);
-    const cBright = COL(0x76e054);
-    const cRedTurf = COL(0x8c243a);
-    const isRed = rng() < 0.28;
-
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + rng() * 0.4;
-      const dist = OC.lerp(0.06, 0.36, rng());
-      const bw = OC.lerp(0.24, 0.42, rng());
-      const bh = OC.lerp(0.38, 0.72, rng());
-      const leaf = OC.geoPrep(new T.PlaneGeometry(bw, bh, 3, 4));
-      const lp = leaf.attributes.position;
-      for (let k = 0; k < lp.count; k++) {
-        const lx = lp.getX(k), ly = lp.getY(k);
-        const ruffle = Math.sin(ly * 7.5 + i * 1.3) * 0.08 + Math.cos(lx * 8.0) * 0.05;
-        lp.setZ(k, ruffle);
-      }
-      leaf.computeVertexNormals();
-      OC.paint(leaf, (x, y, z, col) => {
-        const u = OC.clamp((y + bh * 0.5) / bh, 0, 1);
-        if (isRed) col.copy(cRedTurf).offsetHSL(0, 0, u * 0.14);
-        else col.copy(cGreen).lerp(cBright, u);
-      });
-      OC.xform(leaf, { r: [0.32 * (rng() - 0.3), a, 0.25], p: [Math.cos(a) * dist, bh * 0.44, Math.sin(a) * dist] });
-      OC.withSway(leaf, (x, y) => Math.max(0, y) * 0.65);
-      list.push(leaf);
-    }
-    return OC.mergeGeometries(list);
-  }
-
-  /* ---- 50. Затопленное дерево игапо с досковидными корнями (Macrolobium acaciifolium) ---- */
   function buildIgapoTree(rng) {
     const list = [];
     const barkDark = COL(0x3a2b1e);
@@ -11647,8 +11721,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildIgapoTree = buildIgapoTree;
 
-  /* ---- 51. Гигантская кувшинка Виктория амазонская (Victoria amazonica) ---- */
   function buildVictoriaLily(rng) {
     const list = [];
     const cPad = COL(0x3a8c32);
@@ -11689,8 +11763,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildVictoriaLily = buildVictoriaLily;
 
-  /* ---- 52. Эхинодорус амазонский (Echinodorus amazonicus) ---- */
   function buildAmazonSword(rng) {
     const list = [];
     const cBase = COL(0x1f5928);
@@ -11718,8 +11792,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildAmazonSword = buildAmazonSword;
 
-  /* ---- 53. Затопленный ствол сельвы с речными губками (Drulia) ---- */
   function buildSunkenLog(rng) {
     const list = [];
     const cWood = COL(0x3c2c1e);
@@ -11742,8 +11816,8 @@ window.OC = window.OC || {};
     }
     return OC.mergeGeometries(list);
   }
+  BUILDERS.buildSunkenLog = buildSunkenLog;
 
-  /* ---- 54. Топляк и переплетение подводных корней ---- */
   function buildDriftwoodSnag(rng) {
     const list = [];
     const cRoot = COL(0x4a3524);
@@ -11763,6 +11837,24 @@ window.OC = window.OC || {};
       list.push(rg);
     }
     return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildDriftwoodSnag = buildDriftwoodSnag;
+})(window.OC);
+
+// === engine/flora_library.js ===
+/* ================= БИБЛИОТЕКА ПРОТОТИПОВ ФЛОРА: МАТЕРИАЛЫ И РЕЕСТР ================= */
+/* Сами геометрии вынесены в engine/flora/*.js (7 тематических модулей) и публикуются
+   через OC._FloraBuilders. Здесь остаются материалы, бюджеты инстансов и реестр видов. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const B = () => (typeof OC._FloraBuilders === 'object' ? OC._FloraBuilders : {});
+
+  function need(name) {
+    const fn = B()[name];
+    if (!fn) throw new Error('FloraLibrary: geometry builder "' + name + '" is not loaded');
+    return fn;
   }
 
   /* ---------- Реестр прототипов ---------- */
@@ -11822,231 +11914,231 @@ window.OC = window.OC || {};
       const prototypes = {
         coral_staghorn: {
           mat: matCoralRigid, maxInstances: 2000, cullDist: 460,
-          geos: [buildStaghorn(0.94, rng), buildStaghorn(0.55, rng), buildStaghorn(0.76, rng), buildStaghorn(0.11, rng)]
+          geos: [need('buildStaghorn')(0.94, rng), need('buildStaghorn')(0.55, rng), need('buildStaghorn')(0.76, rng), need('buildStaghorn')(0.11, rng)]
         },
         coral_table: {
           mat: matCoralRigid, maxInstances: 1700, cullDist: 560,
-          geos: [buildTable(0.09, rng), buildTable(0.44, rng), buildTable(0.86, rng), buildTable(0.96, rng)]
+          geos: [need('buildTable')(0.09, rng), need('buildTable')(0.44, rng), need('buildTable')(0.86, rng), need('buildTable')(0.96, rng)]
         },
         coral_brain: {
           mat: matCoralRigid, maxInstances: 1600, cullDist: 440,
-          geos: [buildBrain(0.14, rng), buildBrain(0.24, rng), buildBrain(0.95, rng)]
+          geos: [need('buildBrain')(0.14, rng), need('buildBrain')(0.24, rng), need('buildBrain')(0.95, rng)]
         },
         coral_bommie: {
           mat: matCoralRigid, maxInstances: 520, cullDist: 640,
-          geos: [buildBommie(0.11, rng), buildBommie(0.48, rng)]
+          geos: [need('buildBommie')(0.11, rng), need('buildBommie')(0.48, rng)]
         },
         coral_plate: {
           mat: matCoralRigid, maxInstances: 1050, cullDist: 480,
-          geos: [buildPlateCoral(0.08, rng), buildPlateCoral(0.82, rng)]
+          geos: [need('buildPlateCoral')(0.08, rng), need('buildPlateCoral')(0.82, rng)]
         },
         coral_crust: {
           mat: matCoralRigid, maxInstances: 2400, cullDist: 230,
-          geos: [buildCrustCoral(0.94, rng), buildCrustCoral(0.09, rng), buildCrustCoral(0.76, rng)]
+          geos: [need('buildCrustCoral')(0.94, rng), need('buildCrustCoral')(0.09, rng), need('buildCrustCoral')(0.76, rng)]
         },
         coral_fan: {
           mat: matCoralSoft, maxInstances: 980, cullDist: 460,
-          geos: [buildSeaFan(0.88, rng), buildSeaFan(0.02, rng), buildSeaFan(0.74, rng)]
+          geos: [need('buildSeaFan')(0.88, rng), need('buildSeaFan')(0.02, rng), need('buildSeaFan')(0.74, rng)]
         },
         coral_soft: {
           mat: matCoralSoft, maxInstances: 980, cullDist: 420,
-          geos: [buildSoftCoral(0.91, rng), buildSoftCoral(0.78, rng), buildSoftCoral(0.07, rng)]
+          geos: [need('buildSoftCoral')(0.91, rng), need('buildSoftCoral')(0.78, rng), need('buildSoftCoral')(0.07, rng)]
         },
         coral_black: {
           mat: matSoft, maxInstances: 650, cullDist: 420,
-          geos: [buildBlackCoral(rng), buildBlackCoral(rng)]
+          geos: [need('buildBlackCoral')(rng), need('buildBlackCoral')(rng)]
         },
         crinoid: {
           mat: matSoft, maxInstances: 1100, cullDist: 230,
-          geos: [buildCrinoid(0.11, rng), buildCrinoid(0.96, rng), buildCrinoid(0.78, rng)]
+          geos: [need('buildCrinoid')(0.11, rng), need('buildCrinoid')(0.96, rng), need('buildCrinoid')(0.78, rng)]
         },
         sponge_tube: {
           mat: matRigid, maxInstances: 700, cullDist: 420,
-          geos: [buildTubeSponge(0.05, 0.13, rng), buildTubeSponge(0.78, 0.88, rng)]
+          geos: [need('buildTubeSponge')(0.05, 0.13, rng), need('buildTubeSponge')(0.78, 0.88, rng)]
         },
         sponge_barrel: {
           mat: matRigid, maxInstances: 650, cullDist: 480,
-          geos: [buildBarrelSponge(0.06, rng), buildBarrelSponge(0.84, rng)]
+          geos: [need('buildBarrelSponge')(0.06, rng), need('buildBarrelSponge')(0.84, rng)]
         },
         anemone: {
           mat: matCoralSoft, maxInstances: 900, cullDist: 340,
-          geos: [buildAnemone(0.74, 0.92, rng), buildAnemone(0.58, 0.50, rng), buildAnemone(0.95, 0.08, rng)]
+          geos: [need('buildAnemone')(0.74, 0.92, rng), need('buildAnemone')(0.58, 0.50, rng), need('buildAnemone')(0.95, 0.08, rng)]
         },
         giant_clam: {
           mat: matClam, maxInstances: 760, cullDist: 310,
-          geos: [buildGiantClam(0.56, rng), buildGiantClam(0.78, rng)]
+          geos: [need('buildGiantClam')(0.56, rng), need('buildGiantClam')(0.78, rng)]
         },
         seagrass: {
           mat: matPlant, maxInstances: 2600, cullDist: 290,
-          geos: [buildSeagrass(0.24, rng), buildSeagrass(0.28, rng)]
+          geos: [need('buildSeagrass')(0.24, rng), need('buildSeagrass')(0.28, rng)]
         },
         kelp: {
           mat: matPlant, maxInstances: 520, cullDist: 480,
-          geos: [buildKelp(0.14, rng), buildKelp(0.18, rng)]
+          geos: [need('buildKelp')(0.14, rng), need('buildKelp')(0.18, rng)]
         },
         mangrove: {
           mat: matSoft, maxInstances: 1150, cullDist: 680,
-          geos: [buildMangrove(rng), buildMangrove(rng)]
+          geos: [need('buildMangrove')(rng), need('buildMangrove')(rng)]
         },
         island_palm: {
           mat: matFoliage, maxInstances: 180, cullDist: 920,
-          geos: [buildIslandPalm(rng), buildIslandPalm(rng)]
+          geos: [need('buildIslandPalm')(rng), need('buildIslandPalm')(rng)]
         },
         urchin: {
           mat: matRigid, maxInstances: 650, cullDist: 190,
-          geos: [buildUrchin()]
+          geos: [need('buildUrchin')()]
         },
         starfish_blue: {
           mat: matRigid, maxInstances: 480, cullDist: 190,
-          geos: [buildStarfish(5, 0.58, false)]
+          geos: [need('buildStarfish')(5, 0.58, false)]
         },
         starfish_cots: {
           mat: matRigid, maxInstances: 480, cullDist: 210,
-          geos: [buildStarfish(11, 0.94, true)]
+          geos: [need('buildStarfish')(11, 0.94, true)]
         },
         shell_triton: {
           mat: matClam, maxInstances: 440, cullDist: 190,
-          geos: [buildTritonShell()]
+          geos: [need('buildTritonShell')()]
         },
         kelp_giant: {
           mat: matPlant, maxInstances: 1100, cullDist: 640,
-          geos: [buildGiantKelp(0.0, rng), buildGiantKelp(0.03, rng)]
+          geos: [need('buildGiantKelp')(0.0, rng), need('buildGiantKelp')(0.03, rng)]
         },
         urchin_purple: {
           mat: matRigid, maxInstances: 800, cullDist: 300,
-          geos: [buildPurpleUrchin()]
+          geos: [need('buildPurpleUrchin')()]
         },
         starfish_ochre: {
           mat: matRigid, maxInstances: 520, cullDist: 300,
-          geos: [buildStarfish(5, 0.07, false), buildStarfish(5, 0.82, false)]
+          geos: [need('buildStarfish')(5, 0.07, false), need('buildStarfish')(5, 0.82, false)]
         },
         anemone_giant_green: {
           mat: matCoralSoft, maxInstances: 620, cullDist: 380,
-          geos: [buildAnemone(0.38, 0.28, rng), buildAnemone(0.44, 0.34, rng)]
+          geos: [need('buildAnemone')(0.38, 0.28, rng), need('buildAnemone')(0.44, 0.34, rng)]
         },
         vent_chimney: {
           mat: matChimney, maxInstances: 320, cullDist: 620,
-          geos: [buildVentChimney(rng), buildVentChimney(rng)]
+          geos: [need('buildVentChimney')(rng), need('buildVentChimney')(rng)]
         },
         riftia_worms: {
           mat: matSoft, maxInstances: 960, cullDist: 420,
-          geos: [buildRiftiaWorms(rng), buildRiftiaWorms(rng)]
+          geos: [need('buildRiftiaWorms')(rng), need('buildRiftiaWorms')(rng)]
         },
         vent_mussels: {
           mat: matRigid, maxInstances: 880, cullDist: 360,
-          geos: [buildVentMussels(rng)]
+          geos: [need('buildVentMussels')(rng)]
         },
         ice_floe: {
           mat: matIce, maxInstances: 520, cullDist: 920,
-          geos: [buildIceFloe(rng), buildIceFloe(rng), buildIceFloe(rng)]
+          geos: [need('buildIceFloe')(rng), need('buildIceFloe')(rng), need('buildIceFloe')(rng)]
         },
         iceberg: {
           mat: matIce, maxInstances: 160, cullDist: 1080,
-          geos: [buildIceberg(rng), buildIceberg(rng)]
+          geos: [need('buildIceberg')(rng), need('buildIceberg')(rng)]
         },
         brinicle: {
           mat: matIce, maxInstances: 220, cullDist: 440,
-          geos: [buildBrinicle(rng), buildBrinicle(rng)]
+          geos: [need('buildBrinicle')(rng), need('buildBrinicle')(rng)]
         },
         kelp_arctic: {
           mat: matPlant, maxInstances: 1400, cullDist: 460,
-          geos: [buildArcticKelp(rng), buildArcticKelp(rng)]
+          geos: [need('buildArcticKelp')(rng), need('buildArcticKelp')(rng)]
         },
         coral_arctic_soft: {
           mat: matCoralSoft, maxInstances: 900, cullDist: 360,
-          geos: [buildArcticSoftCoral(rng), buildArcticSoftCoral(rng)]
+          geos: [need('buildArcticSoftCoral')(rng), need('buildArcticSoftCoral')(rng)]
         },
         anemone_arctic: {
           mat: matCoralSoft, maxInstances: 620, cullDist: 360,
-          geos: [buildAnemone(0.02, 0.96, rng), buildAnemone(0.06, 0.92, rng)]
+          geos: [need('buildAnemone')(0.02, 0.96, rng), need('buildAnemone')(0.06, 0.92, rng)]
         },
         sargassum: {
           mat: matPlant, maxInstances: 1500, cullDist: 520,
-          geos: [buildSargassum(rng), buildSargassum(rng)]
+          geos: [need('buildSargassum')(rng), need('buildSargassum')(rng)]
         },
         wreck_anchor: {
           mat: matRigid, maxInstances: 160, cullDist: 540,
-          geos: [buildWreckAnchor(rng), buildWreckAnchor(rng)]
+          geos: [need('buildWreckAnchor')(rng), need('buildWreckAnchor')(rng)]
         },
         coral_whip: {
           mat: matCoralSoft, maxInstances: 900, cullDist: 460,
-          geos: [buildWhipCoral(0.07, rng), buildWhipCoral(0.13, rng)]
+          geos: [need('buildWhipCoral')(0.07, rng), need('buildWhipCoral')(0.13, rng)]
         },
         seafan_gold: {
           mat: matCoralSoft, maxInstances: 700, cullDist: 520,
-          geos: [buildGoldSeaFan(rng), buildGoldSeaFan(rng)]
+          geos: [need('buildGoldSeaFan')(rng), need('buildGoldSeaFan')(rng)]
         },
         osedax_plume: {
           mat: matSoft, maxInstances: 960, cullDist: 420,
-          geos: [buildOsedaxPlume(rng), buildOsedaxPlume(rng)]
+          geos: [need('buildOsedaxPlume')(rng), need('buildOsedaxPlume')(rng)]
         },
         hadal_sponge: {
           mat: matSoft, maxInstances: 780, cullDist: 440,
-          geos: [buildHadalSponge(rng), buildHadalSponge(rng)]
+          geos: [need('buildHadalSponge')(rng), need('buildHadalSponge')(rng)]
         },
         serpentinite_vent: {
           mat: matChimney, maxInstances: 320, cullDist: 620,
-          geos: [buildSerpentiniteVent(rng), buildSerpentiniteVent(rng)]
+          geos: [need('buildSerpentiniteVent')(rng), need('buildSerpentiniteVent')(rng)]
         },
         methane_hydrate: {
           mat: matHydrate, maxInstances: 520, cullDist: 500,
-          geos: [buildMethaneHydrate(rng), buildMethaneHydrate(rng)]
+          geos: [need('buildMethaneHydrate')(rng), need('buildMethaneHydrate')(rng)]
         },
         cold_tubeworm: {
           mat: matSoft, maxInstances: 960, cullDist: 440,
-          geos: [buildColdTubeworm(rng), buildColdTubeworm(rng)]
+          geos: [need('buildColdTubeworm')(rng), need('buildColdTubeworm')(rng)]
         },
         halite_spire: {
           mat: matIce, maxInstances: 540, cullDist: 560,
-          geos: [buildHaliteSpire(rng), buildHaliteSpire(rng)]
+          geos: [need('buildHaliteSpire')(rng), need('buildHaliteSpire')(rng)]
         },
         stalactite: {
           mat: matRigid, maxInstances: 1100, cullDist: 460,
-          geos: [buildStalactite(rng), buildStalactite(rng), buildStalactite(rng)]
+          geos: [need('buildStalactite')(rng), need('buildStalactite')(rng), need('buildStalactite')(rng)]
         },
         stalagmite: {
           mat: matRigid, maxInstances: 1000, cullDist: 460,
-          geos: [buildStalagmite(rng), buildStalagmite(rng), buildStalagmite(rng)]
+          geos: [need('buildStalagmite')(rng), need('buildStalagmite')(rng), need('buildStalagmite')(rng)]
         },
         cenote_vine: {
           mat: matSoft, maxInstances: 320, cullDist: 520,
-          geos: [buildCenoteVine(rng), buildCenoteVine(rng)]
+          geos: [need('buildCenoteVine')(rng), need('buildCenoteVine')(rng)]
         },
         volcanic_fumarole: {
           mat: matChimney, maxInstances: 260, cullDist: 560,
-          geos: [buildVolcanicFumarole(rng), buildVolcanicFumarole(rng)]
+          geos: [need('buildVolcanicFumarole')(rng), need('buildVolcanicFumarole')(rng)]
         },
         tubastraea_coral: {
           mat: matCoralRigid, maxInstances: 1000, cullDist: 440,
-          geos: [buildTubastraeaCoral(rng), buildTubastraeaCoral(rng)]
+          geos: [need('buildTubastraeaCoral')(rng), need('buildTubastraeaCoral')(rng)]
         },
         galapagos_barnacle: {
           mat: matClam, maxInstances: 900, cullDist: 400,
-          geos: [buildGalapagosBarnacle(rng), buildGalapagosBarnacle(rng)]
+          geos: [need('buildGalapagosBarnacle')(rng), need('buildGalapagosBarnacle')(rng)]
         },
         ulva_turf: {
           mat: matPlant, maxInstances: 1400, cullDist: 420,
-          geos: [buildUlvaTurf(rng), buildUlvaTurf(rng)]
+          geos: [need('buildUlvaTurf')(rng), need('buildUlvaTurf')(rng)]
         },
         igapo_tree: {
           mat: matFoliage, maxInstances: 520, cullDist: 640,
-          geos: [buildIgapoTree(rng), buildIgapoTree(rng)]
+          geos: [need('buildIgapoTree')(rng), need('buildIgapoTree')(rng)]
         },
         victoria_lily: {
           mat: matFoliage, maxInstances: 620, cullDist: 520,
-          geos: [buildVictoriaLily(rng), buildVictoriaLily(rng)]
+          geos: [need('buildVictoriaLily')(rng), need('buildVictoriaLily')(rng)]
         },
         amazon_sword: {
           mat: matPlant, maxInstances: 1200, cullDist: 420,
-          geos: [buildAmazonSword(rng), buildAmazonSword(rng)]
+          geos: [need('buildAmazonSword')(rng), need('buildAmazonSword')(rng)]
         },
         sunken_log: {
           mat: matRigid, maxInstances: 680, cullDist: 480,
-          geos: [buildSunkenLog(rng), buildSunkenLog(rng)]
+          geos: [need('buildSunkenLog')(rng), need('buildSunkenLog')(rng)]
         },
         driftwood_snag: {
           mat: matRigid, maxInstances: 780, cullDist: 460,
-          geos: [buildDriftwoodSnag(rng), buildDriftwoodSnag(rng)]
+          geos: [need('buildDriftwoodSnag')(rng), need('buildDriftwoodSnag')(rng)]
         }
       };
 
