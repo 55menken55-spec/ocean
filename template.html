@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Большой Барьерный риф — 3D-симуляция океана</title>
+<style>
+  :root{
+    --glass: rgba(6, 22, 38, 0.64);
+    --glass-strong: rgba(5, 18, 32, 0.88);
+    --glass-brd: rgba(130, 222, 255, 0.2);
+    --ink: #ecf8ff;
+    --dim: #8bb4c8;
+    --accent: #58e0ff;
+    --accent2: #ffb574;
+    --ok: #5be8b0;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:#03101d;color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  #scene{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  #scene:active{cursor:grabbing}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:2;
+    background:radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 48%, rgba(1,10,20,.55) 100%)}
+  .hud-hideable{transition:opacity .35s, transform .35s}
+  .hud-hidden{opacity:0 !important;pointer-events:none !important}
+
+  /* ---------- Заголовок ---------- */
+  .brand{position:fixed;left:22px;top:18px;z-index:20;pointer-events:none;user-select:none;max-width:calc(50vw - 260px)}
+  .brand h1{margin:0;font-size:17px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
+    text-shadow:0 2px 16px rgba(0,0,0,.65)}
+  .brand h1 span{color:var(--accent)}
+  .brand p{margin:5px 0 0;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+  .brand .line{width:54px;height:1px;background:linear-gradient(90deg,var(--accent),transparent);margin-top:10px}
+  .biome-bar{display:flex;flex-wrap:wrap;max-width:460px;gap:6px;margin-top:10px;pointer-events:auto}
+  .biome-pill{padding:5px 10px;border-radius:999px;border:1px solid var(--glass-brd);
+    background:var(--glass);backdrop-filter:blur(12px);color:var(--dim);font-size:10.5px;
+    font-weight:500;letter-spacing:.05em;cursor:pointer;transition:.2s;font-family:inherit}
+  .biome-pill:hover{border-color:rgba(88,224,255,.55);color:var(--ink)}
+  .biome-pill.on{background:rgba(88,224,255,.22);border-color:rgba(88,224,255,.72);color:#f4feff;
+    box-shadow:0 0 14px rgba(88,224,255,.22)}
+
+  /* ---------- Телеметрия погружения (центр сверху) ---------- */
+  .telemetry{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:22;
+    max-width:min(52vw, 640px);overflow:hidden;
+    display:flex;align-items:center;gap:14px;padding:8px 18px;border-radius:999px;
+    background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);box-shadow:0 12px 32px rgba(0,0,0,.35);
+    font-size:12px;pointer-events:none;white-space:nowrap}
+  .tele-item{display:flex;align-items:center;gap:6px}
+  .tele-item span{color:var(--dim);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+  .tele-item b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+  .tele-sep{width:1px;height:14px;background:rgba(140,225,255,.2)}
+
+  /* ---------- Правые кнопки ---------- */
+  .topright{position:fixed;right:18px;top:18px;z-index:30;display:flex;align-items:flex-start;gap:8px}
+
+  /* ---------- Рейл иконок: логические группы + сворачивание ---------- */
+  .icon-rail{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .icon-group{display:flex;align-items:center;gap:8px;padding:3px;border-radius:15px;
+    background:rgba(6,20,32,.28);border:1px solid rgba(140,225,255,.1)}
+  .icon-group:empty{display:none}
+  .rail-toggle{width:26px;height:42px;font-size:15px;opacity:.75;order:-1}
+  .rail-toggle:hover{opacity:1}
+  .topright[data-collapsed="true"] .icon-rail{
+    max-width:0;opacity:0;pointer-events:none;transform:translateX(10px);overflow:hidden}
+  .icon-rail{transition:max-width .32s cubic-bezier(.2,.8,.2,1),opacity .22s,transform .32s;
+    overflow:hidden;max-width:1200px}
+  .topright[data-collapsed="true"] .rail-toggle{transform:rotate(180deg)}
+
+  /* ---------- Модалки прячут HUD целиком ---------- */
+  body.modal-open .topright,
+  body.modal-open .brand,
+  body.modal-open .telemetry,
+  body.modal-open .res-badge,
+  body.modal-open .minimap-box,
+  body.modal-open .status,
+  body.modal-open .guide-card,
+  body.modal-open .hud-toggle,
+  body.modal-open .touch-actions{
+    opacity:0 !important;pointer-events:none !important;transition:opacity .25s}
+  .icon-btn{width:42px;height:42px;border-radius:13px;border:1px solid var(--glass-brd);
+    background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    color:var(--ink);font-size:16px;display:grid;place-items:center;cursor:pointer;transition:.22s}
+  .icon-btn:hover{border-color:rgba(88,224,255,.55);box-shadow:0 0 20px rgba(88,224,255,.22);transform:translateY(-1px)}
+  .icon-btn.on,.icon-btn.open{background:rgba(88,224,255,.2);border-color:rgba(88,224,255,.72);color:#fff}
+
+  /* ---------- Боковая панель ---------- */
+  :root{--rail-bottom:0px;--rail-top:18px}
+  /* Панель всегда начинается ниже фактического низа рейла иконок
+     (высоту измеряет ui/rails.js и пишет в --rail-bottom) */
+  /* Панели — это выдвижные окна: они обязаны быть выше всего HUD-хрома
+     (рейл 30, джойстик 26, быстрые действия 27, камера-превью 32),
+     иначе иконки и джойстик рисуются поверх открытой панели.
+     Модалки (70) и тосты (60) остаются выше. */
+  .panel{position:fixed;right:18px;top:calc(var(--rail-top) + var(--rail-bottom) + 14px);z-index:55;width:308px;padding:16px;border-radius:18px;
+    background:rgba(6,22,38,.94);border:1px solid var(--glass-brd);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    box-shadow:0 24px 60px rgba(0,0,0,.48);transition:transform .4s cubic-bezier(.2,.8,.2,1),opacity .3s;
+    max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 46px);overflow-y:auto;scrollbar-width:thin}
+  .panel.closed{transform:translateX(120%);opacity:0;pointer-events:none}
+  .panel h2{margin:0 0 10px;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600}
+  .panel .group{margin-bottom:15px;padding-bottom:13px;border-bottom:1px solid rgba(140,225,255,.1)}
+  .panel .group:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
+  .row{display:flex;gap:6px;flex-wrap:wrap}
+  .btn{flex:1 1 auto;padding:8px 9px;border-radius:10px;border:1px solid rgba(140,225,255,.16);
+    background:rgba(255,255,255,.05);color:var(--ink);font-size:11.5px;font-weight:500;
+    cursor:pointer;transition:.2s;white-space:nowrap;font-family:inherit;text-align:center}
+  .btn:hover{background:rgba(88,224,255,.15);border-color:rgba(88,224,255,.48)}
+  .btn.on{background:rgba(88,224,255,.22);border-color:rgba(88,224,255,.72);
+    box-shadow:0 0 16px rgba(88,224,255,.22) inset;color:#f4feff}
+  .btn.chip{flex:1 1 46%;font-size:11px;padding:7px 8px;text-align:left;overflow:hidden;text-overflow:ellipsis}
+
+  .time-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px;font-size:11.5px;color:var(--dim)}
+  .time-row b{color:var(--ink);font-size:14px;font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;outline:none;
+    background:linear-gradient(90deg,#081c33,#3697bf 28%,#8ee5ff 52%,#ffa969 76%,#081c33);margin:8px 0 0}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#eafdff;border:2px solid #58e0ff;box-shadow:0 0 10px rgba(88,224,255,.8);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#eafdff;border:2px solid #58e0ff;cursor:pointer}
+
+  .stat{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);padding:4px 0}
+  .stat b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+  .keys{font-size:11px;line-height:1.75;color:var(--dim)}
+  .keys kbd{display:inline-block;min-width:18px;text-align:center;padding:1px 5px;border-radius:5px;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);font-family:inherit;font-size:10px;color:var(--ink)}
+
+  /* ---------- Мини-карта ---------- */
+  .minimap-box{position:fixed;left:20px;bottom:20px;z-index:22;padding:9px;border-radius:16px;
+    background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
+    box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none}
+  #minimap{display:block;width:184px;height:184px;border-radius:10px;cursor:crosshair;border:1px solid rgba(140,225,255,.18)}
+  .map-cap{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:6px;
+    font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+  .map-cap b{color:var(--ok);font-weight:600}
+  .map-fog-btn{padding:2px 7px;border-radius:999px;border:1px solid rgba(88,224,255,.32);background:rgba(88,224,255,.12);
+    color:var(--accent);font:inherit;font-size:9px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:.16s}
+  .map-fog-btn.off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:var(--dim)}
+
+  /* ---------- Подсказка снизу ---------- */
+  .hero{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:20;text-align:center;
+    pointer-events:auto;transition:opacity .7s, transform .7s}
+  .hero.fade{opacity:0;transform:translateX(-50%) translateY(14px);pointer-events:none}
+  .hero .pill{display:inline-flex;gap:12px;align-items:center;padding:8px 14px;border-radius:999px;
+    background:rgba(6,24,38,.74);border:1px solid var(--glass-brd);backdrop-filter:blur(12px);
+    font-size:11.5px;color:#d6effa;box-shadow:0 12px 32px rgba(0,0,0,.4)}
+  .hero .pill span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .hero .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+  .hero-action{padding:4px 10px;border-radius:999px;border:1px solid rgba(88,224,255,.42);
+    background:rgba(88,224,255,.16);color:#e9fbff;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap;transition:.16s}
+  .hero-action:hover{background:rgba(88,224,255,.28);border-color:rgba(88,224,255,.78)}
+  .hero-close{width:22px;height:22px;border-radius:50%;border:1px solid rgba(255,255,255,.18);
+    background:rgba(255,255,255,.06);color:var(--dim);font-size:11px;cursor:pointer;line-height:1}
+  .hero-close:hover{color:#fff;border-color:rgba(255,255,255,.4)}
+
+  /* ---------- Модальное окно быстрой справки ---------- */
+  .help-box{max-width:860px}
+  .help-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;padding:12px 2px 4px;overflow-y:auto}
+  .help-cat{padding:12px 13px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(130,222,255,.16)}
+  .help-cat h4{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+  .help-item{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:6px 8px;margin-bottom:4px;
+    border-radius:9px;border:1px solid transparent;background:rgba(255,255,255,.025);color:var(--ink);font:inherit;
+    font-size:11.5px;text-align:left;cursor:pointer;transition:.15s}
+  .help-item:last-child{margin-bottom:0}
+  .help-item:hover{background:rgba(88,224,255,.12);border-color:rgba(88,224,255,.36)}
+  .help-item kbd{padding:2px 6px;border-radius:6px;background:rgba(88,224,255,.14);border:1px solid rgba(88,224,255,.32);
+    color:var(--accent);font:600 10px inherit;white-space:nowrap}
+
+  /* ---------- Статус ---------- */
+  .status{position:fixed;right:20px;bottom:14px;z-index:20;font-size:10.5px;letter-spacing:.14em;
+    color:rgba(155,195,215,.72);text-transform:uppercase;pointer-events:none;display:flex;gap:12px}
+
+  /* ---------- Режим батискафа и Эхолот ---------- */
+  .sub-hud{position:fixed;inset:0;z-index:16;pointer-events:none;transition:opacity .35s}
+  .sub-hud.hidden{opacity:0}
+  .sub-frame{position:fixed;inset:14px;border-radius:26px;border:1px solid rgba(88,224,255,.16);
+    box-shadow:inset 0 0 64px rgba(12,68,98,.26)}
+  .sub-reticle{position:fixed;left:50%;top:50%;width:184px;height:184px;transform:translate(-50%,-50%);
+    border-radius:50%;border:1px dashed rgba(88,224,255,.28)}
+  .sub-reticle::before,.sub-reticle::after{content:"";position:absolute;background:rgba(88,224,255,.45)}
+  .sub-reticle::before{left:-14px;right:-14px;top:50%;height:1px;mask:linear-gradient(90deg,#000 18%,transparent 30%,transparent 70%,#000 82%)}
+  .sub-reticle::after{top:-14px;bottom:-14px;left:50%;width:1px;mask:linear-gradient(180deg,#000 18%,transparent 30%,transparent 70%,#000 82%)}
+  .sub-horizon{position:fixed;left:50%;top:50%;width:92px;height:2px;margin-left:-46px;margin-top:-1px;
+    background:linear-gradient(90deg,transparent,rgba(91,232,176,.85) 28%,transparent 44%,transparent 56%,rgba(91,232,176,.85) 72%,transparent);
+    transition:transform .12s linear}
+  .sub-strip{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;gap:14px;align-items:center;
+    padding:8px 18px;border-radius:14px;background:rgba(4,18,32,.72);border:1px solid rgba(88,224,255,.28);
+    backdrop-filter:blur(12px);font-size:11.5px;white-space:nowrap;box-shadow:0 12px 32px rgba(0,0,0,.4)}
+  .sub-cell{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .sub-cell span{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .sub-cell b{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--accent)}
+  .sub-cell b.warn{color:var(--accent2)}
+
+  .sonar-box{position:fixed;right:20px;bottom:42px;z-index:22;width:266px;padding:10px;border-radius:16px;
+    background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
+    box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none;transition:opacity .3s, transform .3s}
+  .sonar-box.hidden{opacity:0;transform:translateY(14px);pointer-events:none}
+  .sonar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;
+    font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  .sonar-head b{color:var(--ok);font-weight:600;max-width:162px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #sonar-canvas{display:block;width:246px;height:102px;border-radius:10px;border:1px solid rgba(140,225,255,.18);
+    background:rgba(2,13,24,.92)}
+
+  .hydro-box{position:fixed;left:222px;bottom:20px;z-index:22;width:294px;padding:10px;border-radius:16px;
+    background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
+    box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none;transition:opacity .28s, transform .28s}
+  .hydro-box.hidden{opacity:0;transform:translateY(14px);pointer-events:none}
+  .hydro-head{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;
+    font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+  .hydro-head b{color:var(--ok);font-weight:600;font-variant-numeric:tabular-nums}
+  .hydro-btn{padding:2px 7px;border-radius:999px;border:1px solid rgba(88,224,255,.32);background:rgba(88,224,255,.12);
+    color:var(--accent);font:inherit;font-size:9px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:.16s}
+  .hydro-btn:hover{background:rgba(88,224,255,.24)}
+  #hydro-canvas{display:block;width:272px;height:94px;border-radius:10px;border:1px solid rgba(140,225,255,.18);
+    background:#020c18}
+  .hydro-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:10px;color:#d6effa}
+  .hydro-foot span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:176px}
+  .hydro-foot b{color:var(--accent);font-size:9.5px;white-space:nowrap;font-weight:600}
+  .hydro-bearing{display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:4px;
+    border-top:1px solid rgba(140,225,255,.12);font-size:9.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .hydro-bearing b{color:var(--ok);font-weight:600}
+
+  @media (max-width:960px){
+    .sonar-box,.hydro-box{display:none}
+    .sub-strip{bottom:64px;gap:10px;padding:6px 12px}
+  }
+
+  /* ---------- Карточка существа ---------- */
+  .popup{position:fixed;z-index:45;width:292px;padding:14px 16px;border-radius:16px;
+    background:var(--glass-strong);border:1px solid rgba(88,224,255,.36);backdrop-filter:blur(16px);
+    box-shadow:0 18px 46px rgba(0,0,0,.55);transition:opacity .25s, transform .25s;pointer-events:none}
+  .popup.hidden{opacity:0;transform:translateY(8px)}
+  .popup-head{display:flex;justify-content:space-between;align-items:center;font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
+  .popup-new{color:var(--ok);font-weight:600}
+  .popup-title{font-size:14.5px;font-weight:600}
+  .popup-latin{font-size:11px;font-style:italic;color:var(--accent);margin-top:2px}
+  .popup-desc{font-size:11.8px;line-height:1.55;color:#c2dce9;margin-top:8px}
+
+  /* ---------- Модальный Атлас рифа ---------- */
+  .atlas-modal{position:fixed;inset:0;z-index:70;background:rgba(2,11,20,.72);backdrop-filter:blur(10px);
+    display:grid;place-items:center;padding:24px;transition:opacity .28s}
+  .atlas-modal.hidden{opacity:0;pointer-events:none}
+  .atlas-box{width:min(1020px, 100%);max-height:90vh;display:flex;flex-direction:column;border-radius:20px;
+    background:var(--glass-strong);border:1px solid rgba(88,224,255,.28);box-shadow:0 28px 80px rgba(0,0,0,.65);overflow:hidden}
+  .atlas-header{display:flex;justify-content:space-between;align-items:center;padding:15px 22px;border-bottom:1px solid rgba(140,225,255,.14)}
+  .atlas-header h3{margin:0;font-size:16px;letter-spacing:.12em;text-transform:uppercase}
+  .atlas-header small{color:var(--accent);font-size:12px;margin-left:12px;font-weight:500}
+  .atlas-viewer{display:grid;grid-template-columns:310px 1fr;gap:18px;padding:16px 22px;border-bottom:1px solid rgba(140,225,255,.14);
+    background:radial-gradient(ellipse at 24% 50%,rgba(22,88,125,.28),rgba(4,16,30,.5) 75%)}
+  .atlas-stage{position:relative;border-radius:14px;overflow:hidden;border:1px solid rgba(88,224,255,.26);
+    background:radial-gradient(circle at 50% 45%,#0f4868,#041322 82%);height:208px;cursor:grab;user-select:none}
+  .atlas-stage:active{cursor:grabbing}
+  #atlas-3d{display:block;width:100%;height:100%}
+  .atlas-stage-light{position:absolute;right:8px;top:8px;padding:4px 9px;border-radius:999px;border:1px solid rgba(140,225,255,.32);
+    background:rgba(4,18,32,.72);color:var(--ink);font-size:11px;cursor:pointer;backdrop-filter:blur(6px)}
+  .atlas-stage-hint{position:absolute;left:10px;bottom:7px;font-size:10px;color:rgba(190,235,255,.65);pointer-events:none}
+  .atlas-info{display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+  .atlas-v-desc{font-size:12.5px;line-height:1.58;color:#cce4f2;margin:2px 0 4px}
+  .atlas-v-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .atlas-v-actions .btn{flex:0 0 auto;padding:7px 14px;font-size:12px}
+  @media (max-width:780px){
+    .atlas-viewer{grid-template-columns:1fr;gap:12px}
+    .atlas-stage{height:176px}
+  }
+  .atlas-tabs{display:flex;gap:8px;flex-wrap:wrap;padding:11px 22px;border-bottom:1px solid rgba(140,225,255,.1);background:rgba(255,255,255,.02)}
+  .atlas-tabs .btn{flex:0 0 auto;padding:6px 12px}
+  .atlas-grid{padding:16px 22px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px}
+  .atlas-card{padding:13px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.14);
+    display:flex;flex-direction:column;gap:5px;cursor:pointer;transition:border-color .18s, transform .18s}
+  .atlas-card:hover{border-color:rgba(88,224,255,.45);transform:translateY(-1px)}
+  .atlas-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px rgba(88,224,255,.45), 0 10px 26px rgba(0,0,0,.35)}
+  .atlas-card.found{border-color:rgba(91,232,176,.42);background:rgba(91,232,176,.06)}
+  .atlas-top{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  .atlas-badge{padding:2px 7px;border-radius:99px;background:rgba(255,255,255,.08)}
+  .atlas-badge.ok{background:rgba(91,232,176,.18);color:var(--ok)}
+  .atlas-name{font-size:14px;font-weight:600;margin-top:2px}
+  .atlas-latin{font-size:11px;font-style:italic;color:var(--accent)}
+  .atlas-desc{font-size:11.5px;line-height:1.5;color:#bdd8e6;flex:1;margin:4px 0 8px}
+  .atlas-foot{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--dim);padding-top:8px;border-top:1px dashed rgba(140,225,255,.12)}
+  .atlas-go{background:rgba(88,224,255,.16);border:1px solid rgba(88,224,255,.45);color:var(--ink);
+    padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-family:inherit}
+  .atlas-go:hover{background:rgba(88,224,255,.3)}
+
+  /* ---------- Подводная фотокамера исследователя ---------- */
+  .cam-hud{position:fixed;inset:0;z-index:24;pointer-events:none;transition:opacity .28s}
+  .cam-hud.hidden{opacity:0;pointer-events:none}
+  .cam-frame{position:fixed;inset:56px 64px 84px;border:1px solid rgba(160,240,255,.28);border-radius:12px}
+  .cam-thirds-v{position:absolute;top:0;bottom:0;left:33.33%;right:33.33%;border-left:1px dashed rgba(255,255,255,.1);border-right:1px dashed rgba(255,255,255,.1)}
+  .cam-thirds-h{position:absolute;left:0;right:0;top:33.33%;bottom:33.33%;border-top:1px dashed rgba(255,255,255,.1);border-bottom:1px dashed rgba(255,255,255,.1)}
+  .cam-focus{position:fixed;left:50%;top:50%;width:128px;height:96px;transform:translate(-50%,-50%);
+    border:1.5px solid rgba(91,232,176,.75);border-radius:10px;box-shadow:0 0 20px rgba(91,232,176,.15)}
+  .cam-target{position:fixed;left:50%;top:calc(50% + 62px);transform:translateX(-50%);
+    padding:5px 14px;border-radius:999px;background:rgba(4,18,32,.78);border:1px solid rgba(91,232,176,.4);
+    font-size:11.5px;color:#e4faff;white-space:nowrap;backdrop-filter:blur(8px)}
+  .cam-bar{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;
+    padding:8px 14px;border-radius:999px;background:rgba(4,18,32,.84);border:1px solid rgba(88,224,255,.35);
+    backdrop-filter:blur(12px);pointer-events:auto;box-shadow:0 12px 34px rgba(0,0,0,.5)}
+  .cam-bar .btn{padding:6px 11px;font-size:11.5px}
+  .cam-snap{padding:8px 18px !important;background:rgba(91,232,176,.24) !important;border-color:rgba(91,232,176,.8) !important;
+    color:#fff !important;font-weight:600 !important}
+  .cam-snap:hover{background:rgba(91,232,176,.4) !important}
+  .cam-flash{position:fixed;inset:0;z-index:90;background:#fff;opacity:0;pointer-events:none;transition:opacity .32s ease-out}
+  .cam-flash.bang{opacity:.78;transition:none}
+  .cam-preview{position:fixed;right:20px;bottom:84px;z-index:32;width:236px;padding:10px;border-radius:14px;
+    background:var(--glass-strong);border:1px solid rgba(91,232,176,.45);backdrop-filter:blur(14px);
+    box-shadow:0 16px 40px rgba(0,0,0,.55);transition:opacity .3s, transform .3s}
+  .cam-preview.hidden{opacity:0;transform:translateY(10px);pointer-events:none}
+  .cam-preview img{display:block;width:100%;border-radius:8px;margin-bottom:8px}
+  .cam-preview-meta{font-size:11px;line-height:1.45;color:var(--ink);margin-bottom:8px}
+  .cam-preview-meta small{display:block;color:var(--ok);font-size:10.5px}
+
+  /* ---------- Журнал экспедиции (Миссии + Фото) ---------- */
+  .mission-card{padding:14px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.14);
+    display:flex;flex-direction:column;gap:8px}
+  .mission-card.done{border-color:rgba(91,232,176,.5);background:rgba(91,232,176,.08)}
+  .mission-prog{height:5px;border-radius:5px;background:rgba(255,255,255,.1);overflow:hidden}
+  .mission-prog > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .3s}
+  .photo-card{padding:10px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.16);
+    display:flex;flex-direction:column;gap:6px}
+  .photo-card img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:9px;background:#04121f}
+  .tele-wp-hide{display:none !important}
+
+  /* ---------- Тост ---------- */
+  .toast{position:fixed;left:50%;top:72px;transform:translate(-50%,-12px);z-index:60;padding:9px 18px;
+    border-radius:999px;background:rgba(5,22,38,.88);border:1px solid rgba(88,224,255,.38);
+    font-size:12px;color:#e5f7ff;opacity:0;pointer-events:none;transition:.35s;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+
+  /* ---------- Кинематографический режим (CineCam 2.39:1 + цветофильтры) ---------- */
+  .cinema-bars{position:fixed;inset:0;z-index:18;pointer-events:none}
+  .cinema-bar-top,.cinema-bar-bot{position:fixed;left:0;right:0;height:0;background:#01060c;transition:height .45s cubic-bezier(.22,.8,.28,1)}
+  .cinema-bar-top{top:0}.cinema-bar-bot{bottom:0}
+  .cinema-bars.active .cinema-bar-top,.cinema-bars.active .cinema-bar-bot{height:min(74px, 9.5vh)}
+  .cinema-hud{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:27;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding:7px 14px;border-radius:999px;background:rgba(4,16,28,.86);border:1px solid rgba(88,224,255,.35);
+    backdrop-filter:blur(12px);box-shadow:0 12px 32px rgba(0,0,0,.55);transition:opacity .28s, transform .28s}
+  .cinema-hud.hidden{opacity:0;transform:translate(-50%, 14px);pointer-events:none}
+  .cinema-hud .btn{flex:0 0 auto;padding:5px 10px;font-size:11px}
+
+  /* ---------- Мобильный виртуальный джойстик ---------- */
+  .touch-nav{display:none;position:fixed;left:18px;right:18px;bottom:52px;z-index:26;justify-content:space-between;align-items:flex-end;pointer-events:none}
+  .touch-stick{position:relative;width:104px;height:104px;border-radius:50%;background:rgba(4,18,32,.52);
+    border:1.5px solid rgba(88,224,255,.35);backdrop-filter:blur(8px);pointer-events:auto;touch-action:none}
+  .touch-knob{position:absolute;left:50%;top:50%;width:42px;height:42px;margin:-21px 0 0 -21px;border-radius:50%;
+    background:radial-gradient(circle at 35% 35%,rgba(140,235,255,.92),rgba(58,180,225,.55));
+    box-shadow:0 4px 16px rgba(0,0,0,.45);pointer-events:none}
+  .touch-vert{display:flex;flex-direction:column;gap:8px;pointer-events:auto}
+  .touch-vert .btn{padding:11px 14px;background:var(--glass);backdrop-filter:blur(10px);min-width:52px}
+  .touch-stick-label{position:absolute;left:50%;bottom:-17px;transform:translateX(-50%);font-size:9px;
+    letter-spacing:.14em;text-transform:uppercase;color:rgba(150,210,235,.72);pointer-events:none;white-space:nowrap}
+  .touch-actions{position:fixed;right:18px;bottom:172px;z-index:27;display:none;flex-direction:column;gap:8px;pointer-events:auto}
+  .touch-act{width:52px;height:52px;border-radius:16px;border:1px solid var(--glass-brd);background:var(--glass);
+    backdrop-filter:blur(12px);color:var(--ink);font-size:15px;display:grid;place-items:center;cursor:pointer;
+    transition:.18s;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  .touch-act:active,.touch-act.on{background:rgba(88,224,255,.28);border-color:rgba(88,224,255,.8);
+    box-shadow:0 0 18px rgba(88,224,255,.28)}
+  .touch-act small{position:absolute;opacity:0;pointer-events:none}
+  @media (pointer:coarse){
+    .touch-nav{display:flex}
+    .touch-actions{display:flex}
+    .icon-btn{width:44px;height:44px}
+  }
+  /* Сенсорный HUD и на узких экранах без coarse-указателя (планшеты, узкие окна) */
+  @media (max-width:960px){
+    .touch-actions{display:flex}
+  }
+  @media (max-height:520px){
+    .touch-nav{bottom:14px}
+    .touch-stick{width:86px;height:86px}
+    .touch-knob{width:34px;height:34px;margin:-17px 0 0 -17px}
+    .touch-actions{bottom:120px;flex-direction:row;right:14px}
+  }
+  .res-badge{position:fixed;right:18px;bottom:14px;z-index:21;font-size:9.5px;letter-spacing:.1em;
+    color:rgba(155,195,215,.66);text-transform:uppercase;pointer-events:none;font-variant-numeric:tabular-nums}
+  .res-badge b{color:var(--ok);font-weight:600}
+  .hud-toggle{position:fixed;left:18px;bottom:14px;z-index:30;width:40px;height:40px;border-radius:13px;
+    border:1px solid var(--glass-brd);background:var(--glass);backdrop-filter:blur(12px);color:var(--ink);
+    font-size:15px;display:none;place-items:center;cursor:pointer;transition:.2s}
+  .hud-toggle.show{display:grid}
+  .hud-toggle.on{border-color:rgba(88,224,255,.7);background:rgba(88,224,255,.2)}
+  @media (max-width:960px),(pointer:coarse){
+    .hud-toggle{display:grid}
+  }
+
+  /* ---------- 3D-глобус планеты ---------- */
+  .globe-box{width:min(980px, 100%);max-height:92vh;display:flex;flex-direction:column;border-radius:20px;
+    background:var(--glass-strong);border:1px solid rgba(88,224,255,.32);box-shadow:0 28px 80px rgba(0,0,0,.72);overflow:hidden}
+  .globe-body{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;padding:16px 20px;overflow-y:auto}
+  .globe-stage{position:relative;min-height:380px;border-radius:16px;overflow:hidden;
+    border:1px solid rgba(88,224,255,.26);cursor:grab;user-select:none;
+    background:radial-gradient(circle at 50% 45%,#0b2b48,#020a14 82%)}
+  .globe-stage:active{cursor:grabbing}
+  #globe-3d{display:block;width:100%;height:100%;min-height:380px}
+  .globe-hover-tip{position:absolute;left:12px;top:12px;padding:5px 12px;border-radius:999px;
+    background:rgba(4,18,32,.84);border:1px solid rgba(88,224,255,.45);font-size:11.5px;color:#eafaff;
+    pointer-events:none;backdrop-filter:blur(8px);transition:opacity .15s}
+  .globe-hover-tip.hidden{opacity:0}
+  .globe-hint{position:absolute;left:12px;bottom:10px;font-size:10.5px;color:rgba(195,235,255,.72);
+    pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+  .globe-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .globe-list{display:flex;flex-direction:column;gap:6px}
+  .globe-loc{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:12px;text-align:left;
+    background:rgba(255,255,255,.04);border:1px solid rgba(140,225,255,.16);color:var(--ink);cursor:pointer;
+    transition:.18s;font-family:inherit}
+  .globe-loc:hover{border-color:rgba(88,224,255,.5);background:rgba(88,224,255,.09)}
+  .globe-loc.on{border-color:var(--accent);background:rgba(88,224,255,.16);box-shadow:0 0 18px rgba(88,224,255,.18)}
+  .globe-loc.cur .globe-loc-meta{color:var(--ok)}
+  .globe-dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+  .globe-loc-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+  .globe-loc-txt b{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .globe-loc-txt small{font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .globe-loc-meta{font-size:10.5px;color:var(--accent);font-weight:600;white-space:nowrap}
+  .globe-card{padding:14px;border-radius:14px;background:rgba(4,20,36,.72);border:1px solid rgba(88,224,255,.22);
+    display:flex;flex-direction:column;gap:9px}
+  .globe-card h4{margin:0;font-size:16px;font-weight:600;color:#f2fdff}
+  .globe-ocean{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+  .globe-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 0;
+    border-top:1px dashed rgba(140,225,255,.16);border-bottom:1px dashed rgba(140,225,255,.16)}
+  .globe-metric{display:flex;flex-direction:column;gap:2px}
+  .globe-metric span{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+  .globe-metric b{font-size:11.5px;color:var(--ink)}
+  .globe-summary{font-size:12px;line-height:1.52;color:#c5e1ee}
+  .globe-prog{font-size:11px;color:var(--ok);font-weight:500}
+  .globe-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+  .globe-actions .btn{flex:1 1 46%;padding:9px 12px;font-size:12px;font-weight:600}
+
+  /* ---------- Карточка сюжетного гид-тура ---------- */
+  .guide-card{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:26;
+    width:min(520px, calc(100vw - 480px));min-width:300px;padding:13px 16px;border-radius:18px;
+    background:var(--glass-strong);border:1px solid rgba(88,224,255,.36);backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);box-shadow:0 20px 52px rgba(0,0,0,.55);
+    transition:opacity .3s, transform .3s, bottom .3s}
+  .guide-card.hidden{opacity:0;transform:translate(-50%, 16px);pointer-events:none}
+  body.sub-on .guide-card{bottom:86px}
+  .guide-head{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+  .guide-step{color:var(--accent);font-weight:600}
+  .guide-title{font-size:14.5px;font-weight:600;color:#f2fdff;margin-bottom:5px}
+  .guide-fact{font-size:12px;line-height:1.5;color:#cbe5f2;margin-bottom:9px}
+  .guide-prog{height:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-bottom:10px}
+  .guide-prog > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--ok));
+    transition:width .12s linear}
+  .guide-controls{display:flex;gap:6px;align-items:center}
+  .guide-controls .btn{padding:6px 10px;font-size:11.5px}
+
+  @media (max-width:860px){
+    .globe-body{grid-template-columns:1fr;gap:12px}
+    .globe-stage,#globe-3d{min-height:240px}
+    .globe-metrics{grid-template-columns:1fr 1fr}
+  }
+  @media (max-width:960px){
+    .guide-card{width:calc(100vw - 24px);bottom:66px;min-width:0}
+  }
+
+  /* ---------- Экологическая лаборатория ---------- */
+  .lab-panel{width:334px;max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 60px)}
+  .lab-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .lab-head h2{margin:0}
+  .lab-hero{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;
+    background:rgba(3,16,30,.72);border:1px solid rgba(130,222,255,.2);margin-bottom:10px}
+  .lab-health{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ok);line-height:1}
+  .lab-health.warn{color:var(--accent2)}
+  .lab-health.crit{color:#ff6b6b}
+  .lab-status{font-size:11px;font-weight:600;text-align:right;color:var(--ink)}
+  .lab-status small{display:block;font-size:9.5px;color:var(--dim);font-weight:400;margin-top:2px}
+  .lab-metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+  .lab-metric{padding:6px 8px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(130,222,255,.12);
+    display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--dim)}
+  .lab-metric b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+  #lab-chart{display:block;width:100%;height:72px;border-radius:10px;border:1px solid rgba(130,222,255,.16);margin-bottom:5px}
+  .lab-legend{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dim)}
+  .lab-legend i{display:inline-block;width:8px;height:2px;vertical-align:middle;margin-right:4px}
+  .lab-slider-row{margin-bottom:10px}
+  .lab-slider-row:last-child{margin-bottom:0}
+  .lab-shead{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:4px}
+  .lab-shead b{color:var(--accent);font-variant-numeric:tabular-nums}
+  input[type=range].lab-range{background:rgba(130,222,255,.22);margin:2px 0 0}
+
+  /* ---------- Панель 3D-ROV, CTD и проб ---------- */
+  .rov-panel{width:338px;max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 60px)}
+  .rov-target-box{padding:8px 10px;border-radius:10px;background:rgba(3,16,30,.72);
+    border:1px solid rgba(130,222,255,.18);font-size:11px;line-height:1.45;margin-bottom:10px}
+  .rov-target-box b{color:var(--ok);display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rov-target-box small{color:var(--dim);font-size:10px;display:block}
+  .rov-target-box small.warn{color:var(--warn);font-weight:600}
+  .rov-target-box small.crit{color:#ff5e6c;font-weight:700}
+  #rov-ctd-chart{display:block;width:100%;height:104px;border-radius:10px;border:1px solid rgba(130,222,255,.18);margin-bottom:6px}
+  .rov-sample-list{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;scrollbar-width:thin}
+  .rov-sample-item{padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(130,222,255,.14);
+    display:flex;gap:8px;align-items:flex-start}
+  .rov-sample-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:4px;box-shadow:0 0 8px currentColor}
+  .rov-sample-body{min-width:0;flex:1}
+  .rov-sample-title{font-size:11.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rov-sample-meta{font-size:10px;color:var(--accent);margin-top:1px}
+  .rov-sample-chem{font-size:10px;color:var(--dim);margin-top:1px}
+
+  /* ---------- Загрузка ---------- */
+  #loading{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at 50% 60%,#0a2c44,#020c17 75%);
+    display:grid;place-items:center;transition:opacity .7s}
+  #loading.hidden{opacity:0;pointer-events:none}
+  .load-wrap{text-align:center}
+  .load-title{font-size:13px;letter-spacing:.36em;text-transform:uppercase;color:#bfe9f7;margin-bottom:20px}
+  .load-track{width:230px;height:2px;background:rgba(255,255,255,.12);border-radius:2px;overflow:hidden;margin:0 auto}
+  #loading-bar{height:100%;width:0;background:linear-gradient(90deg,#58e0ff,#a6f1ff);transition:width .25s;box-shadow:0 0 14px #58e0ff}
+  .load-sub{margin-top:14px;font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:#5a8da6}
+
+  @media (max-width:960px){
+    .telemetry{top:auto;bottom:14px;left:50%;padding:6px 12px;gap:8px;font-size:10.5px}
+    .tele-sep{display:none}
+    .minimap-box{display:none}
+    .hero{display:none}
+    .touch-nav{display:flex}
+    /* Компактный HUD планшета: верхние кнопки уходят под сейф-зону, телеметрия сжимается */
+    .topright{right:12px;top:calc(10px + env(safe-area-inset-top, 0px));gap:6px;
+      --rail-top:calc(10px + env(safe-area-inset-top, 0px));
+      max-width:calc(100vw - 24px);justify-content:flex-end}
+    .icon-group{gap:6px}
+    .telemetry{bottom:calc(10px + env(safe-area-inset-bottom, 0px));font-size:10px;
+      max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none}
+    .telemetry::-webkit-scrollbar{display:none}
+    .brand{max-width:calc(100vw - 96px)}
+    .biome-bar{max-width:calc(100vw - 40px);overflow-x:auto;flex-wrap:nowrap;padding-bottom:3px;scrollbar-width:none}
+    .biome-bar::-webkit-scrollbar{display:none}
+    .biome-pill{flex:0 0 auto;padding:4px 9px;font-size:10px}
+    .res-badge{display:none}
+  }
+  @media (max-width:1500px){
+    /* 14 иконок не помещаются в один ряд вместе с брендом и телеметрией:
+       рейл переносится в два ряда, телеметрия уходит вниз по центру. */
+    .icon-rail{max-width:400px}
+    .telemetry{top:auto;bottom:14px;left:50%;transform:translateX(-50%);max-width:min(60vw, 560px)}
+    .brand{max-width:calc(100vw - 460px)}
+  }
+  @media (max-width:1100px){
+    .brand{max-width:150px}
+    .brand p{display:none}
+    .status{display:none}
+    .telemetry{max-width:70vw}
+  }
+  @media (max-width:720px){
+    .brand{left:14px;top:calc(10px + env(safe-area-inset-top, 0px))}
+    .brand h1{font-size:13px;letter-spacing:.1em}
+    .brand p{font-size:8.5px}
+    .topright{right:10px;top:calc(8px + env(safe-area-inset-top, 0px));gap:5px}
+    :root{--rail-top:calc(8px + env(safe-area-inset-top, 0px))}
+    .icon-btn{width:38px;height:38px;font-size:14px;border-radius:11px}
+    .rail-toggle{width:24px;height:38px}
+    .icon-group{padding:2px}
+    .panel{right:10px;width:min(300px, calc(100vw - 20px));
+      max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 60px)}
+    .panel.lab-panel,.panel.rov-panel{left:10px;right:10px;width:auto}
+    .status{display:none}
+    .telemetry{max-width:calc(100vw - 20px);overflow-x:auto;scrollbar-width:none;border-radius:14px}
+    .telemetry::-webkit-scrollbar{display:none}
+    .sub-strip{flex-wrap:wrap;justify-content:center;gap:8px;max-width:calc(100vw - 20px);
+      bottom:calc(58px + env(safe-area-inset-bottom, 0px))}
+    .sub-frame{inset:8px;border-radius:18px}
+    .sub-reticle{width:132px;height:132px}
+    .touch-nav{left:12px;right:12px;bottom:calc(56px + env(safe-area-inset-bottom, 0px))}
+    .touch-stick{width:96px;height:96px}
+    .touch-actions{bottom:calc(164px + env(safe-area-inset-bottom, 0px));right:12px}
+    .cam-hud{left:8px;right:8px}
+    .cinema-hud{max-width:calc(100vw - 16px);justify-content:center}
+    .guide-card{width:calc(100vw - 16px);bottom:calc(60px + env(safe-area-inset-bottom, 0px))}
+    .atlas-modal{padding:8px}
+    .atlas-box{max-height:96vh}
+    .atlas-grid{grid-template-columns:1fr;padding:12px}
+    .popup{width:min(268px, calc(100vw - 24px))}
+  }
+  @media (max-width:430px){
+    .brand h1{font-size:11.5px}
+    .brand p{display:none}
+    .icon-btn{width:34px;height:34px;font-size:12.5px}
+    .biome-bar{margin-top:7px}
+    .telemetry{font-size:9.5px;padding:5px 10px;gap:6px;max-width:calc(100vw - 96px)}
+    .touch-actions{gap:6px}
+    .touch-act{width:46px;height:46px;font-size:13px}
+    .sub-horizon{width:70px;margin-left:-35px}
+  }
+  @media (orientation:landscape) and (max-height:560px){
+    .brand p,.brand .line{display:none}
+    .panel{max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 20px)}
+    .touch-nav{bottom:10px}
+    /* Ландшафт телефона: развёрнутый рейл занимает два ряда сверху,
+       поэтому быстрые действия начинаются под ним, а не под кнопкой «›» */
+    .touch-actions{bottom:auto;right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px;
+      top:calc(var(--rail-top) + var(--rail-bottom) + 52px)}
+    .telemetry{bottom:8px}
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<canvas id="lens-fx" style="position:fixed;inset:0;z-index:2;pointer-events:none"></canvas>
+<div class="vignette"></div>
+
+<header class="brand">
+  <h1 id="brand-title">Большой <span>Барьерный риф</span></h1>
+  <p id="brand-sub">Шельф Кораллового моря · 2.4 × 2.4 км</p>
+  <div class="line"></div>
+  <div class="biome-bar" id="biome-bar" aria-label="Выбор океанического биома"></div>
+</header>
+
+<div class="telemetry">
+  <div class="tele-item"><span>Зона</span><b id="tele-zone">Гребень рифа</b></div>
+  <div class="tele-sep"></div>
+  <div class="tele-item"><span>Глубина</span><b id="tele-depth">7.5 м</b></div>
+  <div class="tele-sep"></div>
+  <div class="tele-item"><span>Вода</span><b id="tele-temp">27.0 °C</b></div>
+  <div class="tele-sep"></div>
+  <div class="tele-item"><span>Курс</span><b id="tele-heading">С 000°</b></div>
+  <div class="tele-sep" id="tele-weather-sep"></div>
+  <div class="tele-item" id="tele-weather-wrap"><span>Погода</span><b id="tele-weather">Штиль</b></div>
+  <div class="tele-sep tele-wp-hide" id="tele-wp-sep"></div>
+  <div class="tele-item tele-wp-hide" id="tele-wp-wrap"><span>Маяк</span><b id="tele-wp">—</b></div>
+</div>
+
+<div class="topright hud-hideable" id="topright" data-collapsed="false">
+  <button class="icon-btn rail-toggle" id="btn-rail-toggle" title="Свернуть панель инструментов (\\)" aria-label="Свернуть панель" aria-expanded="true">&#8250;</button>
+  <div class="icon-rail" id="icon-rail">
+    <div class="icon-group" id="gh-exped" role="group" aria-label="Экспедиция">
+      <button class="icon-btn" id="btn-globe" title="3D-глобус планеты и экспедиции (O)" aria-label="Глобус">&#127760;</button>
+      <button class="icon-btn" id="btn-atlas" title="Атлас рифа (K)" aria-label="Атлас">&#128214;</button>
+      <button class="icon-btn" id="btn-journal" title="Миссии экспедиции и фотожурнал (J)" aria-label="Журнал">&#129517;</button>
+    </div>
+    <div class="icon-group" id="gh-tools" role="group" aria-label="Инструменты">
+      <button class="icon-btn" id="btn-lab" title="Экологическая лаборатория и стресс-тест рифа (L)" aria-label="Лаборатория">&#9879;</button>
+      <button class="icon-btn" id="btn-rov" title="3D-батискаф ROV, пробы и CTD-зонд (I / Y)" aria-label="Аппарат ROV"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="14" height="8" rx="4"/><path d="M18 8.5h2.5v3H18"/><path d="M6 16h11"/><path d="M8 14v2M15 14v2"/><circle cx="13.5" cy="10" r="1.6"/><path d="M4 10H2M2 8v4"/></svg></button>
+      <button class="icon-btn" id="btn-cam" title="Подводная фотокамера (P)" aria-label="Фотокамера">&#128247;</button>
+      <button class="icon-btn" id="btn-sonar" title="Импульс сонара (G)" aria-label="Сонар">&#128225;</button>
+      <button class="icon-btn" id="btn-hydro" title="Гидрофон и живая FFT-спектрограмма (~)" aria-label="Гидрофон"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 12v0M8 8v8M12 4v16M16 7v10M20 11v2"/></svg></button>
+    </div>
+    <div class="icon-group" id="gh-view" role="group" aria-label="Вид и свет">
+      <button class="icon-btn" id="btn-flash" title="Прожектор батискафа (F)" aria-label="Прожектор">&#128294;</button>
+      <button class="icon-btn" id="btn-sound" title="Звук океана (M)" aria-label="Звук">&#9835;</button>
+      <button class="icon-btn" id="btn-cinema" title="Кинематографический режим и фильтры (N)" aria-label="Кино-режим">&#127916;</button>
+      <button class="icon-btn" id="btn-sub" title="Режим батискафа и эхолот (B)" aria-label="Батискаф">&#9678;</button>
+    </div>
+    <div class="icon-group" id="gh-system" role="group" aria-label="Система">
+      <button class="icon-btn" id="btn-help" title="Подсказки и горячие клавиши (?)" aria-label="Справка">?</button>
+      <button class="icon-btn" id="btn-panel" title="Настройки и зоны (H скрыть)" aria-label="Меню">&#9776;</button>
+    </div>
+  </div>
+</div>
+
+<aside class="panel hud-hideable" id="panel">
+  <div class="group">
+    <h2>Океаны планеты (Биомы)</h2>
+    <div class="row" id="biome-btns"></div>
+  </div>
+
+  <div class="group">
+    <h2>Навигация</h2>
+    <div class="row">
+      <button class="btn on" id="btn-mode-swim">Плавание</button>
+      <button class="btn" id="btn-mode-orbit">Орбита</button>
+      <button class="btn" id="btn-explore">&#9654; Тур</button>
+      <button class="btn" id="btn-mode-cinema">Кино</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="btn-reset">&#8634; Вернуться к центру рифа</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2 id="zone-group-title">Зоны экспедиции</h2>
+    <div class="row" id="zone-chips"></div>
+  </div>
+
+  <div class="group">
+    <h2>Время суток и свет</h2>
+    <input type="range" id="time-slider" min="0" max="100" value="24" aria-label="Время суток">
+    <div class="time-row"><span>Время суток</span><b id="time-label">05:45</b></div>
+    <div class="time-row"><span>Сезон</span><b id="season-label" title="Смена сезона плавно меняет температуру и освещение">Лето</b></div>
+    <div class="row" id="season-buttons" style="margin-top:6px" aria-label="Выбрать время года">
+      <button class="btn" data-season="spring">Весна</button>
+      <button class="btn on" data-season="summer">Лето</button>
+      <button class="btn" data-season="autumn">Осень</button>
+      <button class="btn" data-season="winter">Зима</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn on" id="btn-season-auto">⟳ Годовой цикл: Авто</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="btn-dawn">Рассвет</button>
+      <button class="btn" id="btn-day">Полдень</button>
+      <button class="btn" id="btn-dusk">Закат</button>
+      <button class="btn" id="btn-night">Ночь</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn on" id="btn-auto">⟳ Суточный цикл: Вкл</button>
+    </div>
+  </div>
+
+  <div class="group" id="weather-group">
+    <h2>Погода и волнение (U)</h2>
+    <div class="row" id="weather-btns">
+      <button class="btn on" data-w="auto">Авто</button>
+      <button class="btn" data-w="calm">Штиль</button>
+      <button class="btn" data-w="breeze">Зыбь</button>
+      <button class="btn" data-w="storm">Шторм</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Графика и оптимизация (LOD)</h2>
+    <div class="row" id="quality-btns">
+      <button class="btn" data-q="low">Низк.</button>
+      <button class="btn" data-q="medium">Средн.</button>
+      <button class="btn" data-q="high">Высок.</button>
+      <button class="btn" data-q="ultra">Ультра</button>
+    </div>
+    <div class="row" style="margin-top:6px;align-items:center">
+      <button class="btn on" id="btn-auto-lod" title="Автоматическая подстройка LOD и постобработки по p95 времени кадра">Авто-LOD: Вкл</button>
+      <span id="quality-lod-status" style="font-size:10px;color:var(--dim);flex:1;text-align:right">—</span>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Экосистема в зоне обзора</h2>
+    <div class="stat"><span>Активных чанков рельефа</span><b id="stat-chunks">—</b></div>
+    <div class="stat"><span>Колоний кораллов и флоры</span><b id="stat-corals">—</b></div>
+    <div class="stat"><span>Стайных рыб</span><b id="stat-fish">—</b></div>
+    <div class="stat"><span>Мегафауна и одиночные</span><b id="stat-big">—</b></div>
+  </div>
+
+  <div class="group">
+    <h2>Управление</h2>
+    <div class="keys">
+      <kbd>W A S D</kbd> плыть · <kbd>Shift</kbd> ускорение<br>
+      <kbd>Space/E</kbd> всплыть · <kbd>Q/C</kbd> глубже<br>
+      <kbd>Мышь</kbd> обзор · <kbd>Клик</kbd> карточка вида<br>
+      <kbd>F</kbd> прожектор · <kbd>B</kbd> батискаф · <kbd>G</kbd> сонар<br>
+      <kbd>P</kbd> камера (<kbd>Enter</kbd> снять) · <kbd>J</kbd> миссии<br>
+      <kbd>N</kbd> кино-режим · <kbd>X</kbd> цветофильтр<br>
+      <kbd>O</kbd> 3D-глобус · <kbd>T</kbd> гид-тур · <kbd>L</kbd> эколаб<br>
+      <kbd>Y</kbd> 3D-вид ROV · <kbd>Z</kbd> проба · <kbd>I</kbd> CTD-зонд<br>
+      <kbd>V</kbd> орбита · <kbd>U</kbd> погода · <kbd>K</kbd> атлас<br>
+      <kbd>~</kbd> гидрофон FFT · <kbd>M</kbd> звук · <kbd>H</kbd> HUD<br>
+      Геймпад API ✓
+    </div>
+  </div>
+</aside>
+
+<aside class="panel lab-panel closed hud-hideable" id="lab-panel" aria-label="Экологическая лаборатория">
+  <div class="group">
+    <div class="lab-head">
+      <h2>Экологическая лаборатория</h2>
+      <div class="row" style="gap:5px;flex:0 0 auto">
+        <button class="btn" id="lab-reset" style="padding:4px 8px;font-size:10.5px" title="Сбросить к норме">Сброс</button>
+        <button class="btn" id="lab-close" style="padding:4px 8px;font-size:10.5px" title="Закрыть (L)">&#10005;</button>
+      </div>
+    </div>
+    <div class="lab-hero">
+      <div>
+        <div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim)">Индекс здоровья</div>
+        <div class="lab-health" id="lab-health-num">96<span style="font-size:12px;color:var(--dim);font-weight:500"> / 100</span></div>
+      </div>
+      <div class="lab-status" id="lab-status">Баланс экосистемы<small id="lab-biome-note">Нормальная нагрузка</small></div>
+    </div>
+    <div class="lab-metrics">
+      <div class="lab-metric"><span>Обесцвечивание</span><b id="lab-m-bleach">0%</b></div>
+      <div class="lab-metric"><span>Кислород O₂</span><b id="lab-m-o2">7.2 мг/л</b></div>
+      <div class="lab-metric"><span>Кальцификация</span><b id="lab-m-calc">100%</b></div>
+      <div class="lab-metric"><span>Активность рыб</span><b id="lab-m-fish">100%</b></div>
+    </div>
+    <canvas id="lab-chart" width="298" height="72"></canvas>
+    <div class="lab-legend">
+      <span><i style="background:#5be8b0"></i>Здоровье рифа</span>
+      <span><i style="background:#ffb574"></i>Обесцвечивание</span>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Сценарии стресс-теста</h2>
+    <div class="row" id="lab-presets"></div>
+  </div>
+
+  <div class="group">
+    <h2>Параметры среды в реальном времени</h2>
+    <div class="lab-slider-row">
+      <div class="lab-shead"><span>Δ Температуры воды</span><b id="lab-v-temp">+0.0 °C</b></div>
+      <input type="range" class="lab-range" id="lab-s-temp" min="-2.0" max="4.5" step="0.1" value="0.0" aria-label="Отклонение температуры воды">
+    </div>
+    <div class="lab-slider-row">
+      <div class="lab-shead"><span>Кислотность (pH)</span><b id="lab-v-ph">8.10 pH</b></div>
+      <input type="range" class="lab-range" id="lab-s-ph" min="7.55" max="8.25" step="0.01" value="8.10" aria-label="Кислотность pH">
+    </div>
+    <div class="lab-slider-row">
+      <div class="lab-shead"><span>Эвтрофикация (цветение)</span><b id="lab-v-nutr">18%</b></div>
+      <input type="range" class="lab-range" id="lab-s-nutr" min="0" max="100" step="1" value="18" aria-label="Эвтрофикация">
+    </div>
+    <div class="lab-slider-row">
+      <div class="lab-shead"><span>Сила океанического течения</span><b id="lab-v-curr">1.0×</b></div>
+      <input type="range" class="lab-range" id="lab-s-curr" min="0.2" max="3.0" step="0.05" value="1.0" aria-label="Сила течения">
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Скорость биопроцессов</h2>
+    <div class="row" id="lab-speed-btns">
+      <button class="btn on" data-ts="1">1×</button>
+      <button class="btn" data-ts="5">5× Быстро</button>
+      <button class="btn" data-ts="20">20× Таймлапс</button>
+    </div>
+  </div>
+</aside>
+
+<aside class="panel rov-panel closed hud-hideable" id="rov-panel" aria-label="Аппарат ROV Наутилус-IV и океанография">
+  <div class="group">
+    <div class="lab-head">
+      <h2>ROV «Наутилус-IV» · Приборы</h2>
+      <div class="row" style="gap:5px;flex:0 0 auto">
+        <button class="btn" id="rov-close" style="padding:4px 8px;font-size:10.5px" title="Закрыть (I)">&#10005;</button>
+      </div>
+    </div>
+    <div class="row" style="gap:6px;margin-bottom:10px">
+      <button class="btn chip" id="rov-btn-chase" title="Вид от 3-го лица за ROV (Y)">Вид ROV 3-е (Y)</button>
+      <button class="btn chip" id="rov-btn-currents" title="3D-трассеры океанических течений">3D-течения</button>
+      <button class="btn chip" id="rov-btn-sample" title="Захватить пробу манипулятором (Z)">Взять пробу (Z)</button>
+      <button class="btn chip on" id="rov-btn-ctd" title="Сбросить CTD-зонд по вертикали (I)">Зонд CTD (I)</button>
+      <button class="btn chip" id="rov-btn-vessel" title="Всплыть к надводному экспедиционному судну НИС">К судну НИС</button>
+      <button class="btn chip" id="rov-btn-buoy" title="Сбросить автономный буй-гидрофон (9)">Сбросить буй (9)</button>
+      <button class="btn chip" id="rov-btn-buoy-view" title="Перелететь к развёрнутому бую-станции">К бую</button>
+      <button class="btn chip" id="rov-btn-buoy-recall" title="Свернуть все буи">Собрать</button>
+    </div>
+    <div class="rov-target-box">
+      <b id="rov-target-label">Захват: Толща воды (Нискин)</b>
+      <small id="rov-flow-label">Вектор течения: 0.0 уз</small>
+      <small id="rov-tether-label">Кабель-трос: свёрнут (вкл. Y)</small>
+      <small id="rov-buoy-status">Автономные буи: 0 / 2</small>
+    </div>
+  </div>
+
+  <div class="group">
+    <h2>Вертикальный профиль CTD-зонда</h2>
+    <canvas id="rov-ctd-chart" width="298" height="104"></canvas>
+    <div class="lab-legend" style="margin-bottom:8px">
+      <span><i style="background:#ffb574"></i>Температура °C</span>
+      <span><i style="background:#58e0ff"></i>Кислород O₂</span>
+      <span><i style="background:#5be8b0"></i>ROV</span>
+    </div>
+    <div class="lab-metrics" style="margin-bottom:0">
+      <div class="lab-metric"><span>Термоклин</span><b id="rov-ctd-thermo">—</b></div>
+      <div class="lab-metric"><span>Дно / Поверхн.</span><b id="rov-ctd-temps">—</b></div>
+      <div class="lab-metric"><span>Мин. O₂</span><b id="rov-ctd-o2">—</b></div>
+      <div class="lab-metric"><span>Макс. давл.</span><b id="rov-ctd-press">—</b></div>
+      <div class="lab-metric"><span>Вода / минерализация</span><b id="rov-ctd-water">—</b></div>
+      <div class="lab-metric"><span>Проводимость / TDS</span><b id="rov-ctd-conductivity">—</b></div>
+      <div class="lab-metric"><span>pH</span><b id="rov-ctd-ph">—</b></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="lab-head" style="margin-bottom:8px">
+      <h2>Отсек проб (<span id="rov-sample-count">0</span>)</h2>
+      <div class="row" style="gap:5px;flex:0 0 auto">
+        <button class="btn" id="rov-btn-museum" style="padding:3px 8px;font-size:10px" title="Открыть полный Музей проб">Музей</button>
+        <button class="btn" id="rov-samples-clear" style="padding:3px 8px;font-size:10px">Очистить</button>
+      </div>
+    </div>
+    <div class="rov-sample-list" id="rov-samples">
+      <div style="font-size:11px;color:var(--dim);padding:6px 0">Наведите аппарат на коралл, курильщик, лёд или дно и нажмите <b>Z</b>, чтобы взять научную пробу.</div>
+    </div>
+  </div>
+</aside>
+
+<div class="cam-hud hidden hud-hideable" id="cam-hud">
+  <div class="cam-frame">
+    <div class="cam-thirds-v"></div>
+    <div class="cam-thirds-h"></div>
+  </div>
+  <div class="cam-focus"></div>
+  <div class="cam-target" id="cam-target">Поиск объекта в кадре…</div>
+  <div class="cam-bar">
+    <button class="btn" id="cam-zoom-out" title="Шире угол ([)">− Угол</button>
+    <span id="cam-fov-label" style="font-size:11px;color:var(--dim);min-width:44px;text-align:center">52°</span>
+    <button class="btn" id="cam-zoom-in" title="Приблизить (])">+ Зум</button>
+    <button class="btn" id="btn-cam-filter" title="Цветофильтр (X)">Фильтр: Естеств.</button>
+    <button class="btn cam-snap" id="cam-snap" title="Сделать снимок (Enter)">&#128247; Снять (Enter)</button>
+    <button class="btn" id="cam-close">Закрыть (P)</button>
+  </div>
+</div>
+
+<div class="cinema-bars" id="cinema-bars">
+  <div class="cinema-bar-top"></div>
+  <div class="cinema-bar-bot"></div>
+</div>
+<div class="cinema-hud hidden" id="cinema-hud">
+  <span style="font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)">Кино</span>
+  <div class="row" id="cinema-filters" style="gap:5px;flex:0 0 auto"></div>
+  <button class="btn cam-snap" id="cinema-snap" title="Снимок в кино-фильтре">&#128247; Кадр</button>
+  <button class="btn" id="cinema-close">Выйти (N)</button>
+</div>
+<div class="cam-flash" id="cam-flash"></div>
+<div class="cam-preview hidden hud-hideable" id="cam-preview">
+  <img id="cam-preview-img" alt="Подводный снимок">
+  <div class="cam-preview-meta" id="cam-preview-meta"></div>
+  <div class="row">
+    <a class="btn on" id="cam-download" download="ocean-photo.png" style="text-decoration:none">Скачать PNG</a>
+    <button class="btn" id="cam-open-journal">Галерея</button>
+  </div>
+</div>
+
+<div class="sub-hud hidden hud-hideable" id="sub-hud">
+  <div class="sub-frame"></div>
+  <div class="sub-reticle"></div>
+  <div class="sub-horizon" id="sub-horizon"></div>
+  <div class="sub-strip">
+    <div class="sub-cell"><span>Давление</span><b id="sub-pressure">1.74 атм</b></div>
+    <div class="tele-sep"></div>
+    <div class="sub-cell"><span>Клиренс</span><b id="sub-clearance">8.2 м</b></div>
+    <div class="tele-sep"></div>
+    <div class="sub-cell"><span>Ход</span><b id="sub-speed">0.0 уз</b></div>
+    <div class="tele-sep"></div>
+    <div class="sub-cell"><span>Течение</span><b id="sub-current">0.0 уз</b></div>
+    <div class="tele-sep"></div>
+    <div class="sub-cell"><span>Среда</span><b id="sub-phase">День</b></div>
+  </div>
+</div>
+
+<div class="sonar-box hidden hud-hideable" id="sonar-box">
+  <div class="sonar-head"><span>Эхолот 165 м · 3D-луч</span><b id="sonar-readout">Сканер · Чисто</b></div>
+  <canvas id="sonar-canvas" width="246" height="102" title="Профиль дна по курсу (G — 3D-мультилуч)"></canvas>
+</div>
+
+<div class="minimap-box hud-hideable">
+  <canvas id="minimap" title="Клик — переход · ПКМ или Shift+Клик — поставить/убрать маячок"></canvas>
+  <div class="map-cap"><span>Карта: <b id="map-cov">0%</b></span><button class="map-fog-btn" id="map-fog-btn" title="Туман войны / Полная карта">Туман</button><span>ПКМ — маяк</span></div>
+</div>
+
+<div class="hydro-box hidden hud-hideable" id="hydro-box">
+  <div class="hydro-head"><span>Гидрофон · FFT</span><b id="hydro-db">92 dB</b><div style="display:flex;gap:4px"><button class="hydro-btn" id="hydro-listen-btn" title="Прослушать голос пикового источника">Слушать</button><button class="hydro-btn" id="hydro-track-btn" title="Навести камеру/ROV по пеленгу на источник">Курс</button></div></div>
+  <canvas id="hydro-canvas" width="272" height="94" title="Спектрограмма-водопад 0–4 кГц и пеленгатор"></canvas>
+  <div class="hydro-foot"><span id="hydro-source">Фоновый шум океана</span><b id="hydro-band">40–320 Гц</b></div>
+  <div class="hydro-bearing"><span>Пеленгатор:</span><b id="hydro-bearing">Ожидание сигнала…</b></div>
+</div>
+
+<div class="touch-nav hud-hideable">
+  <div class="touch-stick" id="touch-stick" aria-label="Виртуальный джойстик плавания">
+    <div class="touch-knob" id="touch-knob"></div>
+    <span class="touch-stick-label">Плавание</span>
+  </div>
+  <div class="touch-vert">
+    <button class="btn" id="m-up" title="Всплыть" aria-label="Всплыть">&#9650;</button>
+    <button class="btn" id="m-down" title="Глубже" aria-label="Погрузиться">&#9660;</button>
+  </div>
+</div>
+
+<div class="touch-actions hud-hideable" id="touch-actions" aria-label="Быстрые действия для сенсорных экранов">
+  <button class="touch-act" id="m-flash" title="Прожектор (F)" aria-label="Прожектор">&#128294;</button>
+  <button class="touch-act" id="m-sonar" title="Сонар (G)" aria-label="Сонар">&#128225;</button>
+  <button class="touch-act" id="m-sample" title="Взять пробу (Z)" aria-label="Проба">&#129520;</button>
+  <button class="touch-act" id="m-sub" title="Режим батискафа (B)" aria-label="Батискаф">&#9678;</button>
+  <button class="touch-act" id="m-menu" title="Настройки и качество (H — скрыть HUD)" aria-label="Меню">&#9776;</button>
+</div>
+
+<div class="hero hud-hideable" id="hero-onboard">
+  <div class="pill">
+    <span><i class="dot"></i>WASD — плыть · Мышь — обзор</span>
+    <span><i class="dot"></i>G — 3D-сонар · ~ — гидрофон · Z — проба</span>
+    <button class="hero-action" id="hero-tour-btn" title="Начать сюжетный гид-тур по 10 мирам (T)">&#9654; Гид-тур (T)</button>
+    <button class="hero-action" id="hero-help-btn" title="Все команды и быстрый старт (?)">? Клавиши</button>
+    <button class="hero-close" id="hero-dismiss" title="Скрыть панель подсказок" aria-label="Скрыть подсказку">&#10005;</button>
+  </div>
+</div>
+
+<div class="status hud-hideable"><span id="status-region">GBR · Тихий океан</span><span id="fps">— FPS</span></div>
+
+<div class="res-badge hud-hideable" id="res-badge" aria-live="off">Оптика <b id="res-scale">100%</b> · <span id="res-quality">Высокое</span></div>
+<button class="hud-toggle" id="hud-toggle" title="Показать / скрыть интерфейс (H)" aria-label="Скрыть или показать HUD">&#128065;</button>
+
+<div class="guide-card hidden hud-hideable" id="guide-card" role="region" aria-label="Сюжетный гид-тур">
+  <div class="guide-head">
+    <span class="guide-step" id="guide-step">Этап 1 / 8</span>
+    <span id="guide-biome">Большой Барьерный риф</span>
+  </div>
+  <div class="guide-title" id="guide-title">—</div>
+  <div class="guide-fact" id="guide-fact">—</div>
+  <div class="guide-prog"><i id="guide-prog-bar"></i></div>
+  <div class="guide-controls">
+    <button class="btn" id="guide-prev" title="Предыдущий этап">&#9664; Назад</button>
+    <button class="btn on" id="guide-pause" title="Пауза / продолжить">&#10074;&#10074; Пауза</button>
+    <button class="btn" id="guide-next" title="Следующий этап">Вперёд &#9654;</button>
+    <button class="btn" id="guide-exit" style="flex:0 0 auto" title="Завершить тур (T / Esc)">Выйти</button>
+  </div>
+</div>
+
+<div class="popup hidden" id="fish-popup"></div>
+<div class="toast" id="toast"></div>
+
+<div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
+  <div class="globe-box">
+    <div class="atlas-header">
+      <div><h3>3D-глобус планеты</h3><small>10 водных экспедиций · 52 этапа гида</small></div>
+      <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="globe-body">
+      <div class="globe-stage">
+        <canvas id="globe-3d" width="460" height="390"></canvas>
+        <div class="globe-hover-tip hidden" id="globe-hover-tip">—</div>
+        <div class="globe-hint">Вращайте Землю мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть</div>
+      </div>
+      <div class="globe-side">
+        <div class="globe-list" id="globe-list"></div>
+        <div class="globe-card">
+          <div class="globe-ocean" id="globe-b-ocean">—</div>
+          <h4 id="globe-b-name">—</h4>
+          <div class="globe-metrics">
+            <div class="globe-metric"><span>Координаты</span><b id="globe-b-coords">—</b></div>
+            <div class="globe-metric"><span>Глубина</span><b id="globe-b-depth">—</b></div>
+            <div class="globe-metric"><span>Температура</span><b id="globe-b-temp">—</b></div>
+          </div>
+          <div class="globe-summary" id="globe-b-summary">—</div>
+          <div class="globe-prog" id="globe-b-progress">—</div>
+          <div class="globe-actions">
+            <button class="btn" id="globe-go-btn">Перейти в биом</button>
+            <button class="btn on" id="globe-tour-btn">Запустить гид-тур</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="atlas-modal hidden" id="atlas-modal" role="dialog" aria-modal="true" aria-label="Атлас океанического биома">
+  <div class="atlas-box">
+    <div class="atlas-header">
+      <div><h3 id="atlas-title">Атлас Большого Барьерного рифа</h3><small id="atlas-count">1 / 42</small></div>
+      <button class="btn" id="atlas-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="atlas-viewer" id="atlas-viewer">
+      <div class="atlas-stage" id="atlas-stage">
+        <canvas id="atlas-3d" width="310" height="208"></canvas>
+        <button class="atlas-stage-light" id="atlas-light-btn" title="Сменить свет: День / Ночь Био">&#9728; День</button>
+        <div class="atlas-stage-hint">Вращайте модель мышью 360°</div>
+      </div>
+      <div class="atlas-info">
+        <div>
+          <div class="atlas-top"><span class="atlas-cat" id="atlas-v-cat">Категория</span><span class="atlas-badge" id="atlas-v-badge">Изучено</span></div>
+          <div class="atlas-name" id="atlas-v-name" style="font-size:18px;margin-top:4px">—</div>
+          <div class="atlas-latin" id="atlas-v-latin" style="font-size:12.5px">—</div>
+          <div class="atlas-v-desc" id="atlas-v-desc">Выберите карточку вида или объекта для детального 3D-осмотра и прослушивания голоса.</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:8px" id="atlas-v-zone">Среда обитания: —</div>
+          <div class="atlas-v-actions">
+            <button class="btn on" id="atlas-v-voice">&#128266; Прослушать звук</button>
+            <button class="btn" id="atlas-v-dive">&#8627; Нырнуть к виду</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="atlas-tabs" id="atlas-tabs">
+      <button class="btn on" data-cat="Все">Все</button>
+      <button class="btn" data-cat="Геология">География</button>
+      <button class="btn" data-cat="Экспедиция">Экспедиция</button>
+      <button class="btn" data-cat="Артефакты">Артефакты</button>
+      <button class="btn" data-cat="Кораллы">Кораллы</button>
+      <button class="btn" data-cat="Флора">Флора</button>
+      <button class="btn" data-cat="Беспозвоночные">Беспозвоночные</button>
+      <button class="btn" data-cat="Рыбы">Рыбы</button>
+      <button class="btn" data-cat="Птицы">Птицы</button>
+      <button class="btn" data-cat="Мегафауна">Мегафауна</button>
+    </div>
+    <div class="atlas-grid" id="atlas-grid"></div>
+  </div>
+</div>
+
+<div class="atlas-modal hidden" id="journal-modal" role="dialog" aria-modal="true" aria-label="Журнал экспедиции">
+  <div class="atlas-box">
+    <div class="atlas-header">
+      <div><h3 id="journal-title">Журнал экспедиции</h3><small id="journal-summary">Миссий: 0 / 12 · Снимков: 0</small></div>
+      <button class="btn" id="journal-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="atlas-tabs" id="journal-tabs">
+      <button class="btn on" data-jtab="missions">Научные миссии</button>
+      <button class="btn" data-jtab="photos">Фотожурнал</button>
+      <button class="btn" data-jtab="museum">Музей проб</button>
+      <button class="btn" id="journal-export-md" style="margin-left:auto" title="Скачать научный отчёт экспедиции (.md)">Отчёт .MD</button>
+      <button class="btn" id="journal-export-json" title="Экспортировать полную научную телеметрию (.json)">JSON</button>
+      <button class="btn" id="journal-clear-wp">Снять маяк</button>
+    </div>
+    <div class="atlas-grid" id="journal-grid"></div>
+  </div>
+</div>
+
+<div class="atlas-modal hidden" id="help-modal" role="dialog" aria-modal="true" aria-label="Быстрый старт и горячие клавиши">
+  <div class="atlas-box help-box">
+    <div class="atlas-header">
+      <div><h3>Справочник пилота и горячие клавиши</h3><small>Нажмите на команду, чтобы активировать прибор прямо сейчас</small></div>
+      <button class="btn" id="help-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
+    </div>
+    <div class="help-grid">
+      <div class="help-cat">
+        <h4>Движение и обзор</h4>
+        <button class="help-item" data-help-act="reset"><span>Свободное плавание · Вернуться к старту</span><kbd>WASD / R</kbd></button>
+        <button class="help-item" data-help-act="orbit"><span>Всплыть / глубже · Сменить камеру (Орбита)</span><kbd>Space/C · V</kbd></button>
+        <button class="help-item" data-help-act="sub"><span>Режим батискафа (HUD и клиренс)</span><kbd>B</kbd></button>
+        <button class="help-item" data-help-act="flash"><span>Прожектор батискафа (фототаксис рыб)</span><kbd>F</kbd></button>
+      </div>
+      <div class="help-cat">
+        <h4>Сонар, Гидрофон и Карта</h4>
+        <button class="help-item" data-help-act="sonar"><span>3D-мультилучевой сонар и Туман войны</span><kbd>G</kbd></button>
+        <button class="help-item" data-help-act="hydro"><span>Гидрофон · Живая FFT-спектрограмма</span><kbd>~ / Ё</kbd></button>
+        <button class="help-item" data-help-act="globe"><span>3D-глобус планеты (10 экспедиций)</span><kbd>O</kbd></button>
+        <button class="help-item" data-help-act="weather"><span>Переключить погоду (Штиль/Зыбь/Шторм)</span><kbd>U</kbd></button>
+      </div>
+      <div class="help-cat">
+        <h4>Наука, ROV и Эколаб</h4>
+        <button class="help-item" data-help-act="sample"><span>Взять научную пробу манипулятором ROV</span><kbd>Z</kbd></button>
+        <button class="help-item" data-help-act="rov"><span>Приборы ROV, кабель и буй-гидрофон</span><kbd>I / Y / 9</kbd></button>
+        <button class="help-item" data-help-act="lab"><span>Эколаб: стресс-тест и обесцвечивание</span><kbd>L</kbd></button>
+        <button class="help-item" data-help-act="journal"><span>Журнал, 40 миссий и Музей проб</span><kbd>J</kbd></button>
+      </div>
+      <div class="help-cat">
+        <h4>Атлас, Камера и Гид</h4>
+        <button class="help-item" data-help-act="tour"><span>Сюжетный гид-тур (52 этапа)</span><kbd>T</kbd></button>
+        <button class="help-item" data-help-act="atlas"><span>3D-Атлас: 221 вид и биоакустика</span><kbd>K</kbd></button>
+        <button class="help-item" data-help-act="cam"><span>Подводная фотокамера · Кино (2.39:1)</span><kbd>P / N</kbd></button>
+        <button class="help-item" data-help-act="sound"><span>Звук океана · Скрыть/показать HUD</span><kbd>M / H</kbd></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="load-wrap">
+    <div class="load-title">Погружение на Большой Барьерный риф</div>
+    <div class="load-track"><div id="loading-bar"></div></div>
+    <div class="load-sub">Генерация шельфа и рифовых зон</div>
+  </div>
+</div>
+
+<script>/*__THREE__*/</script>
+<script>/*__SRC__*/</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "ocean-reef-3d",
+  "version": "2.0.0",
+  "description": "3D Ocean & Great Barrier Reef Biome Simulator",
+  "scripts": {
+    "build": "python3 build.py",
+    "start": "python3 -m http.server 8080 --bind 0.0.0.0",
+    "test": "node tests/verify.mjs",
+    "test:e2e": "node tests/verify_e2e.mjs",
+    "test:browser": "node tests/e2e_playwright.mjs"
+  }
+}

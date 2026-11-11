@@ -1,0 +1,128 @@
+name: Ocean Simulator CI & WebGL E2E
+
+on:
+  push:
+    branches:
+      - main
+      - "arena/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ocean-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-vm-verify:
+    name: Build, Skills & Production Bundle VM Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify ORDER and build single-file index.html
+        run: |
+          python3 build.py --check
+          python3 build.py
+          git diff --exit-code index.html
+
+      - name: Validate Agent Skills metadata
+        run: python3 .agents/skills/validate_skills.py
+
+      - name: Run full engine & GLSL integration verification
+        run: node tests/verify.mjs
+
+      - name: Run production bundle E2E DOM & WebGL-Spy profiler
+        run: node tests/verify_e2e.mjs
+
+  browser-webgl-e2e:
+    name: Real Headless Chromium (SwiftShader WebGL) E2E
+    needs: build-and-vm-verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
+
+      - name: Install Playwright & Chromium with system dependencies
+        run: |
+          npm install --no-save playwright
+          # CDN playwright периодически обрывает соединение и умеет висеть.
+          # Бюджет джоба — 15 мин, из них ~5 оставляем на прогон тестов,
+          # поэтому каждая попытка ограничена 180 с: за это время 100 МБ
+          # либо скачиваются, либо соединение мертво. Две попытки + пауза = ~7 мин.
+          for attempt in 1 2; do
+            if timeout 180 npx playwright install --with-deps chromium; then
+              echo "Playwright/Chromium установлены с попытки $attempt"
+              exit 0
+            fi
+            echo "Попытка $attempt не удалась (таймаут 180 с), повтор через 15 с"
+            sleep 15
+          done
+          echo "::error title=Playwright install skipped (CDN unreachable)::cdn.playwright.dev не отдал Chromium за 2 попытки по 180 с — это внешняя недоступность CDN, не ошибка кода"
+          exit 1
+
+      - name: Run Playwright WebGL SwiftShader E2E & FPS Profile
+        env:
+          OC_URL: http://127.0.0.1:8080/index.html
+          OC_PERF_SUMMARY_MD: ${{ github.step_summary }}
+        run: |
+          python3 -m http.server 8080 --bind 127.0.0.1 >/tmp/http_server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/index.html >/dev/null; then
+              break
+            fi
+            sleep 0.5
+          done
+          set -o pipefail
+          node tests/e2e_playwright.mjs 2>&1 | tee /tmp/playwright.log
+
+      - name: Surface Playwright failure reason as annotation
+        if: failure()
+        run: |
+          REASON=$(grep -m1 '^::error' /tmp/playwright.log 2>/dev/null || true)
+          if [ -n "$REASON" ] || [ -f /tmp/playwright.log ]; then
+            if [ -z "$REASON" ]; then REASON=$(grep -m1 'FAILED STAGE' /tmp/playwright.log || true); fi
+            if [ -z "$REASON" ]; then REASON=$(tail -n 12 /tmp/playwright.log | tr '\n' ' ' | cut -c1-900); fi
+            if [ -z "$REASON" ]; then REASON=$(tail -n 12 /tmp/http_server.log | tr '\n' ' ' || true); fi
+            echo "::error title=Playwright E2E failure::$REASON"
+          fi
+
+      - name: Upload failure screenshot on error
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webgl-e2e-failure
+          path: test-results/
+          if-no-files-found: ignore
