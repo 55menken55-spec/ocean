@@ -309,6 +309,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
               if (bestP) {
                 lungeTarget = bestP;
                 lungeTimer = 4.6;
+                if (bestP.applyPredation) bestP.applyPredation();
               }
               lungeCooldown = (dayW < 0.45 ? 10 : 16) + Math.random() * 12;
             }
@@ -484,7 +485,11 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
                 const d = Math.hypot(pr.x - group.position.x, pr.z - group.position.z);
                 if (d < bestD) { bestD = d; bestP = pr; }
               }
-              if (bestP) { lungeTarget = bestP; lungeTimer = 4.6; }
+              if (bestP) {
+                lungeTarget = bestP;
+                lungeTimer = 4.6;
+                if (bestP.applyPredation) bestP.applyPredation();
+              }
               lungeCooldown = 16 + Math.random() * 10;
             }
           }
