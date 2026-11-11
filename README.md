@@ -131,7 +131,8 @@ src/
 │   ├── fauna/               # 3D-животные по акваториям: schools, reef_life, rays_sharks, whales,
 │   │                        # polar, abyss, brine_cave, surface_birds, cetaceans, galapagos,
 │   │                        # amazon_river; spawn (высадка по faunaPlan), particles/splash/haze
-│   │                        # (эффекты среды), systems (реестр OC._FaunaSystems)
+│   │                        # (эффекты среды), systems (реестр OC._FaunaSystems);
+│   │                        # brine_lake (рассол/галоклин/нить Ариадны), cave_twilight (глубины и пещеры)
 │   ├── audio.js             # Реестр звуковой шины OC.sound (точка входа)
 │   ├── audio/               # core (микс/мьют), ambience (шум среды), calls (киты, гроза), ui_sfx, species_voice
 │   ├── rov.js               # Оркестровка ROV: анимация, режимы, публичный API

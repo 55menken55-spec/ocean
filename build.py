@@ -60,6 +60,8 @@ ORDER = [
     'engine/fauna/whales.js',
     'engine/fauna/polar.js',
     'engine/fauna/abyss.js',
+    'engine/fauna/brine_lake.js',
+    'engine/fauna/cave_twilight.js',
     'engine/fauna/brine_cave.js',
     'engine/fauna/surface_birds.js',
     'engine/fauna/cetaceans.js',

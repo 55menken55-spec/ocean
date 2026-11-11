@@ -267,6 +267,8 @@ const faunaSrc = [
   'src/engine/fauna/whales.js',
   'src/engine/fauna/polar.js',
   'src/engine/fauna/abyss.js',
+  'src/engine/fauna/brine_lake.js',
+  'src/engine/fauna/cave_twilight.js',
   'src/engine/fauna/brine_cave.js',
   'src/engine/fauna/surface_birds.js',
   'src/engine/fauna/cetaceans.js',
