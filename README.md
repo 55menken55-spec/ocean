@@ -125,7 +125,9 @@ src/
 │   ├── flora/               # 7 групп прототипов: рифовые кораллы, ламинария, курильщики, арктический лёд, тропика, пещеры, игапо
 │   ├── flora_streamer.js    # Стриминг флоры по чанкам в пулы InstancedMesh (нулевые холостые буферы)
 │   ├── fauna_engine.js      # Ядро фауны, частицы, термоклин, мутьевые шлейфы и биолюминесцентный след
-│   ├── fauna/               # Модульная библиотека 3D-животных (schools, pelagic, abyss_polar, surface_expedition, systems)
+│   ├── fauna/               # 3D-животные по акваториям: schools, reef_life, rays_sharks, whales,
+│   │                        # polar, abyss, brine_cave, surface_birds, cetaceans, galapagos,
+│   │                        # amazon_river и systems (частицы/эффекты)
 │   ├── audio.js             # Процедурный WebAudio океан (AnalyserNode, прибой, гром, лёд, косатки, затвор)
 │   ├── rov.js               # Оркестровка ROV: анимация, режимы, публичный API
 │   ├── rov/                 # Модель аппарата и рука, кабель-трос, буи, кильватер/течения, пробы и CTD
