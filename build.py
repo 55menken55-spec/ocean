@@ -43,6 +43,8 @@ ORDER = [
     'engine/fauna/systems.js',
     'engine/fauna_engine.js',
     'engine/audio.js',
+    'engine/rov/tether.js',
+    'engine/rov/buoys.js',
     'engine/rov.js',
     'engine/sonar.js',
     'engine/hydrophone.js',
