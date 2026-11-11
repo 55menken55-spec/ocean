@@ -36,6 +36,7 @@ ORDER = [
     'engine/fauna/pelagic.js',
     'engine/fauna/abyss_polar.js',
     'engine/fauna/surface_expedition.js',
+    'engine/fauna/systems.js',
     'engine/fauna_engine.js',
     'engine/audio.js',
     'engine/rov.js',

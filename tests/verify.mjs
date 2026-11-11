@@ -36,6 +36,7 @@ const SRC_ORDER = [
   'src/engine/fauna/pelagic.js',
   'src/engine/fauna/abyss_polar.js',
   'src/engine/fauna/surface_expedition.js',
+  'src/engine/fauna/systems.js',
   'src/engine/fauna_engine.js',
   'src/engine/audio.js',
   'src/engine/rov.js',
@@ -306,7 +307,8 @@ const faunaSrc = [
   'src/engine/fauna/schools.js',
   'src/engine/fauna/pelagic.js',
   'src/engine/fauna/abyss_polar.js',
-  'src/engine/fauna/surface_expedition.js'
+  'src/engine/fauna/surface_expedition.js',
+  'src/engine/fauna/systems.js'
 ].map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8')).join('\n');
 assert(faunaSrc.includes('marine_snow'), 'fauna_engine.js missing marine_snow deep particle layer');
 

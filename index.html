@@ -18038,25 +18038,17 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeFumaroleVents = makeFumaroleVents;
 })(window.OC);
 
-// === engine/fauna_engine.js ===
-/* ================= ФАУНА: ЭКОСИСТЕМНЫЙ ИИ (BOIDS), ДЕНЬ/НОЧЬ, МЕГАФАУНА, ПЛАНКТОН ================= */
+// === engine/fauna/systems.js ===
+/* ================= ФАУНА: ЭКОСИСТЕМНЫЕ СИСТЕМЫ ЧАСТИЦ И ЭФФЕКТОВ ================= */
+/* Пузырьки/планктон/снег, ночной нерест кораллов, брызги выпрыгивающих китов,
+   биолюминесцентный след Noctiluca, дымка термоклина/галоклина, мутьевые шлейфы
+   бентоса и струи гидратных сипов. Чистые фабрики: сцена + текстура на входе. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
   const T = THREE;
 
-  let fishMatInstanced = null;
-  let fishMatBiolum = null;
-  let creatureMat = null;
-  let faunaGroup = null;
-  let activeSchoolsRef = [];
-  let qualityHookBound = false;
-
-  /* ---------- Процедурная форма рыбы (нос +X, хвост -X) ---------- */
-  OC._FaunaCtx = OC._FaunaCtx || { fishMatInstanced: null, fishMatBiolum: null, creatureMat: null };
-  OC._FaunaBuilders = OC._FaunaBuilders || {};
-
-  function createCameraRelativeParticles(scene, n, tex, mode, noSurface) {
+  const createCameraRelativeParticles = function (scene, n, tex, mode, noSurface) {
     const kind = mode === true ? 'plankton' : (mode === false ? 'bubbles' : mode);
     const isPlankton = kind === 'plankton';
     const isSnow = kind === 'snow';
@@ -18149,10 +18141,10 @@ window.OC = window.OC || {};
     pts.userData.key = isPlankton ? 'plankton' : (isSnow ? 'marine_snow' : 'bubbles');
     scene.add(pts);
     return mat;
-  }
+  };
 
   /* ---------- Ночной массовый нерест кораллов (поднимающиеся гаметы) ---------- */
-  function createCoralSpawningSystem(scene, n, tex) {
+  const createCoralSpawningSystem = function (scene, n, tex) {
     const geo = new T.BufferGeometry();
     const pos = new Float32Array(n * 3);
     const col = new Float32Array(n * 3);
@@ -18242,10 +18234,10 @@ window.OC = window.OC || {};
     pts.userData.key = 'coral_spawn';
     scene.add(pts);
     return { pts, mat };
-  }
+  };
 
   /* ---------- Система водных брызг (выпрыги китов, белух и морских львов) ---------- */
-  function makeSplashSystem(scene, texHard) {
+  const makeSplashSystem = function (scene, texHard) {
     const N = 420;
     const pos = new Float32Array(N * 3);
     const vel = new Float32Array(N * 3);
@@ -18354,10 +18346,10 @@ window.OC = window.OC || {};
       setScale(s) { mat.uniforms.uScale.value = s; },
       getActiveCount: () => activeCount
     };
-  }
+  };
 
   /* ---------- Биолюминесцентный след ночесветок (Noctiluca) при движении дайвера ---------- */
-  function makeBiolumTrail(scene, tex, noSurface) {
+  const makeBiolumTrail = function (scene, tex, noSurface) {
     const N = 180;
     const geo = new T.BufferGeometry();
     const pos = new Float32Array(N * 3);
@@ -18448,10 +18440,10 @@ window.OC = window.OC || {};
         mat.uniforms.uScale.value = s;
       }
     };
-  }
+  };
 
   /* ---------- Видимая оптическая дымка термоклина / галоклина (Schlieren haze veil) ---------- */
-  function makeThermoclineHaze(scene, biome) {
+  const makeThermoclineHaze = function (scene, biome) {
     const id = biome ? biome.id : '';
     let thermoY = -22.0;
     let enabled = true;
@@ -18538,10 +18530,10 @@ window.OC = window.OC || {};
         return distY < 3.6;
       }
     };
-  }
+  };
 
   /* ---------- Дно-подъёмные мутьевые шлейфы (Benthic Silt-Out Plumes) ---------- */
-  function makeBenthicSiltSystem(scene, biome, texSoft) {
+  const makeBenthicSiltSystem = function (scene, biome, texSoft) {
     const N = 240;
     const geo = new T.BufferGeometry();
     const pos = new Float32Array(N * 3);
@@ -18681,10 +18673,10 @@ window.OC = window.OC || {};
       setScale(s) { mat.uniforms.uScale.value = s; },
       getTurbidity: () => localTurbidity
     };
-  }
+  };
 
   /* ---------- Шлейфы пузырьков газовых гидратов и холодных метановых сипов ---------- */
-  function makeHydratePlumeSystem(scene, biome, texHard) {
+  const makeHydratePlumeSystem = function (scene, biome, texHard) {
     const id = biome ? biome.id : '';
     const hasHydrates = (id === 'brine_pool' || id === 'mariana_trench');
     if (!hasHydrates) {
@@ -18775,8 +18767,43 @@ window.OC = window.OC || {};
       update() {},
       setScale(s) { mat.uniforms.uScale.value = s; }
     };
-  }
+  };
 
+
+  OC._FaunaSystems = {
+    createCameraRelativeParticles,
+    createCoralSpawningSystem,
+    makeSplashSystem,
+    makeBiolumTrail,
+    makeThermoclineHaze,
+    makeBenthicSiltSystem,
+    makeHydratePlumeSystem
+  };
+})(window.OC);
+
+// === engine/fauna_engine.js ===
+/* ================= ФАУНА: ЭКОСИСТЕМНЫЙ ИИ (BOIDS), ДЕНЬ/НОЧЬ, МЕГАФАУНА, ПЛАНКТОН ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  let fishMatInstanced = null;
+  let fishMatBiolum = null;
+  let creatureMat = null;
+  let faunaGroup = null;
+  let activeSchoolsRef = [];
+  let qualityHookBound = false;
+
+  /* ---------- Процедурная форма рыбы (нос +X, хвост -X) ---------- */
+  OC._FaunaCtx = OC._FaunaCtx || { fishMatInstanced: null, fishMatBiolum: null, creatureMat: null };
+  OC._FaunaBuilders = OC._FaunaBuilders || {};
+
+  /* Системы частиц и эффектов вынесены в fauna/systems.js */
+  const {
+    createCameraRelativeParticles, createCoralSpawningSystem, makeSplashSystem,
+    makeBiolumTrail, makeThermoclineHaze, makeBenthicSiltSystem, makeHydratePlumeSystem
+  } = OC._FaunaSystems;
   /* ---------- Галапагосы: Океаническая луна-рыба (Mola mola), Морская игуана, Пингвин, Косатка, Мобула, Арка Дарвина, Фумаролы ---------- */
 
   function disposeFaunaGroup(scene) {
