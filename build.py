@@ -53,6 +53,7 @@ ORDER = [
     'engine/fauna/galapagos.js',
     'engine/fauna/amazon_river.js',
     'engine/fauna/systems.js',
+    'engine/fauna/spawn.js',
     'engine/fauna_engine.js',
     'engine/audio/core.js',
     'engine/audio/ambience.js',

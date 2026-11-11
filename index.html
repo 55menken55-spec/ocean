@@ -19051,98 +19051,23 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
-// === engine/fauna_engine.js ===
-/* ================= ФАУНА: ЭКОСИСТЕМНЫЙ ИИ (BOIDS), ДЕНЬ/НОЧЬ, МЕГАФАУНА, ПЛАНКТОН ================= */
+// === engine/fauna/spawn.js ===
+/* ================= ВЫСАДКА ФАУНЫ БИОМА ПО ЭКОЛОГИЧЕСКОМУ ПЛАНУ ================= */
+/* Читает biome.faunaPlan и вызывает билдеры из OC._FaunaBuilders, наполняя общие
+   массивы агентов: одиночные особи, стаи, хищники, цели сонара и прыгуны у поверхности.
+   Возвращает китов, список китов и головное судно — их использует update-цикл. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
+
   const T = THREE;
 
-  let fishMatInstanced = null;
-  let fishMatBiolum = null;
-  let creatureMat = null;
-  let faunaGroup = null;
-  let activeSchoolsRef = [];
-  let qualityHookBound = false;
-
-  /* ---------- Процедурная форма рыбы (нос +X, хвост -X) ---------- */
-  OC._FaunaCtx = OC._FaunaCtx || { fishMatInstanced: null, fishMatBiolum: null, creatureMat: null };
-  OC._FaunaBuilders = OC._FaunaBuilders || {};
-
-  /* Системы частиц и эффектов вынесены в fauna/systems.js */
-  const {
-    createCameraRelativeParticles, createCoralSpawningSystem, makeSplashSystem,
-    makeBiolumTrail, makeThermoclineHaze, makeBenthicSiltSystem, makeHydratePlumeSystem
-  } = OC._FaunaSystems;
-  /* ---------- Галапагосы: Океаническая луна-рыба (Mola mola), Морская игуана, Пингвин, Косатка, Мобула, Арка Дарвина, Фумаролы ---------- */
-
-  function disposeFaunaGroup(scene) {
-    if (!faunaGroup) return;
-    const dGeos = new Set();
-    const dMats = new Set();
-    faunaGroup.traverse((o) => {
-      if (o.geometry && !dGeos.has(o.geometry)) { o.geometry.dispose(); dGeos.add(o.geometry); }
-      if (o.material) {
-        const ms = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of ms) {
-          if (m && !dMats.has(m)) { m.dispose(); dMats.add(m); }
-        }
-      }
-    });
-    scene.remove(faunaGroup);
-    faunaGroup = null;
-  }
-
-  OC.FaunaEngine = {
-    init(scene, biome) {
-      disposeFaunaGroup(scene);
-      faunaGroup = new T.Group();
-      scene.add(faunaGroup);
-
-      fishMatInstanced = OC._FaunaCtx.fishMatInstanced = OC.enhanceMaterial(new T.MeshStandardMaterial({
-        vertexColors: true, roughness: 0.48, metalness: 0.06, side: T.DoubleSide
-      }), { causticStrength: biome.noSurface ? 0.0 : 0.56, fishSwim: true });
-
-      fishMatBiolum = OC._FaunaCtx.fishMatBiolum = OC.enhanceMaterial(new T.MeshStandardMaterial({
-        vertexColors: true,
-        emissive: new T.Color(0x2ce8ff),
-        emissiveIntensity: 0.45,
-        roughness: 0.42,
-        metalness: 0.08,
-        side: T.DoubleSide
-      }), { causticStrength: biome.noSurface ? 0.0 : 0.34, fishSwim: true });
-
-      creatureMat = OC._FaunaCtx.creatureMat = OC.enhanceMaterial(new T.MeshStandardMaterial({
-        vertexColors: true, roughness: 0.52, metalness: 0.06, side: T.DoubleSide
-      }), { causticStrength: biome.noSurface ? 0.0 : 0.64 });
-
-      const plan = biome.faunaPlan || {};
-      const agents = [];
-      const schools = [];
-      const predatorAgents = [];
-      const preySchools = [];
-      const sonarTargets = [];
-      const texSoft = OC.circleTexture(64, false);
-      const texHard = OC.circleTexture(64, true);
-      const splashSystem = makeSplashSystem(faunaGroup, texHard);
-      const lastCamPos = new T.Vector3();
-
-      const _splashTmp = new T.Vector3();
-      function emitSplash(worldPos, intensity, zOpt) {
-        let wp = worldPos;
-        let inten = intensity;
-        if (typeof worldPos === 'number') {
-          _splashTmp.set(worldPos, 0, intensity || 0);
-          wp = _splashTmp;
-          inten = zOpt;
-        }
-        if (!wp || !Number.isFinite(wp.x) || !Number.isFinite(wp.z)) return;
-        splashSystem.emit(wp, inten);
-        if ((inten || 0) >= 0.6 && OC.sound && OC.sound.whaleSplash) {
-          const d = Math.hypot(wp.x - lastCamPos.x, (wp.y || 0) - lastCamPos.y, wp.z - lastCamPos.z);
-          if (d < 360) OC.sound.whaleSplash(d);
-        }
-      }
+  function spawnFauna(ctx) {
+    const {
+      faunaGroup, biome, plan, emitSplash,
+      agents, schools, predatorAgents, preySchools, sonarTargets,
+      surfaceJumpers, huntingAgents
+    } = ctx;
 
       const schoolsSpec = plan.schools || [];
       for (const s of schoolsSpec) {
@@ -19184,7 +19109,6 @@ window.OC = window.OC || {};
         sonarTargets.push(a);
       }
 
-      const surfaceJumpers = [];
       for (const sl of (plan.seaLions || [])) {
         const a = OC._FaunaBuilders.makeSeaLion(faunaGroup, biome, sl, emitSplash);
         agents.push(a);
@@ -19210,7 +19134,6 @@ window.OC = window.OC || {};
         sonarTargets.push(a);
       }
 
-      const huntingAgents = [];
       for (const sh of (plan.sharks || [])) {
         const a = OC._FaunaBuilders.makeShark(faunaGroup, biome, sh);
         agents.push(a);
@@ -19443,6 +19366,116 @@ window.OC = window.OC || {};
         const fmo = OC._FaunaBuilders.makeFumaroleVents(faunaGroup, biome, fm);
         agents.push(fmo);
       }
+
+    return { whale, whalesList, primaryVessel };
+  }
+
+  OC._FaunaSpawn = { spawnFauna };
+})(window.OC);
+
+// === engine/fauna_engine.js ===
+/* ================= ФАУНА: ЭКОСИСТЕМНЫЙ ИИ (BOIDS), ДЕНЬ/НОЧЬ, МЕГАФАУНА, ПЛАНКТОН ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  let fishMatInstanced = null;
+  let fishMatBiolum = null;
+  let creatureMat = null;
+  let faunaGroup = null;
+  let activeSchoolsRef = [];
+  let qualityHookBound = false;
+
+  /* ---------- Процедурная форма рыбы (нос +X, хвост -X) ---------- */
+  OC._FaunaCtx = OC._FaunaCtx || { fishMatInstanced: null, fishMatBiolum: null, creatureMat: null };
+  OC._FaunaBuilders = OC._FaunaBuilders || {};
+
+  /* Системы частиц и эффектов вынесены в fauna/systems.js */
+  const {
+    createCameraRelativeParticles, createCoralSpawningSystem, makeSplashSystem,
+    makeBiolumTrail, makeThermoclineHaze, makeBenthicSiltSystem, makeHydratePlumeSystem
+  } = OC._FaunaSystems;
+  const { spawnFauna } = OC._FaunaSpawn;
+  /* ---------- Галапагосы: Океаническая луна-рыба (Mola mola), Морская игуана, Пингвин, Косатка, Мобула, Арка Дарвина, Фумаролы ---------- */
+
+  function disposeFaunaGroup(scene) {
+    if (!faunaGroup) return;
+    const dGeos = new Set();
+    const dMats = new Set();
+    faunaGroup.traverse((o) => {
+      if (o.geometry && !dGeos.has(o.geometry)) { o.geometry.dispose(); dGeos.add(o.geometry); }
+      if (o.material) {
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of ms) {
+          if (m && !dMats.has(m)) { m.dispose(); dMats.add(m); }
+        }
+      }
+    });
+    scene.remove(faunaGroup);
+    faunaGroup = null;
+  }
+
+  OC.FaunaEngine = {
+    init(scene, biome) {
+      disposeFaunaGroup(scene);
+      faunaGroup = new T.Group();
+      scene.add(faunaGroup);
+
+      fishMatInstanced = OC._FaunaCtx.fishMatInstanced = OC.enhanceMaterial(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.48, metalness: 0.06, side: T.DoubleSide
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.56, fishSwim: true });
+
+      fishMatBiolum = OC._FaunaCtx.fishMatBiolum = OC.enhanceMaterial(new T.MeshStandardMaterial({
+        vertexColors: true,
+        emissive: new T.Color(0x2ce8ff),
+        emissiveIntensity: 0.45,
+        roughness: 0.42,
+        metalness: 0.08,
+        side: T.DoubleSide
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.34, fishSwim: true });
+
+      creatureMat = OC._FaunaCtx.creatureMat = OC.enhanceMaterial(new T.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.52, metalness: 0.06, side: T.DoubleSide
+      }), { causticStrength: biome.noSurface ? 0.0 : 0.64 });
+
+      const plan = biome.faunaPlan || {};
+      const agents = [];
+      const schools = [];
+      const predatorAgents = [];
+      const preySchools = [];
+      const sonarTargets = [];
+      const surfaceJumpers = [];
+      const huntingAgents = [];
+      const texSoft = OC.circleTexture(64, false);
+      const texHard = OC.circleTexture(64, true);
+      const splashSystem = makeSplashSystem(faunaGroup, texHard);
+      const lastCamPos = new T.Vector3();
+
+      const _splashTmp = new T.Vector3();
+      function emitSplash(worldPos, intensity, zOpt) {
+        let wp = worldPos;
+        let inten = intensity;
+        if (typeof worldPos === 'number') {
+          _splashTmp.set(worldPos, 0, intensity || 0);
+          wp = _splashTmp;
+          inten = zOpt;
+        }
+        if (!wp || !Number.isFinite(wp.x) || !Number.isFinite(wp.z)) return;
+        splashSystem.emit(wp, inten);
+        if ((inten || 0) >= 0.6 && OC.sound && OC.sound.whaleSplash) {
+          const d = Math.hypot(wp.x - lastCamPos.x, (wp.y || 0) - lastCamPos.y, wp.z - lastCamPos.z);
+          if (d < 360) OC.sound.whaleSplash(d);
+        }
+      }
+
+      const { whale, whalesList, primaryVessel } = spawnFauna({
+        faunaGroup, biome, plan, emitSplash,
+        agents, schools, predatorAgents, preySchools, sonarTargets,
+        surfaceJumpers, huntingAgents
+      });
+
+      // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
 
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;

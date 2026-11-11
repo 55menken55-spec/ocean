@@ -125,7 +125,8 @@ src/
 │   ├── flora_library.js     # Реестр процедурной библиотеки 57 видов (реализации — в flora/)
 │   ├── flora/               # 7 групп прототипов: рифовые кораллы, ламинария, курильщики, арктический лёд, тропика, пещеры, игапо
 │   ├── flora_streamer.js    # Стриминг флоры по чанкам в пулы InstancedMesh (нулевые холостые буферы)
-│   ├── fauna_engine.js      # Ядро фауны, частицы, термоклин, мутьевые шлейфы и биолюминесцентный след
+│   ├── fauna_engine.js      # Ядро фауны: init/update, поведение, DVM, сонарные цели, превью Атласа
+│   ├── fauna/spawn.js       # Высадка фауны по biome.faunaPlan (стаи, мегафауна, суда, прыгуны)
 │   ├── fauna/               # 3D-животные по акваториям: schools, reef_life, rays_sharks, whales,
 │   │                        # polar, abyss, brine_cave, surface_birds, cetaceans, galapagos,
 │   │                        # amazon_river и systems (частицы/эффекты)

@@ -53,6 +53,7 @@ const SRC_ORDER = [
   'src/engine/fauna/galapagos.js',
   'src/engine/fauna/amazon_river.js',
   'src/engine/fauna/systems.js',
+  'src/engine/fauna/spawn.js',
   'src/engine/fauna_engine.js',
   'src/engine/audio.js',
   'src/engine/audio/core.js',
