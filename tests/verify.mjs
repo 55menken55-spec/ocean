@@ -46,6 +46,8 @@ const SRC_ORDER = [
   'src/engine/rov/model.js',
   'src/engine/rov/tether.js',
   'src/engine/rov/buoys.js',
+  'src/engine/rov/wake.js',
+  'src/engine/rov/samples.js',
   'src/engine/rov.js',
   'src/engine/sonar.js',
   'src/engine/hydrophone.js',

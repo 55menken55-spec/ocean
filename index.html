@@ -21505,119 +21505,18 @@ window.OC = window.OC || {};
   OC._RovBuoys = { buildBuoyMesh, updateBuoys };
 })(window.OC);
 
-// === engine/rov.js ===
-/* ================= 3D-БАТИСКАФ ROV «НАУТИЛУС-IV», МАНИПУЛЯТОР, CTD И 3D-ТЕЧЕНИЯ ================= */
+// === engine/rov/wake.js ===
+/* ================= ROV: ПУЗЫРЬКОВЫЙ КИЛЬВАТЕР И 3D-ТРАССЕРЫ ТЕЧЕНИЙ ================= */
+/* Пул из 128 всплывающих пузырьков за винтами и 140 линий тока, летящих по полю
+   течений биома. Буферы принадлежат rov.js — фабрики и апдейт работают по ссылкам. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
   const T = THREE;
-
-  const MAX_SAMPLES = 20;
-  const WAKE_COUNT = 128;
-  const STREAM_COUNT = 140;
-  const TETHER_SEGS = 22;
-  const MAX_BUOYS = 2;
-  const STREAM_BOX_XZ = 92;
-  const STREAM_BOX_Y = 46;
-
-  // Цвета и классификация научных проб
-  const CORAL_SPECIES = new Set([
-    'coral_staghorn', 'coral_table', 'coral_brain', 'coral_plate', 'coral_crust',
-    'coral_boulder', 'coral_pillar', 'coral_seafan', 'coral_soft', 'coral_whip',
-    'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral', 'tubastraea_coral'
-  ]);
-  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm', 'volcanic_fumarole']);
-  const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle', 'halite_spire']);
-  const KARST_SPECIES = new Set(['stalactite', 'stalagmite']);
-  const VOLCANIC_SPECIES = new Set(['galapagos_barnacle', 'darwins_arch']);
-  const WRECK_SPECIES = new Set(['wreck_anchor']);
-  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag']);
-
-  let sceneRef = null;
-  let rovGroup = null;
-  let fpArmGroup = null;
-  let wakePoints = null;
-  let currentsMesh = null;
-  let tetherLine = null;
-  const tetherPos = new Float32Array((TETHER_SEGS + 1) * 3);
-  const tetherCol = new Float32Array((TETHER_SEGS + 1) * 3);
-  const tetherState = {
-    active: false,
-    lengthM: 0,
-    maxLengthM: 420,
-    tensionPct: 0,
-    status: 'откл.',
-    anchorLabel: 'НИС «Океан-1»',
-    anchorX: 0,
-    anchorY: 0,
-    anchorZ: 0
-  };
-  const buoys = [];
-  const buoyMeshes = [];
-  let buoySeq = 0;
-
-  // Подвижные узлы 3D-аппарата (заполняются из rov/model.js)
-  const nodes = {};
-  const propL = () => nodes.propL;
-  const propR = () => nodes.propR;
-  const propV = () => nodes.propV;
-  const strobeMat = () => nodes.strobeMat;
-  const ledMat = () => nodes.ledMat;
-  const armShoulder = () => nodes.armShoulder;
-  const armUpper = () => nodes.armUpper;
-  const armForearm = () => nodes.armForearm;
-  const armWrist = () => nodes.armWrist;
-  const clawL = () => nodes.clawL;
-  const clawR = () => nodes.clawR;
-  const sampleOrb = () => nodes.sampleOrb;
-  const laserBeam = () => nodes.laserBeam;
-  const fpUpper = () => nodes.fpUpper;
-  const fpForearm = () => nodes.fpForearm;
-  const fpClawL = () => nodes.fpClawL;
-  const fpClawR = () => nodes.fpClawR;
-  const fpOrb = () => nodes.fpOrb;
-
-
-  // Состояние анимации и инструментов
-  let currentsVisible = false;
-  let prevYaw = 0;
-  let prevCraftPos = new T.Vector3();
-  let rollSmooth = 0;
-  let pitchSmooth = 0;
-  let propAngle = 0;
-  let grabTimer = 0;
-  let grabDuration = 1.95;
-  let wakeCursor = 0;
-  let wakeAccum = 0;
-  let wakeInited = false;
-  let streamsInited = false;
-
-  const wakePos = new Float32Array(WAKE_COUNT * 3);
-  const wakeVel = new Float32Array(WAKE_COUNT * 3);
-  const wakeLife = new Float32Array(WAKE_COUNT);
-
-  const streamPos = new Float32Array(STREAM_COUNT * 6);
-  const streamCol = new Float32Array(STREAM_COUNT * 6);
-  const streamHeadX = new Float32Array(STREAM_COUNT);
-  const streamHeadY = new Float32Array(STREAM_COUNT);
-  const streamHeadZ = new Float32Array(STREAM_COUNT);
-  const streamAge = new Float32Array(STREAM_COUNT);
-
-  const samples = [];
-  let lastCtdCast = null;
-
-  // Временные объекты (zero-GC)
-  const _fwd = new T.Vector3();
-  const _right = new T.Vector3();
-  const _up = new T.Vector3(0, 1, 0);
-  const _probe = new T.Vector3();
   const _currTmp = new T.Vector3();
-  const _worldTmp = new T.Vector3();
-  const _nearOut = { species: '', x: 0, y: 0, z: 0, scale: 1, tint: 0xffffff, dist: 999 };
 
-  /* Модель аппарата и рука от первого лица — rov/model.js */
-  const { buildRovModel, buildFirstPersonArm } = OC._RovModel;
-  function buildWakePoints() {
+    function buildWakePoints(ctx) {
+    const wakePos = ctx.wakePos;
     const geo = new T.BufferGeometry();
     geo.setAttribute('position', new T.BufferAttribute(wakePos, 3));
     const mat = new T.PointsMaterial({
@@ -21637,7 +21536,9 @@ window.OC = window.OC || {};
     return pts;
   }
 
-  function buildCurrentStreamlines() {
+  function buildCurrentStreamlines(ctx) {
+    const streamPos = ctx.streamPos;
+    const streamCol = ctx.streamCol;
     const geo = new T.BufferGeometry();
     geo.setAttribute('position', new T.BufferAttribute(streamPos, 3));
     geo.setAttribute('color', new T.BufferAttribute(streamCol, 3));
@@ -21656,7 +21557,9 @@ window.OC = window.OC || {};
     return lines;
   }
 
-  function seedStream(i, origin, biome, rng) {
+  function seedStream(ctx, i, origin, biome, rng) {
+    const streamHeadX = ctx.streamHeadX, streamHeadY = ctx.streamHeadY, streamHeadZ = ctx.streamHeadZ, streamAge = ctx.streamAge;
+    const STREAM_BOX_XZ = ctx.STREAM_BOX_XZ, STREAM_BOX_Y = ctx.STREAM_BOX_Y;
     const hx = origin.x + (rng() - 0.5) * STREAM_BOX_XZ;
     const hz = origin.z + (rng() - 0.5) * STREAM_BOX_XZ;
     const fl = biome ? biome.getHeight(hx, hz) : -25;
@@ -21674,15 +21577,20 @@ window.OC = window.OC || {};
     streamAge[i] = rng() * 3.5;
   }
 
-  function updateCurrents(dt, time, origin, biome, labState) {
+  function updateCurrents(ctx, dt, time, origin, biome, labState) {
+    const currentsMesh = ctx.currentsMesh;
+    const streamPos = ctx.streamPos, streamCol = ctx.streamCol;
+    const streamHeadX = ctx.streamHeadX, streamHeadY = ctx.streamHeadY, streamHeadZ = ctx.streamHeadZ, streamAge = ctx.streamAge;
+    const STREAM_COUNT = ctx.STREAM_COUNT, STREAM_BOX_XZ = ctx.STREAM_BOX_XZ, STREAM_BOX_Y = ctx.STREAM_BOX_Y;
     if (!currentsMesh) return;
+    const currentsVisible = !!ctx.currentsVisible;
     currentsMesh.visible = currentsVisible;
     if (!currentsVisible || !biome) return;
 
-    if (!streamsInited) {
-      streamsInited = true;
+    if (!ctx.streamsInited) {
+      ctx.streamsInited = true;
       const rng = OC.mulberry32(90210);
-      for (let i = 0; i < STREAM_COUNT; i++) seedStream(i, origin, biome, rng);
+      for (let i = 0; i < ctx.STREAM_COUNT; i++) seedStream(ctx, i, origin, biome, rng);
     }
 
     const mult = labState ? labState.currentMult : 1.0;
@@ -21768,7 +21676,10 @@ window.OC = window.OC || {};
   /* Кабель-трос и буи вынесены в rov/tether.js и rov/buoys.js */
   const { buildTetherMesh, updateTether } = OC._RovTether;
   const { buildBuoyMesh, updateBuoys } = OC._RovBuoys;
-  function updateWake(dt, craftPos, speed, chaseActive) {
+  function updateWake(ctx, dt, craftPos, speed, chaseActive) {
+    const wakePoints = ctx.wakePoints;
+    const wakePos = ctx.wakePos, wakeVel = ctx.wakeVel, wakeLife = ctx.wakeLife;
+    const WAKE_COUNT = ctx.WAKE_COUNT, rovGroup = ctx.rovGroup(), _worldTmp = ctx._worldTmp;
     if (!wakePoints) return;
     if (!chaseActive) {
       wakePoints.visible = false;
@@ -21776,8 +21687,8 @@ window.OC = window.OC || {};
     }
     wakePoints.visible = true;
 
-    if (!wakeInited) {
-      wakeInited = true;
+    if (!ctx.wakeInited) {
+      ctx.wakeInited = true;
       for (let i = 0; i < WAKE_COUNT; i++) {
         wakePos[i * 3] = craftPos.x;
         wakePos[i * 3 + 1] = craftPos.y - 100;
@@ -21787,12 +21698,12 @@ window.OC = window.OC || {};
     }
 
     if (speed > 0.65 && rovGroup) {
-      wakeAccum += dt * OC.clamp(speed * 2.4, 8, 38);
-      while (wakeAccum >= 1) {
-        wakeAccum -= 1;
-        const side = (wakeCursor % 2 === 0) ? 0.54 : -0.54;
+      ctx.wakeAccum += dt * OC.clamp(speed * 2.4, 8, 38);
+      while (ctx.wakeAccum >= 1) {
+        ctx.wakeAccum -= 1;
+        const side = (ctx.wakeCursor % 2 === 0) ? 0.54 : -0.54;
         _worldTmp.set(side, 0.02, -1.16).applyMatrix4(rovGroup.matrixWorld);
-        const idx = wakeCursor;
+        const idx = ctx.wakeCursor;
         wakePos[idx * 3] = _worldTmp.x + (Math.random() - 0.5) * 0.08;
         wakePos[idx * 3 + 1] = _worldTmp.y + (Math.random() - 0.5) * 0.08;
         wakePos[idx * 3 + 2] = _worldTmp.z + (Math.random() - 0.5) * 0.08;
@@ -21800,7 +21711,7 @@ window.OC = window.OC || {};
         wakeVel[idx * 3 + 1] = 0.55 + Math.random() * 0.45;
         wakeVel[idx * 3 + 2] = (Math.random() - 0.5) * 0.35;
         wakeLife[idx] = 1.0;
-        wakeCursor = (wakeCursor + 1) % WAKE_COUNT;
+        ctx.wakeCursor = (ctx.wakeCursor + 1) % WAKE_COUNT;
       }
     }
 
@@ -21818,7 +21729,39 @@ window.OC = window.OC || {};
     wakePoints.geometry.attributes.position.needsUpdate = true;
   }
 
-  function scanManipulatorTarget(biome, pos, fwd, out) {
+
+  OC._RovWake = {
+    buildWakePoints, buildCurrentStreamlines, updateCurrents, updateWake
+  };
+})(window.OC);
+
+// === engine/rov/samples.js ===
+/* ================= ROV: МАНИПУЛЯТОР, ПРОБЫ И ВОДНАЯ ТОЛЩА (CTD) ================= */
+/* Наведение манипулятора, классификация научных проб (кораллы, гидротермы, лёд,
+   карст, вулканиты, обломки, флора) и профиль водной толщи: температура, солёность,
+   O₂, давление по бинам глубины. Чистые функции без состояния сцены. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const _nearOut = { species: '', x: 0, y: 0, z: 0, scale: 1, tint: 0xffffff, dist: 999 };
+  const _probe = new T.Vector3();
+
+    // Цвета и классификация научных проб
+  const CORAL_SPECIES = new Set([
+    'coral_staghorn', 'coral_table', 'coral_brain', 'coral_plate', 'coral_crust',
+    'coral_boulder', 'coral_pillar', 'coral_seafan', 'coral_soft', 'coral_whip',
+    'seafan_gold', 'black_coral', 'anemone', 'arctic_soft_coral', 'tubastraea_coral'
+  ]);
+  const VENT_SPECIES = new Set(['smoker_chimney', 'vent_chimney', 'tube_worm', 'riftia_worms', 'vent_mussel', 'vent_mussels', 'serpentinite_vent', 'osedax_plume', 'methane_hydrate', 'cold_tubeworm', 'volcanic_fumarole']);
+  const ICE_SPECIES = new Set(['ice_floe', 'iceberg', 'brinicle', 'halite_spire']);
+  const KARST_SPECIES = new Set(['stalactite', 'stalagmite']);
+  const VOLCANIC_SPECIES = new Set(['galapagos_barnacle', 'darwins_arch']);
+  const WRECK_SPECIES = new Set(['wreck_anchor']);
+  const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag']);
+
+
+    function scanManipulatorTarget(biome, pos, fwd, out) {
     out = out || {};
     out.kind = 'water';
     out.species = '';
@@ -21861,10 +21804,11 @@ window.OC = window.OC || {};
     return out;
   }
 
-  function classifySample(target, biome, depthM, labState) {
+  function classifySample(target, biome, depthM, labState, atPos, seq) {
+    const pos = atPos || (target && target.pos) || _probe;
     const tempBase = biome.getTemperatureAt
-      ? biome.getTemperatureAt(prevCraftPos.x, depthM, biome.getZoneAt(prevCraftPos.x, prevCraftPos.y, prevCraftPos.z))
-      : (biome.getZoneAt(prevCraftPos.x, prevCraftPos.y, prevCraftPos.z).tempC || 18);
+      ? biome.getTemperatureAt(pos.x, depthM, biome.getZoneAt(pos.x, pos.y, pos.z))
+      : (biome.getZoneAt(pos.x, pos.y, pos.z).tempC || 18);
     const delta = labState ? labState.tempDelta : 0;
     const waterTemp = Math.max(-1.9, tempBase + delta);
     const pH = labState ? labState.pH : 8.10;
@@ -21957,7 +21901,7 @@ window.OC = window.OC || {};
     }
 
     return {
-      id: 'smp_' + Date.now() + '_' + (samples.length + 1),
+      id: 'smp_' + Date.now() + '_' + ((seq || 0) + 1),
       biomeId: biome.id,
       biomeName: biome.name,
       species: target.species,
@@ -22070,6 +22014,121 @@ window.OC = window.OC || {};
     };
   }
 
+
+  OC._RovSamples = { scanManipulatorTarget, classifySample, computeWaterColumn };
+})(window.OC);
+
+// === engine/rov.js ===
+/* ================= 3D-БАТИСКАФ ROV «НАУТИЛУС-IV», МАНИПУЛЯТОР, CTD И 3D-ТЕЧЕНИЯ ================= */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const MAX_SAMPLES = 20;
+  const WAKE_COUNT = 128;
+  const STREAM_COUNT = 140;
+  const TETHER_SEGS = 22;
+  const MAX_BUOYS = 2;
+  const STREAM_BOX_XZ = 92;
+  const STREAM_BOX_Y = 46;
+
+  let sceneRef = null;
+  let rovGroup = null;
+  let fpArmGroup = null;
+  let wakePoints = null;
+  let currentsMesh = null;
+  let tetherLine = null;
+  const tetherPos = new Float32Array((TETHER_SEGS + 1) * 3);
+  const tetherCol = new Float32Array((TETHER_SEGS + 1) * 3);
+  const tetherState = {
+    active: false,
+    lengthM: 0,
+    maxLengthM: 420,
+    tensionPct: 0,
+    status: 'откл.',
+    anchorLabel: 'НИС «Океан-1»',
+    anchorX: 0,
+    anchorY: 0,
+    anchorZ: 0
+  };
+  const buoys = [];
+  const buoyMeshes = [];
+  let buoySeq = 0;
+
+  // Подвижные узлы 3D-аппарата (заполняются из rov/model.js)
+  const nodes = {};
+  const propL = () => nodes.propL;
+  const propR = () => nodes.propR;
+  const propV = () => nodes.propV;
+  const strobeMat = () => nodes.strobeMat;
+  const ledMat = () => nodes.ledMat;
+  const armShoulder = () => nodes.armShoulder;
+  const armUpper = () => nodes.armUpper;
+  const armForearm = () => nodes.armForearm;
+  const armWrist = () => nodes.armWrist;
+  const clawL = () => nodes.clawL;
+  const clawR = () => nodes.clawR;
+  const sampleOrb = () => nodes.sampleOrb;
+  const laserBeam = () => nodes.laserBeam;
+  const fpUpper = () => nodes.fpUpper;
+  const fpForearm = () => nodes.fpForearm;
+  const fpClawL = () => nodes.fpClawL;
+  const fpClawR = () => nodes.fpClawR;
+  const fpOrb = () => nodes.fpOrb;
+
+
+  // Состояние анимации и инструментов
+  let currentsVisible = false;
+  let prevYaw = 0;
+  let prevCraftPos = new T.Vector3();
+  let rollSmooth = 0;
+  let pitchSmooth = 0;
+  let propAngle = 0;
+  let grabTimer = 0;
+  let grabDuration = 1.95;
+  let wakeCursor = 0;
+  let wakeAccum = 0;
+  /* Флаги инициализации пулов кильватера/течений живут здесь и передаются в rov/wake.js */
+
+  const wakePos = new Float32Array(WAKE_COUNT * 3);
+  const wakeVel = new Float32Array(WAKE_COUNT * 3);
+  const wakeLife = new Float32Array(WAKE_COUNT);
+
+  const streamPos = new Float32Array(STREAM_COUNT * 6);
+  const streamCol = new Float32Array(STREAM_COUNT * 6);
+  const streamHeadX = new Float32Array(STREAM_COUNT);
+  const streamHeadY = new Float32Array(STREAM_COUNT);
+  const streamHeadZ = new Float32Array(STREAM_COUNT);
+  const streamAge = new Float32Array(STREAM_COUNT);
+
+  const samples = [];
+  let lastCtdCast = null;
+
+  // Временные объекты (zero-GC)
+  const _fwd = new T.Vector3();
+  const _right = new T.Vector3();
+  const _up = new T.Vector3(0, 1, 0);
+  const _probe = new T.Vector3();
+  const _currTmp = new T.Vector3();
+  const _worldTmp = new T.Vector3();
+
+  const fxCtx = {
+    STREAM_COUNT, WAKE_COUNT, STREAM_BOX_XZ, STREAM_BOX_Y,
+    wakePos, wakeVel, wakeLife, streamPos, streamCol,
+    streamHeadX, streamHeadY, streamHeadZ, streamAge,
+    wakeCursor: 0, wakeAccum: 0, wakeInited: false, streamsInited: false, currentsVisible: false,
+    _worldTmp, rovGroup: () => rovGroup,
+    currentsMesh: null, wakePoints: null
+  };
+
+  /* Модель аппарата и рука от первого лица — rov/model.js */
+  const { buildRovModel, buildFirstPersonArm } = OC._RovModel;
+  /* Кабель-трос, буи, кильватер, течения и пробы — rov/tether.js, buoys.js, wake.js, samples.js */
+  const { buildTetherMesh, updateTether } = OC._RovTether;
+  const { buildBuoyMesh, updateBuoys } = OC._RovBuoys;
+  const { buildWakePoints: buildWakePointsFx, buildCurrentStreamlines: buildCurrentStreamlinesFx, updateCurrents: updateCurrentsFx, updateWake: updateWakeFx } = OC._RovWake;
+  const { scanManipulatorTarget, classifySample, computeWaterColumn } = OC._RovSamples;
   OC.ROV = {
     init(scene) {
       sceneRef = scene;
@@ -22096,10 +22155,12 @@ window.OC = window.OC || {};
       scene.add(fpArmGroup);
       Object.assign(nodes, armBuilt.nodes);
 
-      wakePoints = buildWakePoints();
+      wakePoints = buildWakePointsFx(fxCtx);
+      fxCtx.wakePoints = wakePoints;
       scene.add(wakePoints);
 
-      currentsMesh = buildCurrentStreamlines();
+      currentsMesh = buildCurrentStreamlinesFx(fxCtx);
+      fxCtx.currentsMesh = currentsMesh;
       scene.add(currentsMesh);
 
       tetherLine = buildTetherMesh({ tetherPos, tetherCol, TETHER_SEGS });
@@ -22111,14 +22172,14 @@ window.OC = window.OC || {};
         buoyMeshes.push(bm);
       }
 
-      wakeInited = false;
-      streamsInited = false;
+      fxCtx.wakeInited = false;
+      fxCtx.streamsInited = false;
       grabTimer = 0;
     },
 
     resetForBiome(biome, pos) {
-      streamsInited = false;
-      wakeInited = false;
+      fxCtx.streamsInited = false;
+      fxCtx.wakeInited = false;
       grabTimer = 0;
       if (tetherLine) tetherLine.visible = false;
       tetherState.active = false;
@@ -22136,6 +22197,7 @@ window.OC = window.OC || {};
 
     setCurrentsVisible(on) {
       currentsVisible = !!on;
+      fxCtx.currentsVisible = currentsVisible;
       if (currentsMesh) currentsMesh.visible = currentsVisible;
       return currentsVisible;
     },
@@ -22245,7 +22307,7 @@ window.OC = window.OC || {};
       const tgt = scanManipulatorTarget(biome, pos, f, {});
       const off = biome.depthOffset || 0;
       const depthM = off + (off > 0 ? -pos.y : Math.max(0, -pos.y));
-      const entry = classifySample(tgt, biome, depthM, labState);
+      const entry = classifySample(tgt, biome, depthM, labState, prevCraftPos, samples.length);
 
       samples.unshift(entry);
       if (samples.length > MAX_SAMPLES) samples.length = MAX_SAMPLES;
@@ -22345,8 +22407,8 @@ window.OC = window.OC || {};
         }
       }
 
-      updateWake(dt, craftPos || camera.position, speed, showCraft);
-      updateCurrents(dt, time, craftPos || camera.position, biome, labState);
+      updateWakeFx(fxCtx, dt, craftPos || camera.position, speed, showCraft);
+      updateCurrentsFx(fxCtx, dt, time, craftPos || camera.position, biome, labState);
       updateTether({ tetherLine, tetherState, tetherPos, tetherCol, TETHER_SEGS, _currTmp }, craftPos || (camera ? camera.position : null), biome, time, showCraft, labState);
 
       updateBuoys(buoyMeshes, buoys, time);
