@@ -132,6 +132,8 @@ window.OC = window.OC || {};
     globe: {
       lat: -16.8, lon: 146.2, coordLabel: '16.8° ю.ш., 146.2° в.д.',
       ocean: 'Коралловое море · Австралия', depthSpan: '0 – 168 м', tempSpan: '21 – 29 °C', color: '#45e0d4',
+      country: 'Австралия (Квинсленд)', waterType: 'sea', protectionStatus: 'Всемирное наследие UNESCO',
+      notableFor: 'крупнейшая живая структура Земли, коралловые рифы, Голубая дыра',
       summary: 'Крупнейшая живая структура Земли: мангры, песчаный островок, 88-метровая Голубая дыра и миграции горбатых китов.'
     },
     worldRadius: WORLD_RADIUS,

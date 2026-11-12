@@ -466,6 +466,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 11.37, lon: 142.59, coordLabel: '11.4° с.ш., 142.6° в.д.',
       ocean: 'Марианский жёлоб · Тихий океан', depthSpan: '10 845 – 10 948 м', tempSpan: '1.8 – 3.6 °C', color: '#7a9cff',
+      country: 'микронезия / США (ближайшая земля — Гуам)', waterType: 'ocean', protectionStatus: 'национальный монумент Marianas Trench',
+      notableFor: 'глубочайшая точка Земли (Челленджер), китовое падение, Osedax',
       summary: 'Глубочайшая бездна Земли (~10.9 км): 24-метровый скелет китового падения с червями Osedax, серпентинитовые сипы и морские слизни.'
     },
     worldRadius: 1200,

@@ -147,7 +147,7 @@ window.OC = window.OC || {};
       lines.push(`- Состояние: **${rep.ecoLab.statusLabel}** · ΔT: ${rep.ecoLab.tempDeltaC >= 0 ? '+' : ''}${rep.ecoLab.tempDeltaC} °C · pH: ${rep.ecoLab.pH} · Обесцвечивание: ${rep.ecoLab.bleachingPct}%`);
       lines.push('');
     }
-    lines.push('## Сводка по 11 биомам планеты');
+    lines.push(`## Сводка по ${rep.biomes.length} биомам планеты`);
     lines.push('| Биом | Регион | Глубины | Виды | Миссии |');
     lines.push('|---|---|---|---|---|');
     for (const b of rep.biomes) {
