@@ -168,7 +168,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
   function makeTurtle(scene, biome, opts) {
     const group = new T.Group();
-    const shell = new T.SphereGeometry(1, 16, 12);
+    const shell = new T.SphereGeometry(1, 32, 20);
     shell.scale(2.4, 0.92, 2.9);
     OC.geoPrep(shell);
     OC.paint(shell, (x, y, z, c) => {
@@ -177,7 +177,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     });
     group.add(new T.Mesh(shell, OC._FaunaCtx.creatureMat));
 
-    const head = new T.SphereGeometry(0.58, 10, 8);
+    const head = new T.SphereGeometry(0.58, 20, 16);
     head.scale(0.95, 0.85, 1.25);
     OC.geoPrep(head);
     OC.paint(head, 0x5c6e46);
@@ -186,7 +186,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     group.add(headM);
 
     const flippers = [];
-    const flGeo = new T.SphereGeometry(1, 9, 6);
+    const flGeo = new T.SphereGeometry(1, 16, 10);
     flGeo.scale(1.65, 0.12, 0.56);
     OC.geoPrep(flGeo);
     OC.paint(flGeo, 0x556640);
@@ -263,13 +263,13 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
   function makeDugong(scene, biome, opts) {
     const group = new T.Group();
-    const body = new T.SphereGeometry(1, 16, 12);
+    const body = new T.SphereGeometry(1, 32, 20);
     body.scale(0.85, 0.78, 2.35);
     OC.geoPrep(body);
     OC.paint(body, (x, y, z, c) => c.setHSL(0.56, 0.12, y > 0 ? 0.48 : 0.62));
     group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
 
-    const snout = new T.CylinderGeometry(0.42, 0.55, 0.9, 10);
+    const snout = new T.CylinderGeometry(0.42, 0.55, 0.9, 16);
     snout.rotateX(Math.PI * 0.65);
     OC.geoPrep(snout);
     OC.paint(snout, 0x7b8990);
@@ -278,7 +278,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     group.add(snM);
 
     // Плавники
-    const fl = new T.SphereGeometry(1, 8, 6);
+    const fl = new T.SphereGeometry(1, 16, 10);
     fl.scale(0.75, 0.12, 0.35);
     OC.geoPrep(fl);
     OC.paint(fl, 0x6f7d84);
@@ -292,7 +292,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     // Хвостовой стебель и лопасть дюгоня
     const tailPivot = new T.Group();
     tailPivot.position.set(0, 0, -2.1);
-    const fluke = new T.ConeGeometry(0.95, 1.2, 4);
+    const fluke = new T.ConeGeometry(0.95, 1.2, 8);
     fluke.scale(1.3, 1, 0.18);
     fluke.rotateX(Math.PI / 2);
     OC.geoPrep(fluke);

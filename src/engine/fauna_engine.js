@@ -927,7 +927,7 @@ window.OC = window.OC || {};
           tmpGroup.remove(built);
         }
         if (!built) {
-          built = new T.Mesh(new T.SphereGeometry(0.8, 32, 16), previewMat);
+          built = new T.Mesh(new T.SphereGeometry(0.8, 48, 24), previewMat);
         }
 
         // Обнуляем возможный сдвиг (напр. позиция группы в мировой точке) и приводим к единому масштабу 2.6 м
