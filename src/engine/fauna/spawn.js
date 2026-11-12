@@ -55,6 +55,41 @@ window.OC = window.OC || {};
         sonarTargets.push(a);
       }
 
+      for (const m of (plan.megafauna || [])) {
+        if (m.key === 'florida_manatee') {
+          const a = OC._FaunaBuilders.makeManatee(faunaGroup, biome, m);
+          agents.push(a);
+          sonarTargets.push(a);
+        }
+      }
+
+      for (const cr of (plan.crustaceans || [])) {
+        if (cr.key === 'cave_crayfish' || cr.key === 'blind_cave_fish') {
+          const geo = OC._FaunaBuilders.makeFishGeo(cr.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563 });
+          const mesh = new T.Mesh(geo, OC._FaunaCtx.creatureMat);
+          mesh.scale.setScalar(cr.scale || 0.8);
+          mesh.userData.key = cr.key;
+          scene.add(mesh);
+          const ra = new T.Vector3(), rb = new T.Vector3();
+          agents.push({
+            key: cr.key,
+            getPosition: () => mesh.position,
+            update(dt, time, camPos) {
+              if (Math.hypot(cr.cx - camPos.x, cr.cz - camPos.z) > 420) { mesh.visible = false; return; }
+              mesh.visible = true;
+              let ang = Math.random() * 6.28;
+              const rr = cr.radius + Math.sin(time * 0.5) * 3;
+              const x = cr.cx + Math.cos(ang) * rr;
+              const z = cr.cz + Math.sin(ang) * rr;
+              const y = Math.max(biome.getHeight(x, z) + 1.0, cr.y);
+              mesh.position.set(x, y, z);
+              mesh.lookAt(cr.cx, cr.y, cr.cz);
+            }
+          });
+          sonarTargets.push(agents[agents.length - 1]);
+        }
+      }
+
       for (const sl of (plan.seaLions || [])) {
         const a = OC._FaunaBuilders.makeSeaLion(faunaGroup, biome, sl, emitSplash);
         agents.push(a);

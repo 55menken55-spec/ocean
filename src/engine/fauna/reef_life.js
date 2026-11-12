@@ -330,6 +330,77 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     };
   }
 
+  /* ---------- Ламантин (Trichechus manatus) — крупнее дюгоня, хвост лопатковидный ---------- */
+
+  function makeManatee(scene, biome, opts) {
+    const group = new T.Group();
+    const body = new T.SphereGeometry(1, 36, 24);
+    body.scale(1.05, 0.85, 2.8);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.setHSL(0.52, 0.10, y > 0 ? 0.44 : 0.58));
+    group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
+
+    // Круглая голова ламантина (не удлинённая, как у дюгоня)
+    const head = new T.SphereGeometry(0.65, 24, 18);
+    head.scale(0.85, 0.95, 0.85);
+    OC.geoPrep(head);
+    OC.paint(head, 0x6e7d84);
+    const headM = new T.Mesh(head, OC._FaunaCtx.creatureMat);
+    headM.position.set(0, 0.05, 2.55);
+    group.add(headM);
+
+    // Передние плавники
+    const fl = new T.SphereGeometry(1, 20, 14);
+    fl.scale(0.85, 0.14, 0.4);
+    OC.geoPrep(fl);
+    OC.paint(fl, 0x7a888e);
+    for (const s of [-1, 1]) {
+      const m = new T.Mesh(fl, OC._FaunaCtx.creatureMat);
+      m.position.set(s * 1.05, -0.3, 1.4);
+      m.rotation.z = -s * 0.25;
+      group.add(m);
+    }
+
+    // Хвостовая лопасть ламантина (лопатковидная, не bifurcated как у дюгоня)
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -2.55);
+    const fluke = new T.CylinderGeometry(0.85, 0.85, 0.5, 12);
+    fluke.rotateX(Math.PI / 2);
+    OC.geoPrep(fluke);
+    OC.paint(fluke, 0x5e6c72);
+    const fkM = new T.Mesh(fluke, OC._FaunaCtx.creatureMat);
+    fkM.position.set(0, 0, -0.25);
+    tailPivot.add(fkM);
+    group.add(tailPivot);
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.userData.key = 'florida_manatee';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 80;
+    const a = new T.Vector3(), b = new T.Vector3();
+
+    return {
+      key: 'florida_manatee',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += (1.3 / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r, bz = opts.cz + Math.sin(ang + 0.1) * opts.r;
+        const ay = Math.max(biome.getHeight(ax, az) + 1.5 + Math.sin(t * 0.35) * 0.6, -10);
+        const by = Math.max(biome.getHeight(bx, bz) + 1.5 + Math.sin(t * 0.35 + 0.15) * 0.6, -10);
+        a.set(ax, Math.min(-1.5, ay), az);
+        b.set(bx, Math.min(-1.5, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        tailPivot.rotation.x = Math.sin(time * 1.5) * 0.25;
+      }
+    };
+  }
+
   /* ---------- Рифовая, китовая, леопардовая и гренландская полярная акулы ---------- */
 
   function makeOctopus(scene, biome, opts) {
@@ -441,6 +512,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeGoldenJelly = makeGoldenJelly;
   OC._FaunaBuilders.makeTurtle = makeTurtle;
   OC._FaunaBuilders.makeDugong = makeDugong;
+  OC._FaunaBuilders.makeManatee = makeManatee;
   OC._FaunaBuilders.makeOctopus = makeOctopus;
   OC._FaunaBuilders.makeMoray = makeMoray;
 })(window.OC);

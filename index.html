@@ -15265,6 +15265,77 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     };
   }
 
+  /* ---------- Ламантин (Trichechus manatus) — крупнее дюгоня, хвост лопатковидный ---------- */
+
+  function makeManatee(scene, biome, opts) {
+    const group = new T.Group();
+    const body = new T.SphereGeometry(1, 36, 24);
+    body.scale(1.05, 0.85, 2.8);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.setHSL(0.52, 0.10, y > 0 ? 0.44 : 0.58));
+    group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
+
+    // Круглая голова ламантина (не удлинённая, как у дюгоня)
+    const head = new T.SphereGeometry(0.65, 24, 18);
+    head.scale(0.85, 0.95, 0.85);
+    OC.geoPrep(head);
+    OC.paint(head, 0x6e7d84);
+    const headM = new T.Mesh(head, OC._FaunaCtx.creatureMat);
+    headM.position.set(0, 0.05, 2.55);
+    group.add(headM);
+
+    // Передние плавники
+    const fl = new T.SphereGeometry(1, 20, 14);
+    fl.scale(0.85, 0.14, 0.4);
+    OC.geoPrep(fl);
+    OC.paint(fl, 0x7a888e);
+    for (const s of [-1, 1]) {
+      const m = new T.Mesh(fl, OC._FaunaCtx.creatureMat);
+      m.position.set(s * 1.05, -0.3, 1.4);
+      m.rotation.z = -s * 0.25;
+      group.add(m);
+    }
+
+    // Хвостовая лопасть ламантина (лопатковидная, не bifurcated как у дюгоня)
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -2.55);
+    const fluke = new T.CylinderGeometry(0.85, 0.85, 0.5, 12);
+    fluke.rotateX(Math.PI / 2);
+    OC.geoPrep(fluke);
+    OC.paint(fluke, 0x5e6c72);
+    const fkM = new T.Mesh(fluke, OC._FaunaCtx.creatureMat);
+    fkM.position.set(0, 0, -0.25);
+    tailPivot.add(fkM);
+    group.add(tailPivot);
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.userData.key = 'florida_manatee';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 80;
+    const a = new T.Vector3(), b = new T.Vector3();
+
+    return {
+      key: 'florida_manatee',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += (1.3 / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r, bz = opts.cz + Math.sin(ang + 0.1) * opts.r;
+        const ay = Math.max(biome.getHeight(ax, az) + 1.5 + Math.sin(t * 0.35) * 0.6, -10);
+        const by = Math.max(biome.getHeight(bx, bz) + 1.5 + Math.sin(t * 0.35 + 0.15) * 0.6, -10);
+        a.set(ax, Math.min(-1.5, ay), az);
+        b.set(bx, Math.min(-1.5, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        tailPivot.rotation.x = Math.sin(time * 1.5) * 0.25;
+      }
+    };
+  }
+
   /* ---------- Рифовая, китовая, леопардовая и гренландская полярная акулы ---------- */
 
   function makeOctopus(scene, biome, opts) {
@@ -15376,6 +15447,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeGoldenJelly = makeGoldenJelly;
   OC._FaunaBuilders.makeTurtle = makeTurtle;
   OC._FaunaBuilders.makeDugong = makeDugong;
+  OC._FaunaBuilders.makeManatee = makeManatee;
   OC._FaunaBuilders.makeOctopus = makeOctopus;
   OC._FaunaBuilders.makeMoray = makeMoray;
 })(window.OC);
@@ -20903,6 +20975,41 @@ window.OC = window.OC || {};
         sonarTargets.push(a);
       }
 
+      for (const m of (plan.megafauna || [])) {
+        if (m.key === 'florida_manatee') {
+          const a = OC._FaunaBuilders.makeManatee(faunaGroup, biome, m);
+          agents.push(a);
+          sonarTargets.push(a);
+        }
+      }
+
+      for (const cr of (plan.crustaceans || [])) {
+        if (cr.key === 'cave_crayfish' || cr.key === 'blind_cave_fish') {
+          const geo = OC._FaunaBuilders.makeFishGeo(cr.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563 });
+          const mesh = new T.Mesh(geo, OC._FaunaCtx.creatureMat);
+          mesh.scale.setScalar(cr.scale || 0.8);
+          mesh.userData.key = cr.key;
+          scene.add(mesh);
+          const ra = new T.Vector3(), rb = new T.Vector3();
+          agents.push({
+            key: cr.key,
+            getPosition: () => mesh.position,
+            update(dt, time, camPos) {
+              if (Math.hypot(cr.cx - camPos.x, cr.cz - camPos.z) > 420) { mesh.visible = false; return; }
+              mesh.visible = true;
+              let ang = Math.random() * 6.28;
+              const rr = cr.radius + Math.sin(time * 0.5) * 3;
+              const x = cr.cx + Math.cos(ang) * rr;
+              const z = cr.cz + Math.sin(ang) * rr;
+              const y = Math.max(biome.getHeight(x, z) + 1.0, cr.y);
+              mesh.position.set(x, y, z);
+              mesh.lookAt(cr.cx, cr.y, cr.cz);
+            }
+          });
+          sonarTargets.push(agents[agents.length - 1]);
+        }
+      }
+
       for (const sl of (plan.seaLions || [])) {
         const a = OC._FaunaBuilders.makeSeaLion(faunaGroup, biome, sl, emitSplash);
         agents.push(a);
@@ -22930,6 +23037,22 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, size: 1 });
         } else if (key === 'dugong') {
           OC._FaunaBuilders.makeDugong(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'florida_manatee') {
+          OC._FaunaBuilders.makeManatee(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'blind_cave_fish' || key === 'cave_crayfish') {
+          const spec = (() => {
+            for (const b of OC.Biomes.list()) {
+              const p = b && b.faunaPlan;
+              if (!p) continue;
+              const c = (p.crustaceans || []).find((s) => s.key === key);
+              if (c) return c;
+            }
+            return null;
+          })();
+          if (spec) {
+            const fg = OC._FaunaBuilders.makeFishGeo(spec.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563, eyeScale: 0 });
+            built = new T.Mesh(fg, previewMat);
+          }
         } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark') {
           OC._FaunaBuilders.makeShark(tmpGroup, dummyBiome, {
             cx: 0, cz: 0, y: 0, r: 10, speed: 2,

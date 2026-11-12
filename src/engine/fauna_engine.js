@@ -802,6 +802,22 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, size: 1 });
         } else if (key === 'dugong') {
           OC._FaunaBuilders.makeDugong(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'florida_manatee') {
+          OC._FaunaBuilders.makeManatee(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'blind_cave_fish' || key === 'cave_crayfish') {
+          const spec = (() => {
+            for (const b of OC.Biomes.list()) {
+              const p = b && b.faunaPlan;
+              if (!p) continue;
+              const c = (p.crustaceans || []).find((s) => s.key === key);
+              if (c) return c;
+            }
+            return null;
+          })();
+          if (spec) {
+            const fg = OC._FaunaBuilders.makeFishGeo(spec.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563, eyeScale: 0 });
+            built = new T.Mesh(fg, previewMat);
+          }
         } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark') {
           OC._FaunaBuilders.makeShark(tmpGroup, dummyBiome, {
             cx: 0, cz: 0, y: 0, r: 10, speed: 2,
