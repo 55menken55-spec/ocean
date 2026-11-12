@@ -248,6 +248,10 @@ window.OC = window.OC || {};
   let coordsEl = null;
   let depthEl = null;
   let tempEl = null;
+  let countryEl = null;
+  let waterTypeEl = null;
+  let protectionEl = null;
+  let notableEl = null;
   let progressEl = null;
   let summaryEl = null;
   let goBtn = null;
@@ -430,7 +434,7 @@ window.OC = window.OC || {};
     }
 
     // Соединяем точки всех биомов дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea', 'amazon_igapo', 'baikal'];
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea', 'amazon_igapo', 'baikal', 'red_sea'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);
@@ -482,6 +486,11 @@ window.OC = window.OC || {};
     if (coordsEl) coordsEl.textContent = g.coordLabel || `${g.lat.toFixed(1)}°, ${g.lon.toFixed(1)}°`;
     if (depthEl) depthEl.textContent = g.depthSpan || '—';
     if (tempEl) tempEl.textContent = g.tempSpan || '—';
+    if (countryEl) countryEl.textContent = g.country || '—';
+    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле' };
+    if (waterTypeEl) waterTypeEl.textContent = g.waterType ? (waterTypeLabels[g.waterType] || g.waterType) : '—';
+    if (protectionEl) protectionEl.textContent = g.protectionStatus || '—';
+    if (notableEl) notableEl.textContent = g.notableFor || '—';
     if (summaryEl) summaryEl.textContent = g.summary || b.subtitle;
 
     if (progressEl) {
@@ -708,6 +717,10 @@ window.OC = window.OC || {};
       coordsEl = document.getElementById('globe-b-coords');
       depthEl = document.getElementById('globe-b-depth');
       tempEl = document.getElementById('globe-b-temp');
+      countryEl = document.getElementById('globe-b-country');
+      waterTypeEl = document.getElementById('globe-b-watertype');
+      protectionEl = document.getElementById('globe-b-protection');
+      notableEl = document.getElementById('globe-b-notable');
       progressEl = document.getElementById('globe-b-progress');
       summaryEl = document.getElementById('globe-b-summary');
       goBtn = document.getElementById('globe-go-btn');

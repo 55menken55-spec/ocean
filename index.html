@@ -414,7 +414,7 @@
     display:flex;flex-direction:column;gap:9px}
   .globe-card h4{margin:0;font-size:16px;font-weight:600;color:#f2fdff}
   .globe-ocean{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
-  .globe-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 0;
+  .globe-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 0;
     border-top:1px dashed rgba(140,225,255,.16);border-bottom:1px dashed rgba(140,225,255,.16)}
   .globe-metric{display:flex;flex-direction:column;gap:2px}
   .globe-metric span{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
@@ -992,7 +992,7 @@
 <div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
   <div class="globe-box">
     <div class="atlas-header">
-      <div><h3>3D-глобус планеты</h3><small>10 водных экспедиций · 52 этапа гида</small></div>
+      <div><h3>3D-глобус планеты</h3><small>12 водных экспедиций · 63 этапа гида</small></div>
       <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
     </div>
     <div class="globe-body">
@@ -1010,6 +1010,13 @@
             <div class="globe-metric"><span>Координаты</span><b id="globe-b-coords">—</b></div>
             <div class="globe-metric"><span>Глубина</span><b id="globe-b-depth">—</b></div>
             <div class="globe-metric"><span>Температура</span><b id="globe-b-temp">—</b></div>
+            <div class="globe-metric"><span>Страна</span><b id="globe-b-country">—</b></div>
+            <div class="globe-metric"><span>Тип водоёма</span><b id="globe-b-watertype">—</b></div>
+            <div class="globe-metric"><span>Охрана</span><b id="globe-b-protection">—</b></div>
+          </div>
+          <div class="globe-notable" style="margin-top:8px;font-size:11px;color:#9cc4d8;line-height:1.45;">
+            <span style="font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);display:block;margin-bottom:2px">Чем примечательно</span>
+            <span id="globe-b-notable">—</span>
           </div>
           <div class="globe-summary" id="globe-b-summary">—</div>
           <div class="globe-prog" id="globe-b-progress">—</div>
@@ -29561,6 +29568,10 @@ window.OC = window.OC || {};
   let coordsEl = null;
   let depthEl = null;
   let tempEl = null;
+  let countryEl = null;
+  let waterTypeEl = null;
+  let protectionEl = null;
+  let notableEl = null;
   let progressEl = null;
   let summaryEl = null;
   let goBtn = null;
@@ -29743,7 +29754,7 @@ window.OC = window.OC || {};
     }
 
     // Соединяем точки всех биомов дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea', 'amazon_igapo', 'baikal'];
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea', 'amazon_igapo', 'baikal', 'red_sea'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);
@@ -29795,6 +29806,11 @@ window.OC = window.OC || {};
     if (coordsEl) coordsEl.textContent = g.coordLabel || `${g.lat.toFixed(1)}°, ${g.lon.toFixed(1)}°`;
     if (depthEl) depthEl.textContent = g.depthSpan || '—';
     if (tempEl) tempEl.textContent = g.tempSpan || '—';
+    if (countryEl) countryEl.textContent = g.country || '—';
+    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле' };
+    if (waterTypeEl) waterTypeEl.textContent = g.waterType ? (waterTypeLabels[g.waterType] || g.waterType) : '—';
+    if (protectionEl) protectionEl.textContent = g.protectionStatus || '—';
+    if (notableEl) notableEl.textContent = g.notableFor || '—';
     if (summaryEl) summaryEl.textContent = g.summary || b.subtitle;
 
     if (progressEl) {
@@ -30021,6 +30037,10 @@ window.OC = window.OC || {};
       coordsEl = document.getElementById('globe-b-coords');
       depthEl = document.getElementById('globe-b-depth');
       tempEl = document.getElementById('globe-b-temp');
+      countryEl = document.getElementById('globe-b-country');
+      waterTypeEl = document.getElementById('globe-b-watertype');
+      protectionEl = document.getElementById('globe-b-protection');
+      notableEl = document.getElementById('globe-b-notable');
       progressEl = document.getElementById('globe-b-progress');
       summaryEl = document.getElementById('globe-b-summary');
       goBtn = document.getElementById('globe-go-btn');
