@@ -38,6 +38,7 @@ ORDER = [
     'biomes/amazon_igapo.js',
     'biomes/baikal.js',
     'biomes/red_sea.js',
+    'biomes/florida_caves.js',
     'engine/weather.js',
     'engine/eco_lab.js',
     'engine/world/textures.js',

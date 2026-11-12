@@ -457,6 +457,43 @@ window.OC = window.OC || {};
       landmarkId: 'lagoon_shallows',
       goal: 1,
       progress: (ctx) => ctx.hasZone('reef_lagoon') && ctx.hasPhotoOrPing(['dugong', 'turtle']) ? 1 : 0
+    },
+        // --- Подводные пещеры Флориды ---
+    {
+      id: 'fl_spring_entrance',
+      biomeId: 'florida_caves',
+      title: 'Вход в источник Флориды',
+      desc: 'Исследуйте бассейн источника и зафиксируйте флоридскую мягкокрылую черепаху.',
+      landmarkId: 'spring_entrance',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('spring_basin') && ctx.hasPhotoOrPing(['florida_softshell']) ? 1 : 0
+    },
+    {
+      id: 'fl_cavern_hall',
+      biomeId: 'florida_caves',
+      title: 'Карстовый зал и сталиктиты',
+      desc: 'Найдите карстовый зал и осмотрите сталактиты и сталагмиты.',
+      landmarkId: 'cavern_ceiling',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('cavern_hall') && ctx.hasPhotoOrPing(['stalactite', 'stalagmite']) ? 1 : 0
+    },
+    {
+      id: 'fl_cave_crayfish',
+      biomeId: 'florida_caves',
+      title: 'Пещерный рак и слепая рыба',
+      desc: 'Опуститесь в узкий проход и обнаружьте пещерного рака и слепую пещерную рыбу.',
+      landmarkId: 'squeeze_passage',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('narrow_passage') && ctx.hasPhotoOrPing(['cave_crayfish', 'blind_cave_fish']) ? 1 : 0
+    },
+    {
+      id: 'fl_manatee',
+      biomeId: 'florida_caves',
+      title: 'Ламантин у источника',
+      desc: 'Встретьте флоридского ламантина у входа в источник.',
+      landmarkId: 'spring_entrance',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('spring_basin') && ctx.hasPhotoOrPing(['florida_manatee']) ? 1 : 0
     }
   ];
 
