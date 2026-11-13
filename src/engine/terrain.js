@@ -466,17 +466,22 @@ self.onmessage = function (e) {
       processWorkerQueue();
       return;
     }
-    // Копируем данные для передачи в worker (Transferable массивы)
+    // Копируем буферы перед передачей в Worker, чтобы не нейтрализовать
+    // общий heightGridBuf (getHeightGridBuf переиспользует один буфер).
+    // Transferable переносит владение буфером — после этого источник становится
+    // неиспользуемым (detached), и все следующие чанки получают нулевые высоты.
+    const hCopy = new Float32Array(pd.heightData);
+    const cCopy = new Float32Array(pd.colorData);
     terrainWorker.postMessage({
       type: 'buildChunk',
       cx: next.rec.cx,
       cz: next.rec.cz,
       segs: pd.segs,
       chunkSize: chunkSize,
-      heightData: pd.heightData,
-      colorData: pd.colorData,
+      heightData: hCopy,
+      colorData: cCopy,
       stride: pd.stride
-    }, [pd.heightData.buffer, pd.colorData.buffer]);
+    }, [hCopy.buffer, cCopy.buffer]);
   }
 
   function buildChunkFromWorkerData(rec, segs, positions, normals, colors, indices, vertexCount, indexCount) {
@@ -531,6 +536,9 @@ function createOrUpdateChunk(rec, segs) {
 
     // Если Worker доступен — используем асинхронную постройку
     if (terrainWorker) {
+      // Не добавлять чанк повторно, если он уже в очереди ожидания
+      if (pendingChunkData.has(key)) return;
+
       // Подготавливаем height и color данные в основном потоке (вызовы getHeight/getTerrainColor)
       const x0 = rec.cx * chunkSize;
       const z0 = rec.cz * chunkSize;
