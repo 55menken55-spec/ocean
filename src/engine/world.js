@@ -732,15 +732,24 @@ window.OC = window.OC || {};
     if (OC.Seasons) OC.Seasons.update(dt);
     updateBasePalette(timeOfDay);
 
+    // Истинная мировая позиция камеры с учетом Floating Origin (для planet-sized миров)
+    const origin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+    const ox = origin ? origin.x : 0;
+    const oy = origin ? origin.y : 0;
+    const oz = origin ? origin.z : 0;
+    const trueCamX = camPos.x + ox;
+    const trueCamY = camPos.y + oy;
+    const trueCamZ = camPos.z + oz;
+
     const biome = OC.Biomes.getActive();
     const season = OC.Seasons ? OC.Seasons.getState(biome) : null;
     const waterLevel = (biome && Number.isFinite(biome.seaLevel) ? biome.seaLevel : 0) + (season ? season.waterLevelM : 0);
-    const relativeY = camPos.y - waterLevel;
+    const relativeY = trueCamY - waterLevel;
     const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome, waterLevel) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
     const lab = OC.EcoLab ? OC.EcoLab.update(dt, biome, pal.dayW) : null;
     causticU.uBleach.value = lab ? lab.bleaching : 0.0;
     const opt = biome
-      ? biome.getOpticalProfile(camPos.x, relativeY, camPos.z, pal.dayW)
+      ? biome.getOpticalProfile(trueCamX, relativeY, trueCamZ, pal.dayW)
       : {
           aboveWater: relativeY > 0.25,
           fogColor: pal.skyMid,
@@ -835,7 +844,7 @@ window.OC = window.OC || {};
 
     if (flashBeam && flashBeamMat) {
       const beamStrength = (flashlight.intensity / 4.2) * OC.lerp(1.15, 0.42, pal.dayW * opt.sunAtten);
-      flashBeam.visible = beamStrength > 0.02 && (biome && biome.noSurface ? true : camPos.y < 1.5);
+      flashBeam.visible = beamStrength > 0.02 && (biome && biome.noSurface ? true : trueCamY < 1.5);
       if (flashBeam.visible) {
         if (rovChase) {
           flashBeam.position.copy(flashlight.position);
@@ -848,8 +857,8 @@ window.OC = window.OC || {};
         flashBeamMat.uniforms.uNoSurface.value = (biome && biome.noSurface) ? 1.0 : 0.0;
         flashBeamMat.uniforms.uColor.value.copy(pal.water).lerp(_beamTint, 0.68);
         if (biome && biome.getHeight) {
-          const bx = flashTarget.position.x;
-          const bz = flashTarget.position.z;
+          const bx = flashTarget.position.x + ox;
+          const bz = flashTarget.position.z + oz;
           flashBeamMat.uniforms.uBedDepth.value = biome.getHeight(bx, bz);
         } else {
           flashBeamMat.uniforms.uBedDepth.value = -999.0;
@@ -882,7 +891,7 @@ window.OC = window.OC || {};
     causticU.uSunProj.value.set(sunDir.x / Math.max(0.35, sunDir.y), sunDir.z / Math.max(0.35, sunDir.y));
     causticU.uWaveAmp.value = wState.waveAmp;
     if (biome && biome.getCurrentAt) {
-      biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
+      biome.getCurrentAt(trueCamX, trueCamY, trueCamZ, time, _worldCurr);
       const currMult = (lab ? lab.currentMult : 1.0) * (season ? season.currentFactor : 1.0);
       causticU.uCurrent.value.set(_worldCurr.x * currMult, _worldCurr.z * currMult);
     }
@@ -918,7 +927,7 @@ window.OC = window.OC || {};
         let bestD2 = 1e9;
         for (let i = 0; shafts && i < shafts.length; i++) {
           const s = shafts[i];
-          const d2 = (camPos.x - s.x) * (camPos.x - s.x) + (camPos.z - s.z) * (camPos.z - s.z);
+          const d2 = (trueCamX - s.x) * (trueCamX - s.x) + (trueCamZ - s.z) * (trueCamZ - s.z);
           if (d2 < bestD2) { bestD2 = d2; best = s; }
         }
         if (best) {
@@ -926,8 +935,8 @@ window.OC = window.OC || {};
           raysState.raysGroup.position.z = best.z;
         }
       } else {
-        raysState.raysGroup.position.x = Math.round(camPos.x / 60) * 60;
-        raysState.raysGroup.position.z = Math.round(camPos.z / 60) * 60;
+        raysState.raysGroup.position.x = Math.round(trueCamX / 60) * 60;
+        raysState.raysGroup.position.z = Math.round(trueCamZ / 60) * 60;
       }
       // Закон Снеллиуса сжимает наклон луча в воде (~0.75 от горизонтального отклонения)
       _refractRayDir.set(sunDir.x * 0.68, Math.max(0.45, sunDir.y), sunDir.z * 0.68).normalize();
@@ -941,7 +950,7 @@ window.OC = window.OC || {};
     }
 
     /* надводные осадки (штормовой дождь / арктический снегопад) */
-    const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
+    const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(trueCamX, trueCamZ) < 25.0);
     if (precipFx) {
       precipFx.points.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && relativeY > -12.0;
       if (precipFx.points.visible) {
