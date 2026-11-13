@@ -136,7 +136,9 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     const isCleaner = !!opts.cleaner;
     const isBiolum = !!opts.biolum;
 
-    const geo = makeFishGeo(opts.geoOpts || {});
+    // Собственная геометрия стаи (например, криобиота Европы) либо стандартная рыба
+    const geoBuilder = (opts.geoKey && OC._FaunaBuilders.geoBuilders) ? OC._FaunaBuilders.geoBuilders[opts.geoKey] : null;
+    const geo = geoBuilder ? geoBuilder() : makeFishGeo(opts.geoOpts || {});
     const swimAttr = new Float32Array(maxN * 2);
     const rng = OC.mulberry32((Math.abs(Math.round(cx * 31 + cz * 17)) ^ (baseN * 977)) >>> 0 || 1337);
     for (let i = 0; i < maxN; i++) {

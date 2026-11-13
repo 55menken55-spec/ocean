@@ -99,6 +99,8 @@ window.OC = window.OC || {};
     if (biome.id === 'brine_pool') return { baseTemp: 6.8, heatTolerance: 1.8, hasCorals: false, isAbyss: true };
     if (biome.id === 'cenote_caves') return { baseTemp: 25.4, heatTolerance: 1.8, hasCorals: false, isAbyss: false };
     if (biome.id === 'galapagos_upwelling') return { baseTemp: 19.6, heatTolerance: 1.5, hasCorals: true, isAbyss: false };
+    // Подлёдный океан Европы: ни кораллов, ни солнечного света — только хемосинтез
+    if (biome.id === 'europa_ocean') return { baseTemp: -1.6, heatTolerance: 3.2, hasCorals: false, isAbyss: true };
     return { baseTemp: 27.0, heatTolerance: 1.1, hasCorals: true, isAbyss: false };
   }
 

@@ -494,6 +494,43 @@ window.OC = window.OC || {};
       landmarkId: 'spring_entrance',
       goal: 1,
       progress: (ctx) => ctx.hasZone('spring_basin') && ctx.hasPhotoOrPing(['florida_manatee']) ? 1 : 0
+    },
+    // --- Подлёдный океан Европы: гипотетическая криобиота ---
+    {
+      id: 'europa_cryoforest',
+      biomeId: 'europa_ocean',
+      title: 'Хранитель водородного леса',
+      desc: 'Исследуйте криолес на склоне серпентинитового хребта и зафиксируйте виды, живущие на водороде.',
+      landmarkId: 'cryo_forest_stand',
+      goal: 2,
+      progress: (ctx) => (ctx.hasPhotoOrPing(['cryo_forest']) ? 1 : 0) + (ctx.hasPhotoOrPing(['cryo_tubeworm', 'chemo_mat']) ? 1 : 0)
+    },
+    {
+      id: 'europa_serpentine',
+      biomeId: 'europa_ocean',
+      title: 'Холодный огонь Европы',
+      desc: 'Найдите поле серпентинитовых труб и сфотографируйте трубу, хемосинтетический мат или сиповую креветку.',
+      landmarkId: 'serpentine_field',
+      goal: 2,
+      progress: (ctx) => (ctx.hasPhotoOrPing(['serpentine_chimney']) ? 1 : 0) + (ctx.hasPhotoOrPing(['cryo_shrimp', 'vent_crab']) ? 1 : 0)
+    },
+    {
+      id: 'europa_hydrogen',
+      biomeId: 'europa_ocean',
+      title: 'Водородный кран',
+      desc: 'Спуститесь к водородному сипу и обнаружьте краба или креветку у выхода флюида.',
+      landmarkId: 'hydrogen_vent',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('serpentine_field') && ctx.hasPhotoOrPing(['vent_crab', 'cryo_shrimp']) ? 1 : 0
+    },
+    {
+      id: 'europa_brine_tara',
+      biomeId: 'europa_ocean',
+      title: 'Карман рассола Тары',
+      desc: 'Поднимитесь к базальному льду, найдите канал рассола и зафиксируйте рассольный полип или фонарную медузу.',
+      landmarkId: 'tara_brine',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('basal_ice') && ctx.hasPhotoOrPing(['brine_polyp', 'ice_veil', 'cryo_medusa']) ? 1 : 0
     }
   ];
 

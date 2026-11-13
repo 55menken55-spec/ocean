@@ -254,6 +254,7 @@ window.OC = window.OC || {};
 
       return {
         agents,
+        sonarTargets,
         whale,
         getVesselInfo: () => (primaryVessel ? primaryVessel.shipInfo : null),
         notifySonarPing(origin) {
@@ -823,6 +824,8 @@ window.OC = window.OC || {};
               c.setHex(0x232228).lerp(new T.Color(0x4c5840), Math.sin(x * 0.4 + z * 0.4) * 0.3 + 0.3);
             } else if (bId === 'amazon_igapo') {
               c.setHex(0x4a331d).lerp(new T.Color(0x8e6b42), Math.sin(x * 0.42 + z * 0.38) * 0.35 + 0.35);
+            } else if (bId === 'europa_ocean') {
+              c.setHex(0x2b3140).lerp(new T.Color(0x515d78), Math.sin(x * 0.45 + z * 0.45) * 0.28 + 0.28);
             } else {
               c.setHex(0xdbc9a4).lerp(new T.Color(0xc49c76), Math.sin(x * 0.45 + z * 0.45) * 0.5 + 0.5);
             }
@@ -950,6 +953,18 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeElectricEel(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'river_stingray') {
           OC._FaunaBuilders.makeRiverStingray(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'cryo_glider' || key === 'cryo_krill' || key === 'cryo_shrimp') {
+          // Криобиота Европы: собственная геометрия стаи вместо земной рыбы
+          const geoBuilder = OC._FaunaBuilders.geoBuilders && OC._FaunaBuilders.geoBuilders[key];
+          if (geoBuilder) built = new T.Mesh(geoBuilder(), previewBiolumMat);
+        } else if (key === 'cryo_ray') {
+          OC._FaunaBuilders.makeCryoRay(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, y: 0, speed: 2, scale: 1 });
+        } else if (key === 'armored_swimmer') {
+          OC._FaunaBuilders.makeArmoredSwimmer(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 12, y: 0, speed: 1.5, scale: 1 });
+        } else if (key === 'cryo_medusa') {
+          OC._FaunaBuilders.makeCryoMedusa(tmpGroup, { x: 0, y: 0, z: 0, scale: 1 });
+        } else if (key === 'vent_crab') {
+          OC._FaunaBuilders.makeVentCrab(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: 0, speed: 0.8, scale: 1 });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;

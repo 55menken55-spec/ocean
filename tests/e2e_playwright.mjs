@@ -98,13 +98,13 @@ try {
   enterStage('desktop-biomes');
   // Profile every ocean biome across live Chromium frames
   const biomeIds = await page.evaluate(() => window.OC.Biomes.list().map((b) => b.id));
-  assert(biomeIds.length >= 11, `Expected >= 11 biomes, found ${biomeIds.length}`);
+  assert(biomeIds.length >= 14, `Expected >= 14 biomes, found ${biomeIds.length}`);
 
   const reportMeta = await page.evaluate(() => {
     const exp = window.OC.Expedition && window.OC.Expedition.exportReport ? window.OC.Expedition.exportReport('md') : null;
     return exp ? { len: exp.content.length, biomes: exp.report.biomes.length } : null;
   });
-  assert(reportMeta && reportMeta.biomes === 11 && reportMeta.len > 400, `Playwright report export failed: ${JSON.stringify(reportMeta)}`);
+  assert(reportMeta && reportMeta.biomes === 14 && reportMeta.len > 400, `Playwright report export failed: ${JSON.stringify(reportMeta)}`);
 
   const report = [];
   for (const id of biomeIds) {

@@ -45,6 +45,14 @@ window.OC = window.OC || {};
     if (key === 'fish_parrot') return 'Хруст кораллов';
     if (key === 'fish_lantern' || key === 'jelly' || key === 'jelly_deep' || key === 'jelly_arctic' || key === 'jelly_golden' || key === 'clione_angel' || key === 'fish_angler' || key === 'squid_abyssal' || key === 'octopus_dumbo') return 'Био-перелив глубины';
     if (key.startsWith('shark_') || key === 'manta' || key.startsWith('ray_') || key === 'turtle') return 'Гидродинамический импульс';
+    /* --- Подлёдный океан Европы: криобиота --- */
+    if (key === 'cryo_medusa') return 'Импульс колокола фонарной медузы';
+    if (key === 'cryo_shrimp' || key === 'vent_crab') return key === 'vent_crab' ? 'Стрекотание панциря сип-краба' : 'Щелчки крио-креветок';
+    if (key === 'cryo_ray' || key === 'armored_swimmer') return 'Свист панцирного пловца Европы';
+    if (key === 'serpentine_chimney') return 'Гул серпентинитовой трубы';
+    if (key === 'cryo_forest' || key === 'chemo_mat' || key === 'cryo_tubeworm' || key === 'brine_polyp' || key === 'sulfate_crust') return 'Холодное шёпот криолеса';
+    if (key === 'ice_veil') return 'Звон ледяных занавесов';
+    if (key === 'cryo_glider' || key === 'cryo_krill') return 'Мерцание стаи криобиоты';
     return 'Подводный отклик';
   };
 
@@ -455,6 +463,97 @@ window.OC = window.OC || {};
         g.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
         o.connect(lp); lp.connect(g); g.connect(out);
         o.start(now); o.stop(now + 0.75);
+      } else if (key === 'cryo_glider' || key === 'cryo_krill' || key === 'cryo_shrimp' || key === 'cryo_ray' || key === 'armored_swimmer' || key === 'cryo_medusa' || key === 'vent_crab' || key === 'cryo_forest' || key === 'ice_veil' || key === 'serpentine_chimney' || key === 'brine_polyp' || key === 'chemo_mat' || key === 'cryo_tubeworm' || key === 'sulfate_crust') {
+        /* Криобиота подлёдного океана Европы: ни одного земного тембра.
+           Всё звучит либо как кристаллический звон, либо как глухой гидростатический гул. */
+        if (key === 'cryo_medusa') {
+          // Глубокий колокол медузы: две низкие гармоники и холодный обертон
+          [138, 206, 412].forEach((f, i) => {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(f, now);
+            o.frequency.linearRampToValueAtTime(f * 0.94, now + 1.8);
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.linearRampToValueAtTime(i === 2 ? 0.028 : 0.085, now + 0.16);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 1.9);
+            o.connect(g); g.connect(out);
+            o.start(now); o.stop(now + 1.95);
+          });
+        } else if (key === 'cryo_shrimp' || key === 'vent_crab') {
+          // Сверхвысокочастотные щелчки панциря
+          for (let i = 0; i < 7; i++) {
+            const t = now + i * 0.072;
+            const o = ctx.createOscillator();
+            const bp = ctx.createBiquadFilter();
+            const g = ctx.createGain();
+            o.type = 'square';
+            o.frequency.setValueAtTime(2600 - i * 140, t);
+            o.frequency.exponentialRampToValueAtTime(1500, t + 0.02);
+            bp.type = 'bandpass'; bp.frequency.value = 2900; bp.Q.value = 3.2;
+            g.gain.setValueAtTime(0.05, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.026);
+            o.connect(bp); bp.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.03);
+          }
+        } else if (key === 'cryo_ray' || key === 'armored_swimmer') {
+          // Свист рассекающей воды о минеральный панцирь
+          const o = ctx.createOscillator();
+          const lp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(126, now);
+          o.frequency.exponentialRampToValueAtTime(41, now + 0.9);
+          lp.type = 'lowpass'; lp.frequency.value = 260;
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.linearRampToValueAtTime(0.13, now + 0.12);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.95);
+          o.connect(lp); lp.connect(g); g.connect(out);
+          o.start(now); o.stop(now + 1.0);
+        } else if (key === 'serpentine_chimney') {
+          // Гул холодного H₂-флюида в трубе
+          const o = ctx.createOscillator();
+          const lp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(52, now);
+          o.frequency.linearRampToValueAtTime(44, now + 1.6);
+          lp.type = 'lowpass'; lp.frequency.value = 190;
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.linearRampToValueAtTime(0.075, now + 0.35);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 1.7);
+          o.connect(lp); lp.connect(g); g.connect(out);
+          o.start(now); o.stop(now + 1.75);
+        } else if (key === 'ice_veil') {
+          // Звон ледяных нитей под базальным льдом
+          [1760, 2340, 2930].forEach((f, i) => {
+            const t = now + i * 0.13;
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(f, t);
+            o.frequency.exponentialRampToValueAtTime(f * 0.995, t + 0.6);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.035, t + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.62);
+            o.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.66);
+          });
+        } else {
+          // Мерцание криобиоты: расстроенное стеклянное трение
+          [620, 930, 1490].forEach((f, i) => {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(f * (1 + (i - 1) * 0.006), now + i * 0.08);
+            o.frequency.linearRampToValueAtTime(f * 1.02, now + 1.2 + i * 0.08);
+            g.gain.setValueAtTime(0.0001, now + i * 0.08);
+            g.gain.linearRampToValueAtTime(0.032, now + i * 0.08 + 0.14);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 1.1);
+            o.connect(g); g.connect(out);
+            o.start(now + i * 0.08); o.stop(now + i * 0.08 + 1.15);
+          });
+        }
       } else {
         // Живая серия подводных пузырьков и сонарный пинг открытия
         [440, 620, 810].forEach((f, i) => {

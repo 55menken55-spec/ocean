@@ -349,11 +349,11 @@ console.log('   Option 2 ocean currents, particle/sway advection, #sub-current H
 
 // G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea, Wreck Atoll, Mariana Trench, Brine Pool, Cenote Caves & Galapagos Upwelling) & clean switching
 const allBiomes = OC.Biomes.list();
-assert(allBiomes.length === 13, `Expected 13 registered aquatic biomes, got ${allBiomes.length}`);
+assert(allBiomes.length === 14, `Expected 14 registered aquatic biomes, got ${allBiomes.length}`);
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
 assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
-for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll', 'mariana_trench', 'brine_pool', 'cenote_caves', 'galapagos_upwelling']) {
+for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll', 'mariana_trench', 'brine_pool', 'cenote_caves', 'galapagos_upwelling', 'europa_ocean']) {
   const b = OC.Biomes.setActive(bId);
   assert(b && b.id === bId, `Failed to activate biome ${bId}`);
   assert(b.zones && b.zones.length >= 4, `${bId} needs >= 4 ecological zones`);
@@ -596,7 +596,7 @@ console.log('   Multi-biome hot-switching & runtime quality preset switching (lo
 
 // H) Verify Direction 1 + All 10 Biome Missions (Camera, 40 Scientific Missions, Minimap Waypoints, Persistence)
 assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-assert.equal(OC.Expedition.MISSIONS.length, 52, `Expected 52 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+assert.equal(OC.Expedition.MISSIONS.length, 56, `Expected 56 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
 for (const b of OC.Biomes.list()) {
   const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
   assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
@@ -896,7 +896,7 @@ OC.Globe.init({
 });
 
 const beacons = OC.Globe.getBeacons();
-assert.equal(beacons.length, 13, '3D Globe must expose 13 expedition beacons');
+assert.equal(beacons.length, 14, '3D Globe must expose 14 expedition beacons');
 let totalTourStages = 0;
 for (const b of OC.Biomes.list()) {
   assert(b.globe && Number.isFinite(b.globe.lat) && Number.isFinite(b.globe.lon), `Biome ${b.id} missing globe coordinates`);
@@ -910,7 +910,7 @@ for (const b of OC.Biomes.list()) {
   const sum = OC.Expedition.getBiomeSummary(b);
   assert(sum.speciesTotal === Object.keys(b.encyclopedia).length && sum.missionsTotal === 4, `getBiomeSummary mismatch for ${b.id}`);
 }
-assert(totalTourStages === 67, `Expected 67 total guided tour stages across 13 biomes, got ${totalTourStages}`);
+assert(totalTourStages === 73, `Expected 73 total guided tour stages across 14 biomes, got ${totalTourStages}`);
 
 for (const bc of beacons) {
   const rad = Math.hypot(bc.x, bc.y, bc.z);
@@ -1681,6 +1681,67 @@ assert.equal(OC.Expedition.MISSIONS.filter((m) => m.biomeId === 'baikal').length
 OC.Biomes.setActive('great_barrier_reef');
 console.log('   11th Biome "Озеро Байкал" (1,642 m rift, clear-water optics, Baikal sponge, omul, golomyanka, nerpa, methane seeps, CTD and 4 missions) verified.');
 
+// AA2) Verify 14th Biome: Europa's subglacial ocean (europa_ocean, 25,000 m, H2 cryoforest, serpentinite vents, cryobiota)
+const europa = OC.Biomes.get('europa_ocean');
+assert(europa && europa.noSurface === true, 'Europa must register as a subglacial (no-surface) biome');
+assert(europa.depthOffset === 25000 && Math.abs(europa.pressureScale - 0.136) < 1e-9, 'Europa must use a 25 km ice-shell depth offset and Europa gravity (1/7 Earth)');
+assert(europa.minimapTheme === 'europa' && europa.globe.world === 'europa' && europa.globe.waterType === 'subglacial', 'Europa must carry its own minimap theme, planet (europa) and water type');
+assert(europa.zones.length === 5 && europa.landmarks.length === 6 && europa.tourLegs.length === 6, 'Europa must expose 5 zones, 6 landmarks and 6 guided tour legs');
+assert(europa.getCeilingHeight(0, 0) > europa.getHeight(0, 0) + 40, 'Europa must have a thick basal ice ceiling above the seafloor');
+assert(europa.getHeight(-292, 138) > -85 && europa.getHeight(392, -338) < -105, 'Europa bathymetry must include the raised serpentinite vent field and the deep oceanic basin');
+const europaVentOptics = europa.getOpticalProfile(-292, -76, 138, 1);
+const europaPlainOptics = europa.getOpticalProfile(392, -110, -338, 1);
+assert(europaVentOptics.causticStrength === 0 && europaVentOptics.rayStrength === 0 && europaVentOptics.bioGlow > 0.5, 'Europa must have no sunlight 25 km below the surface - only bioluminescence');
+assert(europaPlainOptics.fogDensity > 0.005 && europaPlainOptics.fogDensity < europaVentOptics.fogDensity + 0.02, 'Europa fog must stay dense and water-dark across the whole ocean');
+let europaCryoFlora = 0;
+let europaVeilFlora = 0;
+let europaChimneyFlora = 0;
+for (let cz = -3; cz < 3; cz++) {
+  for (let cx = -3; cx < 3; cx++) {
+    const items = europa.generateChunkFlora(cx, cz, europa.chunkSize, 1.2, OC.mulberry32(((cx * 73856093) ^ (cz * 19348663) ^ 0x2e01) >>> 0));
+    for (const it of items) {
+      if (it.species === 'cryo_forest') europaCryoFlora++;
+      if (it.species === 'ice_veil') europaVeilFlora++;
+      if (it.species === 'serpentine_chimney') europaChimneyFlora++;
+      assert(europa.encyclopedia[it.species], `Europa flora species ${it.species} missing from encyclopedia`);
+    }
+  }
+}
+assert(europaCryoFlora > 0 && europaVeilFlora > 0 && europaChimneyFlora > 0, 'Europa flora stream must seed cryoforest, ceiling-hanging ice veils and serpentinite chimneys');
+for (const k of ['cryo_forest', 'ice_veil', 'serpentine_chimney', 'brine_polyp', 'chemo_mat', 'cryo_tubeworm', 'sulfate_crust', 'cryo_glider', 'cryo_krill', 'cryo_shrimp', 'cryo_ray', 'armored_swimmer', 'cryo_medusa', 'vent_crab']) {
+  assert(europa.encyclopedia[k], `Europa encyclopedia missing key ${k}`);
+  assert(OC.sound.getVoiceLabel(k).length > 4, `Europa acoustic label missing for ${k}`);
+  const preview = OC.FaunaEngine.createPreviewMesh(k, europa);
+  assert(preview && preview.children.length > 0, `Europa Atlas preview missing for ${k}`);
+}
+const europaSeason = OC.Seasons.getState(europa);
+assert(europaSeason.hemisphere === 'equatorial' && Math.abs(europaSeason.iceFactor - 1) < 1e-9, 'Europa must have a perpetual ice shell and an equatorial (tilt-free) seasonal profile');
+assert(Math.abs(OC.Seasons.getTemperatureDelta(europa, 25050)) > 0.0001, 'Europa seasonal temperature profile must not collapse to zero delta');
+const europaPlan = europa.faunaPlan;
+assert(europaPlan.cryoRays.length === 2 && europaPlan.armoredSwimmers.length === 2 && europaPlan.cryoMedusae.length === 4 && europaPlan.ventCrabs.length === 3, 'Europa fauna plan must include cryo rays, armored swimmers, lantern medusae and vent crabs');
+assert(europaPlan.schools.every((sc) => sc.geoKey && sc.biolum), 'Europa schools must use their own bioluminescent cryogeometries');
+const europaFauna = OC.FaunaEngine.init(scene, europa);
+for (const k of ['cryo_ray', 'armored_swimmer', 'cryo_medusa', 'vent_crab', 'cryo_glider', 'cryo_krill', 'cryo_shrimp']) {
+  assert(europaFauna.agents.some((a) => a.key === k), `Europa fauna engine must spawn ${k}`);
+}
+assert(europaFauna.sonarTargets.some((a) => a.key === 'cryo_ray') && europaFauna.sonarTargets.some((a) => a.key === 'vent_crab'), 'Europa megafauna must be scannable with the multibeam sonar');
+const europaSpawn = new T.Vector3(europa.spawn.pos[0], europa.spawn.pos[1], europa.spawn.pos[2]);
+europaFauna.update(1 / 60, OC.uTime.value, europaSpawn, 0, false);
+const ctdEuropa = OC.ROV.runCtdCast(europa, europaSpawn, OC.EcoLab.getState());
+assert(ctdEuropa && ctdEuropa.waterType === 'subglacial', 'Europa CTD must identify a subglacial ocean');
+assert(ctdEuropa.pH > 10 && ctdEuropa.pH < 13, `Europa CTD must report alkaline serpentinized water (pH ~11): ${ctdEuropa && ctdEuropa.pH}`);
+assert(ctdEuropa.bins.every((bin) => bin.o2 >= 0 && bin.o2 < 1.2), 'Europa oxygen profile must stay anoxic (no photosynthesis under 25 km of ice)');
+assert(ctdEuropa.conductivityUSCm > 100 && ctdEuropa.tdsMgL > 90000 && ctdEuropa.mineralizationPpt > 90, 'Europa CTD must report hypersaline brine (TDS > 90 g/l)');
+const europaExpectedAtm = 1 + (ctdEuropa.maxDepthM / 10.08) * europa.pressureScale;
+assert(Math.abs(ctdEuropa.maxPressureAtm - europaExpectedAtm) < 0.2 && ctdEuropa.maxPressureAtm > 250 && ctdEuropa.maxPressureAtm < 400, `Europa pressure must be scaled by 1/7 Earth gravity (~340 atm): ${ctdEuropa.maxPressureAtm}`);
+assert(ctdEuropa.minDepthM >= 25000 && ctdEuropa.maxDepthM > ctdEuropa.minDepthM + 25 && ctdEuropa.maxDepthM < 25120, 'Europa CTD must sample the full local water column of the 25 km-deep subglacial ocean');
+assert(OC.Hydrophone.getAcousticProfile('serpentine_chimney').label.includes('Гул'), 'Europa serpentinite chimneys must have their own acoustic signature');
+assert.equal(OC.Expedition.MISSIONS.filter((m) => m.biomeId === 'europa_ocean').length, 4, 'Europa must provide four expedition goals');
+const europaBeacon = OC.Globe.getBeacons().find((b) => b.id === 'europa_ocean');
+assert(europaBeacon && europaBeacon.world === 'europa', 'Europa must publish a planet-aware beacon (globe.world = europa)');
+OC.Biomes.setActive('great_barrier_reef');
+console.log('   14th Biome "Океан Европы" (25,000 m subglacial ocean, H2 cryoforest, serpentinite vents, cryobiota, 340 atm CTD and 4 missions) verified.');
+
 // AB) Verify Stage 2 Underwater Optical Shader FX (WebGLRenderTarget Post-Processing, Chromatic Aberration, Lens Wetness & Overhead Shadows)
 assert(typeof OC.renderWorld === 'function' && typeof OC.resizeWorld === 'function' && typeof OC.getPostFxState === 'function', 'world.js must expose OC.renderWorld, OC.resizeWorld & OC.getPostFxState');
 assert(typeof OC.setPostFxEnabled === 'function' && typeof OC.setSubViewportOptics === 'function', 'world.js must expose OC.setPostFxEnabled & OC.setSubViewportOptics');
@@ -1742,7 +1803,7 @@ console.log(`   Stage 3 ROV & Marine Science (Umbilical Tether ${tNear.lengthM}m
 // AD) Verify Stage 4 Scientific Report Export (.MD & .JSON) & Adaptive Auto-LOD Controller
 assert(typeof OC.Expedition.buildScientificReport === 'function' && typeof OC.Expedition.exportReport === 'function', 'OC.Expedition must expose scientific report builder & exporter');
 const repMd = OC.Expedition.exportReport('md', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
-assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 13 биомам'), 'Markdown report must summarize all 13 biomes & CTD data');
+assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 14 биомам'), 'Markdown report must summarize all 14 biomes & CTD data');
 const repJson = OC.Expedition.exportReport('json', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
 const baikalReportMd = OC.Expedition.exportReport('md', { biome: baikal, ctdCast: ctdBaikal });
 const baikalReportJson = OC.Expedition.exportReport('json', { biome: baikal, ctdCast: ctdBaikal });
@@ -1752,8 +1813,8 @@ assert.equal(baikalReportData.ctdCast.conductivityUSCm, ctdBaikal.conductivityUS
 assert.equal(baikalReportData.ctdCast.oxygenProfile.length, ctdBaikal.bins.length, 'JSON report must export every CTD oxygen-depth sample');
 assert.equal(baikalReportData.ctdCast.profile[0].conductivityUSCm, ctdBaikal.bins[0].conductivityUSCm, 'JSON report must retain the conductivity/TDS vertical profile');
 const parsedRep = JSON.parse(repJson.content);
-assert.equal(parsedRep.biomes.length, 13, 'JSON scientific report must contain all 13 biomes');
-assert(parsedRep.summary.missionsTotal === 52 && parsedRep.summary.speciesTotal === 268, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
+assert.equal(parsedRep.biomes.length, 14, 'JSON scientific report must contain all 14 biomes');
+assert(parsedRep.summary.missionsTotal === 56 && parsedRep.summary.speciesTotal === 285, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
 
 assert(typeof OC.Quality.evaluateAutoLod === 'function' && typeof OC.Quality.setAutoLod === 'function' && typeof OC.Quality.getAutoLodState === 'function', 'OC.Quality must expose adaptive Auto-LOD controller');
 OC.Quality.set('high');

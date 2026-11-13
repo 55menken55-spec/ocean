@@ -186,7 +186,9 @@ window.OC = window.OC || {};
         if (isSubMode()) {
           const flHere = biome.getHeight(craftPos.x, craftPos.z);
           const clearance = Math.max(0, craftPos.y - flHere);
-          const atm = (1 + depthM / 10.08).toFixed(2);
+          // Гидростатическое давление: масштаб силы тяжести планеты (Европа — 1/7 земной)
+          const pScale = biome.pressureScale || 1;
+          const atm = (1 + (depthM / 10.08) * pScale).toFixed(2);
           const knots = (camSpeed * 1.94384).toFixed(1);
           const pitchDeg = OC.Navigation.getPitch() * 180 / Math.PI;
           if (subHorizon) subHorizon.style.transform = 'translateY(' + OC.clamp(-pitchDeg * 1.1, -36, 36).toFixed(1) + 'px)';
@@ -213,7 +215,8 @@ window.OC = window.OC || {};
             else if (inCaveCeiling) phaseLabel = 'Карстовая пещера · Свод';
             else if (biome.noSurface) {
               phaseLabel = biome.id === 'mariana_trench' ? 'Гадальная зона · 10 920 м'
-                : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м' : 'Абиссаль · 2500 м');
+                : (biome.id === 'brine_pool' ? 'Сумеречная толща · 650 м'
+                  : (biome.id === 'europa_ocean' ? 'Подлёдный океан · 25 000 м' : 'Абиссаль · 2500 м'));
             } else if (fInfo.coralSpawnIntensity > 0.35) phaseLabel = 'Ночь · Нерест кораллов';
             else if (fInfo.dvmPhase === 'dusk_ascent') phaseLabel = 'Сумерки · Миграция DVM';
             else if (biome.hasAurora) {

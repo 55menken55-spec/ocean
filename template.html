@@ -395,6 +395,9 @@
     background:rgba(4,18,32,.84);border:1px solid rgba(88,224,255,.45);font-size:11.5px;color:#eafaff;
     pointer-events:none;backdrop-filter:blur(8px);transition:opacity .15s}
   .globe-hover-tip.hidden{opacity:0}
+  .globe-planet{position:absolute;right:12px;top:12px;padding:5px 12px;border-radius:999px;
+    background:rgba(4,18,32,.84);border:1px solid rgba(140,210,255,.5);font-size:11.5px;color:#eafaff;
+    letter-spacing:.06em;pointer-events:none;backdrop-filter:blur(8px)}
   .globe-hint{position:absolute;left:12px;bottom:10px;font-size:10.5px;color:rgba(195,235,255,.72);
     pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.8)}
   .globe-side{display:flex;flex-direction:column;gap:12px;min-width:0}
@@ -992,14 +995,15 @@
 <div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
   <div class="globe-box">
     <div class="atlas-header">
-      <div><h3>3D-глобус планеты</h3><small>13 водных экспедиций · 67 этапа гида</small></div>
+      <div><h3 id="globe-title">3D-глобус: Земля</h3><small>14 водных экспедиций · 73 этапа гида</small></div>
       <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
     </div>
     <div class="globe-body">
       <div class="globe-stage">
         <canvas id="globe-3d" width="460" height="390"></canvas>
         <div class="globe-hover-tip hidden" id="globe-hover-tip">—</div>
-        <div class="globe-hint">Вращайте Землю мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть</div>
+        <div class="globe-planet" id="globe-planet">Земля</div>
+        <div class="globe-hint" id="globe-hint">Вращайте Землю мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть</div>
       </div>
       <div class="globe-side">
         <div class="globe-list" id="globe-list"></div>

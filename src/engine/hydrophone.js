@@ -110,6 +110,16 @@ window.OC = window.OC || {};
     if (key === 'ice_floe' || key === 'iceberg' || key === 'brinicle') return { mode: 'ice', minHz: 190, maxHz: 1580, label: 'Треск пакового льда' };
     if (key === 'shipwreck' || key === 'research_vessel') return { mode: 'vessel', minHz: 55, maxHz: 310, label: key === 'research_vessel' ? 'Шум винта и эхолот НИС' : 'Скрип подводного остова' };
     if (key === 'stalactite' || key === 'stalagmite' || key === 'ariadne_line') return { mode: 'drip', minHz: 520, maxHz: 1050, label: 'Резонанс карстовой пещеры' };
+    /* --- Подлёдный океан Европы: криобиота --- */
+    if (key === 'serpentine_chimney') return { mode: 'rumble', minHz: 28, maxHz: 230, label: 'Гул серпентинитовой трубы' };
+    if (key === 'chemo_mat') return { mode: 'rumble', minHz: 34, maxHz: 260, label: 'Шипение H₂-флюида в матe' };
+    if (key === 'cryo_shrimp' || key === 'vent_crab') return { mode: 'clicks', minHz: 1250, maxHz: 3400, label: key === 'vent_crab' ? 'Стрекотание панциря сип-краба' : 'Щелчки крио-креветок' };
+    if (key === 'cryo_medusa') return { mode: 'pulse', minHz: 90, maxHz: 430, label: 'Импульсы колокола фонарной медузы' };
+    if (key === 'cryo_ray' || key === 'armored_swimmer') return { mode: 'swim', minHz: 55, maxHz: 300, label: 'Гидродинамика панцирного пловца' };
+    if (key === 'cryo_glider' || key === 'cryo_krill') return { mode: 'bio', minHz: 210, maxHz: 1080, label: 'Биоакустика криобиоты' };
+    if (key === 'cryo_forest' || key === 'ice_veil' || key === 'brine_polyp' || key === 'cryo_tubeworm' || key === 'sulfate_crust') {
+      return { mode: 'bio', minHz: 140, maxHz: 780, label: 'Шёпот криобиоты Европы' };
+    }
     if (key.startsWith('shark_') || key === 'manta' || key === 'mobula_ray' || key === 'ocean_sunfish' || key === 'oarfish' || key === 'galapagos_shark') {
       return { mode: 'swim', minHz: 90, maxHz: 420, label: 'Гидродинамика крупного вида' };
     }
@@ -267,6 +277,7 @@ window.OC = window.OC || {};
   }
 
   OC.Hydrophone = {
+    getAcousticProfile,
     init(canvasEl) {
       canvas = canvasEl || null;
       if (canvas) {

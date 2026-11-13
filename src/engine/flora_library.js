@@ -1,5 +1,5 @@
 /* ================= БИБЛИОТЕКА ПРОТОТИПОВ ФЛОРА: МАТЕРИАЛЫ И РЕЕСТР ================= */
-/* Сами геометрии вынесены в engine/flora/*.js (7 тематических модулей) и публикуются
+/* Сами геометрии вынесены в engine/flora/*.js (9 тематических модулей) и публикуются
    через OC._FloraBuilders. Здесь остаются материалы, бюджеты инстансов и реестр видов. */
 window.OC = window.OC || {};
 (function (OC) {
@@ -306,6 +306,35 @@ window.OC = window.OC || {};
         charophyte_bed: {
           mat: matPlant, maxInstances: 1450, cullDist: 360,
           geos: [need('buildCharophyteBed')(rng), need('buildCharophyteBed')(rng)]
+        },
+        /* --- Подлёдный океан Европы: гипотетическая криобиота --- */
+        cryo_forest: {
+          mat: matPlant, maxInstances: 1500, cullDist: 520,
+          geos: [need('buildCryoForest')(rng), need('buildCryoForest')(rng), need('buildCryoForest')(rng)]
+        },
+        ice_veil: {
+          mat: matIce, maxInstances: 1300, cullDist: 480,
+          geos: [need('buildIceVeil')(rng), need('buildIceVeil')(rng), need('buildIceVeil')(rng)]
+        },
+        serpentine_chimney: {
+          mat: matChimney, maxInstances: 420, cullDist: 640,
+          geos: [need('buildSerpentineChimney')(rng), need('buildSerpentineChimney')(rng)]
+        },
+        brine_polyp: {
+          mat: matCoralSoft, maxInstances: 1100, cullDist: 380,
+          geos: [need('buildBrinePolyp')(rng), need('buildBrinePolyp')(rng)]
+        },
+        chemo_mat: {
+          mat: matRigid, maxInstances: 1400, cullDist: 320,
+          geos: [need('buildChemoMat')(rng), need('buildChemoMat')(rng)]
+        },
+        cryo_tubeworm: {
+          mat: matSoft, maxInstances: 1200, cullDist: 420,
+          geos: [need('buildCryoTubeworm')(rng), need('buildCryoTubeworm')(rng)]
+        },
+        sulfate_crust: {
+          mat: matRigid, maxInstances: 1300, cullDist: 300,
+          geos: [need('buildSulfateCrust')(rng), need('buildSulfateCrust')(rng)]
         }
       };
 

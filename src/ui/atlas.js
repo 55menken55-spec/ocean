@@ -94,6 +94,14 @@ window.OC = window.OC || {};
     'Слияние вод': 'whitewater_confluence',
     'Роща сейб': 'cathedral_canopy',
     'Русло и пойма': 'rio_negro_channel',
+    /* Подлёдный океан Европы */
+    'Нижняя граница ледяного панциря': 'basal_ice_view',
+    'Базальный лёд': 'tara_brine',
+    'Карман рассола Тары': 'tara_brine',
+    'Верхний пелагиал': 'basal_ice_view',
+    'Серпентинитовый хребет': 'cryo_forest_stand',
+    'Серпентинитовое поле': 'serpentine_field',
+    'Глубинная океаническая равнина': 'basal_plain_floor',
     'Все зоны': 'crest'
   };
 
