@@ -46,6 +46,7 @@ ORDER = [
     'engine/world/precip.js',
     'engine/world/postfx.js',
     'engine/world.js',
+    'engine/floating_origin.js',
     'engine/terrain.js',
     'engine/flora/reef_corals.js',
     'engine/flora/reef_soft.js',

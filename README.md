@@ -126,7 +126,7 @@ src/
 │   ├── eco_lab.js           # Экологическая лаборатория: тепловой стресс, обесцвечивание кораллов, pH, O2
 │   ├── world.js             # Рендер, освещение, Снеллиус с дисперсией, сияние, шейдер обесцвечивания
 │   ├── world/               # textures (каустика/рябь/пена), rays (god rays), precip (осадки), postfx (экранный FX)
-│   ├── terrain.js           # Потоковый LOD-ландшафт дна и свода пещер с кэшем сетки высот и юбками
+│   ├── floating_origin.js   # Пересчёт начала координат относительно игрока (для planet-sized миров)\n│   ├── terrain.js           # Потоковый LOD-ландшафт дна и свода пещер с кэшем сетки высот и юбками
 │   ├── flora_library.js     # Реестр процедурной библиотеки 59 видов (реализации — в flora/)
 │   ├── flora/               # reef_corals/reef_soft/reef_sponges/reef_benthos (риф), temperate_kelp (ламинария),
 │   │                        # vents_abyss (курильщики), arctic_ice (лёд), wreck_tropic (тропика), caves_brine, amazon_igapo, baikal

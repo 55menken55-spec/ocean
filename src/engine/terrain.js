@@ -69,9 +69,11 @@ window.OC = window.OC || {};
   }
 
   /* ---- Построение меша одного чанка с юбками по краям (без швов между LOD) ---- */
+  /* Геометрия строится относительно центра чанка (0,0,0 = угол чанка в мировом пространстве);
+     мировая позиция задаётся через mesh.position = worldCenter - origin (Floating Origin). */
   function buildChunkGeometry(cx, cz, segs) {
-    const x0 = cx * chunkSize;
-    const z0 = cz * chunkSize;
+    const x0 = cx * chunkSize; // абсолютный угол чанка (для запросов к биому)
+    const z0 = cz * chunkSize; // абсолютный угол чанка (для запросов к биому)
     const step = chunkSize / segs;
     const inv2Step = 1 / (2 * step);
     const n = segs + 1;
@@ -79,11 +81,11 @@ window.OC = window.OC || {};
     const hBuf = getHeightGridBuf(stride);
 
     for (let gz = 0; gz < stride; gz++) {
-      const z = z0 + (gz - 1) * step;
+      const absZ = z0 + (gz - 1) * step;
       const row = gz * stride;
       for (let gx = 0; gx < stride; gx++) {
-        const x = x0 + (gx - 1) * step;
-        hBuf[row + gx] = biomeRef.getHeight(x, z);
+        const absX = x0 + (gx - 1) * step;
+        hBuf[row + gx] = biomeRef.getHeight(absX, absZ);
       }
     }
 
@@ -96,18 +98,20 @@ window.OC = window.OC || {};
     const col = new Float32Array(totalVerts * 3);
 
     for (let iz = 0; iz <= segs; iz++) {
-      const z = z0 + iz * step;
+      const absZ = z0 + iz * step;
+      const relZ = absZ - z0; // относительно угла чанка
       const gRow = (iz + 1) * stride;
       for (let ix = 0; ix <= segs; ix++) {
-        const x = x0 + ix * step;
+        const absX = x0 + ix * step;
+        const relX = absX - x0; // относительно угла чанка
         const gIdx = gRow + (ix + 1);
         const y = hBuf[gIdx];
         const idx = iz * n + ix;
         const p3 = idx * 3;
 
-        pos[p3] = x;
+        pos[p3] = relX;
         pos[p3 + 1] = y;
-        pos[p3 + 2] = z;
+        pos[p3 + 2] = relZ;
 
         const hL = hBuf[gIdx - 1];
         const hR = hBuf[gIdx + 1];
@@ -122,7 +126,7 @@ window.OC = window.OC || {};
         norm[p3 + 1] = ny / len;
         norm[p3 + 2] = nz / len;
 
-        biomeRef.getTerrainColor(x, y, z, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
+        biomeRef.getTerrainColor(absX, y, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
         col[p3] = _tmpCol.r;
         col[p3 + 1] = _tmpCol.g;
         col[p3 + 2] = _tmpCol.b;
@@ -203,15 +207,15 @@ window.OC = window.OC || {};
 
     let anyClosed = false;
     for (let gz = 0; gz < stride; gz++) {
-      const z = z0 + (gz - 1) * step;
+      const absZ = z0 + (gz - 1) * step;
       const row = gz * stride;
       for (let gx = 0; gx < stride; gx++) {
-        const x = x0 + (gx - 1) * step;
-        const rawY = biomeRef.getCeilingHeight(x, z);
+        const absX = x0 + (gx - 1) * step;
+        const rawY = biomeRef.getCeilingHeight(absX, absZ);
         const y = Math.min(22.0, rawY);
         hBuf[row + gx] = y;
         if (gx >= 1 && gx <= n && gz >= 1 && gz <= n) {
-          const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(x, z) : (rawY > 38.0);
+          const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(absX, absZ) : (rawY > 38.0);
           openMask[(gz - 1) * n + (gx - 1)] = isOpen ? 1 : 0;
           if (!isOpen) anyClosed = true;
         }
@@ -221,18 +225,20 @@ window.OC = window.OC || {};
     if (!anyClosed) return null;
 
     for (let iz = 0; iz <= segs; iz++) {
-      const z = z0 + iz * step;
+      const absZ = z0 + iz * step;
+      const relZ = absZ - z0;
       const gRow = (iz + 1) * stride;
       for (let ix = 0; ix <= segs; ix++) {
-        const x = x0 + ix * step;
+        const absX = x0 + ix * step;
+        const relX = absX - x0;
         const gIdx = gRow + (ix + 1);
         const y = hBuf[gIdx];
         const idx = iz * n + ix;
         const p3 = idx * 3;
 
-        pos[p3] = x;
+        pos[p3] = relX;
         pos[p3 + 1] = y;
-        pos[p3 + 2] = z;
+        pos[p3 + 2] = relZ;
 
         const hL = hBuf[gIdx - 1];
         const hR = hBuf[gIdx + 1];
@@ -246,8 +252,8 @@ window.OC = window.OC || {};
         norm[p3 + 1] = ny / len;
         norm[p3 + 2] = nz / len;
 
-        if (biomeRef.getCeilingColor) biomeRef.getCeilingColor(x, y, z, _tmpCol);
-        else biomeRef.getTerrainColor(x, y, z, _tmpCol);
+        if (biomeRef.getCeilingColor) biomeRef.getCeilingColor(absX, y, absZ, _tmpCol);
+        else biomeRef.getTerrainColor(absX, y, absZ, _tmpCol);
         col[p3] = _tmpCol.r;
         col[p3 + 1] = _tmpCol.g;
         col[p3 + 2] = _tmpCol.b;
@@ -318,7 +324,11 @@ window.OC = window.OC || {};
     return q.terrainFarSegs;
   }
 
-  function createOrUpdateChunk(rec, segs) {
+  function getOriginRef() {
+    return OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+}
+
+function createOrUpdateChunk(rec, segs) {
     if (rec.segs === segs && rec.mesh) return;
     const geo = buildChunkGeometry(rec.cx, rec.cz, segs);
     if (rec.mesh) {
@@ -329,6 +339,11 @@ window.OC = window.OC || {};
       rec.mesh.userData.key = 'floor';
       group.add(rec.mesh);
     }
+    // Позиционируем меш относительно текущего начала координат (Floating Origin)
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
+    rec.mesh.position.set(rec.wx - ox, 0, rec.wz - oz);
 
     if (ceilingMat && biomeRef.getCeilingHeight) {
       const cGeo = buildCeilingChunkGeometry(rec.cx, rec.cz, segs);
@@ -337,10 +352,12 @@ window.OC = window.OC || {};
           rec.ceilMesh.geometry.dispose();
           rec.ceilMesh.geometry = cGeo;
           rec.ceilMesh.visible = rec.mesh.visible;
+          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
         } else {
           rec.ceilMesh = new T.Mesh(cGeo, ceilingMat);
           rec.ceilMesh.userData.key = 'floor';
           rec.ceilMesh.visible = rec.mesh.visible;
+          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
           group.add(rec.ceilMesh);
         }
       } else if (rec.ceilMesh) {
@@ -397,6 +414,14 @@ window.OC = window.OC || {};
       group = new T.Group();
       scene.add(group);
 
+      // При сдвиге начала координат (Floating Origin) перепозиционируем все меши чанков
+      OC.FloatingOrigin.onShift((delta) => {
+        chunks.forEach((rec) => {
+          if (rec.mesh) rec.mesh.position.sub(delta);
+          if (rec.ceilMesh) rec.ceilMesh.position.sub(delta);
+        });
+      });
+
       terrainMat = new T.MeshStandardMaterial({
         vertexColors: true,
         roughness: 0.9,
@@ -437,36 +462,44 @@ window.OC = window.OC || {};
       frameCounter = 0;
     },
 
-    update(camPos) {
+    update(camPos, scene) {
       if (!initialized) return;
       frameCounter++;
       const q = OC.Quality.get();
+      const origin = getOriginRef();
+      const ox = origin ? origin.x : 0;
+      const oz = origin ? origin.z : 0;
+
+      // Истинная мировая позиция камеры (локальная + origin)
+      const trueCamX = camPos.x + ox;
+      const trueCamZ = camPos.z + oz;
+
       if (!needsRebuildScan && lastScanQuality === q.id) {
-        const dx = camPos.x - lastScanX;
-        const dz = camPos.z - lastScanZ;
+        const dx = trueCamX - lastScanX;
+        const dz = trueCamZ - lastScanZ;
         if (dx * dx + dz * dz < 100) return; // < 10 м без смены качества: чанки актуальны
       }
-      lastScanX = camPos.x;
-      lastScanZ = camPos.z;
+      lastScanX = trueCamX;
+      lastScanZ = trueCamZ;
       lastScanQuality = q.id;
 
       const t0 = performance.now();
       const budgetMs = 3.5;
 
-      const camChunkX = Math.floor(camPos.x / chunkSize);
-      const camChunkZ = Math.floor(camPos.z / chunkSize);
+      const camChunkX = Math.floor(trueCamX / chunkSize);
+      const camChunkZ = Math.floor(trueCamZ / chunkSize);
       const farDist = q.terrainFarDist;
       const visibilityChunkRadius = Math.ceil(farDist / chunkSize) + 1;
 
       const touched = new Set();
       const candidates = [];
 
-      // 1. Создаём/обновляем чанки в радиусе видимости около камеры
+      // 1. Создаём/обновляем чанки в радиусе видимости около истинной позиции камеры
       for (let cz = camChunkZ - visibilityChunkRadius; cz <= camChunkZ + visibilityChunkRadius; cz++) {
         for (let cx = camChunkX - visibilityChunkRadius; cx <= camChunkX + visibilityChunkRadius; cx++) {
           const wx = (cx + 0.5) * chunkSize;
           const wz = (cz + 0.5) * chunkSize;
-          const dist = Math.hypot(wx - camPos.x, wz - camPos.z);
+          const dist = Math.hypot(wx - trueCamX, wz - trueCamZ);
           if (dist > farDist) continue;
 
           const rec = getOrCreateChunkRec(cx, cz);

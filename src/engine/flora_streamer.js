@@ -39,14 +39,18 @@ window.OC = window.OC || {};
   const _col = new T.Color();
   const _volcDmgColor = new T.Color(0x5a4a3a);
 
-  function chunkKey(cx, cz) {
+function chunkKey(cx, cz) {
     return cx + ',' + cz;
-  }
+}
 
-  function chunkCacheTouch(key) {
+function chunkCacheTouch(key) {
     const rec = chunkFloraCache.get(key);
     if (rec) rec.lastUsed = frameCounter;
-  }
+}
+
+function getOriginRef() {
+    return OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+}
 
   function evictStaleFloraChunks() {
     const toDelete = [];
@@ -97,11 +101,14 @@ window.OC = window.OC || {};
     }
   }
 
-  function buildChunkData(cx, cz, density) {
+function buildChunkData(cx, cz, density) {
     const seed = ((cx * 73856093) ^ (cz * 19349663) ^ 0x5f3759df) >>> 0;
     const rng = OC.mulberry32(seed);
     const raw = biomeRef.generateChunkFlora(cx, cz, chunkSize, density, rng);
     const items = [];
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
 
     for (let i = 0; i < raw.length; i++) {
       const it = raw[i];
@@ -111,9 +118,9 @@ window.OC = window.OC || {};
       items.push({
         species: it.species,
         variant,
-        x: it.x,
+        x: it.x - ox, // относительно начала координат (Floating Origin)
         y: it.y,
-        z: it.z,
+        z: it.z - oz, // относительно начала координат (Floating Origin)
         ry: it.ry,
         scale: it.scale,
         tint: it.tint || 0xffffff
@@ -121,20 +128,27 @@ window.OC = window.OC || {};
     }
     items.lastUsed = frameCounter;
     return items;
-  }
+}
 
   function rebuildActiveInstances(camPos) {
     const q = OC.Quality.get();
     const activeR = q.floraActiveRadius;
     const activeR2 = activeR * activeR;
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
+
+    // Истинная мировая позиция камеры (локальная + origin)
+    const trueCamX = camPos.x + ox;
+    const trueCamZ = camPos.z + oz;
 
     for (let i = 0; i < pools.length; i++) pools[i].count = 0;
 
-    // Радиус кэша не ограничен chunkHalfCount — берём из координат камеры напрямую
-    const minCx = Math.floor((camPos.x - activeR) / chunkSize);
-    const maxCx = Math.floor((camPos.x + activeR) / chunkSize);
-    const minCz = Math.floor((camPos.z - activeR) / chunkSize);
-    const maxCz = Math.floor((camPos.z + activeR) / chunkSize);
+    // Радиус кэша не ограничен chunkHalfCount — берём из истинных координат камеры
+    const minCx = Math.floor((trueCamX - activeR) / chunkSize);
+    const maxCx = Math.floor((trueCamX + activeR) / chunkSize);
+    const minCz = Math.floor((trueCamZ - activeR) / chunkSize);
+    const maxCz = Math.floor((trueCamZ + activeR) / chunkSize);
 
     let total = 0;
 
@@ -142,8 +156,8 @@ window.OC = window.OC || {};
       for (let cx = minCx; cx <= maxCx; cx++) {
         const wx = (cx + 0.5) * chunkSize;
         const wz = (cz + 0.5) * chunkSize;
-        const dxC = wx - camPos.x;
-        const dzC = wz - camPos.z;
+        const dxC = wx - trueCamX;
+        const dzC = wz - trueCamZ;
         if (dxC * dxC + dzC * dzC > (activeR + chunkSize * 0.8) ** 2) continue;
 
         const items = chunkFloraCache.get(chunkKey(cx, cz));
@@ -228,6 +242,14 @@ window.OC = window.OC || {};
       dirtyRebuild = false;
       cacheComplete = false;
       lastCacheCheckPos.set(1e9, 1e9, 1e9);
+
+      // При сдвиге начала координат (Floating Origin) сдвигаем все пулы инстансов
+      OC.FloatingOrigin.onShift((delta) => {
+        for (let i = 0; i < pools.length; i++) {
+          pools[i].mesh.position.sub(delta);
+          if (pools[i].mesh.instanceMatrix) pools[i].mesh.instanceMatrix.needsUpdate = true;
+        }
+      });
 
       group = new T.Group();
       scene.add(group);

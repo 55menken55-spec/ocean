@@ -10794,6 +10794,89 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
+// === engine/floating_origin.js ===
+/* ================= FLOATING ORIGIN (пересчёт координат относительно игрока) ================= */
+/* Позволяет перемещаться на сколь угодно большие расстояния без потери точности float32.
+   Камера удерживается vicino к началу координат; при превышении порога всё смещение
+   накапливается в origin, а scène сдвигается назад. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const origin = new T.Vector3(); // истинная мировая позиция сцены (0,0,0)
+  let threshold = 1000;           // сдвигать, когда камера дальше этого (м)
+  const shiftListeners = [];      // колбэки при сдвиге origins
+
+  OC.FloatingOrigin = {
+    /* Вернуть текущее смещение начала координат. */
+    getOrigin() {
+      return origin;
+    },
+
+    /* Перевести истинную мировую позицию в локальную ( escena ). */
+    toLocal(worldPos) {
+      return worldPos.clone().sub(origin);
+    },
+
+    /* Перевести локальную позицию сцены в истинную мировую. */
+    toWorld(localPos) {
+      return localPos.clone().add(origin);
+    },
+
+    /* Истинная позиция камеры в мире (локальная + origin). */
+    getTrueCameraPos(camera, out) {
+      const o = origin;
+      const c = camera.position;
+      const target = out || new T.Vector3();
+      return target.set(c.x + o.x, c.y + o.y, c.z + o.z);
+    },
+
+    /* Подписаться на событие сдвига начала координат. */
+    onShift(cb) {
+      shiftListeners.push(cb);
+    },
+
+    /* Вызывать каждый фрейм с камерой. Возвращает true, если сдвиг произошёл. */
+    update(camera, scene) {
+      const camPos = camera.position;
+      const dist = Math.hypot(camPos.x, camPos.y, camPos.z);
+
+      if (dist > threshold) {
+        const delta = camPos.clone(); // насколько сдвигаем всё назад
+
+        // Накапливаем в origin
+        origin.add(delta);
+
+        // Сдвигаем все объекты сцены назад на delta
+        if (scene) {
+          scene.traverse((obj) => {
+            if (obj.isMesh || obj.isInstancedMesh || obj.isLight || obj.isSprite) {
+              obj.position.sub(delta);
+              if (obj.isInstancedMesh && obj.instanceMatrix) {
+                obj.instanceMatrix.needsUpdate = true;
+              }
+            }
+          });
+        }
+
+        // Сбрасываем камеру в начало
+        camPos.set(0, 0, 0);
+        camera.updateMatrixWorld();
+
+        // Уведомляем подписчиков
+        shiftListeners.forEach((cb) => cb(delta, origin));
+
+        return true;
+      }
+      return false;
+    },
+
+    setThreshold(v) { threshold = v; },
+    getThreshold() { return threshold; }
+  };
+})(window.OC);
+
 // === engine/terrain.js ===
 /* ================= ДИНАМИЧЕСКИЙ ЧАНКОВЫЙ ЛАНДШАФТ С LOD (unbounded world) ================= */
 /* Чанки создаются только около камеры и удаляются при удалении (LRU), что позволяет
@@ -10866,9 +10949,11 @@ window.OC = window.OC || {};
   }
 
   /* ---- Построение меша одного чанка с юбками по краям (без швов между LOD) ---- */
+  /* Геометрия строится относительно центра чанка (0,0,0 = угол чанка в мировом пространстве);
+     мировая позиция задаётся через mesh.position = worldCenter - origin (Floating Origin). */
   function buildChunkGeometry(cx, cz, segs) {
-    const x0 = cx * chunkSize;
-    const z0 = cz * chunkSize;
+    const x0 = cx * chunkSize; // абсолютный угол чанка (для запросов к биому)
+    const z0 = cz * chunkSize; // абсолютный угол чанка (для запросов к биому)
     const step = chunkSize / segs;
     const inv2Step = 1 / (2 * step);
     const n = segs + 1;
@@ -10876,11 +10961,11 @@ window.OC = window.OC || {};
     const hBuf = getHeightGridBuf(stride);
 
     for (let gz = 0; gz < stride; gz++) {
-      const z = z0 + (gz - 1) * step;
+      const absZ = z0 + (gz - 1) * step;
       const row = gz * stride;
       for (let gx = 0; gx < stride; gx++) {
-        const x = x0 + (gx - 1) * step;
-        hBuf[row + gx] = biomeRef.getHeight(x, z);
+        const absX = x0 + (gx - 1) * step;
+        hBuf[row + gx] = biomeRef.getHeight(absX, absZ);
       }
     }
 
@@ -10893,18 +10978,20 @@ window.OC = window.OC || {};
     const col = new Float32Array(totalVerts * 3);
 
     for (let iz = 0; iz <= segs; iz++) {
-      const z = z0 + iz * step;
+      const absZ = z0 + iz * step;
+      const relZ = absZ - z0; // относительно угла чанка
       const gRow = (iz + 1) * stride;
       for (let ix = 0; ix <= segs; ix++) {
-        const x = x0 + ix * step;
+        const absX = x0 + ix * step;
+        const relX = absX - x0; // относительно угла чанка
         const gIdx = gRow + (ix + 1);
         const y = hBuf[gIdx];
         const idx = iz * n + ix;
         const p3 = idx * 3;
 
-        pos[p3] = x;
+        pos[p3] = relX;
         pos[p3 + 1] = y;
-        pos[p3 + 2] = z;
+        pos[p3 + 2] = relZ;
 
         const hL = hBuf[gIdx - 1];
         const hR = hBuf[gIdx + 1];
@@ -10919,7 +11006,7 @@ window.OC = window.OC || {};
         norm[p3 + 1] = ny / len;
         norm[p3 + 2] = nz / len;
 
-        biomeRef.getTerrainColor(x, y, z, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
+        biomeRef.getTerrainColor(absX, y, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
         col[p3] = _tmpCol.r;
         col[p3 + 1] = _tmpCol.g;
         col[p3 + 2] = _tmpCol.b;
@@ -11000,15 +11087,15 @@ window.OC = window.OC || {};
 
     let anyClosed = false;
     for (let gz = 0; gz < stride; gz++) {
-      const z = z0 + (gz - 1) * step;
+      const absZ = z0 + (gz - 1) * step;
       const row = gz * stride;
       for (let gx = 0; gx < stride; gx++) {
-        const x = x0 + (gx - 1) * step;
-        const rawY = biomeRef.getCeilingHeight(x, z);
+        const absX = x0 + (gx - 1) * step;
+        const rawY = biomeRef.getCeilingHeight(absX, absZ);
         const y = Math.min(22.0, rawY);
         hBuf[row + gx] = y;
         if (gx >= 1 && gx <= n && gz >= 1 && gz <= n) {
-          const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(x, z) : (rawY > 38.0);
+          const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(absX, absZ) : (rawY > 38.0);
           openMask[(gz - 1) * n + (gx - 1)] = isOpen ? 1 : 0;
           if (!isOpen) anyClosed = true;
         }
@@ -11018,18 +11105,20 @@ window.OC = window.OC || {};
     if (!anyClosed) return null;
 
     for (let iz = 0; iz <= segs; iz++) {
-      const z = z0 + iz * step;
+      const absZ = z0 + iz * step;
+      const relZ = absZ - z0;
       const gRow = (iz + 1) * stride;
       for (let ix = 0; ix <= segs; ix++) {
-        const x = x0 + ix * step;
+        const absX = x0 + ix * step;
+        const relX = absX - x0;
         const gIdx = gRow + (ix + 1);
         const y = hBuf[gIdx];
         const idx = iz * n + ix;
         const p3 = idx * 3;
 
-        pos[p3] = x;
+        pos[p3] = relX;
         pos[p3 + 1] = y;
-        pos[p3 + 2] = z;
+        pos[p3 + 2] = relZ;
 
         const hL = hBuf[gIdx - 1];
         const hR = hBuf[gIdx + 1];
@@ -11043,8 +11132,8 @@ window.OC = window.OC || {};
         norm[p3 + 1] = ny / len;
         norm[p3 + 2] = nz / len;
 
-        if (biomeRef.getCeilingColor) biomeRef.getCeilingColor(x, y, z, _tmpCol);
-        else biomeRef.getTerrainColor(x, y, z, _tmpCol);
+        if (biomeRef.getCeilingColor) biomeRef.getCeilingColor(absX, y, absZ, _tmpCol);
+        else biomeRef.getTerrainColor(absX, y, absZ, _tmpCol);
         col[p3] = _tmpCol.r;
         col[p3 + 1] = _tmpCol.g;
         col[p3 + 2] = _tmpCol.b;
@@ -11115,7 +11204,11 @@ window.OC = window.OC || {};
     return q.terrainFarSegs;
   }
 
-  function createOrUpdateChunk(rec, segs) {
+  function getOriginRef() {
+    return OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+}
+
+function createOrUpdateChunk(rec, segs) {
     if (rec.segs === segs && rec.mesh) return;
     const geo = buildChunkGeometry(rec.cx, rec.cz, segs);
     if (rec.mesh) {
@@ -11126,6 +11219,11 @@ window.OC = window.OC || {};
       rec.mesh.userData.key = 'floor';
       group.add(rec.mesh);
     }
+    // Позиционируем меш относительно текущего начала координат (Floating Origin)
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
+    rec.mesh.position.set(rec.wx - ox, 0, rec.wz - oz);
 
     if (ceilingMat && biomeRef.getCeilingHeight) {
       const cGeo = buildCeilingChunkGeometry(rec.cx, rec.cz, segs);
@@ -11134,10 +11232,12 @@ window.OC = window.OC || {};
           rec.ceilMesh.geometry.dispose();
           rec.ceilMesh.geometry = cGeo;
           rec.ceilMesh.visible = rec.mesh.visible;
+          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
         } else {
           rec.ceilMesh = new T.Mesh(cGeo, ceilingMat);
           rec.ceilMesh.userData.key = 'floor';
           rec.ceilMesh.visible = rec.mesh.visible;
+          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
           group.add(rec.ceilMesh);
         }
       } else if (rec.ceilMesh) {
@@ -11194,6 +11294,14 @@ window.OC = window.OC || {};
       group = new T.Group();
       scene.add(group);
 
+      // При сдвиге начала координат (Floating Origin) перепозиционируем все меши чанков
+      OC.FloatingOrigin.onShift((delta) => {
+        chunks.forEach((rec) => {
+          if (rec.mesh) rec.mesh.position.sub(delta);
+          if (rec.ceilMesh) rec.ceilMesh.position.sub(delta);
+        });
+      });
+
       terrainMat = new T.MeshStandardMaterial({
         vertexColors: true,
         roughness: 0.9,
@@ -11234,36 +11342,44 @@ window.OC = window.OC || {};
       frameCounter = 0;
     },
 
-    update(camPos) {
+    update(camPos, scene) {
       if (!initialized) return;
       frameCounter++;
       const q = OC.Quality.get();
+      const origin = getOriginRef();
+      const ox = origin ? origin.x : 0;
+      const oz = origin ? origin.z : 0;
+
+      // Истинная мировая позиция камеры (локальная + origin)
+      const trueCamX = camPos.x + ox;
+      const trueCamZ = camPos.z + oz;
+
       if (!needsRebuildScan && lastScanQuality === q.id) {
-        const dx = camPos.x - lastScanX;
-        const dz = camPos.z - lastScanZ;
+        const dx = trueCamX - lastScanX;
+        const dz = trueCamZ - lastScanZ;
         if (dx * dx + dz * dz < 100) return; // < 10 м без смены качества: чанки актуальны
       }
-      lastScanX = camPos.x;
-      lastScanZ = camPos.z;
+      lastScanX = trueCamX;
+      lastScanZ = trueCamZ;
       lastScanQuality = q.id;
 
       const t0 = performance.now();
       const budgetMs = 3.5;
 
-      const camChunkX = Math.floor(camPos.x / chunkSize);
-      const camChunkZ = Math.floor(camPos.z / chunkSize);
+      const camChunkX = Math.floor(trueCamX / chunkSize);
+      const camChunkZ = Math.floor(trueCamZ / chunkSize);
       const farDist = q.terrainFarDist;
       const visibilityChunkRadius = Math.ceil(farDist / chunkSize) + 1;
 
       const touched = new Set();
       const candidates = [];
 
-      // 1. Создаём/обновляем чанки в радиусе видимости около камеры
+      // 1. Создаём/обновляем чанки в радиусе видимости около истинной позиции камеры
       for (let cz = camChunkZ - visibilityChunkRadius; cz <= camChunkZ + visibilityChunkRadius; cz++) {
         for (let cx = camChunkX - visibilityChunkRadius; cx <= camChunkX + visibilityChunkRadius; cx++) {
           const wx = (cx + 0.5) * chunkSize;
           const wz = (cz + 0.5) * chunkSize;
-          const dist = Math.hypot(wx - camPos.x, wz - camPos.z);
+          const dist = Math.hypot(wx - trueCamX, wz - trueCamZ);
           if (dist > farDist) continue;
 
           const rec = getOrCreateChunkRec(cx, cz);
@@ -13900,14 +14016,18 @@ window.OC = window.OC || {};
   const _col = new T.Color();
   const _volcDmgColor = new T.Color(0x5a4a3a);
 
-  function chunkKey(cx, cz) {
+function chunkKey(cx, cz) {
     return cx + ',' + cz;
-  }
+}
 
-  function chunkCacheTouch(key) {
+function chunkCacheTouch(key) {
     const rec = chunkFloraCache.get(key);
     if (rec) rec.lastUsed = frameCounter;
-  }
+}
+
+function getOriginRef() {
+    return OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+}
 
   function evictStaleFloraChunks() {
     const toDelete = [];
@@ -13958,11 +14078,14 @@ window.OC = window.OC || {};
     }
   }
 
-  function buildChunkData(cx, cz, density) {
+function buildChunkData(cx, cz, density) {
     const seed = ((cx * 73856093) ^ (cz * 19349663) ^ 0x5f3759df) >>> 0;
     const rng = OC.mulberry32(seed);
     const raw = biomeRef.generateChunkFlora(cx, cz, chunkSize, density, rng);
     const items = [];
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
 
     for (let i = 0; i < raw.length; i++) {
       const it = raw[i];
@@ -13972,9 +14095,9 @@ window.OC = window.OC || {};
       items.push({
         species: it.species,
         variant,
-        x: it.x,
+        x: it.x - ox, // относительно начала координат (Floating Origin)
         y: it.y,
-        z: it.z,
+        z: it.z - oz, // относительно начала координат (Floating Origin)
         ry: it.ry,
         scale: it.scale,
         tint: it.tint || 0xffffff
@@ -13982,20 +14105,27 @@ window.OC = window.OC || {};
     }
     items.lastUsed = frameCounter;
     return items;
-  }
+}
 
   function rebuildActiveInstances(camPos) {
     const q = OC.Quality.get();
     const activeR = q.floraActiveRadius;
     const activeR2 = activeR * activeR;
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
+
+    // Истинная мировая позиция камеры (локальная + origin)
+    const trueCamX = camPos.x + ox;
+    const trueCamZ = camPos.z + oz;
 
     for (let i = 0; i < pools.length; i++) pools[i].count = 0;
 
-    // Радиус кэша не ограничен chunkHalfCount — берём из координат камеры напрямую
-    const minCx = Math.floor((camPos.x - activeR) / chunkSize);
-    const maxCx = Math.floor((camPos.x + activeR) / chunkSize);
-    const minCz = Math.floor((camPos.z - activeR) / chunkSize);
-    const maxCz = Math.floor((camPos.z + activeR) / chunkSize);
+    // Радиус кэша не ограничен chunkHalfCount — берём из истинных координат камеры
+    const minCx = Math.floor((trueCamX - activeR) / chunkSize);
+    const maxCx = Math.floor((trueCamX + activeR) / chunkSize);
+    const minCz = Math.floor((trueCamZ - activeR) / chunkSize);
+    const maxCz = Math.floor((trueCamZ + activeR) / chunkSize);
 
     let total = 0;
 
@@ -14003,8 +14133,8 @@ window.OC = window.OC || {};
       for (let cx = minCx; cx <= maxCx; cx++) {
         const wx = (cx + 0.5) * chunkSize;
         const wz = (cz + 0.5) * chunkSize;
-        const dxC = wx - camPos.x;
-        const dzC = wz - camPos.z;
+        const dxC = wx - trueCamX;
+        const dzC = wz - trueCamZ;
         if (dxC * dxC + dzC * dzC > (activeR + chunkSize * 0.8) ** 2) continue;
 
         const items = chunkFloraCache.get(chunkKey(cx, cz));
@@ -14089,6 +14219,14 @@ window.OC = window.OC || {};
       dirtyRebuild = false;
       cacheComplete = false;
       lastCacheCheckPos.set(1e9, 1e9, 1e9);
+
+      // При сдвиге начала координат (Floating Origin) сдвигаем все пулы инстансов
+      OC.FloatingOrigin.onShift((delta) => {
+        for (let i = 0; i < pools.length; i++) {
+          pools[i].mesh.position.sub(delta);
+          if (pools[i].mesh.instanceMatrix) pools[i].mesh.instanceMatrix.needsUpdate = true;
+        }
+      });
 
       group = new T.Group();
       scene.add(group);
@@ -33896,11 +34034,14 @@ window.OC = window.OC || {};
       OC.uTime.value = time;
 
       OC.Navigation.update(dt, time, camera, reduced);
+      // Floating Origin: сдвигаем начало координат, если камера ушла слишком далеко
+      const scene = OC.getScene();
+      if (scene && OC.FloatingOrigin) OC.FloatingOrigin.update(camera, scene);
       const camPos = camera.position;
       const craftPos = OC.Navigation.getPosition ? OC.Navigation.getPosition() : camPos;
 
       OC.updateWorld(dt, time, camPos, autoCycle);
-      OC.Terrain.update(camPos);
+      OC.Terrain.update(camPos, scene);
       OC.FloraStreamer.update(camPos);
       if (OC.Sonar) OC.Sonar.update(dt);
       const camSpeed = OC.Navigation.getSpeed();
