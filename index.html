@@ -585,9 +585,13 @@
     .panel{max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 20px)}
     .touch-nav{bottom:10px}
     /* Ландшафт телефона: развёрнутый рейл занимает два ряда сверху,
-       поэтому быстрые действия начинаются под ним, а не под кнопкой «›» */
+       поэтому быстрые действия начинаются под ним, а не под кнопкой «›».
+       Блок быстрых действий (3 ряда кнопок) не должен вылезать за нижний край
+       экрана 390 px: позицию ограничиваем через min(), а высоту — max-height. */
     .touch-actions{bottom:auto;right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px;
-      top:calc(var(--rail-top) + var(--rail-bottom) + 52px)}
+      top:min(calc(var(--rail-top) + var(--rail-bottom) + 36px), calc(100vh - 152px));
+      max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 44px);overflow-y:auto}
+    .touch-act{width:44px;height:44px;font-size:13px}
     .telemetry{bottom:8px}
   }
 </style>
