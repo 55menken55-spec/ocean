@@ -596,6 +596,11 @@ window.OC = window.OC || {};
     surfacePlane.frustumCulled = false;
     scene.add(surfacePlane);
 
+    // При сдвиге Floating Origin перемещаем поверхность воды вместе со сценой
+    OC.FloatingOrigin.onShift((delta) => {
+        if (surfacePlane) surfacePlane.position.sub(delta);
+    });
+
     raysState.scene = scene;
     buildRays(raysState, q.rayCount);
     precipFx = buildPrecip(scene, Math.round(1450 * q.particlesScale));
