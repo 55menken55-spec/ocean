@@ -166,7 +166,9 @@
     color:var(--accent);font:600 10px inherit;white-space:nowrap}
 
   /* ---------- Статус ---------- */
-  .status{position:fixed;right:20px;bottom:14px;z-index:20;font-size:10.5px;letter-spacing:.14em;
+  /* Статус (регион + FPS) стоит НАД плашкой оптики в правом нижнем углу:
+     обе метки были в одной точке и плашка «Оптика» перекрывала FPS. */
+  .status{position:fixed;right:20px;bottom:30px;z-index:20;font-size:10.5px;letter-spacing:.14em;
     color:rgba(155,195,215,.72);text-transform:uppercase;pointer-events:none;display:flex;gap:12px}
 
   /* ---------- Режим батискафа и Эхолот ---------- */
@@ -190,7 +192,8 @@
   .sub-cell b{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--accent)}
   .sub-cell b.warn{color:var(--accent2)}
 
-  .sonar-box{position:fixed;right:20px;bottom:42px;z-index:22;width:266px;padding:10px;border-radius:16px;
+  /* Эхолот встаёт выше строки статуса, чтобы панели не наезжали друг на друга */
+  .sonar-box{position:fixed;right:20px;bottom:56px;z-index:22;width:266px;padding:10px;border-radius:16px;
     background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
     box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none;transition:opacity .3s, transform .3s}
   .sonar-box.hidden{opacity:0;transform:translateY(14px);pointer-events:none}
@@ -538,7 +541,8 @@
     .brand{max-width:150px}
     .brand p{display:none}
     .status{display:none}
-    .telemetry{max-width:70vw}
+    /* Телеметрия по центру не должна доезжать до плашки «Оптика» справа */
+    .telemetry{max-width:min(70vw, calc(100vw - 420px))}
   }
   @media (max-width:720px){
     .brand{left:14px;top:calc(10px + env(safe-area-inset-top, 0px))}
