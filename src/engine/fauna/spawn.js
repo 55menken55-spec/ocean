@@ -75,15 +75,18 @@ window.OC = window.OC || {};
             key: cr.key,
             getPosition: () => mesh.position,
             update(dt, time, camPos) {
-              if (Math.hypot(cr.cx - camPos.x, cr.cz - camPos.z) > 420) { mesh.visible = false; return; }
+              const origin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : new T.Vector3();
+              const lcx = cr.cx - origin.x;
+              const lcz = cr.cz - origin.z;
+              if (Math.hypot(lcx - camPos.x, lcz - camPos.z) > 420) { mesh.visible = false; return; }
               mesh.visible = true;
               let ang = Math.random() * 6.28;
               const rr = cr.radius + Math.sin(time * 0.5) * 3;
-              const x = cr.cx + Math.cos(ang) * rr;
-              const z = cr.cz + Math.sin(ang) * rr;
-              const y = Math.max(biome.getHeight(x, z) + 1.0, cr.y);
+              const x = lcx + Math.cos(ang) * rr;
+              const z = lcz + Math.sin(ang) * rr;
+              const y = Math.max(biome.getHeight(x + origin.x, z + origin.z) + 1.0, cr.y);
               mesh.position.set(x, y, z);
-              mesh.lookAt(cr.cx, cr.y, cr.cz);
+              mesh.lookAt(lcx, cr.y, lcz);
             }
           });
           sonarTargets.push(agents[agents.length - 1]);
@@ -172,7 +175,8 @@ window.OC = window.OC || {};
       }
 
       for (const seep of (plan.seepTargets || [])) {
-        const p = new T.Vector3(seep.x, biome.getHeight(seep.x, seep.z) + 1.0, seep.z);
+        const origin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : new T.Vector3();
+        const p = new T.Vector3(seep.x - origin.x, biome.getHeight(seep.x, seep.z) + 1.0, seep.z - origin.z);
         const target = { key: 'methane_seep_baikal', getPosition: () => p, update() {} };
         agents.push(target);
         sonarTargets.push(target);
