@@ -459,8 +459,18 @@ self.onmessage = function (e) {
     const next = workerQueue.shift();
     workerBusy = true;
     const key = chunkKey(next.rec.cx, next.rec.cz);
-    const pd = pendingChunkData.get(key);
-    if (!pd) {
+    // Свои данные для каждой записи очереди: чанк мог быть перезапрошен с другим
+    // LOD, и тогда запись в pendingChunkData уже перезаписана.
+    const pd = next.pd || pendingChunkData.get(key);
+    if (!pd || !pendingChunkData.has(key)) {
+      workerBusy = false;
+      processWorkerQueue();
+      return;
+    }
+    // Буферы уходят в worker как Transferable — после передачи они отсоединены,
+    // и повторная передача того же буфера бросает DataCloneError
+    // («An ArrayBuffer is detached and could not be cloned»).
+    if (pd.heightData.buffer.byteLength === 0 || pd.colorData.buffer.byteLength === 0) {
       workerBusy = false;
       processWorkerQueue();
       return;
@@ -537,7 +547,9 @@ function createOrUpdateChunk(rec, segs) {
       const inv2Step = 1 / (2 * step);
       const n = segs + 1;
       const stride = n + 2;
-      const hBuf = getHeightGridBuf(stride);
+      // Для worker-пути нужен ОТДЕЛЬНЫЙ буфер на чанк: общий scratch-буфер
+      // отсоединяется после первой передачи в worker и ломает следующий чанк.
+      const hBuf = new Float32Array(stride * stride);
 
       for (let gz = 0; gz < stride; gz++) {
         const absZ = z0 + (gz - 1) * step;
@@ -567,7 +579,7 @@ function createOrUpdateChunk(rec, segs) {
       }
 
       pendingChunkData.set(key, { heightData: hBuf, colorData, stride, segs });
-      workerQueue.push({ rec, segs });
+      workerQueue.push({ rec, segs, pd: pendingChunkData.get(key) });
       processWorkerQueue();
       return; // Чанк будет построен асинхронно
     }
@@ -669,9 +681,11 @@ function createOrUpdateChunk(rec, segs) {
             if (type !== 'chunkBuilt') return;
             const key = chunkKey(cx, cz);
             const rec = chunks.get(key);
-            if (!rec) return;
+            // Очередь воркера должна освобождаться даже если чанк успели выбросить
+            // (переключение биома): иначе асинхронная постройка встаёт навсегда.
             workerBusy = false;
             processWorkerQueue();
+            if (!rec) return;
             buildChunkFromWorkerData(rec, segs, positions, normals, colors, indices, vertexCount, indexCount);
           };
           terrainWorker.onerror = (err) => {
