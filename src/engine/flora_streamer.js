@@ -1,4 +1,6 @@
-/* ================= ЧАНКОВЫЙ СТРИМИНГ ФЛОРЫ ЧЕРЕЗ INSTANCEDMESH ================= */
+/* ================= ДИНАМИЧЕСКИЙ ЧАНКОВЫЙ СТРИМИНГ ФЛОРЫ (unbounded world) ================= */
+/* Кэш чанков флоры ограничен по размеру (LRU eviction), координаты не привязаны к
+   worldRadius биома — можно стримить флору на arbitrarily больших расстояниях. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
@@ -8,7 +10,6 @@ window.OC = window.OC || {};
   let biomeRef = null;
   let group = null;
   let chunkSize = 150;
-  let chunkHalfCount = 8;
 
   const chunkFloraCache = new Map(); // "cx,cz" -> Array<{ species, variant, x, y, z, ry, scale, tint }>
   const pools = [];                  // { species, variant, mesh, maxCount, cullDist, count }
@@ -24,6 +25,11 @@ window.OC = window.OC || {};
   let qualityHookBound = false;
   let lastIceOpacity = -1;
   let lastKelpProductivity = -1;
+  let frameCounter = 0;
+
+  /* Лимит кэшируемых чанков флоры в памяти (при превышении удаляются давно неиспользуемые) */
+  const MAX_CACHED_CHUNKS = 320;
+  const CHUNK_IDLE_FRAMES = 240; // ~4 сек без использования -> удалить из кэша
 
   const _pos = new T.Vector3();
   const _quat = new T.Quaternion();
@@ -35,6 +41,35 @@ window.OC = window.OC || {};
 
   function chunkKey(cx, cz) {
     return cx + ',' + cz;
+  }
+
+  function chunkCacheTouch(key) {
+    const rec = chunkFloraCache.get(key);
+    if (rec) rec.lastUsed = frameCounter;
+  }
+
+  function evictStaleFloraChunks() {
+    const toDelete = [];
+    chunkFloraCache.forEach((items, key) => {
+      if (items.lastUsed < frameCounter - CHUNK_IDLE_FRAMES) {
+        toDelete.push(key);
+      }
+    });
+    // Если всё ещё слишком много — удалить старейшие
+    if (chunkFloraCache.size - toDelete.length > MAX_CACHED_CHUNKS) {
+      const sorted = Array.from(chunkFloraCache.entries()).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+      let excess = chunkFloraCache.size - toDelete.length - MAX_CACHED_CHUNKS;
+      for (let i = 0; i < sorted.length && excess > 0; i++) {
+        const [key] = sorted[i];
+        if (!toDelete.includes(key)) {
+          toDelete.push(key);
+          excess--;
+        }
+      }
+    }
+    for (const key of toDelete) {
+      chunkFloraCache.delete(key);
+    }
   }
 
   function updateSeasonalAppearance() {
@@ -84,6 +119,7 @@ window.OC = window.OC || {};
         tint: it.tint || 0xffffff
       });
     }
+    items.lastUsed = frameCounter;
     return items;
   }
 
@@ -94,10 +130,11 @@ window.OC = window.OC || {};
 
     for (let i = 0; i < pools.length; i++) pools[i].count = 0;
 
-    const minCx = Math.max(-chunkHalfCount, Math.floor((camPos.x - activeR) / chunkSize));
-    const maxCx = Math.min(chunkHalfCount - 1, Math.floor((camPos.x + activeR) / chunkSize));
-    const minCz = Math.max(-chunkHalfCount, Math.floor((camPos.z - activeR) / chunkSize));
-    const maxCz = Math.min(chunkHalfCount - 1, Math.floor((camPos.z + activeR) / chunkSize));
+    // Радиус кэша не ограничен chunkHalfCount — берём из координат камеры напрямую
+    const minCx = Math.floor((camPos.x - activeR) / chunkSize);
+    const maxCx = Math.floor((camPos.x + activeR) / chunkSize);
+    const minCz = Math.floor((camPos.z - activeR) / chunkSize);
+    const maxCz = Math.floor((camPos.z + activeR) / chunkSize);
 
     let total = 0;
 
@@ -111,6 +148,7 @@ window.OC = window.OC || {};
 
         const items = chunkFloraCache.get(chunkKey(cx, cz));
         if (!items) continue;
+        chunkCacheTouch(chunkKey(cx, cz));
 
         for (let i = 0; i < items.length; i++) {
           const it = items[i];
@@ -123,11 +161,9 @@ window.OC = window.OC || {};
           if (!pool) continue;
           const cull = Math.min(activeR, pool.cullDist);
           if (d2 > cull * cull) continue;
-          // Плавное дистанционное прореживание мелкого бентоса в дальнем кольце (>58% дальности)
           if (pool.cullDist <= 340 && (i & 1) === 1 && d2 > (cull * 0.58) ** 2) continue;
           if (pool.count >= pool.maxCount) continue;
 
-          // Damage от событий вулкана: tint к коричневому + сжатие по damage-фактору
           let dmg = 0;
           if (OC.Volcano && OC.Volcano.getDamageFactor) {
             dmg = OC.Volcano.getDamageFactor(it.x, it.z);
@@ -170,7 +206,6 @@ window.OC = window.OC || {};
       lastIceOpacity = -1;
       lastKelpProductivity = -1;
       chunkSize = biome.chunkSize || 150;
-      chunkHalfCount = Math.round(biome.worldRadius / chunkSize);
 
       if (group) {
         const disposedGeos = new Set();
@@ -208,7 +243,6 @@ window.OC = window.OC || {};
           mesh.frustumCulled = false;
           mesh.userData.key = species;
           mesh.count = 0;
-          // Инициализируем instanceColor до первого рендера (нужно для Three r128)
           mesh.setColorAt(0, new T.Color(1, 1, 1));
           mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
           group.add(mesh);
@@ -237,7 +271,6 @@ window.OC = window.OC || {};
       for (let dz = -1; dz <= 1; dz++) {
         for (let dx = -1; dx <= 1; dx++) {
           const cx = scx + dx, cz = scz + dz;
-          if (cx < -chunkHalfCount || cx >= chunkHalfCount || cz < -chunkHalfCount || cz >= chunkHalfCount) continue;
           chunkFloraCache.set(chunkKey(cx, cz), buildChunkData(cx, cz, q.floraDensity));
         }
       }
@@ -255,12 +288,13 @@ window.OC = window.OC || {};
           dirtyRebuild = true;
         });
       }
+      frameCounter = 0;
     },
 
     update(camPos) {
       if (!biomeRef) return;
+      frameCounter++;
       updateSeasonalAppearance();
-      // Damage от вулкана: если damage-state изменился, пересобрать tint (dirtyRebuild)
       if (OC.Volcano && OC.Volcano.getDamageState) {
         const vs = OC.Volcano.getDamageState();
         const key = vs.active ? vs.f.toFixed(2) : 'off';
@@ -274,12 +308,12 @@ window.OC = window.OC || {};
         const budgetMs = 3.5;
 
         const cacheR = q.floraCacheRadius;
-        const minCx = Math.max(-chunkHalfCount, Math.floor((camPos.x - cacheR) / chunkSize));
-        const maxCx = Math.min(chunkHalfCount - 1, Math.floor((camPos.x + cacheR) / chunkSize));
-        const minCz = Math.max(-chunkHalfCount, Math.floor((camPos.z - cacheR) / chunkSize));
-        const maxCz = Math.min(chunkHalfCount - 1, Math.floor((camPos.z + cacheR) / chunkSize));
+        // Радиус кэша не ограничен chunkHalfCount — бери из координат камеры
+        const minCx = Math.floor((camPos.x - cacheR) / chunkSize);
+        const maxCx = Math.floor((camPos.x + cacheR) / chunkSize);
+        const minCz = Math.floor((camPos.z - cacheR) / chunkSize);
+        const maxCz = Math.floor((camPos.z + cacheR) / chunkSize);
 
-        // Собираем недостающие чанки по близости к камере
         const missing = [];
         for (let cz = minCz; cz <= maxCz; cz++) {
           for (let cx = minCx; cx <= maxCx; cx++) {
@@ -308,6 +342,8 @@ window.OC = window.OC || {};
         }
         lastCacheCheckPos.copy(camPos);
       }
+
+      evictStaleFloraChunks();
 
       const movedDist = Math.hypot(camPos.x - lastRebuildPos.x, camPos.z - lastRebuildPos.z);
       if (dirtyRebuild || movedDist > 34) {
@@ -357,7 +393,8 @@ window.OC = window.OC || {};
     getStats() {
       return {
         cachedChunks: chunkFloraCache.size,
-        activeInstances: totalVisibleInstances
+        activeInstances: totalVisibleInstances,
+        maxCached: MAX_CACHED_CHUNKS
       };
     }
   };

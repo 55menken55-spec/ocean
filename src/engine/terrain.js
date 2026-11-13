@@ -1,4 +1,6 @@
-/* ================= ЧАНКОВЫЙ ЛАНДШАФТ С LOD И ПРОГРЕССИВНОЙ ЗАГРУЗКОЙ ================= */
+/* ================= ДИНАМИЧЕСКИЙ ЧАНКОВЫЙ ЛАНДШАФТ С LOD (unbounded world) ================= */
+/* Чанки создаются только около камеры и удаляются при удалении (LRU), что позволяет
+   ехать на arbitrarily большие расстояния без предварительной регистрации всего мира. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
@@ -9,8 +11,7 @@ window.OC = window.OC || {};
   let terrainMat = null;
   let ceilingMat = null;
   let group = null;
-  const chunks = new Map(); // key "cx,cz" -> { cx, cz, wx, wz, segs, mesh, ceilMesh }
-  let chunkRadiusCount = 8; // [-8 .. 7] = 16x16 для 2400 м при chunkSize=150
+  const chunks = new Map(); // key "cx,cz" -> { cx, cz, wx, wz, segs, mesh, ceilMesh, lastUsed }
   let chunkSize = 150;
   let initialized = false;
   let needsRebuildScan = true;
@@ -18,6 +19,11 @@ window.OC = window.OC || {};
   let lastScanZ = 1e9;
   let lastScanQuality = '';
   let heightGridBuf = new Float32Array(64 * 64);
+  let frameCounter = 0;
+
+  /* Лимит чанков в памяти одновременно. При превышении удаляются старейшие невидимые. */
+  const MAX_ACTIVE_CHUNKS = 240;
+  const CHUNK_IDLE_FRAMES = 180; // ~3 сек без попадания в Visibility -> candidat на удаление
 
   const _tmpCol = new T.Color();
 
@@ -29,6 +35,37 @@ window.OC = window.OC || {};
 
   function chunkKey(cx, cz) {
     return cx + ',' + cz;
+  }
+
+  function getOrCreateChunkRec(cx, cz) {
+    const key = chunkKey(cx, cz);
+    let rec = chunks.get(key);
+    if (!rec) {
+      rec = {
+        cx, cz,
+        wx: (cx + 0.5) * chunkSize,
+        wz: (cz + 0.5) * chunkSize,
+        segs: 0,
+        mesh: null,
+        ceilMesh: null,
+        lastUsed: 0
+      };
+      chunks.set(key, rec);
+    }
+    return rec;
+  }
+
+  function disposeChunk(rec) {
+    if (rec.mesh) {
+      if (rec.mesh.geometry) rec.mesh.geometry.dispose();
+      group.remove(rec.mesh);
+      rec.mesh = null;
+    }
+    if (rec.ceilMesh) {
+      if (rec.ceilMesh.geometry) rec.ceilMesh.geometry.dispose();
+      group.remove(rec.ceilMesh);
+      rec.ceilMesh = null;
+    }
   }
 
   /* ---- Построение меша одного чанка с юбками по краям (без швов между LOD) ---- */
@@ -72,7 +109,6 @@ window.OC = window.OC || {};
         pos[p3 + 1] = y;
         pos[p3 + 2] = z;
 
-        // Непрерывные центральные разности из кэша высот (в 4.5x меньше вызовов getHeight без швов)
         const hL = hBuf[gIdx - 1];
         const hR = hBuf[gIdx + 1];
         const hD = hBuf[gIdx - stride];
@@ -198,7 +234,6 @@ window.OC = window.OC || {};
         pos[p3 + 1] = y;
         pos[p3 + 2] = z;
 
-        // Нормали потолка пещеры смотрят вниз и внутрь каверны
         const hL = hBuf[gIdx - 1];
         const hR = hBuf[gIdx + 1];
         const hD = hBuf[gIdx - stride];
@@ -317,8 +352,9 @@ window.OC = window.OC || {};
     rec.segs = segs;
   }
 
-  /* ---- Внешний горизонт дна за пределами детальной карты ---- */
+  /* ---- Внешний горизонт дна за пределами детальной карты (только для ограниченных миров) ---- */
   function buildHorizonApron() {
+    if (!biomeRef || biomeRef.worldRadius > 4000) return; // для unbounded worlds не строим фартук
     const g = new T.PlaneGeometry(5200, 5200, 48, 48);
     g.rotateX(-Math.PI / 2);
     const p = g.attributes.position;
@@ -327,7 +363,6 @@ window.OC = window.OC || {};
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), z = p.getZ(i);
       let y = biomeRef.getHeight(x, z);
-      // Внутри зоны детальных чанков чуть опускаем фартук, чтобы не было Z-fighting
       if (Math.abs(x) < biomeRef.worldRadius - 10 && Math.abs(z) < biomeRef.worldRadius - 10) {
         y -= 12.0;
       }
@@ -348,7 +383,6 @@ window.OC = window.OC || {};
       sceneRef = scene;
       biomeRef = biome;
       chunkSize = biome.chunkSize || 150;
-      chunkRadiusCount = Math.round(biome.worldRadius / chunkSize);
 
       if (group) {
         group.traverse((o) => {
@@ -379,22 +413,8 @@ window.OC = window.OC || {};
         OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true });
       }
 
+      // Горизонтный фартук только для ограниченных миров
       buildHorizonApron();
-
-      // Регистрируем дескрипторы всех 16x16 чанков
-      for (let cz = -chunkRadiusCount; cz < chunkRadiusCount; cz++) {
-        for (let cx = -chunkRadiusCount; cx < chunkRadiusCount; cx++) {
-          chunks.set(chunkKey(cx, cz), {
-            cx,
-            cz,
-            wx: (cx + 0.5) * chunkSize,
-            wz: (cz + 0.5) * chunkSize,
-            segs: 0,
-            mesh: null,
-            ceilMesh: null
-          });
-        }
-      }
 
       // Синхронно строим только стартовую окрестность вокруг камеры (~25 чанков, < 20 мс)
       const q = OC.Quality.get();
@@ -402,8 +422,9 @@ window.OC = window.OC || {};
       const scz = Math.floor(spawnPos.z / chunkSize);
       for (let dz = -2; dz <= 2; dz++) {
         for (let dx = -2; dx <= 2; dx++) {
-          const rec = chunks.get(chunkKey(scx + dx, scz + dz));
-          if (!rec) continue;
+          const cx = scx + dx;
+          const cz = scz + dz;
+          const rec = getOrCreateChunkRec(cx, cz);
           const dist = Math.hypot(rec.wx - spawnPos.x, rec.wz - spawnPos.z);
           createOrUpdateChunk(rec, desiredSegs(dist, q));
         }
@@ -413,10 +434,12 @@ window.OC = window.OC || {};
       lastScanX = 1e9;
       lastScanZ = 1e9;
       lastScanQuality = q.id;
+      frameCounter = 0;
     },
 
     update(camPos) {
       if (!initialized) return;
+      frameCounter++;
       const q = OC.Quality.get();
       if (!needsRebuildScan && lastScanQuality === q.id) {
         const dx = camPos.x - lastScanX;
@@ -430,32 +453,71 @@ window.OC = window.OC || {};
       const t0 = performance.now();
       const budgetMs = 3.5;
 
-      // Собираем чанки в зоне видимости, требующие создания или обновления LOD
+      const camChunkX = Math.floor(camPos.x / chunkSize);
+      const camChunkZ = Math.floor(camPos.z / chunkSize);
+      const farDist = q.terrainFarDist;
+      const visibilityChunkRadius = Math.ceil(farDist / chunkSize) + 1;
+
+      const touched = new Set();
       const candidates = [];
+
+      // 1. Создаём/обновляем чанки в радиусе видимости около камеры
+      for (let cz = camChunkZ - visibilityChunkRadius; cz <= camChunkZ + visibilityChunkRadius; cz++) {
+        for (let cx = camChunkX - visibilityChunkRadius; cx <= camChunkX + visibilityChunkRadius; cx++) {
+          const wx = (cx + 0.5) * chunkSize;
+          const wz = (cz + 0.5) * chunkSize;
+          const dist = Math.hypot(wx - camPos.x, wz - camPos.z);
+          if (dist > farDist) continue;
+
+          const rec = getOrCreateChunkRec(cx, cz);
+          rec.lastUsed = frameCounter;
+          touched.add(chunkKey(cx, cz));
+
+          if (rec.mesh && !rec.mesh.visible) rec.mesh.visible = true;
+          if (rec.ceilMesh && !rec.ceilMesh.visible) rec.ceilMesh.visible = true;
+
+          const target = desiredSegs(dist, q);
+          if (rec.segs !== target) {
+            const priority = rec.mesh ? dist + 220 : dist;
+            candidates.push({ rec, target, priority });
+          }
+        }
+      }
+
+      // 2. Скрыть чанки за пределами видимости
       chunks.forEach((rec) => {
-        const dist = Math.hypot(rec.wx - camPos.x, rec.wz - camPos.z);
-        if (dist > q.terrainFarDist) {
+        if (!touched.has(chunkKey(rec.cx, rec.cz))) {
           if (rec.mesh && rec.mesh.visible) rec.mesh.visible = false;
           if (rec.ceilMesh && rec.ceilMesh.visible) rec.ceilMesh.visible = false;
-          return;
-        }
-        if (rec.mesh && !rec.mesh.visible) rec.mesh.visible = true;
-        if (rec.ceilMesh && !rec.ceilMesh.visible) rec.ceilMesh.visible = true;
-        const target = desiredSegs(dist, q);
-        if (rec.segs !== target) {
-          // Не перестраиваем мелкую разницу слишком далеко без нужды
-          const priority = rec.mesh ? dist + 220 : dist;
-          candidates.push({ rec, target, priority });
         }
       });
 
-      if (!candidates.length) {
-        needsRebuildScan = false;
-        return;
+      // 3. LRU eviction: удалить чанки вне visibility и давно неиспользуемые
+      const toDelete = [];
+      chunks.forEach((rec, key) => {
+        if (!touched.has(key) && rec.lastUsed < frameCounter - CHUNK_IDLE_FRAMES) {
+          toDelete.push({ key, rec });
+        }
+      });
+      // Если всё ещё слишком много чанков — удалить старейшие невидимые
+      if (chunks.size - toDelete.length > MAX_ACTIVE_CHUNKS) {
+        const sorted = Array.from(chunks.entries()).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+        let excess = chunks.size - toDelete.length - MAX_ACTIVE_CHUNKS;
+        for (let i = 0; i < sorted.length && excess > 0; i++) {
+          const [key, rec] = sorted[i];
+          if (!touched.has(key) && !toDelete.some((d) => d.key === key)) {
+            toDelete.push({ key, rec });
+            excess--;
+          }
+        }
       }
-      needsRebuildScan = true;
-      candidates.sort((a, b) => a.priority - b.priority);
+      for (const { key, rec } of toDelete) {
+        disposeChunk(rec);
+        chunks.delete(key);
+      }
 
+      // 4. Построение по бюджету времени
+      candidates.sort((a, b) => a.priority - b.priority);
       let built = 0;
       for (let i = 0; i < candidates.length; i++) {
         createOrUpdateChunk(candidates[i].rec, candidates[i].target);
@@ -470,7 +532,7 @@ window.OC = window.OC || {};
       chunks.forEach((r) => {
         if (r.mesh) { built++; if (r.mesh.visible) visible++; }
       });
-      return { total: chunks.size, built, visible };
+      return { total: chunks.size, built, visible, max: MAX_ACTIVE_CHUNKS };
     }
   };
 })(window.OC);
