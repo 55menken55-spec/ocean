@@ -566,7 +566,14 @@ function createOrUpdateChunk(rec, segs) {
           const absX = x0 + ix * step;
           const gIdx = gRow + (ix + 1);
           const h = hBuf[gIdx];
-          const gradMag = 0; // цвет не зависит от градиента в worker, передаём 0
+          // Градиент высот для правильного затенения текстуры (как в buildChunkGeometry)
+          const hL = hBuf[gIdx - 1];
+          const hR = hBuf[gIdx + 1];
+          const hD = hBuf[gIdx - stride];
+          const hU = hBuf[gIdx + stride];
+          const nx = (hL - hR) * inv2Step;
+          const nz = (hD - hU) * inv2Step;
+          const gradMag = Math.hypot(nx, nz);
           biomeRef.getTerrainColor(absX, h, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
           const c3 = gIdx * 3;
           colorData[c3] = _tmpCol.r;
