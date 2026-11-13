@@ -303,6 +303,13 @@ try {
       return { before, atlasOpen: window.OC.Atlas.isOpen() };
     });
     await mobilePage.waitForTimeout(450); // ждём завершения перехода прозрачности
+    // Под SwiftShader главный поток загружен рендером, поэтому CSS-переход
+    // прозрачности может дойти до конца заметно позже номинальных 250 мс —
+    // ждём фактического достижения целевой прозрачности, а не фиксированной паузы.
+    await mobilePage.waitForFunction(() => {
+      const v = (sel) => Number(getComputedStyle(document.querySelector(sel)).opacity);
+      return v('#topright') < 0.05 && v('.brand') < 0.05 && v('.telemetry') < 0.05;
+    }, null, { timeout: 15000 }).catch(() => {});
     modalHud.open = await mobilePage.evaluate(() => {
       const vis = (sel) => Number(window.getComputedStyle(document.querySelector(sel)).opacity);
       return {
@@ -312,6 +319,10 @@ try {
     });
     await mobilePage.evaluate(() => window.OC.Atlas.toggle());
     await mobilePage.waitForTimeout(450);
+    await mobilePage.waitForFunction(() => {
+      const v = (sel) => Number(getComputedStyle(document.querySelector(sel)).opacity);
+      return v('#topright') > 0.95 && v('.brand') > 0.95;
+    }, null, { timeout: 15000 }).catch(() => {});
     modalHud.closed = await mobilePage.evaluate(() => {
       const vis = (sel) => Number(window.getComputedStyle(document.querySelector(sel)).opacity);
       return { class: document.body.classList.contains('modal-open'), rail: vis('#topright'), brand: vis('.brand') };
