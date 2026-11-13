@@ -167,8 +167,8 @@ self.onmessage = function (e) {
     if (!rec) {
       rec = {
         cx, cz,
-        wx: (cx + 0.5) * chunkSize,
-        wz: (cz + 0.5) * chunkSize,
+        wx: cx * chunkSize,      // левый-задний угол чанка, совпадает с x0/z0 в buildChunkGeometry
+        wz: cz * chunkSize,
         segs: 0,
         mesh: null,
         ceilMesh: null,
@@ -733,8 +733,8 @@ function createOrUpdateChunk(rec, segs) {
       // 1. Создаём/обновляем чанки в радиусе видимости около истинной позиции камеры
       for (let cz = camChunkZ - visibilityChunkRadius; cz <= camChunkZ + visibilityChunkRadius; cz++) {
         for (let cx = camChunkX - visibilityChunkRadius; cx <= camChunkX + visibilityChunkRadius; cx++) {
-          const wx = (cx + 0.5) * chunkSize;
-          const wz = (cz + 0.5) * chunkSize;
+          const wx = cx * chunkSize;
+          const wz = cz * chunkSize;
           const dist = Math.hypot(wx - trueCamX, wz - trueCamZ);
           if (dist > farDist) continue;
 
