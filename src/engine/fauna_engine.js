@@ -152,6 +152,7 @@ window.OC = window.OC || {};
       const _toTarget = new T.Vector3();
       const _currFlow = new T.Vector3();
       const _flowAccum = new T.Vector3();
+
       let faunaCountRefreshTimer = 0;
 
       function refreshFaunaCounts() {
@@ -261,6 +262,8 @@ window.OC = window.OC || {};
 
           lastCamPos.copy(camPos);
           updateCtx.dayW = dayW;
+
+
           updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;

@@ -680,6 +680,12 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
       getPosition: () => mesh.position,
       update(dt, time, camPos, ctx) {
         if (Math.hypot(cx - camPos.x, cz - camPos.z) > 480) { mesh.visible = false; return; }
+        // Конусное отсечение: объекты за спиной камеры не рендерятся
+        const camFwdX = ctx ? ctx.camFwdX : 0;
+        const camFwdZ = ctx ? ctx.camFwdZ : -1;
+        const dx = cx - camPos.x;
+        const dz = cz - camPos.z;
+        if (dx * camFwdX + dz * camFwdZ < -6) { mesh.visible = false; return; }
         mesh.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
         const camSpeed = ctx ? ctx.camSpeed : 0;
@@ -739,6 +745,12 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
       getPosition: () => group.position,
       update(dt, time, camPos, ctx) {
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 420) { group.visible = false; return; }
+        // Конусное отсечение: объекты за спиной камеры не рендерятся
+        const camFwdX = ctx ? ctx.camFwdX : 0;
+        const camFwdZ = ctx ? ctx.camFwdZ : -1;
+        const dx = opts.cx - camPos.x;
+        const dz = opts.cz - camPos.z;
+        if (dx * camFwdX + dz * camFwdZ < -6) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
         const nightAct = OC.lerp(1.55, 0.65, dayW);

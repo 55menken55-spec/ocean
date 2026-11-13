@@ -142,6 +142,15 @@ function buildChunkData(cx, cz, density) {
     const trueCamX = camPos.x + ox;
     const trueCamZ = camPos.z + oz;
 
+    // Потолочное отсечение для пещерных биомов:
+    // если камера под сводом, объекты над сводом в своей точке за потолком — не рисуем
+    const hasCeiling = biomeRef && typeof biomeRef.getCeilingHeight === 'function';
+    const camY = camPos.y + (origin ? origin.y : 0);
+    let camCeilY = null;
+    if (hasCeiling) {
+      camCeilY = biomeRef.getCeilingHeight(trueCamX, trueCamZ);
+    }
+
     for (let i = 0; i < pools.length; i++) pools[i].count = 0;
 
     // Радиус кэша не ограничен chunkHalfCount — берём из истинных координат камеры
@@ -170,6 +179,14 @@ function buildChunkData(cx, cz, density) {
           const dz = it.z - camPos.z;
           const d2 = dx * dx + dz * dz;
           if (d2 > activeR2) continue;
+
+          // Потолочное отсечение: объект над сводом пещеры, камера под сводом — объект за потолком
+          if (hasCeiling && camCeilY !== null && camY < camCeilY) {
+            const objWorldX = it.x + ox;
+            const objWorldZ = it.z + oz;
+            const objCeilY = biomeRef.getCeilingHeight(objWorldX, objWorldZ);
+            if (it.y > objCeilY) continue;
+          }
 
           const pool = poolLookup.get(it.species + ':' + it.variant);
           if (!pool) continue;
@@ -262,7 +279,9 @@ function buildChunkData(cx, cz, density) {
 
         for (let v = 0; v < vCount; v++) {
           const mesh = new T.InstancedMesh(spec.geos[v], spec.mat, perVarMax);
-          mesh.frustumCulled = false;
+          // Включаем отсечение по視русна — критично для больших миров:
+          // экземпляры за кадром не попадают в draw calls.
+          mesh.frustumCulled = true;
           mesh.userData.key = species;
           mesh.count = 0;
           mesh.setColorAt(0, new T.Color(1, 1, 1));
