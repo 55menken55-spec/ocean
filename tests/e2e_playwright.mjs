@@ -316,7 +316,7 @@ try {
       const vis = (sel) => Number(window.getComputedStyle(document.querySelector(sel)).opacity);
       return { class: document.body.classList.contains('modal-open'), rail: vis('#topright'), brand: vis('.brand') };
     });
-    assert(modalHud.open.atlasOpen, 'Атлас не открылся в тесте модалок');
+    assert(modalHud.atlasOpen, 'Атлас не открылся в тесте модалок');
     assert(modalHud.open.class === true, 'Открытая модалка должна ставить body.modal-open');
     assert(modalHud.open.rail < 0.05 && modalHud.open.brand < 0.05 && modalHud.open.tele < 0.05,
       `HUD не скрылся под модалкой: ${JSON.stringify(modalHud.open)}`);
