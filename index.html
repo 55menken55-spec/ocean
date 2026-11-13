@@ -11565,7 +11565,7 @@ function createOrUpdateChunk(rec, segs) {
       }
 
       // Горизонтный фартук только для ограниченных миров
-      buildHorizonApron();
+      // buildHorizonApron(); // отключён для отладки прозрачного дна
 
       // Синхронно строим только стартовую окрестность вокруг камеры (~25 чанков, < 20 мс)
       const q = OC.Quality.get();
