@@ -900,9 +900,9 @@ window.OC = window.OC || {};
     surfacePlane.visible = !(biome && biome.noSurface);
     if (surfacePlane.visible) {
       const snap = 44;
-      surfacePlane.position.x = Math.round(camPos.x / snap) * snap;
+      surfacePlane.position.x = Math.round(trueCamX / snap) * snap;
       surfacePlane.position.y = waterLevel;
-      surfacePlane.position.z = Math.round(camPos.z / snap) * snap;
+      surfacePlane.position.z = Math.round(trueCamZ / snap) * snap;
       surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
       surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
       surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);

@@ -136,6 +136,7 @@ self.onmessage = function (e) {
   let lastScanZ = 1e9;
   let lastScanQuality = '';
   let heightGridBuf = new Float32Array(64 * 64);
+  let horizonApron = null; // ссылка на горизонтный фартук для сдвига при Floating Origin
   let frameCounter = 0;
 
   /* Лимит чанков в памяти одновременно. При превышении удаляются старейшие невидимые. */
@@ -634,6 +635,7 @@ function createOrUpdateChunk(rec, segs) {
     g.computeVertexNormals();
     const apron = new T.Mesh(g, terrainMat);
     apron.userData.key = 'floor';
+    horizonApron = apron;
     group.add(apron);
   }
 
@@ -692,6 +694,7 @@ function createOrUpdateChunk(rec, segs) {
           if (rec.mesh) rec.mesh.position.sub(delta);
           if (rec.ceilMesh) rec.ceilMesh.position.sub(delta);
         });
+        if (horizonApron) horizonApron.position.sub(delta);
       });
 
       terrainMat = new T.MeshStandardMaterial({
