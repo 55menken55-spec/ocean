@@ -136,6 +136,7 @@ self.onmessage = function (e) {
   let lastScanZ = 1e9;
   let lastScanQuality = '';
   let heightGridBuf = new Float32Array(64 * 64);
+  let horizonApron = null; // ссылка на горизонтный фартук для сдвига при Floating Origin
   let frameCounter = 0;
 
   /* Лимит чанков в памяти одновременно. При превышении удаляются старейшие невидимые. */
@@ -166,8 +167,8 @@ self.onmessage = function (e) {
     if (!rec) {
       rec = {
         cx, cz,
-        wx: (cx + 0.5) * chunkSize,
-        wz: (cz + 0.5) * chunkSize,
+        wx: cx * chunkSize,      // левый-задний угол чанка, совпадает с x0/z0 в buildChunkGeometry
+        wz: cz * chunkSize,
         segs: 0,
         mesh: null,
         ceilMesh: null,
@@ -465,17 +466,22 @@ self.onmessage = function (e) {
       processWorkerQueue();
       return;
     }
-    // Копируем данные для передачи в worker (Transferable массивы)
+    // Копируем буферы перед передачей в Worker, чтобы не нейтрализовать
+    // общий heightGridBuf (getHeightGridBuf переиспользует один буфер).
+    // Transferable переносит владение буфером — после этого источник становится
+    // неиспользуемым (detached), и все следующие чанки получают нулевые высоты.
+    const hCopy = new Float32Array(pd.heightData);
+    const cCopy = new Float32Array(pd.colorData);
     terrainWorker.postMessage({
       type: 'buildChunk',
       cx: next.rec.cx,
       cz: next.rec.cz,
       segs: pd.segs,
       chunkSize: chunkSize,
-      heightData: pd.heightData,
-      colorData: pd.colorData,
+      heightData: hCopy,
+      colorData: cCopy,
       stride: pd.stride
-    }, [pd.heightData.buffer, pd.colorData.buffer]);
+    }, [hCopy.buffer, cCopy.buffer]);
   }
 
   function buildChunkFromWorkerData(rec, segs, positions, normals, colors, indices, vertexCount, indexCount) {
@@ -528,51 +534,7 @@ function createOrUpdateChunk(rec, segs) {
     if (rec.segs === segs && rec.mesh) return;
     const key = chunkKey(rec.cx, rec.cz);
 
-    // Если Worker доступен — используем асинхронную постройку
-    if (terrainWorker) {
-      // Подготавливаем height и color данные в основном потоке (вызовы getHeight/getTerrainColor)
-      const x0 = rec.cx * chunkSize;
-      const z0 = rec.cz * chunkSize;
-      const step = chunkSize / segs;
-      const inv2Step = 1 / (2 * step);
-      const n = segs + 1;
-      const stride = n + 2;
-      const hBuf = getHeightGridBuf(stride);
-
-      for (let gz = 0; gz < stride; gz++) {
-        const absZ = z0 + (gz - 1) * step;
-        const row = gz * stride;
-        for (let gx = 0; gx < stride; gx++) {
-          const absX = x0 + (gx - 1) * step;
-          hBuf[row + gx] = biomeRef.getHeight(absX, absZ);
-        }
-      }
-
-      const gridCount = n * n;
-      const colorData = new Float32Array(gridCount * 3);
-      for (let iz = 0; iz <= segs; iz++) {
-        const absZ = z0 + iz * step;
-        const gRow = (iz + 1) * stride;
-        for (let ix = 0; ix <= segs; ix++) {
-          const absX = x0 + ix * step;
-          const gIdx = gRow + (ix + 1);
-          const h = hBuf[gIdx];
-          const gradMag = 0; // цвет не зависит от градиента в worker, передаём 0
-          biomeRef.getTerrainColor(absX, h, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
-          const c3 = gIdx * 3;
-          colorData[c3] = _tmpCol.r;
-          colorData[c3 + 1] = _tmpCol.g;
-          colorData[c3 + 2] = _tmpCol.b;
-        }
-      }
-
-      pendingChunkData.set(key, { heightData: hBuf, colorData, stride, segs });
-      workerQueue.push({ rec, segs });
-      processWorkerQueue();
-      return; // Чанк будет построен асинхронно
-    }
-
-    // Fallback: синхронная постройка (если Worker недоступен)
+    // Синхронная постройка чанка (Worker отключён для отладки прозрачного дна)
     const geo = buildChunkGeometry(rec.cx, rec.cz, segs);
     if (rec.mesh) {
       rec.mesh.geometry.dispose();
@@ -634,6 +596,7 @@ function createOrUpdateChunk(rec, segs) {
     g.computeVertexNormals();
     const apron = new T.Mesh(g, terrainMat);
     apron.userData.key = 'floor';
+    horizonApron = apron;
     group.add(apron);
   }
 
@@ -692,6 +655,7 @@ function createOrUpdateChunk(rec, segs) {
           if (rec.mesh) rec.mesh.position.sub(delta);
           if (rec.ceilMesh) rec.ceilMesh.position.sub(delta);
         });
+        if (horizonApron) horizonApron.position.sub(delta);
       });
 
       terrainMat = new T.MeshStandardMaterial({
@@ -711,7 +675,7 @@ function createOrUpdateChunk(rec, segs) {
       }
 
       // Горизонтный фартук только для ограниченных миров
-      buildHorizonApron();
+      // buildHorizonApron(); // отключён для отладки прозрачного дна
 
       // Синхронно строим только стартовую окрестность вокруг камеры (~25 чанков, < 20 мс)
       const q = OC.Quality.get();
@@ -769,8 +733,8 @@ function createOrUpdateChunk(rec, segs) {
       // 1. Создаём/обновляем чанки в радиусе видимости около истинной позиции камеры
       for (let cz = camChunkZ - visibilityChunkRadius; cz <= camChunkZ + visibilityChunkRadius; cz++) {
         for (let cx = camChunkX - visibilityChunkRadius; cx <= camChunkX + visibilityChunkRadius; cx++) {
-          const wx = (cx + 0.5) * chunkSize;
-          const wz = (cz + 0.5) * chunkSize;
+          const wx = cx * chunkSize;
+          const wz = cz * chunkSize;
           const dist = Math.hypot(wx - trueCamX, wz - trueCamZ);
           if (dist > farDist) continue;
 
