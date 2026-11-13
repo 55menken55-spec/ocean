@@ -21466,6 +21466,152 @@ window.OC = window.OC || {};
   OC._FaunaSystems = OC._FaunaSystems || {};
 })(window.OC);
 
+// === engine/fauna_impostors.js ===
+/* ================= IMPOSTORS (BILLBOARDS ДЛЯ УДАЛЁННОЙ ФАУНЫ) ================= */
+/* Когда существо дальше порога impostorDist, его 3D-меш заменяется на
+   Billboard-квадрат, который всегда лицом к камере. Это экономит вершинную
+   нагрузку и draw calls на больших дистанциях (>200 м), где детали модели
+   всё равно неразличимы. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  let sceneRef = null;
+  let camRef = null;
+
+  /* Пул billboard-мешей, кэшированных по ключу вида "species:tintHex" */
+  const impostorPool = new Map(); // "species:tint" -> { mesh, species, tint, inUse }
+  const activeImpostors = new Map(); // agent -> { mesh, species, tint }
+  const _camPos = new T.Vector3();
+  const _camFwd = new T.Vector3();
+  const _up = new T.Vector3(0, 1, 0);
+  const _tmpVec = new T.Vector3();
+
+  /* Дистанция переключения на impostor (и обратно с гистерезисом) */
+  const IMPOSTOR_DIST_ON = 200;   // дальше 200 м -> impostor
+  const IMPOSTOR_DIST_OFF = 150;   // ближе 150 м -> полная 3D-модель
+  const IMPOSTOR_SIZE = 1.6;       // размер квадрата billboard
+
+  function getImpostorKey(species, tint) {
+    return species + ':' + (tint !== undefined ? tint.toString(16) : 'fff');
+  }
+
+  function createImpostor(species, tint) {
+    const geo = new T.PlaneGeometry(IMPOSTOR_SIZE, IMPOSTOR_SIZE);
+    const mat = new T.MeshBasicMaterial({
+      color: tint !== undefined ? tint : 0xffffff,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+      side: T.DoubleSide
+    });
+    const mesh = new T.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.userData.isImpostor = true;
+    mesh.userData.species = species;
+    mesh.visible = false;
+    sceneRef.add(mesh);
+    return { mesh, species, tint, inUse: false };
+  }
+
+  function getImpostor(species, tint) {
+    const key = getImpostorKey(species, tint);
+    let entry = impostorPool.get(key);
+    if (!entry) {
+      entry = createImpostor(species, tint);
+      impostorPool.set(key, entry);
+    }
+    entry.inUse = true;
+    return entry.mesh;
+  }
+
+  function releaseImpostor(species, tint) {
+    const key = getImpostorKey(species, tint);
+    const entry = impostorPool.get(key);
+    if (entry) entry.inUse = false;
+  }
+
+  OC.FaunaImpostors = {
+    init(scene, camera) {
+      sceneRef = scene;
+      camRef = camera;
+      impostorPool.clear();
+      activeImpostors.clear();
+    },
+
+    /* Вызывать каждый кадр с позицией и направлением камеры.
+       Обновляет поворот всех активных impostor-мешей, чтобы они лицом к камере. */
+    update(camPos, camFwd) {
+      if (!sceneRef) return;
+      _camPos.copy(camPos);
+      if (camFwd) _camFwd.copy(camFwd);
+      else if (camRef) camRef.getWorldDirection(_camFwd);
+
+      activeImpostors.forEach((info, agent) => {
+        const mesh = info.mesh;
+        const p = agent.getPosition ? agent.getPosition() : null;
+        if (!p) return;
+
+        mesh.position.copy(p);
+
+        /* Billboard: квадрат всегда лицом к камере, но остаётся вертикальным (Y-up).
+           Используем направление камеры по XZ для поворота вокруг Y. */
+        const angle = Math.atan2(_camFwd.x, _camFwd.z);
+        mesh.rotation.set(0, angle, 0);
+
+        /* Небольшой эффект удаления: чуть уменьшаем 불кость с дистанцией */
+        const d = Math.hypot(p.x - camPos.x, p.z - camPos.z);
+        const alpha = Math.max(0.3, Math.min(1.0, 1.0 - (d - IMPOSTOR_DIST_OFF) / 400));
+        mesh.material.opacity = alpha;
+      });
+    },
+
+    /* Включить/выключить impostor для агента.
+       agent — объект с getPosition(); species — ключ вида; tint — цвет. */
+    setImpostor(agent, enabled, species, tint) {
+      const key = agent;
+      if (enabled) {
+        if (activeImpostors.has(key)) return; // уже активен
+        const mesh = getImpostor(species, tint);
+        mesh.visible = true;
+        activeImpostors.set(key, { mesh, species, tint });
+      } else {
+        const info = activeImpostors.get(key);
+        if (!info) return;
+        info.mesh.visible = false;
+        activeImpostors.delete(key);
+        releaseImpostor(info.species, info.tint);
+      }
+    },
+
+    /* Отключить все impostors (например, при смене биома) */
+    clearAll() {
+      activeImpostors.forEach((info) => {
+        info.mesh.visible = false;
+        if (sceneRef) sceneRef.remove(info.mesh);
+        releaseImpostor(info.species, info.tint);
+      });
+      activeImpostors.clear();
+      // Освобождаем весь пул
+      impostorPool.forEach((entry) => {
+        if (sceneRef) sceneRef.remove(entry.mesh);
+        entry.mesh.geometry.dispose();
+        entry.mesh.material.dispose();
+        entry.inUse = false;
+      });
+      impostorPool.clear();
+    },
+
+    getStats() {
+      let active = 0;
+      let pooled = 0;
+      impostorPool.forEach((e) => { if (e.inUse) active++; else pooled++; });
+      return { active, pooled, total: impostorPool.size };
+    }
+  };
+})(window.OC);
+
 // === engine/fauna/spawn.js ===
 /* ================= ВЫСАДКА ФАУНЫ БИОМА ПО ЭКОЛОГИЧЕСКОМУ ПЛАНУ ================= */
 /* Читает biome.faunaPlan и вызывает билдеры из OC._FaunaBuilders, наполняя общие
@@ -22835,6 +22981,7 @@ window.OC = window.OC || {};
 
   OC.FaunaEngine = {
     init(scene, biome) {
+      if (OC.FaunaImpostors) OC.FaunaImpostors.clearAll();
       disposeFaunaGroup(scene);
       faunaGroup = new T.Group();
       scene.add(faunaGroup);
@@ -22858,6 +23005,13 @@ window.OC = window.OC || {};
 
       const plan = biome.faunaPlan || {};
       const agents = [];
+      const impostoredAgents = new Set(); // агенты, для которых сейчас активен impostor
+
+      // Инициализация системы impostor-билбордов для удалённой фауны
+      if (OC.FaunaImpostors) {
+        const cam = OC.getCamera ? OC.getCamera() : null;
+        OC.FaunaImpostors.init(scene, cam);
+      }
       const schools = [];
       const predatorAgents = [];
       const preySchools = [];
@@ -22940,6 +23094,7 @@ window.OC = window.OC || {};
       const _toTarget = new T.Vector3();
       const _currFlow = new T.Vector3();
       const _flowAccum = new T.Vector3();
+      const _tmpVec2 = new T.Vector3();
 
       let faunaCountRefreshTimer = 0;
 
@@ -23107,8 +23262,39 @@ window.OC = window.OC || {};
             fishMatBiolum.emissiveIntensity = OC.lerp(1.45, 0.25, dayW) + (pal.bioGlow || 0) * 0.45;
           }
 
+          // Направление камеры для поворота impostor-ビルбордов лицом к игроку
+          let camFwdX = 0, camFwdZ = -1;
+          const cam = OC.getCamera ? OC.getCamera() : null;
+          if (cam) {
+            cam.getWorldDirection(_tmpVec2);
+            camFwdX = _tmpVec2.x;
+            camFwdZ = _tmpVec2.z;
+          }
+
           for (let i = 0; i < agents.length; i++) {
+            const ag = agents[i];
+            const p = ag.getPosition ? ag.getPosition() : null;
             agents[i].update(dt, time, camPos, updateCtx);
+
+            // Impostor: на дистанции >200 м 3D-модель заменяется на billboard-квадрат.
+            // 3D-меш не скрывается напрямую (mesh может быть в замыкании билдера),
+            // impostorビルборд визуально перекрывает уменьшенную модель на遠 дистанции.
+            if (p && OC.FaunaImpostors && ag.key) {
+              const dCam = Math.hypot(p.x - camPos.x, p.z - camPos.z);
+              const hasImp = impostoredAgents.has(ag);
+              if (dCam > 200 && !hasImp) {
+                OC.FaunaImpostors.setImpostor(ag, true, ag.key, 0xffffff);
+                impostoredAgents.add(ag);
+              } else if (dCam < 150 && hasImp) {
+                OC.FaunaImpostors.setImpostor(ag, false);
+                impostoredAgents.delete(ag);
+              }
+            }
+          }
+
+          // Поворачиваем все активные impostor-ビルборды лицом к камере
+          if (OC.FaunaImpostors) {
+            OC.FaunaImpostors.update(camPos, { x: camFwdX, y: 0, z: camFwdZ });
           }
           faunaCountRefreshTimer += dt;
           if (faunaCountRefreshTimer >= 1) {

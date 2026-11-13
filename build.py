@@ -79,6 +79,7 @@ ORDER = [
     'engine/fauna/splash.js',
     'engine/fauna/haze.js',
     'engine/fauna/systems.js',
+    'engine/fauna_impostors.js',
     'engine/fauna/spawn.js',
     'engine/volcano.js',
     'engine/fauna_engine.js',

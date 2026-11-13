@@ -47,6 +47,7 @@ window.OC = window.OC || {};
 
   OC.FaunaEngine = {
     init(scene, biome) {
+      if (OC.FaunaImpostors) OC.FaunaImpostors.clearAll();
       disposeFaunaGroup(scene);
       faunaGroup = new T.Group();
       scene.add(faunaGroup);
@@ -70,6 +71,13 @@ window.OC = window.OC || {};
 
       const plan = biome.faunaPlan || {};
       const agents = [];
+      const impostoredAgents = new Set(); // агенты, для которых сейчас активен impostor
+
+      // Инициализация системы impostor-билбордов для удалённой фауны
+      if (OC.FaunaImpostors) {
+        const cam = OC.getCamera ? OC.getCamera() : null;
+        OC.FaunaImpostors.init(scene, cam);
+      }
       const schools = [];
       const predatorAgents = [];
       const preySchools = [];
@@ -152,6 +160,7 @@ window.OC = window.OC || {};
       const _toTarget = new T.Vector3();
       const _currFlow = new T.Vector3();
       const _flowAccum = new T.Vector3();
+      const _tmpVec2 = new T.Vector3();
 
       let faunaCountRefreshTimer = 0;
 
@@ -319,8 +328,39 @@ window.OC = window.OC || {};
             fishMatBiolum.emissiveIntensity = OC.lerp(1.45, 0.25, dayW) + (pal.bioGlow || 0) * 0.45;
           }
 
+          // Направление камеры для поворота impostor-ビルбордов лицом к игроку
+          let camFwdX = 0, camFwdZ = -1;
+          const cam = OC.getCamera ? OC.getCamera() : null;
+          if (cam) {
+            cam.getWorldDirection(_tmpVec2);
+            camFwdX = _tmpVec2.x;
+            camFwdZ = _tmpVec2.z;
+          }
+
           for (let i = 0; i < agents.length; i++) {
+            const ag = agents[i];
+            const p = ag.getPosition ? ag.getPosition() : null;
             agents[i].update(dt, time, camPos, updateCtx);
+
+            // Impostor: на дистанции >200 м 3D-модель заменяется на billboard-квадрат.
+            // 3D-меш не скрывается напрямую (mesh может быть в замыкании билдера),
+            // impostorビルборд визуально перекрывает уменьшенную модель на遠 дистанции.
+            if (p && OC.FaunaImpostors && ag.key) {
+              const dCam = Math.hypot(p.x - camPos.x, p.z - camPos.z);
+              const hasImp = impostoredAgents.has(ag);
+              if (dCam > 200 && !hasImp) {
+                OC.FaunaImpostors.setImpostor(ag, true, ag.key, 0xffffff);
+                impostoredAgents.add(ag);
+              } else if (dCam < 150 && hasImp) {
+                OC.FaunaImpostors.setImpostor(ag, false);
+                impostoredAgents.delete(ag);
+              }
+            }
+          }
+
+          // Поворачиваем все активные impostor-ビルборды лицом к камере
+          if (OC.FaunaImpostors) {
+            OC.FaunaImpostors.update(camPos, { x: camFwdX, y: 0, z: camFwdZ });
           }
           faunaCountRefreshTimer += dt;
           if (faunaCountRefreshTimer >= 1) {
