@@ -600,6 +600,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 7.3, lon: 134.5, coordLabel: '7.3° с.ш., 134.5° в.д.',
       ocean: 'Архипелаг Палау · Микронезия', depthSpan: '0 – 96 м', tempSpan: '24 – 29 °C', color: '#ffbe44',
+      country: 'Палау', waterType: 'sea', protectionStatus: 'морской заповедник',
+      notableFor: 'затонувший корабль «SS Maru», нежалящие золотые медузы, акулы-молоты',
       summary: 'Известняковые грибовидные острова, лагуна нежалящих золотых медуз, 68-метровое судно «SS Maru» и акулы-молоты.'
     },
     worldRadius: 1200,

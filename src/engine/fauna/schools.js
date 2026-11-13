@@ -39,7 +39,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     }, opts);
 
     const list = [];
-    const body = new T.SphereGeometry(1, 12, 9);
+    const body = new T.SphereGeometry(1, 32, 16);
     body.scale(o.len * 0.5, o.height * 0.5, o.width * 0.5);
     const bp = body.attributes.position;
     for (let i = 0; i < bp.count; i++) {
@@ -63,14 +63,14 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     list.push(body);
 
     /* хвост */
-    const tail = new T.ConeGeometry(o.height * o.tailH, o.len * 0.36, 4);
+    const tail = new T.ConeGeometry(o.height * o.tailH, o.len * 0.36, 8);
     OC.xform(tail, { r: [0, Math.PI / 4, Math.PI / 2], s: [0.22, 1, 1], p: [-o.len * 0.56, 0, 0] });
     OC.geoPrep(tail);
     OC.paint(tail, o.finCol);
     list.push(tail);
 
     /* грудные плавники */
-    const fin = new T.ConeGeometry(o.height * 0.22, o.len * 0.28, 3);
+    const fin = new T.ConeGeometry(o.height * 0.22, o.len * 0.28, 6);
     OC.xform(fin, { r: [Math.PI / 2, 0, 0.42], s: [0.2, 1, 1], p: [o.len * 0.22, -o.height * 0.08, o.width * 0.58] });
     OC.geoPrep(fin);
     OC.paint(fin, o.finCol);
@@ -81,7 +81,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     list.push(fin2);
 
     if (o.dorsal) {
-      const d = new T.ConeGeometry(o.height * 0.28, o.len * 0.35, 3);
+      const d = new T.ConeGeometry(o.height * 0.28, o.len * 0.35, 6);
       OC.xform(d, { r: [0, 0, Math.PI / 2 - 0.35], s: [0.14, 1, 1], p: [-o.len * 0.04, o.height * 0.58, 0] });
       OC.geoPrep(d);
       OC.paint(d, o.finCol);
@@ -89,7 +89,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     }
 
     if (o.streamer) {
-      const st = new T.ConeGeometry(o.height * 0.14, o.len * 0.95, 3);
+      const st = new T.ConeGeometry(o.height * 0.14, o.len * 0.95, 6);
       OC.xform(st, { r: [0, 0, Math.PI / 2 + 0.55], s: [0.15, 1, 1], p: [-o.len * 0.22, o.height * 0.85, 0] });
       OC.geoPrep(st);
       OC.paint(st, 0xffffff);
@@ -98,7 +98,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
     /* глаза (у слепых пещерных видов eyeScale === 0) */
     if (o.eyeScale > 0) {
-      const eyeG = new T.SphereGeometry(o.height * 0.085 * o.eyeScale, 6, 5);
+      const eyeG = new T.SphereGeometry(o.height * 0.085 * o.eyeScale, 12, 10);
       OC.geoPrep(eyeG);
       OC.paint(eyeG, 0x0a0a0a);
       const e1 = eyeG.clone(); OC.xform(e1, { p: [o.len * 0.33, o.height * 0.12, o.width * 0.40] });
@@ -680,6 +680,12 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
       getPosition: () => mesh.position,
       update(dt, time, camPos, ctx) {
         if (Math.hypot(cx - camPos.x, cz - camPos.z) > 480) { mesh.visible = false; return; }
+        // Конусное отсечение: объекты за спиной камеры не рендерятся
+        const camFwdX = ctx ? ctx.camFwdX : 0;
+        const camFwdZ = ctx ? ctx.camFwdZ : -1;
+        const dx = cx - camPos.x;
+        const dz = cz - camPos.z;
+        if (dx * camFwdX + dz * camFwdZ < -6) { mesh.visible = false; return; }
         mesh.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
         const camSpeed = ctx ? ctx.camSpeed : 0;
@@ -739,6 +745,12 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
       getPosition: () => group.position,
       update(dt, time, camPos, ctx) {
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 420) { group.visible = false; return; }
+        // Конусное отсечение: объекты за спиной камеры не рендерятся
+        const camFwdX = ctx ? ctx.camFwdX : 0;
+        const camFwdZ = ctx ? ctx.camFwdZ : -1;
+        const dx = opts.cx - camPos.x;
+        const dz = opts.cz - camPos.z;
+        if (dx * camFwdX + dz * camFwdZ < -6) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
         const nightAct = OC.lerp(1.55, 0.65, dayW);

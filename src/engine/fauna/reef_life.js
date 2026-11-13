@@ -168,7 +168,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
   function makeTurtle(scene, biome, opts) {
     const group = new T.Group();
-    const shell = new T.SphereGeometry(1, 16, 12);
+    const shell = new T.SphereGeometry(1, 32, 20);
     shell.scale(2.4, 0.92, 2.9);
     OC.geoPrep(shell);
     OC.paint(shell, (x, y, z, c) => {
@@ -177,7 +177,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     });
     group.add(new T.Mesh(shell, OC._FaunaCtx.creatureMat));
 
-    const head = new T.SphereGeometry(0.58, 10, 8);
+    const head = new T.SphereGeometry(0.58, 20, 16);
     head.scale(0.95, 0.85, 1.25);
     OC.geoPrep(head);
     OC.paint(head, 0x5c6e46);
@@ -186,7 +186,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     group.add(headM);
 
     const flippers = [];
-    const flGeo = new T.SphereGeometry(1, 9, 6);
+    const flGeo = new T.SphereGeometry(1, 16, 10);
     flGeo.scale(1.65, 0.12, 0.56);
     OC.geoPrep(flGeo);
     OC.paint(flGeo, 0x556640);
@@ -263,13 +263,13 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
   function makeDugong(scene, biome, opts) {
     const group = new T.Group();
-    const body = new T.SphereGeometry(1, 16, 12);
+    const body = new T.SphereGeometry(1, 32, 20);
     body.scale(0.85, 0.78, 2.35);
     OC.geoPrep(body);
     OC.paint(body, (x, y, z, c) => c.setHSL(0.56, 0.12, y > 0 ? 0.48 : 0.62));
     group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
 
-    const snout = new T.CylinderGeometry(0.42, 0.55, 0.9, 10);
+    const snout = new T.CylinderGeometry(0.42, 0.55, 0.9, 16);
     snout.rotateX(Math.PI * 0.65);
     OC.geoPrep(snout);
     OC.paint(snout, 0x7b8990);
@@ -278,7 +278,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     group.add(snM);
 
     // Плавники
-    const fl = new T.SphereGeometry(1, 8, 6);
+    const fl = new T.SphereGeometry(1, 16, 10);
     fl.scale(0.75, 0.12, 0.35);
     OC.geoPrep(fl);
     OC.paint(fl, 0x6f7d84);
@@ -292,7 +292,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     // Хвостовой стебель и лопасть дюгоня
     const tailPivot = new T.Group();
     tailPivot.position.set(0, 0, -2.1);
-    const fluke = new T.ConeGeometry(0.95, 1.2, 4);
+    const fluke = new T.ConeGeometry(0.95, 1.2, 8);
     fluke.scale(1.3, 1, 0.18);
     fluke.rotateX(Math.PI / 2);
     OC.geoPrep(fluke);
@@ -326,6 +326,77 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
         group.position.copy(a);
         group.lookAt(b);
         tailPivot.rotation.x = Math.sin(time * 1.8) * 0.35;
+      }
+    };
+  }
+
+  /* ---------- Ламантин (Trichechus manatus) — крупнее дюгоня, хвост лопатковидный ---------- */
+
+  function makeManatee(scene, biome, opts) {
+    const group = new T.Group();
+    const body = new T.SphereGeometry(1, 36, 24);
+    body.scale(1.05, 0.85, 2.8);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.setHSL(0.52, 0.10, y > 0 ? 0.44 : 0.58));
+    group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
+
+    // Круглая голова ламантина (не удлинённая, как у дюгоня)
+    const head = new T.SphereGeometry(0.65, 24, 18);
+    head.scale(0.85, 0.95, 0.85);
+    OC.geoPrep(head);
+    OC.paint(head, 0x6e7d84);
+    const headM = new T.Mesh(head, OC._FaunaCtx.creatureMat);
+    headM.position.set(0, 0.05, 2.55);
+    group.add(headM);
+
+    // Передние плавники
+    const fl = new T.SphereGeometry(1, 20, 14);
+    fl.scale(0.85, 0.14, 0.4);
+    OC.geoPrep(fl);
+    OC.paint(fl, 0x7a888e);
+    for (const s of [-1, 1]) {
+      const m = new T.Mesh(fl, OC._FaunaCtx.creatureMat);
+      m.position.set(s * 1.05, -0.3, 1.4);
+      m.rotation.z = -s * 0.25;
+      group.add(m);
+    }
+
+    // Хвостовая лопасть ламантина (лопатковидная, не bifurcated как у дюгоня)
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -2.55);
+    const fluke = new T.CylinderGeometry(0.85, 0.85, 0.5, 12);
+    fluke.rotateX(Math.PI / 2);
+    OC.geoPrep(fluke);
+    OC.paint(fluke, 0x5e6c72);
+    const fkM = new T.Mesh(fluke, OC._FaunaCtx.creatureMat);
+    fkM.position.set(0, 0, -0.25);
+    tailPivot.add(fkM);
+    group.add(tailPivot);
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.userData.key = 'florida_manatee';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 80;
+    const a = new T.Vector3(), b = new T.Vector3();
+
+    return {
+      key: 'florida_manatee',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += (1.3 / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r, bz = opts.cz + Math.sin(ang + 0.1) * opts.r;
+        const ay = Math.max(biome.getHeight(ax, az) + 1.5 + Math.sin(t * 0.35) * 0.6, -10);
+        const by = Math.max(biome.getHeight(bx, bz) + 1.5 + Math.sin(t * 0.35 + 0.15) * 0.6, -10);
+        a.set(ax, Math.min(-1.5, ay), az);
+        b.set(bx, Math.min(-1.5, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        tailPivot.rotation.x = Math.sin(time * 1.5) * 0.25;
       }
     };
   }
@@ -441,6 +512,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeGoldenJelly = makeGoldenJelly;
   OC._FaunaBuilders.makeTurtle = makeTurtle;
   OC._FaunaBuilders.makeDugong = makeDugong;
+  OC._FaunaBuilders.makeManatee = makeManatee;
   OC._FaunaBuilders.makeOctopus = makeOctopus;
   OC._FaunaBuilders.makeMoray = makeMoray;
 })(window.OC);

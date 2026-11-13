@@ -414,7 +414,7 @@
     display:flex;flex-direction:column;gap:9px}
   .globe-card h4{margin:0;font-size:16px;font-weight:600;color:#f2fdff}
   .globe-ocean{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
-  .globe-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 0;
+  .globe-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 0;
     border-top:1px dashed rgba(140,225,255,.16);border-bottom:1px dashed rgba(140,225,255,.16)}
   .globe-metric{display:flex;flex-direction:column;gap:2px}
   .globe-metric span{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
@@ -992,7 +992,7 @@
 <div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
   <div class="globe-box">
     <div class="atlas-header">
-      <div><h3>3D-глобус планеты</h3><small>10 водных экспедиций · 52 этапа гида</small></div>
+      <div><h3>3D-глобус планеты</h3><small>13 водных экспедиций · 67 этапа гида</small></div>
       <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
     </div>
     <div class="globe-body">
@@ -1010,6 +1010,13 @@
             <div class="globe-metric"><span>Координаты</span><b id="globe-b-coords">—</b></div>
             <div class="globe-metric"><span>Глубина</span><b id="globe-b-depth">—</b></div>
             <div class="globe-metric"><span>Температура</span><b id="globe-b-temp">—</b></div>
+            <div class="globe-metric"><span>Страна</span><b id="globe-b-country">—</b></div>
+            <div class="globe-metric"><span>Тип водоёма</span><b id="globe-b-watertype">—</b></div>
+            <div class="globe-metric"><span>Охрана</span><b id="globe-b-protection">—</b></div>
+          </div>
+          <div class="globe-notable" style="margin-top:8px;font-size:11px;color:#9cc4d8;line-height:1.45;">
+            <span style="font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);display:block;margin-bottom:2px">Чем примечательно</span>
+            <span id="globe-b-notable">—</span>
           </div>
           <div class="globe-summary" id="globe-b-summary">—</div>
           <div class="globe-prog" id="globe-b-progress">—</div>
@@ -1612,6 +1619,8 @@ window.OC = window.OC || {};
      * Регистрация нового океанического / водного биома планеты.
      * Контракт биома:
      * - id, name, region, subtitle, worldRadius, chunkSize, seaLevel
+     * - globe: { lat, lon, coordLabel, ocean, depthSpan, tempSpan, color, summary,
+     *          country, waterType, protectionStatus, notableFor } — геопривязка к реальной планете
      * - spawn: { pos: [x,y,z], yaw, pitch }
      * - zones: [{ id, name, shortName, color, depthLabel, tempC, description }]
      * - landmarks: [{ id, name, zoneId, x, y, z, yaw, pitch, description }]
@@ -2940,6 +2949,8 @@ window.OC = window.OC || {};
     globe: {
       lat: -16.8, lon: 146.2, coordLabel: '16.8° ю.ш., 146.2° в.д.',
       ocean: 'Коралловое море · Австралия', depthSpan: '0 – 168 м', tempSpan: '21 – 29 °C', color: '#45e0d4',
+      country: 'Австралия (Квинсленд)', waterType: 'sea', protectionStatus: 'Всемирное наследие UNESCO',
+      notableFor: 'крупнейшая живая структура Земли, коралловые рифы, Голубая дыра',
       summary: 'Крупнейшая живая структура Земли: мангры, песчаный островок, 88-метровая Голубая дыра и миграции горбатых китов.'
     },
     worldRadius: WORLD_RADIUS,
@@ -3436,6 +3447,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 36.8, lon: -121.9, coordLabel: '36.8° с.ш., 121.9° з.д.',
       ocean: 'Залив Монтерей · Калифорния', depthSpan: '0 – 74 м', tempSpan: '8 – 13 °C', color: '#42d896',
+      country: 'США (Калифорния)', waterType: 'bay', protectionStatus: 'Национальный морской заповедник',
+      notableFor: 'ламиновые леса, морские львы, холодный апвеллинг',
       summary: 'Изумрудные соборы 20-метровой ламинарии, гранитные кекуры с морскими львами и холодный апвеллинг глубокого каньона.'
     },
     worldRadius: 1200,
@@ -3945,6 +3958,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 9.8, lon: -104.3, coordLabel: '9.8° с.ш., 104.3° з.д.',
       ocean: 'Вост.-Тихоокеанское поднятие', depthSpan: '2420 – 2538 м', tempSpan: '1.9 – 380 °C', color: '#ff8a42',
+      country: 'международные воды (Тихий океан)', waterType: 'ocean', protectionStatus: 'не охраняется',
+      notableFor: 'чёрные курильщики, хемосинтетические экосистемы, термофильная фауна',
       summary: 'Хемосинтетический мир на глубине 2.5 км без единого луча солнца: перегретые сульфидные шпили, сады рифтий и морские черти.'
     },
     worldRadius: 1200,
@@ -4530,6 +4545,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 74.2, lon: -68.5, coordLabel: '74.2° с.ш., 68.5° з.д.',
       ocean: 'Залив Баффина · Арктика', depthSpan: '0 – 142 м', tempSpan: '-1.8 .. +0.6 °C', color: '#8ad8ff',
+      country: 'Канада / Гренландия (Дания)', waterType: 'sea', protectionStatus: 'не охраняется',
+      notableFor: 'полярное море, айсберги, брайниклы, белухи, нарвалы',
       summary: 'Изумрудное северное сияние над паковыми льдами, гренландские айсберги, брайниклы, белухи, нарвалы и древние полярные акулы.'
     },
     worldRadius: 1200,
@@ -5160,6 +5177,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 7.3, lon: 134.5, coordLabel: '7.3° с.ш., 134.5° в.д.',
       ocean: 'Архипелаг Палау · Микронезия', depthSpan: '0 – 96 м', tempSpan: '24 – 29 °C', color: '#ffbe44',
+      country: 'Палау', waterType: 'sea', protectionStatus: 'морской заповедник',
+      notableFor: 'затонувший корабль «SS Maru», нежалящие золотые медузы, акулы-молоты',
       summary: 'Известняковые грибовидные острова, лагуна нежалящих золотых медуз, 68-метровое судно «SS Maru» и акулы-молоты.'
     },
     worldRadius: 1200,
@@ -5654,6 +5673,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 11.37, lon: 142.59, coordLabel: '11.4° с.ш., 142.6° в.д.',
       ocean: 'Марианский жёлоб · Тихий океан', depthSpan: '10 845 – 10 948 м', tempSpan: '1.8 – 3.6 °C', color: '#7a9cff',
+      country: 'микронезия / США (ближайшая земля — Гуам)', waterType: 'ocean', protectionStatus: 'национальный монумент Marianas Trench',
+      notableFor: 'глубочайшая точка Земли (Челленджер), китовое падение, Osedax',
       summary: 'Глубочайшая бездна Земли (~10.9 км): 24-метровый скелет китового падения с червями Osedax, серпентинитовые сипы и морские слизни.'
     },
     worldRadius: 1200,
@@ -6222,6 +6243,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 27.78, lon: -91.22, coordLabel: '27.8° с.ш., 91.2° з.д.',
       ocean: 'Мексиканский залив · Склон Луизианы', depthSpan: '612 – 710 м', tempSpan: '5.8 – 8.2 °C', color: '#45f2c8',
+      country: 'США / Мексика', waterType: 'sea', protectionStatus: 'не охраняется',
+      notableFor: 'соляные озёра, галоклин, метановые гидраты, архимедова плавучесть',
       summary: 'Подводные соляные озёра с зеркалом галоклина (230‰) и архимедовой плавучестью, берега мидий и метановых гидратов, сифонофоры и сельдяной король.'
     },
     worldRadius: 1200,
@@ -6849,6 +6872,8 @@ window.OC = window.OC || {};
     globe: {
       lat: 20.27, lon: -87.43, coordLabel: '20.3° с.ш., 87.4° з.д.',
       ocean: 'Карибское побережье Юкатана · Сак-Актун', depthSpan: '0 – 58 м', tempSpan: '24.6 – 26.4 °C', color: '#38e8b0',
+      country: 'Мексика (Кинтана-Роо)', waterType: 'cave', protectionStatus: 'не охраняется',
+      notableFor: 'карстовые пещеры, сеноты, подводные системы, слепые пещерные виды',
       summary: 'Затопленная карстовая сеть со сталактитами, солнечными окнами сенотов, ходовой нитью Ариадны, галоклином Анхелиты и слепыми пещерными рыбами.'
     },
     minimapTheme: 'cenote',
@@ -7364,6 +7389,8 @@ window.OC = window.OC || {};
       depthSpan: '0 – 132 м',
       tempSpan: '15.2 – 23.8 °C',
       color: '#34d399',
+      country: 'Эквадор', waterType: 'ocean', protectionStatus: 'Всемирное наследие UNESCO',
+      notableFor: 'эндемики: морские игуаны, галапагосские пингвины, апвеллинг Кромвеля',
       summary: 'Столкновение тёплого течения и холодного глубинного апвеллинга Кромвеля у вулканической Арки Дарвина: морские игуаны, экваториальные пингвины, Mola mola и косатки.'
     },
     zones: ZONES,
@@ -7814,6 +7841,8 @@ window.OC = window.OC || {};
       depthSpan: '0 – 28 м',
       tempSpan: '26.4 – 29.2 °C',
       color: '#f59e0b',
+      country: 'Бразилия', waterType: 'river', protectionStatus: 'не охраняется',
+      notableFor: 'затопленный лес, розовые дельфины боуто, арапаимы, электрические угри',
       summary: 'Затопленный тропический лес в янтарной воде Рио-Негру и граница Encontro das Águas: розовые дельфины боуто, арапаимы, электрические угри и кувшинки Виктория.'
     },
     zones: ZONES,
@@ -8048,9 +8077,802 @@ window.OC = window.OC || {};
     subtitle: 'Пресноводная рифтовая бездна · 0 – 1 642 м', worldRadius: 1200, chunkSize: 150,
     noSurface: false, seaLevel: 0, depthOffset: 0, minimapTheme: 'baikal',
     globe: { lat: 53.5, lon: 108.0, coordLabel: '53.5° с.ш., 108.0° в.д.', ocean: 'Озеро Байкал · Восточная Сибирь', depthSpan: '0 – 1 642 м', tempSpan: '3.2 – 12.2 °C', color: '#56c7d4',
+      country: 'Россия (Сибирь)', waterType: 'lake', protectionStatus: 'Всемирное наследие UNESCO',
+      notableFor: 'глубрейшее пресноводное озеро, байкальская нерпа, эндемики, активный рифт',
       summary: 'Прозрачная пресная вода, подводные губочные рифы, эндемичные омуль и голомянка, байкальская нерпа и ступенчатые склоны активного рифта.' },
     spawn, zones: ZONES, landmarks, tourLegs, faunaPlan: FAUNA_PLAN, encyclopedia: ENCYCLOPEDIA,
     getHeight, getZoneAt, getTemperatureAt, getCurrentAt, getTerrainColor, getOpticalProfile, generateChunkFlora
+  });
+})(window.OC);
+
+// === biomes/red_sea.js ===
+/* ================= БИОМ: КРАСНОЕ МОРЁ, РАС МОХАММЕД (ЕГИПЕТ · 0–200 М) ================= */
+/* Тропическое коралловое море с гиперсолинностью (~40‰), рифовой стеной и ~10% эндемиков. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  /* Рифовая лагуна (0–12 м), коралловый сад (12–35 м), рифовая стена (35–90 м), глубинный склон (90–200 м) */
+  const ZONES = [
+    {
+      id: 'reef_lagoon',
+      name: 'Рифовая лагуна Рас Мохаммед',
+      shortName: 'Лагуна',
+      color: '#3df2a8',
+      depthLabel: '0 – 12 м',
+      tempC: 27.5,
+      description: 'Мелководная лагуна с коралловыми головами, лугами морской травы и учениками рифовых рыб у берега Синая.'
+    },
+    {
+      id: 'coral_garden',
+      name: 'Коралловый сад',
+      shortName: 'Сад кораллов',
+      color: '#4ee0d4',
+      depthLabel: '12 – 35 м',
+      tempC: 26.0,
+      description: 'Плотные колонии ветвистых и плоских кораллов, морские антонии, актинии и рифовые аквариумные рыбки.'
+    },
+    {
+      id: 'reef_wall',
+      name: 'Рифовая стена (дроп-офиф)',
+      shortName: 'Стена рифа',
+      color: '#2da8c8',
+      depthLabel: '35 – 90 м',
+      tempC: 23.0,
+      description: 'Вертикальный обрыв рифового плато с гורגонариями, чёрными кораллами и рифовыми акулами.'
+    },
+    {
+      id: 'deep_slope',
+      name: 'Глубинный склон Красного моря',
+      shortName: 'Глубинный склон',
+      color: '#1e6aa8',
+      depthLabel: '90 – 200 м',
+      tempC: 21.0,
+      description: 'Пологий иловый склон с морскими губками, морскими лилиями и редкими глубоководными видами.'
+    }
+  ];
+
+  function reefWallX(z) {
+    return Math.sin(z * 0.003) * 120 + Math.cos(z * 0.007) * 45;
+  }
+
+  function getHeight(x, z) {
+    // Общий наклон дна от лагуны к открытому морю: у берега -4 м, к востоку -60 м
+    let h = OC.lerp(-4.0, -58.0, OC.smoothstep(-850, 850, x));
+    h += OC.fbm2(x * 0.01, z * 0.01, 3) * 3.2;
+    h += OC.fbm2(x * 0.04, z * 0.04, 2) * 1.1;
+
+    // Резкая рифовая стена (дроп-офиф) — подъём плато к центру карты
+    const ax = Math.abs(x - reefWallX(z));
+    const wallRise = OC.smoothstep(150, 520, ax) * 42.0;
+    h += wallRise;
+
+    // Коралловые головушки и валуны на плато
+    const bumps = (OC.ridged2(x * 0.015, z * 0.015, 2) - 0.45) * 5.5 * OC.smoothstep(80, 450, ax);
+    h += bumps;
+
+    // Уступ стены и иловый склон за ней
+    const escarpment = OC.smoothstep(520, 900, ax) * 30.0;
+    h -= escarpment;
+
+    // Мягкая рябь илистого дна на глубине
+    h += OC.fbm2(x * 0.025, z * 0.025, 2) * 2.4;
+
+    return OC.clamp(h, -200.0, 2.0);
+  }
+
+  function safeSpotY(x, z, desiredY, clearance) {
+    return Math.max(desiredY, getHeight(x, z) + (clearance || 3.0));
+  }
+
+  function getZoneAt(x, y, z) {
+    const ax = Math.abs(x - reefWallX(z));
+    if (y > -12.0 && ax > 220) return ZONES[0]; // reef_lagoon
+    if (y > -35.0 && ax > 120) return ZONES[1]; // coral_garden
+    if (y > -90.0) return ZONES[2]; // reef_wall
+    return ZONES[3]; // deep_slope
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const ax = Math.abs(x - reefWallX(z));
+    const nearReef = OC.smoothstep(220, 60, ax);
+    const n = OC.clamp(OC.fbm2(x * 0.06, z * 0.06, 2) * 0.7 + 0.3, 0, 1);
+
+    _colA.set(0xe0f7fa); // светлый коралловый песок лагуны
+    _colB.set(0x2d8a5c); // известняк кораллового плато
+    _colC.set(0x1a4a6e); // темный ил глубинного склона
+
+    out.copy(_colA).lerp(_colB, nearReef * (0.5 + n * 0.35));
+
+    // Глубокий ил за стеной рифа
+    if (ax > 520 && y < -60.0) {
+      out.lerp(_colC, OC.smoothstep(900, 520, ax) * 0.7);
+    }
+    // Бирюзовый окрас мелководья
+    if (y > -10.0) {
+      out.lerp(_colA.set(0x6ee7c0), OC.smoothstep(-10.0, -2.0, y) * 0.55);
+    }
+    return out;
+  }
+
+  function getTemperatureAt(x, depthM, zone) {
+    // Красное море — тёплое, с轻ким охлаждением на глубине
+    let t = 26.5 - Math.max(0, depthM) * 0.028;
+    if (zone) {
+      if (zone.id === 'reef_lagoon') t = 27.8;
+      else if (zone.id === 'coral_garden') t = 26.2;
+      else if (zone.id === 'reef_wall') t = 23.0;
+      else if (zone.id === 'deep_slope') t = 21.0;
+    }
+    return t;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const dayLum = (dayW !== undefined ? dayW : 1.0);
+    const shallow = y > -15.0;
+    const reefProx = OC.smoothstep(300, 100, Math.abs(x - reefWallX(z)));
+
+    // Тёплая прозрачная вода Красного моря, хорошая видимость
+    _fogCol.set(0x0b1626)
+      .lerp(_colA.set(0x1a4e8a), dayLum * 0.55)
+      .lerp(_colB.set(0x0b3d5e), reefProx * 0.4);
+
+    _waterCol.set(0x1e90ff)
+      .lerp(_colA.set(0x4ee0d4), shallow ? 0.65 : 0.0)
+      .lerp(_colB.set(0x2da8c8), reefProx * 0.5);
+
+    _skyTop.set(0x0a2a4a).lerp(_colA.set(0x2e86c1), dayLum * 0.85);
+    _skyBot.set(0x061830).lerp(_colB.set(0x1a4e8a), dayLum * 0.6);
+    _aboveHoriz.set(0x0b2a4a);
+
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity: shallow ? 0.008 : OC.lerp(0.010, 0.018, reefProx),
+      causticStrength: shallow ? 0.8 : 0.2,
+      rayStrength: shallow ? 0.75 : 0.25,
+      sunAtten: 0.85 * dayLum,
+      bioGlow: OC.lerp(0.4, 1.0, dayLum),
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz,
+      fillAColor: _colB.set(0x4ee0d4),
+      fillAMult: 0.5 + shallow * 0.4,
+      fillBColor: _colC.set(0x2da8c8),
+      fillBMult: 0.3 + reefProx * 0.4
+    };
+  }
+
+  function getCurrentAt(x, y, z, time, out) {
+    if (!out) out = new T.Vector3();
+    // Общее течение Красного моря с севера на юг (восточное прибрежное течение)
+    out.set(0.12 + Math.sin(time * 0.1 + x * 0.008) * 0.06, 0, -0.18 + Math.cos(time * 0.08 + z * 0.006) * 0.05);
+    return out;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+
+    function add(species, x, z, scale, tint) {
+      const y = getHeight(x, z);
+      items.push({ species, x, y: y - 0.05, z, ry: rng() * 6.283, scale, tint: tint || 0xffffff });
+    }
+
+    // 1. Коралловые colonias на рифовом плато
+    const reefSlots = Math.round(28 * density);
+    for (let i = 0; i < reefSlots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      const y = getHeight(px, pz);
+      if (y > -35.0 && y < -1.0) {
+        const r = rng();
+        if (r < 0.32) add('coral_branch', px, pz, OC.lerp(0.9, 1.6, rng()), 0xff6b6b);
+        else if (r < 0.58) add('coral_table', px, pz, OC.lerp(0.8, 1.4, rng()), 0x4ecdc4);
+        else if (r < 0.78) add('coral_plate', px, pz, OC.lerp(0.7, 1.3, rng()), 0xffe66d);
+        else add('coral_fan', px, pz, OC.lerp(0.85, 1.45, rng()), 0xff9ff3);
+      }
+    }
+
+    // 2. Морские травы и водоросли в лагуне
+    const grassSlots = Math.round(22 * density);
+    for (let i = 0; i < grassSlots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      const y = getHeight(px, pz);
+      if (y > -14.0 && y < -1.0 && rng() < 0.5) {
+        add('seagrass', px, pz, OC.lerp(0.6, 1.1, rng()), 0x8ee08a);
+      }
+    }
+
+    // 3. Глубоководные губки и актинии за стеной рифа
+    const deepSlots = Math.round(16 * density);
+    for (let i = 0; i < deepSlots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      const y = getHeight(px, pz);
+      if (y > -200.0 && y < -35.0) {
+        const r = rng();
+        if (r < 0.45) add('sponge_barrel', px, pz, OC.lerp(0.8, 1.5, rng()), 0xa8e6cf);
+        else if (r < 0.75) add('anemone', px, pz, OC.lerp(0.7, 1.2, rng()), 0xff8fab);
+        else add('sea_lily', px, pz, OC.lerp(0.6, 1.1, rng()), 0xd8b4fe);
+      }
+    }
+
+    // 4. Чёрные коралла на уступах стены
+    const blackCoralSlots = Math.round(10 * density);
+    for (let i = 0; i < blackCoralSlots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      const y = getHeight(px, pz);
+      if (y > -90.0 && y < -35.0 && rng() < 0.4) {
+        add('coral_black', px, pz, OC.lerp(0.85, 1.5, rng()), 0x1a1a2e);
+      }
+    }
+
+    return items;
+  }
+
+  const _lmRaw = [
+    {
+      id: 'sharm_reef',
+      name: 'Коралловый риф Шарм-Эль-Шейха',
+      zoneId: 'coral_garden',
+      x: -120,
+      y: -14.0,
+      z: 40,
+      yaw: 1.2,
+      pitch: -0.1,
+      clearance: 3.0,
+      description: 'Знаковый риф у курорта Шарм-Эль-Шейх с богатой рифовой фауной и прозрачной водой.'
+    },
+    {
+      id: 'reef_drop_off',
+      name: 'Рифовая стена (Drop-off)',
+      zoneId: 'reef_wall',
+      x: 60,
+      y: -45.0,
+      z: -20,
+      yaw: -1.0,
+      pitch: -0.25,
+      clearance: 4.0,
+      description: 'Вертикальный обрыв рифового плато — излюбленное место дайверов с г luoghiями и рифовыми акулами.'
+    },
+    {
+      id: 'lagoon_shallows',
+      name: 'Мелководье лагуны',
+      zoneId: 'reef_lagoon',
+      x: -300,
+      y: -3.0,
+      z: -150,
+      yaw: 0.6,
+      pitch: -0.05,
+      clearance: 2.0,
+      description: 'Мелкая лагуна с морскими травами, где кормятся зелёные черепахи и дюгони.'
+    },
+    {
+      id: 'deep_coral_spire',
+      name: 'Глубоководный коралловый шпиль',
+      zoneId: 'deep_slope',
+      x: 280,
+      y: -110.0,
+      z: -60,
+      yaw: 2.4,
+      pitch: -0.15,
+      clearance: 5.0,
+      description: 'Изолированный глубоководный шпиль с чёрными кораллами и стеклянными губками.'
+    }
+  ];
+
+  const landmarks = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: safeSpotY(lm.x, lm.z, lm.y, lm.clearance)
+  }));
+
+  const spawnX = landmarks[0].x;
+  const spawnZ = landmarks[0].z;
+  const spawnY = safeSpotY(spawnX, spawnZ, -12.0, 4.0);
+
+  const _tourRaw = [
+    { x: spawnX, y: -14.0, z: spawnZ, lx: landmarks[1].x, ly: -45.0, lz: landmarks[1].z, title: 'Коралловый сад Рас Мохаммед', duration: 10, fact: 'Красное море — одно из самых солёных морей мира (~40‰), что способствует уникальному росту кораллов.' },
+    { x: landmarks[1].x, y: -45.0, z: landmarks[1].z, lx: landmarks[2].x, ly: -3.0, lz: landmarks[2].z, title: 'Рифовая стена и_drop-off', duration: 10, fact: 'Стена рифа уходит на глубину более 100 м — здесь можно встретить рифовых акул и мурен.' },
+    { x: landmarks[2].x, y: -3.0, z: landmarks[2].z, lx: landmarks[3].x, ly: -110.0, lz: landmarks[3].z, title: 'Лагуна и дюгони', duration: 10, fact: 'В мелководье лагуны водятся дюгони и зелёные черепахи, пасущиеся на лугах морской травы.' },
+    { x: landmarks[3].x, y: -110.0, z: landmarks[3].z, lx: 120, ly: -180.0, lz: 40, title: 'Глубинный склон и эндемики', duration: 10, fact: 'Около 10% видов фауны Красного моря — эндемики, которые не встречаются нигде больше на Земле.' }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, safeSpotY(leg.x, leg.z, leg.y, 4.0), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    fact: leg.fact,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    coral_branch: ['Ветвистый коралл Acropora', 'Acropora spp.', 'Кораллы', 'Коралловый сад', '12 – 35 м', 'Быстрорастущий ветвистый коралл, создающий сложное укрытие для рифовых рыб.'],
+    coral_table: ['Столешница коралла', 'Acropora / Echinopora', 'Кораллы', 'Коралловый сад', '10 – 30 м', 'Плоская столешневидная колония коралла, ловящая планктон в течении.'],
+    coral_plate: ['Пластинчатый коралл', 'Porites / Montipora', 'Кораллы', 'Коралловый сад', '8 – 25 м', 'Массивные пластинчатые колонии, растущие медленно и достигающие метра в диаметре.'],
+    coral_fan: ['Горгониевый веер', 'Gorgonia / Pinnigorgia', 'Кораллы', 'Рифовая стена', '35 – 70 м', 'Гибкий веерообразный коралл, ориентированный навстречу течению для питания планктоном.'],
+    coral_black: ['Чёрный коралл', 'Antipatharia', 'Кораллы', 'Рифовая стена / склон', '40 – 200 м', 'Тёмный роговый коралл глубоководья, растёт极其 медленно и живет тысячи лет.'],
+    seagrass: ['Морская трава Halophila', 'Halophila stipulacea', 'Водоросли', 'Рифовая лагуна', '0 – 12 м', 'Луга травы в мелководье — место кормления дюгонов и зелёных черепах.'],
+    sponge_barrel: ['Бочонковидная губка', 'Xestospongia / Petrosia', 'Беспозвоночные', 'Глубинный склон', '50 – 150 м', 'Крупная фильтрующая губка на илистом склоне Красного моря.'],
+    anemone: ['Рифовая актиния', 'Entacmaea / Heteractis', 'Беспозвоночные', 'Коралловый сад', '5 – 25 м', 'Яркая актиния с клоунами-рыбами, живущими среди её щупалец.'],
+    sea_lily: ['Морская лилия', 'Crinoidea', 'Беспозвоночные', 'Глубинный склон', '80 – 200 м', 'Изящное иглокожее с перьевидными руками на глубоком склоне.'],
+    clownfish: ['Рыба-клоун', 'Amphiprion bicinctus', 'Рыбы', 'Коралловый сад', '5 – 20 м', 'Эндемик Красного моря с белой полосой, живёт в актиниях и защищает их от хищников.'],
+    butterflyfish: ['Рыба-бабочка', 'Chaetodon fasciatus', 'Рыбы', 'Коралловый сад', '2 – 30 м', 'Яркая рифовая рыба с длительным хвостовым стеблем, питается коралловыми полипами.'],
+    surgeonfish: ['Хирург-рыба', 'Acanthurus sohal', 'Рыбы', 'Коралловый сад', '1 – 40 м', 'Агрессивная территориальная рыба с лезвиеобразным шипом у хвоста.'],
+    moray: ['Рифовая мурена', 'Gymnothorax griseus', 'Рыбы', 'Рифовая стена', '10 – 60 м', 'Змееобразный хищник в коралловых норах с острыми зубами и второй парой челюстей.'],
+    reef_shark: ['Рифовая акула', 'Carcharhinus melanopterus', 'Мегафауна', 'Рифовая стена', '5 – 100 м', 'Маленькая рифовая акула с чёрными кончиками плавников, патрулирует стенку рифа.'],
+    turtle: ['Зелёная черепаха', 'Chelonia mydas', 'Мегафауна', 'Рифовая лагуна', '0 – 30 м', 'Крупная черепаха, пасущаяся на лугах морской травы лагуны Красного моря.'],
+    dugong: ['Дюгонь', 'Dugong dugon', 'Мегафауна', 'Рифовая лагуна', '1 – 10 м', 'Травоядное млекопитающее «морская корова», пасущееся на травах в прибрежных лагунах.'],
+    napoleon: ['Наполеон-рыба', 'Cheilinus undulatus', 'Рыбы', 'Коралловый сад', '1 – 60 м', 'Крупная рифовая рыба с выпуклым лбом, одна из самых узнаваемых в Красном море.'],
+    lionfish: ['Рыба-лев', 'Pterois miles', 'Рыбы', 'Рифовая стена', '1 – 50 м', 'Яркая хищница с ядовитыми шипами, инвазивный вид из Красного моря в другие воды.'],
+    octopus: ['Обыкновенный осьминог', 'Octopus vulgaris', 'Беспозвоночные', 'Рифовая стена', '5 – 40 м', 'Умный головоногий мастер камуфляжа, охотится в коралловых расщелинах ночью.'],
+    nudibranch: ['Голожаберная улитка', 'Nudibranchia', 'Беспозвоночные', 'Коралловый сад', '2 – 30 м', 'Ярко окрашенная улитка без раковины, часто ядовитая и предупреждающе окрашенная.']
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [
+      { cx: -120, cz: 40, r: 28, y: -14, label: 'Станция чистки кораллового сада' },
+      { cx: 60, cz: -20, r: 34, y: -45, label: 'Станция чистки у стены рифа' }
+    ],
+    schools: [
+      { key: 'clownfish', n: 34, cx: -110, cz: 50, radius: 22, yDepth: -12, yAmp: 2.0, spread: 8, speed: 4.2, scale: 0.38, diel: 'day', biolum: false, isPrey: true, shyness: 0.4, geoOpts: { len: 0.55, height: 0.22, width: 0.1, colA: 0xff8c00, colB: 0xffd700, finCol: 0xffb347, eyeScale: 1.3 } },
+      { key: 'butterflyfish', n: 28, cx: -90, cz: 30, radius: 26, yDepth: -18, yAmp: 2.5, spread: 9, speed: 5.0, scale: 0.42, diel: 'day', biolum: false, isPrey: true, shyness: 0.35, geoOpts: { len: 0.72, height: 0.3, width: 0.12, colA: 0xff6b6b, colB: 0xffd93d, finCol: 0xffe66d, eyeScale: 1.4 } },
+      { key: 'surgeonfish', n: 42, cx: 70, cz: -30, radius: 32, yDepth: -38, yAmp: 3.0, spread: 11, speed: 6.8, scale: 0.5, diel: 'day', biolum: false, isPrey: true, shyness: 0.45, geoOpts: { len: 0.9, height: 0.45, width: 0.14, colA: 0x2da8c8, colB: 0x4ee0d4, finCol: 0x8ee08a, eyeScale: 1.2 } }
+    ],
+    predators: [
+      { key: 'moray', cx: 45, cz: -15, radius: 18, y: -50, speed: 2.2, scale: 1.1 },
+      { key: 'lionfish', cx: -100, cz: 60, radius: 14, y: -22, speed: 1.6, scale: 0.85 },
+      { key: 'napoleon', cx: -130, cz: 20, radius: 30, y: -25, speed: 3.2, scale: 1.4 }
+    ],
+    megafauna: [
+      { key: 'reef_shark', cx: 80, cz: -40, radius: 58, y: -55, speed: 4.5, scale: 1.2 },
+      { key: 'turtle', cx: -280, cz: -140, radius: 42, y: -8, speed: 2.8, scale: 1.1 },
+      { key: 'dugong', cx: -320, cz: -160, radius: 48, y: -5, speed: 1.9, scale: 1.3 }
+    ],
+    eels: [],
+    jellies: [],
+    crustaceans: []
+  };
+
+  OC.Biomes.register({
+    id: 'red_sea',
+    name: 'Красное море: Рас Мохаммед',
+    region: 'Красное море · Синайский полуостров',
+    subtitle: 'Коралловое море · 0–200 м · гиперсолинность',
+    globe: {
+      lat: 27.8, lon: 33.9, coordLabel: '27.8° с.ш., 33.9° в.д.',
+      ocean: 'Красное море · Египет / Саудовская Аравия', depthSpan: '0 – 200 м', tempSpan: '21 – 29 °C', color: '#1e90ff',
+      country: 'Египет (Синай) / Саудовская Аравия', waterType: 'sea', protectionStatus: 'Национальный парк Рас Мохаммед',
+      notableFor: 'коралловые рифы, эндемики (~10% видов), дюгони, рифовые акулы, затонувшие суда',
+      summary: 'Тропическое коралловое море с гиперсолинностью (~40‰), рифовой стеной и богатой эндемичной фауной — один из лучших районов для дайвинга в мире.'
+    },
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    spawn: {
+      pos: [spawnX, spawnY, spawnZ],
+      yaw: 1.2,
+      pitch: -0.1
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getZoneAt,
+    getTerrainColor,
+    getTemperatureAt,
+    getOpticalProfile,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
+  });
+})(window.OC);
+
+// === biomes/florida_caves.js ===
+/* ================= БИОМ: ПОДВОДНЫЕ ПЕЩЕРЫ ФЛОРИДЫ (США · 0–60 М) ================= */
+/* Известняковые карстовые пещеры Флоридского аквифера: кристально чистая пресная вода,
+   галереи, сифоны и источники. Реальная система: окрестности Окала и Джейксвилля. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  /* Зоны подводной пещерной системы */
+  const ZONES = [
+    {
+      id: 'spring_basin',
+      name: 'Бассейн источника (Spring Basin)',
+      shortName: 'Источник',
+      color: '#6ee7b7',
+      depthLabel: '0 – 8 м',
+      tempC: 22.0,
+      description: 'Вход в подводную систему: кристально чистая пресная вода бьёт из известнякового источника на поверхность.'
+    },
+    {
+      id: 'cavern_hall',
+      name: 'Карстовый зал',
+      shortName: 'Зал пещеры',
+      color: '#38bdf8',
+      depthLabel: '8 – 25 м',
+      tempC: 21.5,
+      description: 'Просторный известняковый зал со сталактитами, торосами и хорошо освещённой водой у входа.'
+    },
+    {
+      id: 'narrow_passage',
+      name: 'Узкий проход (Squeeze)',
+      shortName: 'Узкий проход',
+      color: '#1d4ed8',
+      depthLabel: '25 – 45 м',
+      tempC: 21.0,
+      description: 'Тесные известняковые коридоры с низкой освещённостью — зона для опытных пещерных дайверов.'
+    },
+    {
+      id: 'deep_siphon',
+      name: 'Глубокий сифон',
+      shortName: 'Сифон',
+      color: '#1e3a8a',
+      depthLabel: '45 – 60 м',
+      tempC: 20.5,
+      description: 'Глубокая затопленная caverna с илистым дном, где аквифер уходит в неизвестность.'
+    }
+  ];
+
+  function caveAxisX(z) {
+    return Math.sin(z * 0.004) * 60 + Math.cos(z * 0.009) * 25;
+  }
+
+  function getHeight(x, z) {
+    // Общий склон дна от берега к центру карты: у берега -6 м, к центру -48 м
+    let h = OC.lerp(-6.0, -46.0, OC.smoothstep(-900, 900, x));
+    h += OC.fbm2(x * 0.012, z * 0.012, 3) * 2.8;
+    h += OC.fbm2(x * 0.05, z * 0.05, 2) * 1.2;
+
+    // Повышение известнякового плато в центре (потолок пещеры выше)
+    const ax = Math.abs(x - caveAxisX(z));
+    const plateauRise = OC.smoothstep(120, 500, ax) * 34.0;
+    h += plateauRise;
+
+    // Каменные торосы и сталагмиты на дне
+    const bumps = (OC.ridged2(x * 0.018, z * 0.018, 2) - 0.4) * 4.5 * OC.smoothstep(60, 400, ax);
+    h += bumps;
+
+    // Падение в глубокий сифон у стен плато
+    const sinkhole = OC.smoothstep(500, 860, ax) * 22.0;
+    h -= sinkhole;
+
+    // Илистая рябь на глубоком дне
+    h += OC.fbm2(x * 0.03, z * 0.03, 2) * 2.0;
+
+    return OC.clamp(h, -60.0, 4.0);
+  }
+
+  function safeSpotY(x, z, desiredY, clearance) {
+    return Math.max(desiredY, getHeight(x, z) + (clearance || 3.0));
+  }
+
+  function getZoneAt(x, y, z) {
+    const ax = Math.abs(x - caveAxisX(z));
+    if (y > -8.0 && ax > 160) return ZONES[0]; // spring_basin
+    if (y > -25.0 && ax > 100) return ZONES[1]; // cavern_hall
+    if (y > -45.0) return ZONES[2]; // narrow_passage
+    return ZONES[3]; // deep_siphon
+  }
+
+  function getTerrainColor(x, y, z, out) {
+    const ax = Math.abs(x - caveAxisX(z));
+    const nearCave = OC.smoothstep(160, 80, ax);
+    const n = OC.clamp(OC.fbm2(x * 0.07, z * 0.07, 2) * 0.6 + 0.4, 0, 1);
+
+    _colA.set(0xe3f2fd); // светлый известняковый песок источника
+    _colB.set(0x7a9e8f); // известняк карстовых стен
+    _colC.set(0x2d3a5c); // тёмный илистый осадок сифона
+
+    out.copy(_colA).lerp(_colB, nearCave * (0.45 + n * 0.3));
+
+    // Илистый дно глубокого сифона
+    if (ax > 500 && y < -35.0) {
+      out.lerp(_colC, OC.smoothstep(860, 500, ax) * 0.65);
+    }
+    // Бирюзовый окрас мелководья источника
+    if (y > -6.0) {
+      out.lerp(_colA.set(0x7fffd4), OC.smoothstep(-6.0, -1.0, y) * 0.5);
+    }
+    return out;
+  }
+
+  function getTemperatureAt(x, depthM, zone) {
+    // Подземная вода Флориды почти не меняет температуры с глубиной (~21 °C круглый год)
+    let t = 21.5 - Math.max(0, depthM) * 0.015;
+    if (zone) {
+      if (zone.id === 'spring_basin') t = 22.2;
+      else if (zone.id === 'cavern_hall') t = 21.6;
+      else if (zone.id === 'narrow_passage') t = 21.0;
+      else if (zone.id === 'deep_siphon') t = 20.4;
+    }
+    return t;
+  }
+
+  function getOpticalProfile(x, y, z, dayW) {
+    const dayLum = (dayW !== undefined ? dayW : 1.0);
+    const shallow = y > -10.0;
+    const caveProx = OC.smoothstep(200, 60, Math.abs(x - caveAxisX(z)));
+
+    // Пресная чистая вода, высокая прозрачность, голубоватый оттенок извне
+    _fogCol.set(0x0a1f33)
+      .lerp(_colA.set(0x1e5f8a), dayLum * 0.6)
+      .lerp(_colB.set(0x0b2e4a), caveProx * 0.45);
+
+    _waterCol.set(0x4fd1c5)
+      .lerp(_colA.set(0x6ee7b7), shallow ? 0.7 : 0.0)
+      .lerp(_colB.set(0x38bdf8), caveProx * 0.55);
+
+    _skyTop.set(0x0f2540).lerp(_colA.set(0x2e86c1), dayLum * 0.88);
+    _skyBot.set(0x081528).lerp(_colB.set(0x1e5f8a), dayLum * 0.65);
+    _aboveHoriz.set(0x0c223a);
+
+    return {
+      aboveWater: false,
+      fogColor: _fogCol,
+      fogDensity: shallow ? 0.006 : OC.lerp(0.009, 0.018, caveProx),
+      causticStrength: shallow ? 0.85 : 0.15,
+      rayStrength: shallow ? 0.8 : 0.2,
+      sunAtten: 0.88 * dayLum,
+      bioGlow: OC.lerp(0.35, 1.0, dayLum),
+      waterColor: _waterCol,
+      skyTop: _skyTop,
+      skyBot: _skyBot,
+      aboveHoriz: _aboveHoriz,
+      fillAColor: _colB.set(0x6ee7b7),
+      fillAMult: 0.55 + shallow * 0.35,
+      fillBColor: _colC.set(0x38bdf8),
+      fillBMult: 0.25 + caveProx * 0.45
+    };
+  }
+
+  function getCurrentAt(x, y, z, time, out) {
+    if (!out) out = new T.Vector3();
+    // Ток источника наружу от плато к берегу
+    out.set(0.14 + Math.sin(time * 0.09 + x * 0.007) * 0.05, 0, -0.16 + Math.cos(time * 0.07 + z * 0.005) * 0.04);
+    return out;
+  }
+
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+
+    function add(species, x, z, scale, tint) {
+      const y = getHeight(x, z);
+      items.push({ species, x, y: y - 0.05, z, ry: rng() * 6.283, scale, tint: tint || 0xffffff });
+    }
+
+    // 1. Водяные лилии и тростник у входа в источник
+    const basinSlots = Math.round(20 * density);
+    for (let i = 0; i < basinSlots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      const y = getHeight(px, pz);
+      if (y > -9.0 && y < 0.0) {
+        const r = rng();
+        if (r < 0.5) add('water_lily', px, pz, OC.lerp(0.7, 1.3, rng()), 0xffffff);
+        else add('reed', px, pz, OC.lerp(0.8, 1.5, rng()), 0x8ee08a);
+      }
+    }
+
+    // 2. Известняковые торосы и сталиктиты в зале пещеры
+    const hallSlots = Math.round(24 * density);
+    for (let i = 0; i < hallSlots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      const y = getHeight(px, pz);
+      if (y > -35.0 && y < -2.0) {
+        const r = rng();
+        if (r < 0.4) add('stalactite', px, pz, OC.lerp(0.9, 1.8, rng()), 0xc9d6df);
+        else if (r < 0.7) add('stalagmite', px, pz, OC.lerp(0.8, 1.5, rng()), 0xb9c4cc);
+        else add('limestone_ledge', px, pz, OC.lerp(0.7, 1.4, rng()), 0xd9e2e8);
+      }
+    }
+
+    // 3. Илистые валуны и водоросли в узких проходах
+    const passageSlots = Math.round(18 * density);
+    for (let i = 0; i < passageSlots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      const y = getHeight(px, pz);
+      if (y > -50.0 && y < -20.0) {
+        const r = rng();
+        if (r < 0.5) add('mud_rock', px, pz, OC.lerp(0.6, 1.2, rng()), 0x5a5a6e);
+        else add('cave_algae', px, pz, OC.lerp(0.5, 1.0, rng()), 0x6ee7b7);
+      }
+    }
+
+    // 4. Глубоководные губки и иловая растительность в сифоне
+    const siphonSlots = Math.round(12 * density);
+    for (let i = 0; i < siphonSlots; i++) {
+      const px = x0 + rng() * chunkSize;
+      const pz = z0 + rng() * chunkSize;
+      const y = getHeight(px, pz);
+      if (y > -60.0 && y < -40.0 && rng() < 0.35) {
+        add('sponge_tube', px, pz, OC.lerp(0.7, 1.3, rng()), 0xa8e6cf);
+      }
+    }
+
+    return items;
+  }
+
+  const _lmRaw = [
+    {
+      id: 'spring_entrance',
+      name: 'Вход в источник (Spring Entrance)',
+      zoneId: 'spring_basin',
+      x: -150,
+      y: -2.0,
+      z: 60,
+      yaw: 0.8,
+      pitch: -0.05,
+      clearance: 2.5,
+      description: 'Вход в подводную систему: кристально чистая пресная вода Флоридского аквифера бьёт из известняка.'
+    },
+    {
+      id: 'cavern_ceiling',
+      name: 'Свод карстового зала',
+      zoneId: 'cavern_hall',
+      x: 40,
+      y: -18.0,
+      z: -30,
+      yaw: -1.2,
+      pitch: -0.18,
+      clearance: 3.5,
+      description: 'Зал известняковой пещеры с зависшими сталактитами и отражённой светящейся водой.'
+    },
+    {
+      id: 'squeeze_passage',
+      name: 'Узкий проход',
+      zoneId: 'narrow_passage',
+      x: 120,
+      y: -38.0,
+      z: -80,
+      yaw: 2.1,
+      pitch: -0.25,
+      clearance: 4.0,
+      description: 'Тесный известняковый коридор — классический "squeeze" для пещерных дайверов.'
+    },
+    {
+      id: 'deep_siphon_wall',
+      name: 'Стена глубокого сифона',
+      zoneId: 'deep_siphon',
+      x: 220,
+      y: -52.0,
+      z: -40,
+      yaw: 0.4,
+      pitch: -0.15,
+      clearance: 5.0,
+      description: 'Глубокая затопленная caverna — куда уходит аквифер в неведомые глубины.'
+    }
+  ];
+
+  const landmarks = _lmRaw.map((lm) => Object.assign({}, lm, {
+    y: safeSpotY(lm.x, lm.z, lm.y, lm.clearance)
+  }));
+
+  const spawnX = landmarks[0].x;
+  const spawnZ = landmarks[0].z;
+  const spawnY = safeSpotY(spawnX, spawnZ, -6.0, 4.0);
+
+  const _tourRaw = [
+    { x: spawnX, y: -6.0, z: spawnZ, lx: landmarks[1].x, ly: -18.0, lz: landmarks[1].z, title: 'Бассейн источника', duration: 10, fact: 'Флоридский аквифер — одна из крупнейших водоносных систем в мире, питание которой идёт из известняковых пород.' },
+    { x: landmarks[1].x, y: -18.0, z: landmarks[1].z, lx: landmarks[2].x, ly: -38.0, lz: landmarks[2].z, title: 'Карстовый зал и сталиктиты', duration: 10, fact: 'Известняковые залы 형성овались тысячелетиями под действием弱кислой дождевой воды, растворяющей камень.' },
+    { x: landmarks[2].x, y: -38.0, z: landmarks[2].z, lx: landmarks[3].x, ly: -52.0, lz: landmarks[3].z, title: 'Узкий проход и сифон', duration: 10, fact: 'Подводные пещеры Флориды популярны среди пещерных дайверов благодаря кристальной прозрачности воды.' },
+    { x: landmarks[3].x, y: -52.0, z: landmarks[3].z, lx: -80, ly: -4.0, lz: 120, title: 'Обратный путь к свету', duration: 10, fact: 'Вoda в аквифере Флориды почти не меняет температуры круглый год — около 21–22 °C.' }
+  ];
+
+  const tourLegs = _tourRaw.map((leg) => ({
+    pos: [leg.x, safeSpotY(leg.x, leg.z, leg.y, 4.0), leg.z],
+    look: [leg.lx, leg.ly, leg.lz],
+    title: leg.title,
+    fact: leg.fact,
+    duration: leg.duration
+  }));
+
+  const ENCYCLOPEDIA = {
+    water_lily: ['Водяная лилия', 'Nymphaea odorata', 'Растения', 'Бассейн источника', '0 – 8 м', 'Белоцветущая лилия на поверхности пресноводных источников Флориды.'],
+    reed: ['Тростник прибрежный', 'Typha domingensis', 'Растения', 'Бассейн источника', '0 – 4 м', 'Тростник на мелководье у входа в пещерную систему, укрытие для молодняка рыб.'],
+    stalactite: ['Сталактит из известняка', 'Calcite speleothem', 'Геология', 'Карстовый зал', '8 – 25 м', 'Каменная игла, свисающая с потолка пещеры, образованная из капель известковой воды.'],
+    stalagmite: ['Сталагмит из известняка', 'Calcite speleothem', 'Геология', 'Карстовый зал', '8 – 25 м', 'Каменный столб, растущий из дна навстречу свисающему сталоактиту.'],
+    limestone_ledge: ['Известняковый уступ', 'Limestone formation', 'Геология', 'Карстовый зал / проход', '5 – 40 м', 'Плоский известняковый уступ, сформированный эрозией подземных вод аквифера.'],
+    mud_rock: ['Одиночный илистый валун', 'Sedimentary boulder', 'Геология', 'Узкий проход', '25 – 50 м', 'Закруглённый валун, покрытый слоем илистого осадка сифона.'],
+    cave_algae: ['Пещерные водоросли', 'Cave biofilm algae', 'Водоросли', 'Узкий проход', '20 – 45 м', 'Тонкие biofilms водорослей на известняковых стенах в_zone с рассеянным светом.'],
+    sponge_tube: ['Трубчатая губка сифона', 'Freshwater sponges', 'Беспозвоночные', 'Глубокий сифон', '45 – 60 м', 'Пресноводная глубоководная губка на илистом дне сифона, фильтрующая воду аквифера.'],
+    florida_softshell: ['Флоридская мягкокрылая черепаха', 'Apalone ferox', 'Рептилии', 'Бассейн источника', '0 – 10 м', 'Пресноводная черепаха с мягким панцирем, обитает в Sources и медленных реках Флориды.'],
+    florida_gar: ['Флоридская игла (иголоzub)', 'Lepisosteus platyrhincus', 'Рыбы', 'Бассейн источника / зал', '1 – 20 м', 'Древняя костяная рыба с длинной челюстью и алмазной чешуей, живое окаменелое существо.'],
+    american_alligator: ['Американский аллигатор', 'Alligator mississippiensis', 'Рептилии', 'Бассейн источника', '0 – 5 м', 'Крупный хищник у входа в источник, может заходить в пресную воду аквифера на корм.'],
+    cave_crayfish: ['Пещерный рак', 'Procambarus pallidus', 'Беспозвоночные', 'Узкий проход / сифон', '20 – 60 м', 'Бесцветный пещерный рак без глаз, адаптированный к жизни в темноте подземных вод.' ],
+    blind_cave_fish: ['Слепая пещерная рыба', 'Typhlichthys subterraneus', 'Рыбы', 'Глубокий сифон', '40 – 60 м', 'Беспигментная рыба без глаз, ориентируется по боковой линии в темноте сифона.' ],
+    florida_bass: ['Флоридский окунь', 'Micropterus floridanus', 'Рыбы', 'Бассейн источника', '1 – 15 м', 'Крупный пресноводный окунь, популярная спортивная рыба Sources и озёр Флориды.' ],
+    bluegill: ['Голубая солнцепёк (солнечная рыбка)', 'Lepomis macrochirus', 'Рыбы', 'Бассейн источника', '0 – 10 м', 'Яркая пресноводная рыбка в прибрежных зарослях Sources и медленных рек.' ],
+    florida_manatee: ['Флоридский ламантин', 'Trichechus manatus latirostris', 'Мегафауна', 'Бассейн источника', '0 – 6 м', 'Крупное травоядное млекопитающее "морская корова", зимой заходит в тёплые Sources Флориды.' ]
+  };
+
+  const FAUNA_PLAN = {
+    cleaningStations: [
+      { cx: -140, cz: 70, r: 22, y: -4, label: 'Станция чистки у входа в источник' },
+      { cx: 30, cz: -40, r: 28, y: -18, label: 'Станция чистки в карстовом зале' }
+    ],
+    schools: [
+      { key: 'florida_bass', n: 26, cx: -130, cz: 80, radius: 20, yDepth: -6, yAmp: 2.0, spread: 8, speed: 5.2, scale: 0.45, diel: 'day', biolum: false, isPrey: true, shyness: 0.4, geoOpts: { len: 0.8, height: 0.3, width: 0.12, colA: 0x2e86c1, colB: 0x4fd1c5, finCol: 0x8ee08a, eyeScale: 1.3 } },
+      { key: 'bluegill', n: 38, cx: -110, cz: 60, radius: 18, yDepth: -4, yAmp: 1.5, spread: 7, speed: 4.4, scale: 0.4, diel: 'day', biolum: false, isPrey: true, shyness: 0.45, geoOpts: { len: 0.55, height: 0.25, width: 0.1, colA: 0x38bdf8, colB: 0x6ee7b7, finCol: 0x4ade80, eyeScale: 1.4 } }
+    ],
+    predators: [
+      { key: 'florida_gar', cx: -100, cz: 50, radius: 16, y: -8, speed: 2.8, scale: 1.0 },
+      { key: 'american_alligator', cx: -160, cz: 40, radius: 24, y: -3, speed: 1.6, scale: 1.8 }
+    ],
+    megafauna: [
+      { key: 'florida_softshell', cx: -120, cz: 90, radius: 26, y: -5, speed: 2.2, scale: 1.1 },
+      { key: 'florida_manatee', cx: -180, cz: 110, radius: 32, y: -2, speed: 1.4, scale: 1.6 }
+    ],
+    eels: [],
+    jellies: [],
+    crustaceans: [
+      { key: 'cave_crayfish', cx: 90, cz: -70, radius: 22, y: -42, speed: 1.2, scale: 0.8 },
+      { key: 'blind_cave_fish', cx: 140, cz: -50, radius: 28, y: -50, speed: 1.8, scale: 0.7 }
+    ]
+  };
+
+  OC.Biomes.register({
+    id: 'florida_caves',
+    name: 'Подводные пещеры Флориды',
+    region: 'Флоридский аквифер · США',
+    subtitle: 'Карстовые пещеры · пресная вода · 0–60 м',
+    globe: {
+      lat: 29.0, lon: -82.5, coordLabel: '29.0° с.ш., 82.5° з.д.',
+      ocean: 'Флоридский аквифер · США', depthSpan: '0 – 60 м', tempSpan: '20 – 22 °C', color: '#6ee7b7',
+      country: 'США (Флорида)', waterType: 'cave', protectionStatus: 'Государственные парки источников',
+      notableFor: 'кристально чистая пресная вода, известняковые карстовые пещеры, аквифер Флориды',
+      summary: 'Подводная карстовая система Флоридского аквифера: галереи, сифоны и источники с кристально чистой пресной водой (~21 °C круглый год).'
+    },
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    spawn: {
+      pos: [spawnX, spawnY, spawnZ],
+      yaw: 0.8,
+      pitch: -0.05
+    },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getZoneAt,
+    getTerrainColor,
+    getTemperatureAt,
+    getOpticalProfile,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
   });
 })(window.OC);
 
@@ -9707,15 +10529,24 @@ window.OC = window.OC || {};
     if (OC.Seasons) OC.Seasons.update(dt);
     updateBasePalette(timeOfDay);
 
+    // Истинная мировая позиция камеры с учетом Floating Origin (для planet-sized миров)
+    const origin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+    const ox = origin ? origin.x : 0;
+    const oy = origin ? origin.y : 0;
+    const oz = origin ? origin.z : 0;
+    const trueCamX = camPos.x + ox;
+    const trueCamY = camPos.y + oy;
+    const trueCamZ = camPos.z + oz;
+
     const biome = OC.Biomes.getActive();
     const season = OC.Seasons ? OC.Seasons.getState(biome) : null;
     const waterLevel = (biome && Number.isFinite(biome.seaLevel) ? biome.seaLevel : 0) + (season ? season.waterLevelM : 0);
-    const relativeY = camPos.y - waterLevel;
+    const relativeY = trueCamY - waterLevel;
     const wState = OC.Weather ? OC.Weather.update(dt, time, camPos, biome, waterLevel) : { waveAmp: 1.0, stormMix: 0.0, precip: 0.0, turbidity: 0.0, lightning: 0.0 };
     const lab = OC.EcoLab ? OC.EcoLab.update(dt, biome, pal.dayW) : null;
     causticU.uBleach.value = lab ? lab.bleaching : 0.0;
     const opt = biome
-      ? biome.getOpticalProfile(camPos.x, relativeY, camPos.z, pal.dayW)
+      ? biome.getOpticalProfile(trueCamX, relativeY, trueCamZ, pal.dayW)
       : {
           aboveWater: relativeY > 0.25,
           fogColor: pal.skyMid,
@@ -9810,7 +10641,7 @@ window.OC = window.OC || {};
 
     if (flashBeam && flashBeamMat) {
       const beamStrength = (flashlight.intensity / 4.2) * OC.lerp(1.15, 0.42, pal.dayW * opt.sunAtten);
-      flashBeam.visible = beamStrength > 0.02 && (biome && biome.noSurface ? true : camPos.y < 1.5);
+      flashBeam.visible = beamStrength > 0.02 && (biome && biome.noSurface ? true : trueCamY < 1.5);
       if (flashBeam.visible) {
         if (rovChase) {
           flashBeam.position.copy(flashlight.position);
@@ -9823,8 +10654,8 @@ window.OC = window.OC || {};
         flashBeamMat.uniforms.uNoSurface.value = (biome && biome.noSurface) ? 1.0 : 0.0;
         flashBeamMat.uniforms.uColor.value.copy(pal.water).lerp(_beamTint, 0.68);
         if (biome && biome.getHeight) {
-          const bx = flashTarget.position.x;
-          const bz = flashTarget.position.z;
+          const bx = flashTarget.position.x + ox;
+          const bz = flashTarget.position.z + oz;
           flashBeamMat.uniforms.uBedDepth.value = biome.getHeight(bx, bz);
         } else {
           flashBeamMat.uniforms.uBedDepth.value = -999.0;
@@ -9857,7 +10688,7 @@ window.OC = window.OC || {};
     causticU.uSunProj.value.set(sunDir.x / Math.max(0.35, sunDir.y), sunDir.z / Math.max(0.35, sunDir.y));
     causticU.uWaveAmp.value = wState.waveAmp;
     if (biome && biome.getCurrentAt) {
-      biome.getCurrentAt(camPos.x, camPos.y, camPos.z, time, _worldCurr);
+      biome.getCurrentAt(trueCamX, trueCamY, trueCamZ, time, _worldCurr);
       const currMult = (lab ? lab.currentMult : 1.0) * (season ? season.currentFactor : 1.0);
       causticU.uCurrent.value.set(_worldCurr.x * currMult, _worldCurr.z * currMult);
     }
@@ -9893,7 +10724,7 @@ window.OC = window.OC || {};
         let bestD2 = 1e9;
         for (let i = 0; shafts && i < shafts.length; i++) {
           const s = shafts[i];
-          const d2 = (camPos.x - s.x) * (camPos.x - s.x) + (camPos.z - s.z) * (camPos.z - s.z);
+          const d2 = (trueCamX - s.x) * (trueCamX - s.x) + (trueCamZ - s.z) * (trueCamZ - s.z);
           if (d2 < bestD2) { bestD2 = d2; best = s; }
         }
         if (best) {
@@ -9901,8 +10732,8 @@ window.OC = window.OC || {};
           raysState.raysGroup.position.z = best.z;
         }
       } else {
-        raysState.raysGroup.position.x = Math.round(camPos.x / 60) * 60;
-        raysState.raysGroup.position.z = Math.round(camPos.z / 60) * 60;
+        raysState.raysGroup.position.x = Math.round(trueCamX / 60) * 60;
+        raysState.raysGroup.position.z = Math.round(trueCamZ / 60) * 60;
       }
       // Закон Снеллиуса сжимает наклон луча в воде (~0.75 от горизонтального отклонения)
       _refractRayDir.set(sunDir.x * 0.68, Math.max(0.45, sunDir.y), sunDir.z * 0.68).normalize();
@@ -9916,7 +10747,7 @@ window.OC = window.OC || {};
     }
 
     /* надводные осадки (штормовой дождь / арктический снегопад) */
-    const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(camPos.x, camPos.z) < 25.0);
+    const underCaveRoof = !!(biome && biome.getCeilingHeight && biome.getCeilingHeight(trueCamX, trueCamZ) < 25.0);
     if (precipFx) {
       precipFx.points.visible = !(biome && biome.noSurface) && !underCaveRoof && wState.precip > 0.03 && relativeY > -12.0;
       if (precipFx.points.visible) {
@@ -9972,20 +10803,221 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
-// === engine/terrain.js ===
-/* ================= ЧАНКОВЫЙ ЛАНДШАФТ С LOD И ПРОГРЕССИВНОЙ ЗАГРУЗКОЙ ================= */
+// === engine/floating_origin.js ===
+/* ================= FLOATING ORIGIN (пересчёт координат относительно игрока) ================= */
+/* Позволяет перемещаться на сколь угодно большие расстояния без потери точности float32.
+   Камера удерживается vicino к началу координат; при превышении порога всё смещение
+   накапливается в origin, а scène сдвигается назад. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
   const T = THREE;
+
+  const origin = new T.Vector3(); // истинная мировая позиция сцены (0,0,0)
+  let threshold = 1000;           // сдвигать, когда камера дальше этого (м)
+  const shiftListeners = [];      // колбэки при сдвиге origins
+
+  OC.FloatingOrigin = {
+    /* Вернуть текущее смещение начала координат. */
+    getOrigin() {
+      return origin;
+    },
+
+    /* Перевести истинную мировую позицию в локальную ( escena ). */
+    toLocal(worldPos) {
+      return worldPos.clone().sub(origin);
+    },
+
+    /* Перевести локальную позицию сцены в истинную мировую. */
+    toWorld(localPos) {
+      return localPos.clone().add(origin);
+    },
+
+    /* Истинная позиция камеры в мире (локальная + origin). */
+    getTrueCameraPos(camera, out) {
+      const o = origin;
+      const c = camera.position;
+      const target = out || new T.Vector3();
+      return target.set(c.x + o.x, c.y + o.y, c.z + o.z);
+    },
+
+    /* Подписаться на событие сдвига начала координат. */
+    onShift(cb) {
+      shiftListeners.push(cb);
+    },
+
+    /* Вызывать каждый фрейм с камерой. Возвращает true, если сдвиг произошёл. */
+    update(camera, scene) {
+      const camPos = camera.position;
+      const dist = Math.hypot(camPos.x, camPos.y, camPos.z);
+
+      if (dist > threshold) {
+        const delta = camPos.clone(); // насколько сдвигаем всё назад
+
+        // Накапливаем в origin
+        origin.add(delta);
+
+        // Сдвигаем все объекты сцены назад на delta
+        if (scene) {
+          scene.traverse((obj) => {
+            if (obj.isMesh || obj.isInstancedMesh || obj.isLight || obj.isSprite) {
+              obj.position.sub(delta);
+              if (obj.isInstancedMesh && obj.instanceMatrix) {
+                obj.instanceMatrix.needsUpdate = true;
+              }
+            }
+          });
+        }
+
+        // Сбрасываем камеру в начало
+        camPos.set(0, 0, 0);
+        camera.updateMatrixWorld();
+
+        // Уведомляем подписчиков
+        shiftListeners.forEach((cb) => cb(delta, origin));
+
+        return true;
+      }
+      return false;
+    },
+
+    setThreshold(v) { threshold = v; },
+    getThreshold() { return threshold; }
+  };
+})(window.OC);
+
+// === engine/terrain.js ===
+/* ================= ДИНАМИЧЕСКИЙ ЧАНКОВЫЙ ЛАНДШАФТ С LOD (unbounded world) ================= */
+/* Чанки создаются только около камеры и удаляются при удалении (LRU), что позволяет
+   ехать на arbitrarily большие расстояния без предварительной регистрации всего мира. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  /* ============ Web Worker: постройка геометрии чанка (встроен как строка) ============ */
+  /* Выполняется в отдельном потоке, не блокируя основной цикл рендеринга. */
+  const TERRAIN_WORKER_SRC = `
+self.onmessage = function (e) {
+  'use strict';
+  const msg = e.data;
+  if (!msg || msg.type !== 'buildChunk') return;
+
+  const { cx, cz, segs, chunkSize, heightData, colorData, stride } = msg;
+  const n = segs + 1;
+  const gridCount = n * n;
+  const skirtVerts = n * 4 * 2;
+  const totalVerts = gridCount + skirtVerts;
+
+  const x0 = cx * chunkSize;
+  const z0 = cz * chunkSize;
+  const step = chunkSize / segs;
+  const inv2Step = 1 / (2 * step);
+
+  const pos = new Float32Array(totalVerts * 3);
+  const norm = new Float32Array(totalVerts * 3);
+  const col = new Float32Array(totalVerts * 3);
+  const indices = [];
+
+  for (let iz = 0; iz <= segs; iz++) {
+    const relZ = iz * step;
+    const gRow = (iz + 1) * stride;
+    for (let ix = 0; ix <= segs; ix++) {
+      const relX = ix * step;
+      const gIdx = gRow + (ix + 1);
+      const h = heightData[gIdx];
+      const idx = iz * n + ix;
+      const p3 = idx * 3;
+
+      pos[p3] = relX;
+      pos[p3 + 1] = h;
+      pos[p3 + 2] = relZ;
+
+      const hL = heightData[gIdx - 1];
+      const hR = heightData[gIdx + 1];
+      const hD = heightData[gIdx - stride];
+      const hU = heightData[gIdx + stride];
+      const nx = (hL - hR) * inv2Step;
+      const ny = 1.0;
+      const nz = (hD - hU) * inv2Step;
+      const gradMag = Math.hypot(nx, nz);
+      const len = Math.hypot(gradMag, ny) || 1;
+      norm[p3] = nx / len;
+      norm[p3 + 1] = ny / len;
+      norm[p3 + 2] = nz / len;
+
+      const c3 = gIdx * 3;
+      col[p3] = colorData[c3];
+      col[p3 + 1] = colorData[c3 + 1];
+      col[p3 + 2] = colorData[c3 + 2];
+    }
+  }
+
+  for (let iz = 0; iz < segs; iz++) {
+    for (let ix = 0; ix < segs; ix++) {
+      const a = iz * n + ix;
+      const b = a + 1;
+      const c = a + n;
+      const d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+
+  let vPtr = gridCount;
+  function addSkirtEdge(getGridIdx, reverse) {
+    const startPtr = vPtr;
+    for (let k = 0; k < n; k++) {
+      const gi = getGridIdx(k);
+      const g3 = gi * 3;
+      const t3 = vPtr * 3;
+      const b3 = (vPtr + 1) * 3;
+
+      pos[t3] = pos[g3]; pos[t3 + 1] = pos[g3 + 1]; pos[t3 + 2] = pos[g3 + 2];
+      pos[b3] = pos[g3]; pos[b3 + 1] = pos[g3 + 1] - 4.0; pos[b3 + 2] = pos[g3 + 2];
+
+      norm[t3] = norm[g3]; norm[t3 + 1] = norm[g3 + 1]; norm[t3 + 2] = norm[g3 + 2];
+      norm[b3] = norm[g3]; norm[b3 + 1] = norm[g3 + 1]; norm[b3 + 2] = norm[g3 + 2];
+
+      col[t3] = col[g3]; col[t3 + 1] = col[g3 + 1]; col[t3 + 2] = col[g3 + 2];
+      col[b3] = col[g3] * 0.85; col[b3 + 1] = col[g3 + 1] * 0.85; col[b3 + 2] = col[g3 + 2] * 0.85;
+      vPtr += 2;
+    }
+    for (let k = 0; k < segs; k++) {
+      const a = startPtr + k * 2;
+      const b = a + 1;
+      const c = a + 2;
+      const d = a + 3;
+      if (reverse) indices.push(a, c, b, b, c, d);
+      else indices.push(a, b, c, b, d, c);
+    }
+  }
+
+  addSkirtEdge((k) => k, false);
+  addSkirtEdge((k) => segs * n + k, true);
+  addSkirtEdge((k) => k * n, true);
+  addSkirtEdge((k) => k * n + segs, false);
+
+  const idxBuf = new Uint32Array(indices);
+
+  self.postMessage({
+    type: 'chunkBuilt',
+    cx, cz, segs,
+    positions: pos.buffer,
+    normals: norm.buffer,
+    colors: col.buffer,
+    indices: idxBuf.buffer,
+    vertexCount: totalVerts,
+    indexCount: idxBuf.length
+  }, [pos.buffer, norm.buffer, col.buffer, idxBuf.buffer]);
+};
+`;
 
   let sceneRef = null;
   let biomeRef = null;
   let terrainMat = null;
   let ceilingMat = null;
   let group = null;
-  const chunks = new Map(); // key "cx,cz" -> { cx, cz, wx, wz, segs, mesh, ceilMesh }
-  let chunkRadiusCount = 8; // [-8 .. 7] = 16x16 для 2400 м при chunkSize=150
+  const chunks = new Map(); // key "cx,cz" -> { cx, cz, wx, wz, segs, mesh, ceilMesh, lastUsed }
   let chunkSize = 150;
   let initialized = false;
   let needsRebuildScan = true;
@@ -9993,6 +11025,17 @@ window.OC = window.OC || {};
   let lastScanZ = 1e9;
   let lastScanQuality = '';
   let heightGridBuf = new Float32Array(64 * 64);
+  let frameCounter = 0;
+
+  /* Лимит чанков в памяти одновременно. При превышении удаляются старейшие невидимые. */
+  const MAX_ACTIVE_CHUNKS = 240;
+  const CHUNK_IDLE_FRAMES = 180; // ~3 сек без попадания в Visibility -> candidat на удаление
+
+  /* Web Worker управление */
+  let terrainWorker = null;
+  const workerQueue = [];     // { rec, segs }
+  let workerBusy = false;
+  const pendingChunkData = new Map(); // key -> { heightData, colorData, stride, segs }
 
   const _tmpCol = new T.Color();
 
@@ -10006,10 +11049,45 @@ window.OC = window.OC || {};
     return cx + ',' + cz;
   }
 
+  function getOrCreateChunkRec(cx, cz) {
+    const key = chunkKey(cx, cz);
+    let rec = chunks.get(key);
+    if (!rec) {
+      rec = {
+        cx, cz,
+        wx: (cx + 0.5) * chunkSize,
+        wz: (cz + 0.5) * chunkSize,
+        segs: 0,
+        mesh: null,
+        ceilMesh: null,
+        lastUsed: 0
+      };
+      chunks.set(key, rec);
+    }
+    return rec;
+  }
+
+  function disposeChunk(rec) {
+    if (rec.mesh) {
+      if (rec.mesh.geometry) rec.mesh.geometry.dispose();
+      group.remove(rec.mesh);
+      rec.mesh = null;
+    }
+    if (rec.ceilMesh) {
+      if (rec.ceilMesh.geometry) rec.ceilMesh.geometry.dispose();
+      group.remove(rec.ceilMesh);
+      rec.ceilMesh = null;
+    }
+    const key = chunkKey(rec.cx, rec.cz);
+    pendingChunkData.delete(key);
+  }
+
   /* ---- Построение меша одного чанка с юбками по краям (без швов между LOD) ---- */
+  /* Геометрия строится относительно центра чанка (0,0,0 = угол чанка в мировом пространстве);
+     мировая позиция задаётся через mesh.position = worldCenter - origin (Floating Origin). */
   function buildChunkGeometry(cx, cz, segs) {
-    const x0 = cx * chunkSize;
-    const z0 = cz * chunkSize;
+    const x0 = cx * chunkSize; // абсолютный угол чанка (для запросов к биому)
+    const z0 = cz * chunkSize; // абсолютный угол чанка (для запросов к биому)
     const step = chunkSize / segs;
     const inv2Step = 1 / (2 * step);
     const n = segs + 1;
@@ -10017,11 +11095,11 @@ window.OC = window.OC || {};
     const hBuf = getHeightGridBuf(stride);
 
     for (let gz = 0; gz < stride; gz++) {
-      const z = z0 + (gz - 1) * step;
+      const absZ = z0 + (gz - 1) * step;
       const row = gz * stride;
       for (let gx = 0; gx < stride; gx++) {
-        const x = x0 + (gx - 1) * step;
-        hBuf[row + gx] = biomeRef.getHeight(x, z);
+        const absX = x0 + (gx - 1) * step;
+        hBuf[row + gx] = biomeRef.getHeight(absX, absZ);
       }
     }
 
@@ -10034,20 +11112,21 @@ window.OC = window.OC || {};
     const col = new Float32Array(totalVerts * 3);
 
     for (let iz = 0; iz <= segs; iz++) {
-      const z = z0 + iz * step;
+      const absZ = z0 + iz * step;
+      const relZ = absZ - z0; // относительно угла чанка
       const gRow = (iz + 1) * stride;
       for (let ix = 0; ix <= segs; ix++) {
-        const x = x0 + ix * step;
+        const absX = x0 + ix * step;
+        const relX = absX - x0; // относительно угла чанка
         const gIdx = gRow + (ix + 1);
         const y = hBuf[gIdx];
         const idx = iz * n + ix;
         const p3 = idx * 3;
 
-        pos[p3] = x;
+        pos[p3] = relX;
         pos[p3 + 1] = y;
-        pos[p3 + 2] = z;
+        pos[p3 + 2] = relZ;
 
-        // Непрерывные центральные разности из кэша высот (в 4.5x меньше вызовов getHeight без швов)
         const hL = hBuf[gIdx - 1];
         const hR = hBuf[gIdx + 1];
         const hD = hBuf[gIdx - stride];
@@ -10061,7 +11140,7 @@ window.OC = window.OC || {};
         norm[p3 + 1] = ny / len;
         norm[p3 + 2] = nz / len;
 
-        biomeRef.getTerrainColor(x, y, z, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
+        biomeRef.getTerrainColor(absX, y, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
         col[p3] = _tmpCol.r;
         col[p3 + 1] = _tmpCol.g;
         col[p3 + 2] = _tmpCol.b;
@@ -10142,15 +11221,15 @@ window.OC = window.OC || {};
 
     let anyClosed = false;
     for (let gz = 0; gz < stride; gz++) {
-      const z = z0 + (gz - 1) * step;
+      const absZ = z0 + (gz - 1) * step;
       const row = gz * stride;
       for (let gx = 0; gx < stride; gx++) {
-        const x = x0 + (gx - 1) * step;
-        const rawY = biomeRef.getCeilingHeight(x, z);
+        const absX = x0 + (gx - 1) * step;
+        const rawY = biomeRef.getCeilingHeight(absX, absZ);
         const y = Math.min(22.0, rawY);
         hBuf[row + gx] = y;
         if (gx >= 1 && gx <= n && gz >= 1 && gz <= n) {
-          const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(x, z) : (rawY > 38.0);
+          const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(absX, absZ) : (rawY > 38.0);
           openMask[(gz - 1) * n + (gx - 1)] = isOpen ? 1 : 0;
           if (!isOpen) anyClosed = true;
         }
@@ -10160,20 +11239,21 @@ window.OC = window.OC || {};
     if (!anyClosed) return null;
 
     for (let iz = 0; iz <= segs; iz++) {
-      const z = z0 + iz * step;
+      const absZ = z0 + iz * step;
+      const relZ = absZ - z0;
       const gRow = (iz + 1) * stride;
       for (let ix = 0; ix <= segs; ix++) {
-        const x = x0 + ix * step;
+        const absX = x0 + ix * step;
+        const relX = absX - x0;
         const gIdx = gRow + (ix + 1);
         const y = hBuf[gIdx];
         const idx = iz * n + ix;
         const p3 = idx * 3;
 
-        pos[p3] = x;
+        pos[p3] = relX;
         pos[p3 + 1] = y;
-        pos[p3 + 2] = z;
+        pos[p3 + 2] = relZ;
 
-        // Нормали потолка пещеры смотрят вниз и внутрь каверны
         const hL = hBuf[gIdx - 1];
         const hR = hBuf[gIdx + 1];
         const hD = hBuf[gIdx - stride];
@@ -10186,8 +11266,8 @@ window.OC = window.OC || {};
         norm[p3 + 1] = ny / len;
         norm[p3 + 2] = nz / len;
 
-        if (biomeRef.getCeilingColor) biomeRef.getCeilingColor(x, y, z, _tmpCol);
-        else biomeRef.getTerrainColor(x, y, z, _tmpCol);
+        if (biomeRef.getCeilingColor) biomeRef.getCeilingColor(absX, y, absZ, _tmpCol);
+        else biomeRef.getTerrainColor(absX, y, absZ, _tmpCol);
         col[p3] = _tmpCol.r;
         col[p3 + 1] = _tmpCol.g;
         col[p3 + 2] = _tmpCol.b;
@@ -10258,9 +11338,47 @@ window.OC = window.OC || {};
     return q.terrainFarSegs;
   }
 
-  function createOrUpdateChunk(rec, segs) {
-    if (rec.segs === segs && rec.mesh) return;
-    const geo = buildChunkGeometry(rec.cx, rec.cz, segs);
+  function getOriginRef() {
+    return OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+}
+
+  /* ---- Асинхронная очередь построения чанков через Web Worker ---- */
+  function processWorkerQueue() {
+    if (workerBusy || !terrainWorker || workerQueue.length === 0) return;
+    const next = workerQueue.shift();
+    workerBusy = true;
+    const key = chunkKey(next.rec.cx, next.rec.cz);
+    const pd = pendingChunkData.get(key);
+    if (!pd) {
+      workerBusy = false;
+      processWorkerQueue();
+      return;
+    }
+    // Копируем данные для передачи в worker (Transferable массивы)
+    terrainWorker.postMessage({
+      type: 'buildChunk',
+      cx: next.rec.cx,
+      cz: next.rec.cz,
+      segs: pd.segs,
+      chunkSize: chunkSize,
+      heightData: pd.heightData,
+      colorData: pd.colorData,
+      stride: pd.stride
+    }, [pd.heightData.buffer, pd.colorData.buffer]);
+  }
+
+  function buildChunkFromWorkerData(rec, segs, positions, normals, colors, indices, vertexCount, indexCount) {
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(new Float32Array(positions), 3));
+    geo.setAttribute('normal', new T.BufferAttribute(new Float32Array(normals), 3));
+    geo.setAttribute('color', new T.BufferAttribute(new Float32Array(colors), 3));
+    geo.setIndex(new T.BufferAttribute(new Uint32Array(indices), 1));
+    geo.computeBoundingSphere();
+
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
+
     if (rec.mesh) {
       rec.mesh.geometry.dispose();
       rec.mesh.geometry = geo;
@@ -10269,6 +11387,7 @@ window.OC = window.OC || {};
       rec.mesh.userData.key = 'floor';
       group.add(rec.mesh);
     }
+    rec.mesh.position.set(rec.wx - ox, 0, rec.wz - oz);
 
     if (ceilingMat && biomeRef.getCeilingHeight) {
       const cGeo = buildCeilingChunkGeometry(rec.cx, rec.cz, segs);
@@ -10277,10 +11396,12 @@ window.OC = window.OC || {};
           rec.ceilMesh.geometry.dispose();
           rec.ceilMesh.geometry = cGeo;
           rec.ceilMesh.visible = rec.mesh.visible;
+          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
         } else {
           rec.ceilMesh = new T.Mesh(cGeo, ceilingMat);
           rec.ceilMesh.userData.key = 'floor';
           rec.ceilMesh.visible = rec.mesh.visible;
+          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
           group.add(rec.ceilMesh);
         }
       } else if (rec.ceilMesh) {
@@ -10292,8 +11413,96 @@ window.OC = window.OC || {};
     rec.segs = segs;
   }
 
-  /* ---- Внешний горизонт дна за пределами детальной карты ---- */
+function createOrUpdateChunk(rec, segs) {
+    if (rec.segs === segs && rec.mesh) return;
+    const key = chunkKey(rec.cx, rec.cz);
+
+    // Если Worker доступен — используем асинхронную постройку
+    if (terrainWorker) {
+      // Подготавливаем height и color данные в основном потоке (вызовы getHeight/getTerrainColor)
+      const x0 = rec.cx * chunkSize;
+      const z0 = rec.cz * chunkSize;
+      const step = chunkSize / segs;
+      const inv2Step = 1 / (2 * step);
+      const n = segs + 1;
+      const stride = n + 2;
+      const hBuf = getHeightGridBuf(stride);
+
+      for (let gz = 0; gz < stride; gz++) {
+        const absZ = z0 + (gz - 1) * step;
+        const row = gz * stride;
+        for (let gx = 0; gx < stride; gx++) {
+          const absX = x0 + (gx - 1) * step;
+          hBuf[row + gx] = biomeRef.getHeight(absX, absZ);
+        }
+      }
+
+      const gridCount = n * n;
+      const colorData = new Float32Array(gridCount * 3);
+      for (let iz = 0; iz <= segs; iz++) {
+        const absZ = z0 + iz * step;
+        const gRow = (iz + 1) * stride;
+        for (let ix = 0; ix <= segs; ix++) {
+          const absX = x0 + ix * step;
+          const gIdx = gRow + (ix + 1);
+          const h = hBuf[gIdx];
+          const gradMag = 0; // цвет не зависит от градиента в worker, передаём 0
+          biomeRef.getTerrainColor(absX, h, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
+          const c3 = gIdx * 3;
+          colorData[c3] = _tmpCol.r;
+          colorData[c3 + 1] = _tmpCol.g;
+          colorData[c3 + 2] = _tmpCol.b;
+        }
+      }
+
+      pendingChunkData.set(key, { heightData: hBuf, colorData, stride, segs });
+      workerQueue.push({ rec, segs });
+      processWorkerQueue();
+      return; // Чанк будет построен асинхронно
+    }
+
+    // Fallback: синхронная постройка (если Worker недоступен)
+    const geo = buildChunkGeometry(rec.cx, rec.cz, segs);
+    if (rec.mesh) {
+      rec.mesh.geometry.dispose();
+      rec.mesh.geometry = geo;
+    } else {
+      rec.mesh = new T.Mesh(geo, terrainMat);
+      rec.mesh.userData.key = 'floor';
+      group.add(rec.mesh);
+    }
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
+    rec.mesh.position.set(rec.wx - ox, 0, rec.wz - oz);
+
+    if (ceilingMat && biomeRef.getCeilingHeight) {
+      const cGeo = buildCeilingChunkGeometry(rec.cx, rec.cz, segs);
+      if (cGeo) {
+        if (rec.ceilMesh) {
+          rec.ceilMesh.geometry.dispose();
+          rec.ceilMesh.geometry = cGeo;
+          rec.ceilMesh.visible = rec.mesh.visible;
+          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
+        } else {
+          rec.ceilMesh = new T.Mesh(cGeo, ceilingMat);
+          rec.ceilMesh.userData.key = 'floor';
+          rec.ceilMesh.visible = rec.mesh.visible;
+          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
+          group.add(rec.ceilMesh);
+        }
+      } else if (rec.ceilMesh) {
+        group.remove(rec.ceilMesh);
+        rec.ceilMesh.geometry.dispose();
+        rec.ceilMesh = null;
+      }
+    }
+    rec.segs = segs;
+  }
+
+  /* ---- Внешний горизонт дна за пределами детальной карты (только для ограниченных миров) ---- */
   function buildHorizonApron() {
+    if (!biomeRef || biomeRef.worldRadius > 4000) return; // для unbounded worlds не строим фартук
     const g = new T.PlaneGeometry(5200, 5200, 48, 48);
     g.rotateX(-Math.PI / 2);
     const p = g.attributes.position;
@@ -10302,7 +11511,6 @@ window.OC = window.OC || {};
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), z = p.getZ(i);
       let y = biomeRef.getHeight(x, z);
-      // Внутри зоны детальных чанков чуть опускаем фартук, чтобы не было Z-fighting
       if (Math.abs(x) < biomeRef.worldRadius - 10 && Math.abs(z) < biomeRef.worldRadius - 10) {
         y -= 12.0;
       }
@@ -10323,7 +11531,6 @@ window.OC = window.OC || {};
       sceneRef = scene;
       biomeRef = biome;
       chunkSize = biome.chunkSize || 150;
-      chunkRadiusCount = Math.round(biome.worldRadius / chunkSize);
 
       if (group) {
         group.traverse((o) => {
@@ -10334,9 +11541,47 @@ window.OC = window.OC || {};
       if (terrainMat) { terrainMat.dispose(); terrainMat = null; }
       if (ceilingMat) { ceilingMat.dispose(); ceilingMat = null; }
       chunks.clear();
+      workerQueue.length = 0;
+      workerBusy = false;
+      pendingChunkData.clear();
       initialized = false;
       group = new T.Group();
       scene.add(group);
+
+      // Инициализируем Web Worker для постройки геометрии чанков
+      if (typeof Worker !== 'undefined' && typeof Blob !== 'undefined' && !terrainWorker) {
+        try {
+          const blob = new Blob([TERRAIN_WORKER_SRC], { type: 'application/javascript' });
+          terrainWorker = new Worker(URL.createObjectURL(blob));
+          terrainWorker.onmessage = (e) => {
+            const { type, cx, cz, segs, positions, normals, colors, indices, vertexCount, indexCount } = e.data;
+            if (type !== 'chunkBuilt') return;
+            const key = chunkKey(cx, cz);
+            const rec = chunks.get(key);
+            if (!rec) return;
+            workerBusy = false;
+            processWorkerQueue();
+            buildChunkFromWorkerData(rec, segs, positions, normals, colors, indices, vertexCount, indexCount);
+          };
+          terrainWorker.onerror = (err) => {
+            console.warn('Terrain worker error:', err);
+            terrainWorker = null;
+            workerBusy = false;
+            processWorkerQueue();
+          };
+        } catch (err) {
+          console.warn('Could not create terrain worker:', err);
+          terrainWorker = null;
+        }
+      }
+
+      // При сдвиге начала координат (Floating Origin) перепозиционируем все меши чанков
+      OC.FloatingOrigin.onShift((delta) => {
+        chunks.forEach((rec) => {
+          if (rec.mesh) rec.mesh.position.sub(delta);
+          if (rec.ceilMesh) rec.ceilMesh.position.sub(delta);
+        });
+      });
 
       terrainMat = new T.MeshStandardMaterial({
         vertexColors: true,
@@ -10354,22 +11599,8 @@ window.OC = window.OC || {};
         OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true });
       }
 
+      // Горизонтный фартук только для ограниченных миров
       buildHorizonApron();
-
-      // Регистрируем дескрипторы всех 16x16 чанков
-      for (let cz = -chunkRadiusCount; cz < chunkRadiusCount; cz++) {
-        for (let cx = -chunkRadiusCount; cx < chunkRadiusCount; cx++) {
-          chunks.set(chunkKey(cx, cz), {
-            cx,
-            cz,
-            wx: (cx + 0.5) * chunkSize,
-            wz: (cz + 0.5) * chunkSize,
-            segs: 0,
-            mesh: null,
-            ceilMesh: null
-          });
-        }
-      }
 
       // Синхронно строим только стартовую окрестность вокруг камеры (~25 чанков, < 20 мс)
       const q = OC.Quality.get();
@@ -10377,8 +11608,9 @@ window.OC = window.OC || {};
       const scz = Math.floor(spawnPos.z / chunkSize);
       for (let dz = -2; dz <= 2; dz++) {
         for (let dx = -2; dx <= 2; dx++) {
-          const rec = chunks.get(chunkKey(scx + dx, scz + dz));
-          if (!rec) continue;
+          const cx = scx + dx;
+          const cz = scz + dz;
+          const rec = getOrCreateChunkRec(cx, cz);
           const dist = Math.hypot(rec.wx - spawnPos.x, rec.wz - spawnPos.z);
           createOrUpdateChunk(rec, desiredSegs(dist, q));
         }
@@ -10388,49 +11620,98 @@ window.OC = window.OC || {};
       lastScanX = 1e9;
       lastScanZ = 1e9;
       lastScanQuality = q.id;
+      frameCounter = 0;
     },
 
-    update(camPos) {
+    update(camPos, scene) {
       if (!initialized) return;
+      frameCounter++;
       const q = OC.Quality.get();
+      const origin = getOriginRef();
+      const ox = origin ? origin.x : 0;
+      const oz = origin ? origin.z : 0;
+
+      // Истинная мировая позиция камеры (локальная + origin)
+      const trueCamX = camPos.x + ox;
+      const trueCamZ = camPos.z + oz;
+
       if (!needsRebuildScan && lastScanQuality === q.id) {
-        const dx = camPos.x - lastScanX;
-        const dz = camPos.z - lastScanZ;
+        const dx = trueCamX - lastScanX;
+        const dz = trueCamZ - lastScanZ;
         if (dx * dx + dz * dz < 100) return; // < 10 м без смены качества: чанки актуальны
       }
-      lastScanX = camPos.x;
-      lastScanZ = camPos.z;
+      lastScanX = trueCamX;
+      lastScanZ = trueCamZ;
       lastScanQuality = q.id;
 
       const t0 = performance.now();
       const budgetMs = 3.5;
 
-      // Собираем чанки в зоне видимости, требующие создания или обновления LOD
+      const camChunkX = Math.floor(trueCamX / chunkSize);
+      const camChunkZ = Math.floor(trueCamZ / chunkSize);
+      const farDist = q.terrainFarDist;
+      const visibilityChunkRadius = Math.ceil(farDist / chunkSize) + 1;
+
+      const touched = new Set();
       const candidates = [];
+
+      // 1. Создаём/обновляем чанки в радиусе видимости около истинной позиции камеры
+      for (let cz = camChunkZ - visibilityChunkRadius; cz <= camChunkZ + visibilityChunkRadius; cz++) {
+        for (let cx = camChunkX - visibilityChunkRadius; cx <= camChunkX + visibilityChunkRadius; cx++) {
+          const wx = (cx + 0.5) * chunkSize;
+          const wz = (cz + 0.5) * chunkSize;
+          const dist = Math.hypot(wx - trueCamX, wz - trueCamZ);
+          if (dist > farDist) continue;
+
+          const rec = getOrCreateChunkRec(cx, cz);
+          rec.lastUsed = frameCounter;
+          touched.add(chunkKey(cx, cz));
+
+          if (rec.mesh && !rec.mesh.visible) rec.mesh.visible = true;
+          if (rec.ceilMesh && !rec.ceilMesh.visible) rec.ceilMesh.visible = true;
+
+          const target = desiredSegs(dist, q);
+          if (rec.segs !== target) {
+            const priority = rec.mesh ? dist + 220 : dist;
+            candidates.push({ rec, target, priority });
+          }
+        }
+      }
+
+      // 2. Скрыть чанки за пределами видимости
       chunks.forEach((rec) => {
-        const dist = Math.hypot(rec.wx - camPos.x, rec.wz - camPos.z);
-        if (dist > q.terrainFarDist) {
+        if (!touched.has(chunkKey(rec.cx, rec.cz))) {
           if (rec.mesh && rec.mesh.visible) rec.mesh.visible = false;
           if (rec.ceilMesh && rec.ceilMesh.visible) rec.ceilMesh.visible = false;
-          return;
-        }
-        if (rec.mesh && !rec.mesh.visible) rec.mesh.visible = true;
-        if (rec.ceilMesh && !rec.ceilMesh.visible) rec.ceilMesh.visible = true;
-        const target = desiredSegs(dist, q);
-        if (rec.segs !== target) {
-          // Не перестраиваем мелкую разницу слишком далеко без нужды
-          const priority = rec.mesh ? dist + 220 : dist;
-          candidates.push({ rec, target, priority });
         }
       });
 
-      if (!candidates.length) {
-        needsRebuildScan = false;
-        return;
+      // 3. LRU eviction: удалить чанки вне visibility и давно неиспользуемые
+      const toDelete = [];
+      chunks.forEach((rec, key) => {
+        if (!touched.has(key) && rec.lastUsed < frameCounter - CHUNK_IDLE_FRAMES) {
+          toDelete.push({ key, rec });
+        }
+      });
+      // Если всё ещё слишком много чанков — удалить старейшие невидимые
+      if (chunks.size - toDelete.length > MAX_ACTIVE_CHUNKS) {
+        const sorted = Array.from(chunks.entries()).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+        let excess = chunks.size - toDelete.length - MAX_ACTIVE_CHUNKS;
+        for (let i = 0; i < sorted.length && excess > 0; i++) {
+          const [key, rec] = sorted[i];
+          if (!touched.has(key) && !toDelete.some((d) => d.key === key)) {
+            toDelete.push({ key, rec });
+            excess--;
+          }
+        }
       }
-      needsRebuildScan = true;
-      candidates.sort((a, b) => a.priority - b.priority);
+      for (const { key, rec } of toDelete) {
+        disposeChunk(rec);
+        chunks.delete(key);
+      }
 
+      // 4. Построение по бюджету времени
+      candidates.sort((a, b) => a.priority - b.priority);
       let built = 0;
       for (let i = 0; i < candidates.length; i++) {
         createOrUpdateChunk(candidates[i].rec, candidates[i].target);
@@ -10445,7 +11726,7 @@ window.OC = window.OC || {};
       chunks.forEach((r) => {
         if (r.mesh) { built++; if (r.mesh.visible) visible++; }
       });
-      return { total: chunks.size, built, visible };
+      return { total: chunks.size, built, visible, max: MAX_ACTIVE_CHUNKS };
     }
   };
 })(window.OC);
@@ -12975,7 +14256,9 @@ window.OC = window.OC || {};
 })(window.OC);
 
 // === engine/flora_streamer.js ===
-/* ================= ЧАНКОВЫЙ СТРИМИНГ ФЛОРЫ ЧЕРЕЗ INSTANCEDMESH ================= */
+/* ================= ДИНАМИЧЕСКИЙ ЧАНКОВЫЙ СТРИМИНГ ФЛОРЫ (unbounded world) ================= */
+/* Кэш чанков флоры ограничен по размеру (LRU eviction), координаты не привязаны к
+   worldRadius биома — можно стримить флору на arbitrarily больших расстояниях. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
@@ -12985,7 +14268,6 @@ window.OC = window.OC || {};
   let biomeRef = null;
   let group = null;
   let chunkSize = 150;
-  let chunkHalfCount = 8;
 
   const chunkFloraCache = new Map(); // "cx,cz" -> Array<{ species, variant, x, y, z, ry, scale, tint }>
   const pools = [];                  // { species, variant, mesh, maxCount, cullDist, count }
@@ -13001,6 +14283,11 @@ window.OC = window.OC || {};
   let qualityHookBound = false;
   let lastIceOpacity = -1;
   let lastKelpProductivity = -1;
+  let frameCounter = 0;
+
+  /* Лимит кэшируемых чанков флоры в памяти (при превышении удаляются давно неиспользуемые) */
+  const MAX_CACHED_CHUNKS = 320;
+  const CHUNK_IDLE_FRAMES = 240; // ~4 сек без использования -> удалить из кэша
 
   const _pos = new T.Vector3();
   const _quat = new T.Quaternion();
@@ -13010,8 +14297,41 @@ window.OC = window.OC || {};
   const _col = new T.Color();
   const _volcDmgColor = new T.Color(0x5a4a3a);
 
-  function chunkKey(cx, cz) {
+function chunkKey(cx, cz) {
     return cx + ',' + cz;
+}
+
+function chunkCacheTouch(key) {
+    const rec = chunkFloraCache.get(key);
+    if (rec) rec.lastUsed = frameCounter;
+}
+
+function getOriginRef() {
+    return OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+}
+
+  function evictStaleFloraChunks() {
+    const toDelete = [];
+    chunkFloraCache.forEach((items, key) => {
+      if (items.lastUsed < frameCounter - CHUNK_IDLE_FRAMES) {
+        toDelete.push(key);
+      }
+    });
+    // Если всё ещё слишком много — удалить старейшие
+    if (chunkFloraCache.size - toDelete.length > MAX_CACHED_CHUNKS) {
+      const sorted = Array.from(chunkFloraCache.entries()).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+      let excess = chunkFloraCache.size - toDelete.length - MAX_CACHED_CHUNKS;
+      for (let i = 0; i < sorted.length && excess > 0; i++) {
+        const [key] = sorted[i];
+        if (!toDelete.includes(key)) {
+          toDelete.push(key);
+          excess--;
+        }
+      }
+    }
+    for (const key of toDelete) {
+      chunkFloraCache.delete(key);
+    }
   }
 
   function updateSeasonalAppearance() {
@@ -13039,11 +14359,14 @@ window.OC = window.OC || {};
     }
   }
 
-  function buildChunkData(cx, cz, density) {
+function buildChunkData(cx, cz, density) {
     const seed = ((cx * 73856093) ^ (cz * 19349663) ^ 0x5f3759df) >>> 0;
     const rng = OC.mulberry32(seed);
     const raw = biomeRef.generateChunkFlora(cx, cz, chunkSize, density, rng);
     const items = [];
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
 
     for (let i = 0; i < raw.length; i++) {
       const it = raw[i];
@@ -13053,28 +14376,46 @@ window.OC = window.OC || {};
       items.push({
         species: it.species,
         variant,
-        x: it.x,
+        x: it.x - ox, // относительно начала координат (Floating Origin)
         y: it.y,
-        z: it.z,
+        z: it.z - oz, // относительно начала координат (Floating Origin)
         ry: it.ry,
         scale: it.scale,
         tint: it.tint || 0xffffff
       });
     }
+    items.lastUsed = frameCounter;
     return items;
-  }
+}
 
   function rebuildActiveInstances(camPos) {
     const q = OC.Quality.get();
     const activeR = q.floraActiveRadius;
     const activeR2 = activeR * activeR;
+    const origin = getOriginRef();
+    const ox = origin ? origin.x : 0;
+    const oz = origin ? origin.z : 0;
+
+    // Истинная мировая позиция камеры (локальная + origin)
+    const trueCamX = camPos.x + ox;
+    const trueCamZ = camPos.z + oz;
+
+    // Потолочное отсечение для пещерных биомов:
+    // если камера под сводом, объекты над сводом в своей точке за потолком — не рисуем
+    const hasCeiling = biomeRef && typeof biomeRef.getCeilingHeight === 'function';
+    const camY = camPos.y + (origin ? origin.y : 0);
+    let camCeilY = null;
+    if (hasCeiling) {
+      camCeilY = biomeRef.getCeilingHeight(trueCamX, trueCamZ);
+    }
 
     for (let i = 0; i < pools.length; i++) pools[i].count = 0;
 
-    const minCx = Math.max(-chunkHalfCount, Math.floor((camPos.x - activeR) / chunkSize));
-    const maxCx = Math.min(chunkHalfCount - 1, Math.floor((camPos.x + activeR) / chunkSize));
-    const minCz = Math.max(-chunkHalfCount, Math.floor((camPos.z - activeR) / chunkSize));
-    const maxCz = Math.min(chunkHalfCount - 1, Math.floor((camPos.z + activeR) / chunkSize));
+    // Радиус кэша не ограничен chunkHalfCount — берём из истинных координат камеры
+    const minCx = Math.floor((trueCamX - activeR) / chunkSize);
+    const maxCx = Math.floor((trueCamX + activeR) / chunkSize);
+    const minCz = Math.floor((trueCamZ - activeR) / chunkSize);
+    const maxCz = Math.floor((trueCamZ + activeR) / chunkSize);
 
     let total = 0;
 
@@ -13082,12 +14423,13 @@ window.OC = window.OC || {};
       for (let cx = minCx; cx <= maxCx; cx++) {
         const wx = (cx + 0.5) * chunkSize;
         const wz = (cz + 0.5) * chunkSize;
-        const dxC = wx - camPos.x;
-        const dzC = wz - camPos.z;
+        const dxC = wx - trueCamX;
+        const dzC = wz - trueCamZ;
         if (dxC * dxC + dzC * dzC > (activeR + chunkSize * 0.8) ** 2) continue;
 
         const items = chunkFloraCache.get(chunkKey(cx, cz));
         if (!items) continue;
+        chunkCacheTouch(chunkKey(cx, cz));
 
         for (let i = 0; i < items.length; i++) {
           const it = items[i];
@@ -13096,15 +14438,21 @@ window.OC = window.OC || {};
           const d2 = dx * dx + dz * dz;
           if (d2 > activeR2) continue;
 
+          // Потолочное отсечение: объект над сводом пещеры, камера под сводом — объект за потолком
+          if (hasCeiling && camCeilY !== null && camY < camCeilY) {
+            const objWorldX = it.x + ox;
+            const objWorldZ = it.z + oz;
+            const objCeilY = biomeRef.getCeilingHeight(objWorldX, objWorldZ);
+            if (it.y > objCeilY) continue;
+          }
+
           const pool = poolLookup.get(it.species + ':' + it.variant);
           if (!pool) continue;
           const cull = Math.min(activeR, pool.cullDist);
           if (d2 > cull * cull) continue;
-          // Плавное дистанционное прореживание мелкого бентоса в дальнем кольце (>58% дальности)
           if (pool.cullDist <= 340 && (i & 1) === 1 && d2 > (cull * 0.58) ** 2) continue;
           if (pool.count >= pool.maxCount) continue;
 
-          // Damage от событий вулкана: tint к коричневому + сжатие по damage-фактору
           let dmg = 0;
           if (OC.Volcano && OC.Volcano.getDamageFactor) {
             dmg = OC.Volcano.getDamageFactor(it.x, it.z);
@@ -13147,7 +14495,6 @@ window.OC = window.OC || {};
       lastIceOpacity = -1;
       lastKelpProductivity = -1;
       chunkSize = biome.chunkSize || 150;
-      chunkHalfCount = Math.round(biome.worldRadius / chunkSize);
 
       if (group) {
         const disposedGeos = new Set();
@@ -13171,6 +14518,14 @@ window.OC = window.OC || {};
       cacheComplete = false;
       lastCacheCheckPos.set(1e9, 1e9, 1e9);
 
+      // При сдвиге начала координат (Floating Origin) сдвигаем все пулы инстансов
+      OC.FloatingOrigin.onShift((delta) => {
+        for (let i = 0; i < pools.length; i++) {
+          pools[i].mesh.position.sub(delta);
+          if (pools[i].mesh.instanceMatrix) pools[i].mesh.instanceMatrix.needsUpdate = true;
+        }
+      });
+
       group = new T.Group();
       scene.add(group);
 
@@ -13182,10 +14537,11 @@ window.OC = window.OC || {};
 
         for (let v = 0; v < vCount; v++) {
           const mesh = new T.InstancedMesh(spec.geos[v], spec.mat, perVarMax);
-          mesh.frustumCulled = false;
+          // Включаем отсечение по視русна — критично для больших миров:
+          // экземпляры за кадром не попадают в draw calls.
+          mesh.frustumCulled = true;
           mesh.userData.key = species;
           mesh.count = 0;
-          // Инициализируем instanceColor до первого рендера (нужно для Three r128)
           mesh.setColorAt(0, new T.Color(1, 1, 1));
           mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
           group.add(mesh);
@@ -13214,7 +14570,6 @@ window.OC = window.OC || {};
       for (let dz = -1; dz <= 1; dz++) {
         for (let dx = -1; dx <= 1; dx++) {
           const cx = scx + dx, cz = scz + dz;
-          if (cx < -chunkHalfCount || cx >= chunkHalfCount || cz < -chunkHalfCount || cz >= chunkHalfCount) continue;
           chunkFloraCache.set(chunkKey(cx, cz), buildChunkData(cx, cz, q.floraDensity));
         }
       }
@@ -13232,12 +14587,13 @@ window.OC = window.OC || {};
           dirtyRebuild = true;
         });
       }
+      frameCounter = 0;
     },
 
     update(camPos) {
       if (!biomeRef) return;
+      frameCounter++;
       updateSeasonalAppearance();
-      // Damage от вулкана: если damage-state изменился, пересобрать tint (dirtyRebuild)
       if (OC.Volcano && OC.Volcano.getDamageState) {
         const vs = OC.Volcano.getDamageState();
         const key = vs.active ? vs.f.toFixed(2) : 'off';
@@ -13251,12 +14607,12 @@ window.OC = window.OC || {};
         const budgetMs = 3.5;
 
         const cacheR = q.floraCacheRadius;
-        const minCx = Math.max(-chunkHalfCount, Math.floor((camPos.x - cacheR) / chunkSize));
-        const maxCx = Math.min(chunkHalfCount - 1, Math.floor((camPos.x + cacheR) / chunkSize));
-        const minCz = Math.max(-chunkHalfCount, Math.floor((camPos.z - cacheR) / chunkSize));
-        const maxCz = Math.min(chunkHalfCount - 1, Math.floor((camPos.z + cacheR) / chunkSize));
+        // Радиус кэша не ограничен chunkHalfCount — бери из координат камеры
+        const minCx = Math.floor((camPos.x - cacheR) / chunkSize);
+        const maxCx = Math.floor((camPos.x + cacheR) / chunkSize);
+        const minCz = Math.floor((camPos.z - cacheR) / chunkSize);
+        const maxCz = Math.floor((camPos.z + cacheR) / chunkSize);
 
-        // Собираем недостающие чанки по близости к камере
         const missing = [];
         for (let cz = minCz; cz <= maxCz; cz++) {
           for (let cx = minCx; cx <= maxCx; cx++) {
@@ -13285,6 +14641,8 @@ window.OC = window.OC || {};
         }
         lastCacheCheckPos.copy(camPos);
       }
+
+      evictStaleFloraChunks();
 
       const movedDist = Math.hypot(camPos.x - lastRebuildPos.x, camPos.z - lastRebuildPos.z);
       if (dirtyRebuild || movedDist > 34) {
@@ -13334,7 +14692,8 @@ window.OC = window.OC || {};
     getStats() {
       return {
         cachedChunks: chunkFloraCache.size,
-        activeInstances: totalVisibleInstances
+        activeInstances: totalVisibleInstances,
+        maxCached: MAX_CACHED_CHUNKS
       };
     }
   };
@@ -13382,7 +14741,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     }, opts);
 
     const list = [];
-    const body = new T.SphereGeometry(1, 12, 9);
+    const body = new T.SphereGeometry(1, 32, 16);
     body.scale(o.len * 0.5, o.height * 0.5, o.width * 0.5);
     const bp = body.attributes.position;
     for (let i = 0; i < bp.count; i++) {
@@ -13406,14 +14765,14 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     list.push(body);
 
     /* хвост */
-    const tail = new T.ConeGeometry(o.height * o.tailH, o.len * 0.36, 4);
+    const tail = new T.ConeGeometry(o.height * o.tailH, o.len * 0.36, 8);
     OC.xform(tail, { r: [0, Math.PI / 4, Math.PI / 2], s: [0.22, 1, 1], p: [-o.len * 0.56, 0, 0] });
     OC.geoPrep(tail);
     OC.paint(tail, o.finCol);
     list.push(tail);
 
     /* грудные плавники */
-    const fin = new T.ConeGeometry(o.height * 0.22, o.len * 0.28, 3);
+    const fin = new T.ConeGeometry(o.height * 0.22, o.len * 0.28, 6);
     OC.xform(fin, { r: [Math.PI / 2, 0, 0.42], s: [0.2, 1, 1], p: [o.len * 0.22, -o.height * 0.08, o.width * 0.58] });
     OC.geoPrep(fin);
     OC.paint(fin, o.finCol);
@@ -13424,7 +14783,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     list.push(fin2);
 
     if (o.dorsal) {
-      const d = new T.ConeGeometry(o.height * 0.28, o.len * 0.35, 3);
+      const d = new T.ConeGeometry(o.height * 0.28, o.len * 0.35, 6);
       OC.xform(d, { r: [0, 0, Math.PI / 2 - 0.35], s: [0.14, 1, 1], p: [-o.len * 0.04, o.height * 0.58, 0] });
       OC.geoPrep(d);
       OC.paint(d, o.finCol);
@@ -13432,7 +14791,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     }
 
     if (o.streamer) {
-      const st = new T.ConeGeometry(o.height * 0.14, o.len * 0.95, 3);
+      const st = new T.ConeGeometry(o.height * 0.14, o.len * 0.95, 6);
       OC.xform(st, { r: [0, 0, Math.PI / 2 + 0.55], s: [0.15, 1, 1], p: [-o.len * 0.22, o.height * 0.85, 0] });
       OC.geoPrep(st);
       OC.paint(st, 0xffffff);
@@ -13441,7 +14800,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
     /* глаза (у слепых пещерных видов eyeScale === 0) */
     if (o.eyeScale > 0) {
-      const eyeG = new T.SphereGeometry(o.height * 0.085 * o.eyeScale, 6, 5);
+      const eyeG = new T.SphereGeometry(o.height * 0.085 * o.eyeScale, 12, 10);
       OC.geoPrep(eyeG);
       OC.paint(eyeG, 0x0a0a0a);
       const e1 = eyeG.clone(); OC.xform(e1, { p: [o.len * 0.33, o.height * 0.12, o.width * 0.40] });
@@ -14023,6 +15382,12 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
       getPosition: () => mesh.position,
       update(dt, time, camPos, ctx) {
         if (Math.hypot(cx - camPos.x, cz - camPos.z) > 480) { mesh.visible = false; return; }
+        // Конусное отсечение: объекты за спиной камеры не рендерятся
+        const camFwdX = ctx ? ctx.camFwdX : 0;
+        const camFwdZ = ctx ? ctx.camFwdZ : -1;
+        const dx = cx - camPos.x;
+        const dz = cz - camPos.z;
+        if (dx * camFwdX + dz * camFwdZ < -6) { mesh.visible = false; return; }
         mesh.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
         const camSpeed = ctx ? ctx.camSpeed : 0;
@@ -14082,6 +15447,12 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
       getPosition: () => group.position,
       update(dt, time, camPos, ctx) {
         if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 420) { group.visible = false; return; }
+        // Конусное отсечение: объекты за спиной камеры не рендерятся
+        const camFwdX = ctx ? ctx.camFwdX : 0;
+        const camFwdZ = ctx ? ctx.camFwdZ : -1;
+        const dx = opts.cx - camPos.x;
+        const dz = opts.cz - camPos.z;
+        if (dx * camFwdX + dz * camFwdZ < -6) { group.visible = false; return; }
         group.visible = true;
         const dayW = ctx ? ctx.dayW : 1.0;
         const nightAct = OC.lerp(1.55, 0.65, dayW);
@@ -14281,7 +15652,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
   function makeTurtle(scene, biome, opts) {
     const group = new T.Group();
-    const shell = new T.SphereGeometry(1, 16, 12);
+    const shell = new T.SphereGeometry(1, 32, 20);
     shell.scale(2.4, 0.92, 2.9);
     OC.geoPrep(shell);
     OC.paint(shell, (x, y, z, c) => {
@@ -14290,7 +15661,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     });
     group.add(new T.Mesh(shell, OC._FaunaCtx.creatureMat));
 
-    const head = new T.SphereGeometry(0.58, 10, 8);
+    const head = new T.SphereGeometry(0.58, 20, 16);
     head.scale(0.95, 0.85, 1.25);
     OC.geoPrep(head);
     OC.paint(head, 0x5c6e46);
@@ -14299,7 +15670,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     group.add(headM);
 
     const flippers = [];
-    const flGeo = new T.SphereGeometry(1, 9, 6);
+    const flGeo = new T.SphereGeometry(1, 16, 10);
     flGeo.scale(1.65, 0.12, 0.56);
     OC.geoPrep(flGeo);
     OC.paint(flGeo, 0x556640);
@@ -14376,13 +15747,13 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
 
   function makeDugong(scene, biome, opts) {
     const group = new T.Group();
-    const body = new T.SphereGeometry(1, 16, 12);
+    const body = new T.SphereGeometry(1, 32, 20);
     body.scale(0.85, 0.78, 2.35);
     OC.geoPrep(body);
     OC.paint(body, (x, y, z, c) => c.setHSL(0.56, 0.12, y > 0 ? 0.48 : 0.62));
     group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
 
-    const snout = new T.CylinderGeometry(0.42, 0.55, 0.9, 10);
+    const snout = new T.CylinderGeometry(0.42, 0.55, 0.9, 16);
     snout.rotateX(Math.PI * 0.65);
     OC.geoPrep(snout);
     OC.paint(snout, 0x7b8990);
@@ -14391,7 +15762,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     group.add(snM);
 
     // Плавники
-    const fl = new T.SphereGeometry(1, 8, 6);
+    const fl = new T.SphereGeometry(1, 16, 10);
     fl.scale(0.75, 0.12, 0.35);
     OC.geoPrep(fl);
     OC.paint(fl, 0x6f7d84);
@@ -14405,7 +15776,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     // Хвостовой стебель и лопасть дюгоня
     const tailPivot = new T.Group();
     tailPivot.position.set(0, 0, -2.1);
-    const fluke = new T.ConeGeometry(0.95, 1.2, 4);
+    const fluke = new T.ConeGeometry(0.95, 1.2, 8);
     fluke.scale(1.3, 1, 0.18);
     fluke.rotateX(Math.PI / 2);
     OC.geoPrep(fluke);
@@ -14439,6 +15810,77 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
         group.position.copy(a);
         group.lookAt(b);
         tailPivot.rotation.x = Math.sin(time * 1.8) * 0.35;
+      }
+    };
+  }
+
+  /* ---------- Ламантин (Trichechus manatus) — крупнее дюгоня, хвост лопатковидный ---------- */
+
+  function makeManatee(scene, biome, opts) {
+    const group = new T.Group();
+    const body = new T.SphereGeometry(1, 36, 24);
+    body.scale(1.05, 0.85, 2.8);
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.setHSL(0.52, 0.10, y > 0 ? 0.44 : 0.58));
+    group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
+
+    // Круглая голова ламантина (не удлинённая, как у дюгоня)
+    const head = new T.SphereGeometry(0.65, 24, 18);
+    head.scale(0.85, 0.95, 0.85);
+    OC.geoPrep(head);
+    OC.paint(head, 0x6e7d84);
+    const headM = new T.Mesh(head, OC._FaunaCtx.creatureMat);
+    headM.position.set(0, 0.05, 2.55);
+    group.add(headM);
+
+    // Передние плавники
+    const fl = new T.SphereGeometry(1, 20, 14);
+    fl.scale(0.85, 0.14, 0.4);
+    OC.geoPrep(fl);
+    OC.paint(fl, 0x7a888e);
+    for (const s of [-1, 1]) {
+      const m = new T.Mesh(fl, OC._FaunaCtx.creatureMat);
+      m.position.set(s * 1.05, -0.3, 1.4);
+      m.rotation.z = -s * 0.25;
+      group.add(m);
+    }
+
+    // Хвостовая лопасть ламантина (лопатковидная, не bifurcated как у дюгоня)
+    const tailPivot = new T.Group();
+    tailPivot.position.set(0, 0, -2.55);
+    const fluke = new T.CylinderGeometry(0.85, 0.85, 0.5, 12);
+    fluke.rotateX(Math.PI / 2);
+    OC.geoPrep(fluke);
+    OC.paint(fluke, 0x5e6c72);
+    const fkM = new T.Mesh(fluke, OC._FaunaCtx.creatureMat);
+    fkM.position.set(0, 0, -0.25);
+    tailPivot.add(fkM);
+    group.add(tailPivot);
+
+    group.scale.setScalar(opts.scale || 1.25);
+    group.userData.key = 'florida_manatee';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 80;
+    const a = new T.Vector3(), b = new T.Vector3();
+
+    return {
+      key: 'florida_manatee',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(opts.cx - camPos.x, opts.cz - camPos.z) > 540) { group.visible = false; return; }
+        group.visible = true;
+        t += dt;
+        ang += (1.3 / opts.r) * dt;
+        const ax = opts.cx + Math.cos(ang) * opts.r, az = opts.cz + Math.sin(ang) * opts.r;
+        const bx = opts.cx + Math.cos(ang + 0.1) * opts.r, bz = opts.cz + Math.sin(ang + 0.1) * opts.r;
+        const ay = Math.max(biome.getHeight(ax, az) + 1.5 + Math.sin(t * 0.35) * 0.6, -10);
+        const by = Math.max(biome.getHeight(bx, bz) + 1.5 + Math.sin(t * 0.35 + 0.15) * 0.6, -10);
+        a.set(ax, Math.min(-1.5, ay), az);
+        b.set(bx, Math.min(-1.5, by), bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        tailPivot.rotation.x = Math.sin(time * 1.5) * 0.25;
       }
     };
   }
@@ -14554,6 +15996,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeGoldenJelly = makeGoldenJelly;
   OC._FaunaBuilders.makeTurtle = makeTurtle;
   OC._FaunaBuilders.makeDugong = makeDugong;
+  OC._FaunaBuilders.makeManatee = makeManatee;
   OC._FaunaBuilders.makeOctopus = makeOctopus;
   OC._FaunaBuilders.makeMoray = makeMoray;
 })(window.OC);
@@ -20023,6 +21466,152 @@ window.OC = window.OC || {};
   OC._FaunaSystems = OC._FaunaSystems || {};
 })(window.OC);
 
+// === engine/fauna_impostors.js ===
+/* ================= IMPOSTORS (BILLBOARDS ДЛЯ УДАЛЁННОЙ ФАУНЫ) ================= */
+/* Когда существо дальше порога impostorDist, его 3D-меш заменяется на
+   Billboard-квадрат, который всегда лицом к камере. Это экономит вершинную
+   нагрузку и draw calls на больших дистанциях (>200 м), где детали модели
+   всё равно неразличимы. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  let sceneRef = null;
+  let camRef = null;
+
+  /* Пул billboard-мешей, кэшированных по ключу вида "species:tintHex" */
+  const impostorPool = new Map(); // "species:tint" -> { mesh, species, tint, inUse }
+  const activeImpostors = new Map(); // agent -> { mesh, species, tint }
+  const _camPos = new T.Vector3();
+  const _camFwd = new T.Vector3();
+  const _up = new T.Vector3(0, 1, 0);
+  const _tmpVec = new T.Vector3();
+
+  /* Дистанция переключения на impostor (и обратно с гистерезисом) */
+  const IMPOSTOR_DIST_ON = 200;   // дальше 200 м -> impostor
+  const IMPOSTOR_DIST_OFF = 150;   // ближе 150 м -> полная 3D-модель
+  const IMPOSTOR_SIZE = 1.6;       // размер квадрата billboard
+
+  function getImpostorKey(species, tint) {
+    return species + ':' + (tint !== undefined ? tint.toString(16) : 'fff');
+  }
+
+  function createImpostor(species, tint) {
+    const geo = new T.PlaneGeometry(IMPOSTOR_SIZE, IMPOSTOR_SIZE);
+    const mat = new T.MeshBasicMaterial({
+      color: tint !== undefined ? tint : 0xffffff,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+      side: T.DoubleSide
+    });
+    const mesh = new T.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    mesh.userData.isImpostor = true;
+    mesh.userData.species = species;
+    mesh.visible = false;
+    sceneRef.add(mesh);
+    return { mesh, species, tint, inUse: false };
+  }
+
+  function getImpostor(species, tint) {
+    const key = getImpostorKey(species, tint);
+    let entry = impostorPool.get(key);
+    if (!entry) {
+      entry = createImpostor(species, tint);
+      impostorPool.set(key, entry);
+    }
+    entry.inUse = true;
+    return entry.mesh;
+  }
+
+  function releaseImpostor(species, tint) {
+    const key = getImpostorKey(species, tint);
+    const entry = impostorPool.get(key);
+    if (entry) entry.inUse = false;
+  }
+
+  OC.FaunaImpostors = {
+    init(scene, camera) {
+      sceneRef = scene;
+      camRef = camera;
+      impostorPool.clear();
+      activeImpostors.clear();
+    },
+
+    /* Вызывать каждый кадр с позицией и направлением камеры.
+       Обновляет поворот всех активных impostor-мешей, чтобы они лицом к камере. */
+    update(camPos, camFwd) {
+      if (!sceneRef) return;
+      _camPos.copy(camPos);
+      if (camFwd) _camFwd.copy(camFwd);
+      else if (camRef) camRef.getWorldDirection(_camFwd);
+
+      activeImpostors.forEach((info, agent) => {
+        const mesh = info.mesh;
+        const p = agent.getPosition ? agent.getPosition() : null;
+        if (!p) return;
+
+        mesh.position.copy(p);
+
+        /* Billboard: квадрат всегда лицом к камере, но остаётся вертикальным (Y-up).
+           Используем направление камеры по XZ для поворота вокруг Y. */
+        const angle = Math.atan2(_camFwd.x, _camFwd.z);
+        mesh.rotation.set(0, angle, 0);
+
+        /* Небольшой эффект удаления: чуть уменьшаем 불кость с дистанцией */
+        const d = Math.hypot(p.x - camPos.x, p.z - camPos.z);
+        const alpha = Math.max(0.3, Math.min(1.0, 1.0 - (d - IMPOSTOR_DIST_OFF) / 400));
+        mesh.material.opacity = alpha;
+      });
+    },
+
+    /* Включить/выключить impostor для агента.
+       agent — объект с getPosition(); species — ключ вида; tint — цвет. */
+    setImpostor(agent, enabled, species, tint) {
+      const key = agent;
+      if (enabled) {
+        if (activeImpostors.has(key)) return; // уже активен
+        const mesh = getImpostor(species, tint);
+        mesh.visible = true;
+        activeImpostors.set(key, { mesh, species, tint });
+      } else {
+        const info = activeImpostors.get(key);
+        if (!info) return;
+        info.mesh.visible = false;
+        activeImpostors.delete(key);
+        releaseImpostor(info.species, info.tint);
+      }
+    },
+
+    /* Отключить все impostors (например, при смене биома) */
+    clearAll() {
+      activeImpostors.forEach((info) => {
+        info.mesh.visible = false;
+        if (sceneRef) sceneRef.remove(info.mesh);
+        releaseImpostor(info.species, info.tint);
+      });
+      activeImpostors.clear();
+      // Освобождаем весь пул
+      impostorPool.forEach((entry) => {
+        if (sceneRef) sceneRef.remove(entry.mesh);
+        entry.mesh.geometry.dispose();
+        entry.mesh.material.dispose();
+        entry.inUse = false;
+      });
+      impostorPool.clear();
+    },
+
+    getStats() {
+      let active = 0;
+      let pooled = 0;
+      impostorPool.forEach((e) => { if (e.inUse) active++; else pooled++; });
+      return { active, pooled, total: impostorPool.size };
+    }
+  };
+})(window.OC);
+
 // === engine/fauna/spawn.js ===
 /* ================= ВЫСАДКА ФАУНЫ БИОМА ПО ЭКОЛОГИЧЕСКОМУ ПЛАНУ ================= */
 /* Читает biome.faunaPlan и вызывает билдеры из OC._FaunaBuilders, наполняя общие
@@ -20079,6 +21668,44 @@ window.OC = window.OC || {};
         const a = OC._FaunaBuilders.makeDugong(faunaGroup, biome, dg);
         agents.push(a);
         sonarTargets.push(a);
+      }
+
+      for (const m of (plan.megafauna || [])) {
+        if (m.key === 'florida_manatee') {
+          const a = OC._FaunaBuilders.makeManatee(faunaGroup, biome, m);
+          agents.push(a);
+          sonarTargets.push(a);
+        }
+      }
+
+      for (const cr of (plan.crustaceans || [])) {
+        if (cr.key === 'cave_crayfish' || cr.key === 'blind_cave_fish') {
+          const geo = OC._FaunaBuilders.makeFishGeo(cr.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563 });
+          const mesh = new T.Mesh(geo, OC._FaunaCtx.creatureMat);
+          mesh.scale.setScalar(cr.scale || 0.8);
+          mesh.userData.key = cr.key;
+          scene.add(mesh);
+          const ra = new T.Vector3(), rb = new T.Vector3();
+          agents.push({
+            key: cr.key,
+            getPosition: () => mesh.position,
+            update(dt, time, camPos) {
+              const origin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : new T.Vector3();
+              const lcx = cr.cx - origin.x;
+              const lcz = cr.cz - origin.z;
+              if (Math.hypot(lcx - camPos.x, lcz - camPos.z) > 420) { mesh.visible = false; return; }
+              mesh.visible = true;
+              let ang = Math.random() * 6.28;
+              const rr = cr.radius + Math.sin(time * 0.5) * 3;
+              const x = lcx + Math.cos(ang) * rr;
+              const z = lcz + Math.sin(ang) * rr;
+              const y = Math.max(biome.getHeight(x + origin.x, z + origin.z) + 1.0, cr.y);
+              mesh.position.set(x, y, z);
+              mesh.lookAt(lcx, cr.y, lcz);
+            }
+          });
+          sonarTargets.push(agents[agents.length - 1]);
+        }
       }
 
       for (const sl of (plan.seaLions || [])) {
@@ -20163,7 +21790,8 @@ window.OC = window.OC || {};
       }
 
       for (const seep of (plan.seepTargets || [])) {
-        const p = new T.Vector3(seep.x, biome.getHeight(seep.x, seep.z) + 1.0, seep.z);
+        const origin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : new T.Vector3();
+        const p = new T.Vector3(seep.x - origin.x, biome.getHeight(seep.x, seep.z) + 1.0, seep.z - origin.z);
         const target = { key: 'methane_seep_baikal', getPosition: () => p, update() {} };
         agents.push(target);
         sonarTargets.push(target);
@@ -21353,6 +22981,7 @@ window.OC = window.OC || {};
 
   OC.FaunaEngine = {
     init(scene, biome) {
+      if (OC.FaunaImpostors) OC.FaunaImpostors.clearAll();
       disposeFaunaGroup(scene);
       faunaGroup = new T.Group();
       scene.add(faunaGroup);
@@ -21376,6 +23005,13 @@ window.OC = window.OC || {};
 
       const plan = biome.faunaPlan || {};
       const agents = [];
+      const impostoredAgents = new Set(); // агенты, для которых сейчас активен impostor
+
+      // Инициализация системы impostor-билбордов для удалённой фауны
+      if (OC.FaunaImpostors) {
+        const cam = OC.getCamera ? OC.getCamera() : null;
+        OC.FaunaImpostors.init(scene, cam);
+      }
       const schools = [];
       const predatorAgents = [];
       const preySchools = [];
@@ -21458,6 +23094,8 @@ window.OC = window.OC || {};
       const _toTarget = new T.Vector3();
       const _currFlow = new T.Vector3();
       const _flowAccum = new T.Vector3();
+      const _tmpVec2 = new T.Vector3();
+
       let faunaCountRefreshTimer = 0;
 
       function refreshFaunaCounts() {
@@ -21567,6 +23205,8 @@ window.OC = window.OC || {};
 
           lastCamPos.copy(camPos);
           updateCtx.dayW = dayW;
+
+
           updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;
@@ -21622,8 +23262,39 @@ window.OC = window.OC || {};
             fishMatBiolum.emissiveIntensity = OC.lerp(1.45, 0.25, dayW) + (pal.bioGlow || 0) * 0.45;
           }
 
+          // Направление камеры для поворота impostor-ビルбордов лицом к игроку
+          let camFwdX = 0, camFwdZ = -1;
+          const cam = OC.getCamera ? OC.getCamera() : null;
+          if (cam) {
+            cam.getWorldDirection(_tmpVec2);
+            camFwdX = _tmpVec2.x;
+            camFwdZ = _tmpVec2.z;
+          }
+
           for (let i = 0; i < agents.length; i++) {
+            const ag = agents[i];
+            const p = ag.getPosition ? ag.getPosition() : null;
             agents[i].update(dt, time, camPos, updateCtx);
+
+            // Impostor: на дистанции >200 м 3D-модель заменяется на billboard-квадрат.
+            // 3D-меш не скрывается напрямую (mesh может быть в замыкании билдера),
+            // impostorビルборд визуально перекрывает уменьшенную модель на遠 дистанции.
+            if (p && OC.FaunaImpostors && ag.key) {
+              const dCam = Math.hypot(p.x - camPos.x, p.z - camPos.z);
+              const hasImp = impostoredAgents.has(ag);
+              if (dCam > 200 && !hasImp) {
+                OC.FaunaImpostors.setImpostor(ag, true, ag.key, 0xffffff);
+                impostoredAgents.add(ag);
+              } else if (dCam < 150 && hasImp) {
+                OC.FaunaImpostors.setImpostor(ag, false);
+                impostoredAgents.delete(ag);
+              }
+            }
+          }
+
+          // Поворачиваем все активные impostor-ビルборды лицом к камере
+          if (OC.FaunaImpostors) {
+            OC.FaunaImpostors.update(camPos, { x: camFwdX, y: 0, z: camFwdZ });
           }
           faunaCountRefreshTimer += dt;
           if (faunaCountRefreshTimer >= 1) {
@@ -22108,6 +23779,22 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, size: 1 });
         } else if (key === 'dugong') {
           OC._FaunaBuilders.makeDugong(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'florida_manatee') {
+          OC._FaunaBuilders.makeManatee(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'blind_cave_fish' || key === 'cave_crayfish') {
+          const spec = (() => {
+            for (const b of OC.Biomes.list()) {
+              const p = b && b.faunaPlan;
+              if (!p) continue;
+              const c = (p.crustaceans || []).find((s) => s.key === key);
+              if (c) return c;
+            }
+            return null;
+          })();
+          if (spec) {
+            const fg = OC._FaunaBuilders.makeFishGeo(spec.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563, eyeScale: 0 });
+            built = new T.Mesh(fg, previewMat);
+          }
         } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark') {
           OC._FaunaBuilders.makeShark(tmpGroup, dummyBiome, {
             cx: 0, cz: 0, y: 0, r: 10, speed: 2,
@@ -22233,7 +23920,7 @@ window.OC = window.OC || {};
           tmpGroup.remove(built);
         }
         if (!built) {
-          built = new T.Mesh(new T.SphereGeometry(0.8, 12, 8), previewMat);
+          built = new T.Mesh(new T.SphereGeometry(0.8, 48, 24), previewMat);
         }
 
         // Обнуляем возможный сдвиг (напр. позиция группы в мировой точке) и приводим к единому масштабу 2.6 м
@@ -27151,6 +28838,80 @@ window.OC = window.OC || {};
       landmarkId: 'baikal_golomyanka_depth',
       goal: 1,
       progress: (ctx) => ctx.depthM >= 1000 && ctx.hasPhotoOrPing(['fish_golomyanka']) ? 1 : 0
+    },
+    // --- Красное море: Рас Мохаммед и коралловые рифы ---
+    {
+      id: 'red_coral_garden',
+      biomeId: 'red_sea',
+      title: 'Коралловый сад Рас Мохаммед',
+      desc: 'Исследуйте коралловый сад и зафиксируйте ветвистые кораллы Acropora.',
+      landmarkId: 'sharm_reef',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('coral_garden') && ctx.hasPhotoOrPing(['coral_branch', 'coral_table', 'coral_plate']) ? 1 : 0
+    },
+    {
+      id: 'red_clownfish',
+      biomeId: 'red_sea',
+      title: 'Рыба-клоун в актинии',
+      desc: 'Сфотографируйте или обнаружьте сонаром рыбу-клоуна Красного моря в актинии.',
+      landmarkId: 'sharm_reef',
+      goal: 1,
+      progress: (ctx) => ctx.hasPhotoOrPing(['clownfish']) ? 1 : 0
+    },
+    {
+      id: 'red_reef_wall',
+      biomeId: 'red_sea',
+      title: 'Рифовая стена и мурена',
+      desc: 'Опуститесь к рифовой стене (drop-off) и найдите рифовую мурену.',
+      landmarkId: 'reef_drop_off',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('reef_wall') && ctx.hasPhotoOrPing(['moray']) ? 1 : 0
+    },
+    {
+      id: 'red_dugong',
+      biomeId: 'red_sea',
+      title: 'Дюгонь в лагуне',
+      desc: 'Встретьте дюгоня — «морскую корову» — в мелководье лагуны Красного моря.',
+      landmarkId: 'lagoon_shallows',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('reef_lagoon') && ctx.hasPhotoOrPing(['dugong', 'turtle']) ? 1 : 0
+    },
+        // --- Подводные пещеры Флориды ---
+    {
+      id: 'fl_spring_entrance',
+      biomeId: 'florida_caves',
+      title: 'Вход в источник Флориды',
+      desc: 'Исследуйте бассейн источника и зафиксируйте флоридскую мягкокрылую черепаху.',
+      landmarkId: 'spring_entrance',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('spring_basin') && ctx.hasPhotoOrPing(['florida_softshell']) ? 1 : 0
+    },
+    {
+      id: 'fl_cavern_hall',
+      biomeId: 'florida_caves',
+      title: 'Карстовый зал и сталиктиты',
+      desc: 'Найдите карстовый зал и осмотрите сталактиты и сталагмиты.',
+      landmarkId: 'cavern_ceiling',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('cavern_hall') && ctx.hasPhotoOrPing(['stalactite', 'stalagmite']) ? 1 : 0
+    },
+    {
+      id: 'fl_cave_crayfish',
+      biomeId: 'florida_caves',
+      title: 'Пещерный рак и слепая рыба',
+      desc: 'Опуститесь в узкий проход и обнаружьте пещерного рака и слепую пещерную рыбу.',
+      landmarkId: 'squeeze_passage',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('narrow_passage') && ctx.hasPhotoOrPing(['cave_crayfish', 'blind_cave_fish']) ? 1 : 0
+    },
+    {
+      id: 'fl_manatee',
+      biomeId: 'florida_caves',
+      title: 'Ламантин у источника',
+      desc: 'Встретьте флоридского ламантина у входа в источник.',
+      landmarkId: 'spring_entrance',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('spring_basin') && ctx.hasPhotoOrPing(['florida_manatee']) ? 1 : 0
     }
   ];
 
@@ -27668,7 +29429,7 @@ window.OC = window.OC || {};
       lines.push(`- Состояние: **${rep.ecoLab.statusLabel}** · ΔT: ${rep.ecoLab.tempDeltaC >= 0 ? '+' : ''}${rep.ecoLab.tempDeltaC} °C · pH: ${rep.ecoLab.pH} · Обесцвечивание: ${rep.ecoLab.bleachingPct}%`);
       lines.push('');
     }
-    lines.push('## Сводка по 11 биомам планеты');
+    lines.push(`## Сводка по ${rep.biomes.length} биомам планеты`);
     lines.push('| Биом | Регион | Глубины | Виды | Миссии |');
     lines.push('|---|---|---|---|---|');
     for (const b of rep.biomes) {
@@ -29103,6 +30864,10 @@ window.OC = window.OC || {};
   let coordsEl = null;
   let depthEl = null;
   let tempEl = null;
+  let countryEl = null;
+  let waterTypeEl = null;
+  let protectionEl = null;
+  let notableEl = null;
   let progressEl = null;
   let summaryEl = null;
   let goBtn = null;
@@ -29285,7 +31050,7 @@ window.OC = window.OC || {};
     }
 
     // Соединяем точки всех биомов дугами глобальной экспедиции
-    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea', 'amazon_igapo', 'baikal'];
+    const orderIds = ['great_barrier_reef', 'wreck_atoll', 'mariana_trench', 'kelp_forest', 'galapagos_upwelling', 'cenote_caves', 'brine_pool', 'hydrothermal_vents', 'arctic_sea', 'amazon_igapo', 'baikal', 'red_sea', 'florida_caves'];
     const ordered = [];
     for (let i = 0; i < orderIds.length; i++) {
       if (beaconById[orderIds[i]]) ordered.push(beaconById[orderIds[i]]);
@@ -29337,6 +31102,11 @@ window.OC = window.OC || {};
     if (coordsEl) coordsEl.textContent = g.coordLabel || `${g.lat.toFixed(1)}°, ${g.lon.toFixed(1)}°`;
     if (depthEl) depthEl.textContent = g.depthSpan || '—';
     if (tempEl) tempEl.textContent = g.tempSpan || '—';
+    if (countryEl) countryEl.textContent = g.country || '—';
+    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле' };
+    if (waterTypeEl) waterTypeEl.textContent = g.waterType ? (waterTypeLabels[g.waterType] || g.waterType) : '—';
+    if (protectionEl) protectionEl.textContent = g.protectionStatus || '—';
+    if (notableEl) notableEl.textContent = g.notableFor || '—';
     if (summaryEl) summaryEl.textContent = g.summary || b.subtitle;
 
     if (progressEl) {
@@ -29563,6 +31333,10 @@ window.OC = window.OC || {};
       coordsEl = document.getElementById('globe-b-coords');
       depthEl = document.getElementById('globe-b-depth');
       tempEl = document.getElementById('globe-b-temp');
+      countryEl = document.getElementById('globe-b-country');
+      waterTypeEl = document.getElementById('globe-b-watertype');
+      protectionEl = document.getElementById('globe-b-protection');
+      notableEl = document.getElementById('globe-b-notable');
       progressEl = document.getElementById('globe-b-progress');
       summaryEl = document.getElementById('globe-b-summary');
       goBtn = document.getElementById('globe-go-btn');
@@ -29635,7 +31409,9 @@ window.OC = window.OC || {};
     cenote_caves: 'Сеноты Юкатана',
     galapagos_upwelling: 'Галапагосы',
     amazon_igapo: 'Амазония',
-    baikal: 'Байкал'
+    baikal: 'Байкал',
+    red_sea: 'Красное море',
+    florida_caves: 'Пещеры Флориды'
   };
 
   const BIOME_REGION = {
@@ -29649,7 +31425,9 @@ window.OC = window.OC || {};
     cenote_caves: 'Юкатан · Сак-Актун 58 м',
     galapagos_upwelling: 'Эквадор · Апвеллинг',
     amazon_igapo: 'Рио-Негру · Игапо 28 м',
-    baikal: 'Сибирь · Байкальский рифт 1 642 м'
+    baikal: 'Сибирь · Байкальский рифт 1 642 м',
+    red_sea: 'Рас Мохаммед · Красное море',
+    florida_caves: 'Океола · Флоридский аквифер'
   };
 
   // Капли воды на стекле маски при выныривании или шторме (fixed pool, без GC)
@@ -32761,11 +34539,14 @@ window.OC = window.OC || {};
       OC.uTime.value = time;
 
       OC.Navigation.update(dt, time, camera, reduced);
+      // Floating Origin: сдвигаем начало координат, если камера ушла слишком далеко
+      const scene = OC.getScene();
+      if (scene && OC.FloatingOrigin) OC.FloatingOrigin.update(camera, scene);
       const camPos = camera.position;
       const craftPos = OC.Navigation.getPosition ? OC.Navigation.getPosition() : camPos;
 
       OC.updateWorld(dt, time, camPos, autoCycle);
-      OC.Terrain.update(camPos);
+      OC.Terrain.update(camPos, scene);
       OC.FloraStreamer.update(camPos);
       if (OC.Sonar) OC.Sonar.update(dt);
       const camSpeed = OC.Navigation.getSpeed();

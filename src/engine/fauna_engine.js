@@ -47,6 +47,7 @@ window.OC = window.OC || {};
 
   OC.FaunaEngine = {
     init(scene, biome) {
+      if (OC.FaunaImpostors) OC.FaunaImpostors.clearAll();
       disposeFaunaGroup(scene);
       faunaGroup = new T.Group();
       scene.add(faunaGroup);
@@ -70,6 +71,13 @@ window.OC = window.OC || {};
 
       const plan = biome.faunaPlan || {};
       const agents = [];
+      const impostoredAgents = new Set(); // агенты, для которых сейчас активен impostor
+
+      // Инициализация системы impostor-билбордов для удалённой фауны
+      if (OC.FaunaImpostors) {
+        const cam = OC.getCamera ? OC.getCamera() : null;
+        OC.FaunaImpostors.init(scene, cam);
+      }
       const schools = [];
       const predatorAgents = [];
       const preySchools = [];
@@ -152,6 +160,8 @@ window.OC = window.OC || {};
       const _toTarget = new T.Vector3();
       const _currFlow = new T.Vector3();
       const _flowAccum = new T.Vector3();
+      const _tmpVec2 = new T.Vector3();
+
       let faunaCountRefreshTimer = 0;
 
       function refreshFaunaCounts() {
@@ -261,6 +271,8 @@ window.OC = window.OC || {};
 
           lastCamPos.copy(camPos);
           updateCtx.dayW = dayW;
+
+
           updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;
@@ -316,8 +328,39 @@ window.OC = window.OC || {};
             fishMatBiolum.emissiveIntensity = OC.lerp(1.45, 0.25, dayW) + (pal.bioGlow || 0) * 0.45;
           }
 
+          // Направление камеры для поворота impostor-ビルбордов лицом к игроку
+          let camFwdX = 0, camFwdZ = -1;
+          const cam = OC.getCamera ? OC.getCamera() : null;
+          if (cam) {
+            cam.getWorldDirection(_tmpVec2);
+            camFwdX = _tmpVec2.x;
+            camFwdZ = _tmpVec2.z;
+          }
+
           for (let i = 0; i < agents.length; i++) {
+            const ag = agents[i];
+            const p = ag.getPosition ? ag.getPosition() : null;
             agents[i].update(dt, time, camPos, updateCtx);
+
+            // Impostor: на дистанции >200 м 3D-модель заменяется на billboard-квадрат.
+            // 3D-меш не скрывается напрямую (mesh может быть в замыкании билдера),
+            // impostorビルборд визуально перекрывает уменьшенную модель на遠 дистанции.
+            if (p && OC.FaunaImpostors && ag.key) {
+              const dCam = Math.hypot(p.x - camPos.x, p.z - camPos.z);
+              const hasImp = impostoredAgents.has(ag);
+              if (dCam > 200 && !hasImp) {
+                OC.FaunaImpostors.setImpostor(ag, true, ag.key, 0xffffff);
+                impostoredAgents.add(ag);
+              } else if (dCam < 150 && hasImp) {
+                OC.FaunaImpostors.setImpostor(ag, false);
+                impostoredAgents.delete(ag);
+              }
+            }
+          }
+
+          // Поворачиваем все активные impostor-ビルборды лицом к камере
+          if (OC.FaunaImpostors) {
+            OC.FaunaImpostors.update(camPos, { x: camFwdX, y: 0, z: camFwdZ });
           }
           faunaCountRefreshTimer += dt;
           if (faunaCountRefreshTimer >= 1) {
@@ -802,6 +845,22 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, y: 0, r: 10, size: 1 });
         } else if (key === 'dugong') {
           OC._FaunaBuilders.makeDugong(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'florida_manatee') {
+          OC._FaunaBuilders.makeManatee(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, scale: 1 });
+        } else if (key === 'blind_cave_fish' || key === 'cave_crayfish') {
+          const spec = (() => {
+            for (const b of OC.Biomes.list()) {
+              const p = b && b.faunaPlan;
+              if (!p) continue;
+              const c = (p.crustaceans || []).find((s) => s.key === key);
+              if (c) return c;
+            }
+            return null;
+          })();
+          if (spec) {
+            const fg = OC._FaunaBuilders.makeFishGeo(spec.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563, eyeScale: 0 });
+            built = new T.Mesh(fg, previewMat);
+          }
         } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark') {
           OC._FaunaBuilders.makeShark(tmpGroup, dummyBiome, {
             cx: 0, cz: 0, y: 0, r: 10, speed: 2,
@@ -927,7 +986,7 @@ window.OC = window.OC || {};
           tmpGroup.remove(built);
         }
         if (!built) {
-          built = new T.Mesh(new T.SphereGeometry(0.8, 12, 8), previewMat);
+          built = new T.Mesh(new T.SphereGeometry(0.8, 48, 24), previewMat);
         }
 
         // Обнуляем возможный сдвиг (напр. позиция группы в мировой точке) и приводим к единому масштабу 2.6 м

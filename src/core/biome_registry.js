@@ -11,6 +11,8 @@ window.OC = window.OC || {};
      * Регистрация нового океанического / водного биома планеты.
      * Контракт биома:
      * - id, name, region, subtitle, worldRadius, chunkSize, seaLevel
+     * - globe: { lat, lon, coordLabel, ocean, depthSpan, tempSpan, color, summary,
+     *          country, waterType, protectionStatus, notableFor } — геопривязка к реальной планете
      * - spawn: { pos: [x,y,z], yaw, pitch }
      * - zones: [{ id, name, shortName, color, depthLabel, tempC, description }]
      * - landmarks: [{ id, name, zoneId, x, y, z, yaw, pitch, description }]

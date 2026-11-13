@@ -349,7 +349,7 @@ console.log('   Option 2 ocean currents, particle/sway advection, #sub-current H
 
 // G) Verify Multi-Biome Planetary Platform (Kelp Forest, Hydrothermal Vents, Arctic Sea, Wreck Atoll, Mariana Trench, Brine Pool, Cenote Caves & Galapagos Upwelling) & clean switching
 const allBiomes = OC.Biomes.list();
-assert(allBiomes.length === 11, `Expected 11 registered aquatic biomes, got ${allBiomes.length}`);
+assert(allBiomes.length === 13, `Expected 13 registered aquatic biomes, got ${allBiomes.length}`);
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
 assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
@@ -596,7 +596,7 @@ console.log('   Multi-biome hot-switching & runtime quality preset switching (lo
 
 // H) Verify Direction 1 + All 10 Biome Missions (Camera, 40 Scientific Missions, Minimap Waypoints, Persistence)
 assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-assert.equal(OC.Expedition.MISSIONS.length, 44, `Expected 44 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+assert.equal(OC.Expedition.MISSIONS.length, 52, `Expected 52 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
 for (const b of OC.Biomes.list()) {
   const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
   assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);
@@ -896,7 +896,7 @@ OC.Globe.init({
 });
 
 const beacons = OC.Globe.getBeacons();
-assert.equal(beacons.length, 11, '3D Globe must expose 11 expedition beacons');
+assert.equal(beacons.length, 13, '3D Globe must expose 13 expedition beacons');
 let totalTourStages = 0;
 for (const b of OC.Biomes.list()) {
   assert(b.globe && Number.isFinite(b.globe.lat) && Number.isFinite(b.globe.lon), `Biome ${b.id} missing globe coordinates`);
@@ -910,7 +910,7 @@ for (const b of OC.Biomes.list()) {
   const sum = OC.Expedition.getBiomeSummary(b);
   assert(sum.speciesTotal === Object.keys(b.encyclopedia).length && sum.missionsTotal === 4, `getBiomeSummary mismatch for ${b.id}`);
 }
-assert(totalTourStages === 59, `Expected 59 total guided tour stages across 11 biomes, got ${totalTourStages}`);
+assert(totalTourStages === 67, `Expected 67 total guided tour stages across 13 biomes, got ${totalTourStages}`);
 
 for (const bc of beacons) {
   const rad = Math.hypot(bc.x, bc.y, bc.z);
@@ -1742,7 +1742,7 @@ console.log(`   Stage 3 ROV & Marine Science (Umbilical Tether ${tNear.lengthM}m
 // AD) Verify Stage 4 Scientific Report Export (.MD & .JSON) & Adaptive Auto-LOD Controller
 assert(typeof OC.Expedition.buildScientificReport === 'function' && typeof OC.Expedition.exportReport === 'function', 'OC.Expedition must expose scientific report builder & exporter');
 const repMd = OC.Expedition.exportReport('md', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
-assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 11 биомам'), 'Markdown report must summarize all 11 biomes & CTD data');
+assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 13 биомам'), 'Markdown report must summarize all 13 biomes & CTD data');
 const repJson = OC.Expedition.exportReport('json', { biome: amzBiome, ctdCast: ctdAmz, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
 const baikalReportMd = OC.Expedition.exportReport('md', { biome: baikal, ctdCast: ctdBaikal });
 const baikalReportJson = OC.Expedition.exportReport('json', { biome: baikal, ctdCast: ctdBaikal });
@@ -1752,8 +1752,8 @@ assert.equal(baikalReportData.ctdCast.conductivityUSCm, ctdBaikal.conductivityUS
 assert.equal(baikalReportData.ctdCast.oxygenProfile.length, ctdBaikal.bins.length, 'JSON report must export every CTD oxygen-depth sample');
 assert.equal(baikalReportData.ctdCast.profile[0].conductivityUSCm, ctdBaikal.bins[0].conductivityUSCm, 'JSON report must retain the conductivity/TDS vertical profile');
 const parsedRep = JSON.parse(repJson.content);
-assert.equal(parsedRep.biomes.length, 11, 'JSON scientific report must contain all 11 biomes');
-assert(parsedRep.summary.missionsTotal === 44 && parsedRep.summary.speciesTotal === 232, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
+assert.equal(parsedRep.biomes.length, 13, 'JSON scientific report must contain all 13 biomes');
+assert(parsedRep.summary.missionsTotal === 52 && parsedRep.summary.speciesTotal === 268, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
 
 assert(typeof OC.Quality.evaluateAutoLod === 'function' && typeof OC.Quality.setAutoLod === 'function' && typeof OC.Quality.getAutoLodState === 'function', 'OC.Quality must expose adaptive Auto-LOD controller');
 OC.Quality.set('high');

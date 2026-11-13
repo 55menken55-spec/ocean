@@ -741,11 +741,14 @@ window.OC = window.OC || {};
       OC.uTime.value = time;
 
       OC.Navigation.update(dt, time, camera, reduced);
+      // Floating Origin: сдвигаем начало координат, если камера ушла слишком далеко
+      const scene = OC.getScene();
+      if (scene && OC.FloatingOrigin) OC.FloatingOrigin.update(camera, scene);
       const camPos = camera.position;
       const craftPos = OC.Navigation.getPosition ? OC.Navigation.getPosition() : camPos;
 
       OC.updateWorld(dt, time, camPos, autoCycle);
-      OC.Terrain.update(camPos);
+      OC.Terrain.update(camPos, scene);
       OC.FloraStreamer.update(camPos);
       if (OC.Sonar) OC.Sonar.update(dt);
       const camSpeed = OC.Navigation.getSpeed();
