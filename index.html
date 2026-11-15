@@ -12419,6 +12419,34 @@ function createOrUpdateChunk(rec, segs) {
       return { total: chunks.size, built, visible, max: MAX_ACTIVE_CHUNKS };
     },
 
+    /* Диагностика ледяного/карстового потолка: сколько чанков реально имеют
+       ceilMesh и в каком диапазоне высот он построен. Читающий API. */
+    getCeilingStats() {
+      let meshes = 0, visible = 0, withCeiling = 0;
+      let minY = Infinity, maxY = -Infinity;
+      chunks.forEach((r) => {
+        if (r.mesh) withCeiling += 0;
+        if (!r.ceilMesh) return;
+        meshes++;
+        if (r.ceilMesh.visible) visible++;
+        const bb = r.ceilMesh.geometry.boundingSphere;
+        if (bb) {
+          minY = Math.min(minY, bb.center.y - bb.radius);
+          maxY = Math.max(maxY, bb.center.y + bb.radius);
+        }
+      });
+      chunks.forEach((r) => { if (r.mesh) withCeiling++; });
+      return {
+        material: !!ceilingMat,
+        biomeHasCeiling: !!(biomeRef && typeof biomeRef.getCeilingHeight === 'function'),
+        floorChunks: withCeiling,
+        ceilingMeshes: meshes,
+        ceilingVisible: visible,
+        minY: Number.isFinite(minY) ? minY : null,
+        maxY: Number.isFinite(maxY) ? maxY : null
+      };
+    },
+
     /* Положение построенных чанков в мировых координатах — регрессионный
        контроль выравнивания геометрии по сетке чанков (смещение на chunkSize/2
        ломало и текстуру, и коллизию). Читающий API, ничего не меняет. */

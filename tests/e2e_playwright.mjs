@@ -115,6 +115,52 @@ try {
     `Terrain chunks are offset from the chunk grid (geometry vs collision desync): ${JSON.stringify(chunkAlign)}`);
   console.log(`   Terrain chunk alignment verified in Chromium (${chunkAlign.count} chunks on the ${chunkAlign.chunkSize} m grid).`);
 
+  enterStage('DIAG-europa-ceiling');
+  await page.evaluate(() => window.OC.switchBiome('europa_ocean'));
+  await page.waitForFunction(() => window.OC.getPerfStats().biomeId === 'europa_ocean' && window.OC.getPerfStats().drawCalls > 0, { timeout: 25000 });
+  await page.waitForTimeout(1500);
+  const diag = await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const sample = (yaw, pitch) => new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        const c = document.getElementById('scene');
+        const gl = c.getContext('webgl2') || c.getContext('webgl');
+        const px = new Uint8Array(4);
+        const pts = [];
+        for (const fx of [0.35, 0.5, 0.65]) for (const fy of [0.3, 0.5, 0.7]) pts.push([Math.floor(c.width * fx), Math.floor(c.height * fy)]);
+        let r = 0, g = 0, b = 0, n = 0;
+        for (const [x, y] of pts) { gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); r += px[0]; g += px[1]; b += px[2]; n++; }
+        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) });
+      });
+    });
+    const out = { ceiling: window.OC.Terrain.getCeilingStats() };
+    const b = window.OC.Biomes.getActive();
+    const lm = b.landmarks.find((l) => l.id === 'tara_brine') || b.landmarks[0];
+    out.landmark = { id: lm.id, x: lm.x, y: lm.y, z: lm.z };
+    out.ceilAtLandmark = b.getCeilingHeight(lm.x, lm.z);
+    out.floorAtLandmark = b.getHeight(lm.x, lm.z);
+    // look DOWN at the floor
+    window.OC.Navigation.flyTo(lm.x, lm.y, lm.z, 0.0, -1.35);
+    await sleep(900);
+    out.camAfterFly = window.OC.Navigation.getPosition ? { ...window.OC.Navigation.getPosition() } : null;
+    out.floorSample = await sample(0.0, -1.35);
+    // look UP at the ice ceiling
+    window.OC.Navigation.flyTo(lm.x, lm.y, lm.z, 0.0, 1.35);
+    await sleep(900);
+    out.camUp = window.OC.Navigation.getPosition ? { ...window.OC.Navigation.getPosition() } : null;
+    out.ceilingSample = await sample(0.0, 1.35);
+    const pal = window.OC.getPalette ? window.OC.getPalette() : null;
+    out.pal = pal ? {
+      hemiSky: '#' + pal.hemiSky.getHexString(), hemiGround: '#' + pal.hemiGround.getHexString(),
+      hemiI: pal.hemiI, sunI: pal.sunI, fogDen: window.OC.getScene().fog.density,
+      fogCol: '#' + window.OC.getScene().fog.color.getHexString()
+    } : null;
+    out.flashlight = window.OC.isFlashlightOn ? window.OC.isFlashlightOn() : null;
+    return out;
+  });
+  console.log('::error title=EUROPA_CEILING_DIAG::' + JSON.stringify(diag));
+  assert.fail('DIAG STOP');
+
   enterStage('desktop-hotkeys');
   // Exercise core hotkeys: B (sub HUD), F (flashlight), G (3D multibeam sonar), ` (hydrophone), Z (ROV grab), I (CTD), K (Atlas), O (Globe), L (EcoLab), P/Enter (Photo), N/X (Cinema), / (Quick-Help)
   for (const code of ['KeyB', 'KeyF', 'KeyG', 'Backquote', 'KeyZ', 'KeyI', 'KeyI', 'KeyL', 'KeyL', 'KeyO', 'Escape', 'KeyK', 'Escape', 'KeyP', 'Enter', 'KeyP', 'KeyN', 'KeyX', 'KeyN', 'Slash', 'Escape']) {
