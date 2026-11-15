@@ -28,6 +28,17 @@ function enterStage(name) {
   console.log(`\n--- stage: ${name} ---`);
 }
 
+/* Ждём заданное число ОТРИСОВАННЫХ кадров, а не миллисекунды: на SwiftShader
+   кадр может идти сотни миллисекунд, и фиксированный sleep даёт на разных
+   машинах разное число кадров — замеры пикселей получаются несравнимыми. */
+async function waitFrames(page, count) {
+  await page.evaluate((n) => new Promise((resolve) => {
+    let left = n;
+    const step = () => (--left <= 0 ? resolve() : requestAnimationFrame(step));
+    requestAnimationFrame(step);
+  }), count);
+}
+
 const browser = await chromium.launch({
   headless: true,
   args: [
@@ -122,9 +133,25 @@ try {
      панцирь (и канал рассола в нём) перестают быть видны. */
   await page.evaluate(() => window.OC.switchBiome('europa_ocean'));
   await page.waitForFunction(() => window.OC.getPerfStats().biomeId === 'europa_ocean' && window.OC.getPerfStats().drawCalls > 0, { timeout: 25000 });
-  await page.waitForTimeout(2500);
+  /* Замер яркости не должен зависеть от производительности машины: SwiftShader
+     медленный, адаптивный Auto-LOD снижает пресет до low и отключает postFx,
+     из-за чего ледяной панцирь темнеет и порог «в 2.5 раза ярче дна» перестаёт
+     выполняться на слабом железе. Качество фиксируется и возвращается назад. */
+  const qualitySaved = await page.evaluate(() => {
+    const st = { auto: window.OC.Quality.isAutoLod(), id: window.OC.Quality.getId() };
+    window.OC.Quality.setAutoLod(false);
+    window.OC.Quality.set('medium');
+    return st;
+  });
+  await waitFrames(page, 45);
   const ceilingProbe = await page.evaluate(async () => {
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Кадры, а не миллисекунды: SwiftShader рисует медленно, и фиксированный
+    // sleep успевает показать разное число кадров от прогона к прогону.
+    const frames = (n) => new Promise((resolve) => {
+      let left = n;
+      const step = () => (--left <= 0 ? resolve() : requestAnimationFrame(step));
+      requestAnimationFrame(step);
+    });
     const sample = () => new Promise((resolve) => {
       requestAnimationFrame(() => {
         const c = document.getElementById('scene');
@@ -137,17 +164,24 @@ try {
         resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n) });
       });
     });
+    // Медиана трёх сэмплов: единичный кадр ловит всплеск каустики/планктона
+    const sampleMedian = async () => {
+      const runs = [];
+      for (let i = 0; i < 3; i++) { runs.push(await sample()); await frames(2); }
+      runs.sort((a, b) => a.lum - b.lum);
+      return runs[1];
+    };
     const b = window.OC.Biomes.getActive();
     const lm = b.landmarks.find((l) => l.id === 'basal_ice_view');
     const out = { landmark: lm ? lm.id : null, ceiling: window.OC.Terrain.getCeilingStats(), flashlightWas: window.OC.isFlashlightOn() };
     // Прожектор выключаем: иначе в кадр попадает аддитивный луч и замер становится замером луча
     window.OC.setFlashlight(false);
     window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, -1.25);
-    await sleep(2200);
-    out.floor = await sample();
+    await frames(45);
+    out.floor = await sampleMedian();
     window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, 1.25);
-    await sleep(2200);
-    out.ice = await sample();
+    await frames(45);
+    out.ice = await sampleMedian();
     window.OC.setFlashlight(out.flashlightWas);
     return out;
   });
@@ -157,7 +191,11 @@ try {
     `Europa basal ice shell is not readable without the flashlight (looking up luminance ${ceilingProbe.ice.lum}, sample ${JSON.stringify(ceilingProbe.ice)})`);
   assert(ceilingProbe.ice.lum >= ceilingProbe.floor.lum * 2.5,
     `Europa ice ceiling must read brighter than the abyssal floor (ice ${ceilingProbe.ice.lum} vs floor ${ceilingProbe.floor.lum})`);
-  console.log(`   Europa basal ice shell readable in Chromium: looking up luminance ${ceilingProbe.ice.lum} vs abyssal floor ${ceilingProbe.floor.lum} (${ceilingProbe.ceiling.ceilingVisible} ceiling chunks).`);
+  await page.evaluate((st) => {
+    window.OC.Quality.set(st.id);
+    window.OC.Quality.setAutoLod(st.auto);
+  }, qualitySaved);
+  console.log(`   Europa basal ice shell readable in Chromium: looking up luminance ${ceilingProbe.ice.lum} vs abyssal floor ${ceilingProbe.floor.lum} (${ceilingProbe.ceiling.ceilingVisible} ceiling chunks, quality fixed to medium).`);
 
   enterStage('europa-atlas-previews');
   /* Регрессия: карточки Атласа «Базальный слой ледяного панциря» и «Канал рассола»
