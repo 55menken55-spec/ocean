@@ -6,120 +6,166 @@ window.OC = window.OC || {};
   'use strict';
   const T = THREE;
 
+  /* ============ Сборка сетки чанка из решёток высот и цветов ============ */
+  /* ЧИСТАЯ функция без замыканий и внешних ссылок: её исходник через toString()
+     уходит в Web Worker, поэтому внутри можно пользоваться только Math и
+     типизированными массивами. Её же использует синхронный fallback — раньше
+     воркер и основной поток содержали две независимые копии этой логики и
+     расходились (воркер потерял расчёт градиента затенения, см. PR #4).
+
+     cfg.flip — режим потолка: нормали смотрят вниз, обход граней обратный,
+     юбка уходит вверх (в толщу льда/карста), часть квадов вырезается маской. */
+  function assembleChunkMesh(cfg) {
+    const segs = cfg.segs;
+    const step = cfg.step;
+    const stride = cfg.stride;
+    const h = cfg.heightData;
+    const c = cfg.colorData;
+    const flip = !!cfg.flip;
+    const skirt = cfg.skirt || 4.0;
+    const mask = cfg.mask || null;
+
+    const n = segs + 1;
+    const gridCount = n * n;
+    const skirtVerts = n * 4 * 2; // 4 ребра * (верх + низ)
+    const totalVerts = gridCount + skirtVerts;
+    const inv2Step = 1 / (2 * step);
+
+    const pos = new Float32Array(totalVerts * 3);
+    const norm = new Float32Array(totalVerts * 3);
+    const col = new Float32Array(totalVerts * 3);
+    const indices = [];
+
+    for (let iz = 0; iz <= segs; iz++) {
+      const relZ = iz * step;
+      const gRow = (iz + 1) * stride;
+      for (let ix = 0; ix <= segs; ix++) {
+        const relX = ix * step;
+        const gIdx = gRow + (ix + 1);
+        const idx = iz * n + ix;
+        const p3 = idx * 3;
+
+        pos[p3] = relX;
+        pos[p3 + 1] = h[gIdx];
+        pos[p3 + 2] = relZ;
+
+        // Нормаль как градиент высот; у потолка она зеркально обращена вниз
+        let nx = (h[gIdx - 1] - h[gIdx + 1]) * inv2Step;
+        let nz = (h[gIdx - stride] - h[gIdx + stride]) * inv2Step;
+        let ny = 1.0;
+        if (flip) { nx = -nx; nz = -nz; ny = -1.0; }
+        const len = Math.hypot(nx, ny, nz) || 1;
+        norm[p3] = nx / len;
+        norm[p3 + 1] = ny / len;
+        norm[p3 + 2] = nz / len;
+
+        const c3 = gIdx * 3;
+        col[p3] = c[c3];
+        col[p3 + 1] = c[c3 + 1];
+        col[p3 + 2] = c[c3 + 2];
+      }
+    }
+
+    for (let iz = 0; iz < segs; iz++) {
+      for (let ix = 0; ix < segs; ix++) {
+        const a = iz * n + ix;
+        const b = a + 1;
+        const cc = a + n;
+        const d = cc + 1;
+        if (mask && mask[a] && mask[b] && mask[cc] && mask[d]) continue;
+        if (flip) indices.push(a, b, cc, b, d, cc);
+        else indices.push(a, cc, b, b, cc, d);
+      }
+    }
+
+    // Юбки по 4 краям чанка — скрывают любые стыки при смене LOD
+    let vPtr = gridCount;
+    function addSkirtEdge(getGridIdx, reverse) {
+      const startPtr = vPtr;
+      for (let k = 0; k < n; k++) {
+        const gi = getGridIdx(k);
+        const g3 = gi * 3;
+        const t3 = vPtr * 3;
+        const b3 = (vPtr + 1) * 3;
+
+        pos[t3] = pos[g3]; pos[t3 + 1] = pos[g3 + 1]; pos[t3 + 2] = pos[g3 + 2];
+        pos[b3] = pos[g3]; pos[b3 + 1] = pos[g3 + 1] + (flip ? skirt : -skirt); pos[b3 + 2] = pos[g3 + 2];
+
+        norm[t3] = norm[g3]; norm[t3 + 1] = norm[g3 + 1]; norm[t3 + 2] = norm[g3 + 2];
+        norm[b3] = norm[g3]; norm[b3 + 1] = norm[g3 + 1]; norm[b3 + 2] = norm[g3 + 2];
+
+        col[t3] = col[g3]; col[t3 + 1] = col[g3 + 1]; col[t3 + 2] = col[g3 + 2];
+        col[b3] = col[g3] * 0.85; col[b3 + 1] = col[g3 + 1] * 0.85; col[b3 + 2] = col[g3 + 2] * 0.85;
+        vPtr += 2;
+      }
+      for (let k = 0; k < segs; k++) {
+        if (mask && mask[getGridIdx(k)] && mask[getGridIdx(k + 1)]) continue;
+        const a = startPtr + k * 2;
+        const b = a + 1;
+        const cc = a + 2;
+        const d = a + 3;
+        if (reverse !== flip) indices.push(a, cc, b, b, cc, d);
+        else indices.push(a, b, cc, b, d, cc);
+      }
+    }
+
+    addSkirtEdge((k) => k, false);                   // верхний край (z = 0)
+    addSkirtEdge((k) => segs * n + k, true);         // нижний край (z = size)
+    addSkirtEdge((k) => k * n, true);                // левый край (x = 0)
+    addSkirtEdge((k) => k * n + segs, false);        // правый край (x = size)
+
+    const idxBuf = new Uint32Array(indices);
+    return {
+      positions: pos, normals: norm, colors: col, indices: idxBuf,
+      vertexCount: totalVerts, indexCount: idxBuf.length
+    };
+  }
+
   /* ============ Web Worker: постройка геометрии чанка (встроен как строка) ============ */
-  /* Выполняется в отдельном потоке, не блокируя основной цикл рендеринга. */
+  /* Выполняется в отдельном потоке, не блокируя основной цикл рендеринга.
+     Собирается из исходника assembleChunkMesh, чтобы основной поток и воркер
+     всегда строили геометрию одним и тем же кодом. */
   const TERRAIN_WORKER_SRC = `
+'use strict';
+${assembleChunkMesh.toString()}
+
 self.onmessage = function (e) {
   'use strict';
   const msg = e.data;
   if (!msg || msg.type !== 'buildChunk') return;
 
-  const { cx, cz, segs, chunkSize, heightData, colorData, stride } = msg;
-  const n = segs + 1;
-  const gridCount = n * n;
-  const skirtVerts = n * 4 * 2;
-  const totalVerts = gridCount + skirtVerts;
-
-  const x0 = cx * chunkSize;
-  const z0 = cz * chunkSize;
+  const segs = msg.segs;
+  const chunkSize = msg.chunkSize;
   const step = chunkSize / segs;
-  const inv2Step = 1 / (2 * step);
+  const out = { type: 'chunkBuilt', cx: msg.cx, cz: msg.cz, segs: segs };
+  const transfer = [];
 
-  const pos = new Float32Array(totalVerts * 3);
-  const norm = new Float32Array(totalVerts * 3);
-  const col = new Float32Array(totalVerts * 3);
-  const indices = [];
-
-  for (let iz = 0; iz <= segs; iz++) {
-    const relZ = iz * step;
-    const gRow = (iz + 1) * stride;
-    for (let ix = 0; ix <= segs; ix++) {
-      const relX = ix * step;
-      const gIdx = gRow + (ix + 1);
-      const h = heightData[gIdx];
-      const idx = iz * n + ix;
-      const p3 = idx * 3;
-
-      pos[p3] = relX;
-      pos[p3 + 1] = h;
-      pos[p3 + 2] = relZ;
-
-      const hL = heightData[gIdx - 1];
-      const hR = heightData[gIdx + 1];
-      const hD = heightData[gIdx - stride];
-      const hU = heightData[gIdx + stride];
-      const nx = (hL - hR) * inv2Step;
-      const ny = 1.0;
-      const nz = (hD - hU) * inv2Step;
-      const gradMag = Math.hypot(nx, nz);
-      const len = Math.hypot(gradMag, ny) || 1;
-      norm[p3] = nx / len;
-      norm[p3 + 1] = ny / len;
-      norm[p3 + 2] = nz / len;
-
-      const c3 = gIdx * 3;
-      col[p3] = colorData[c3];
-      col[p3 + 1] = colorData[c3 + 1];
-      col[p3 + 2] = colorData[c3 + 2];
-    }
+  function pack(m) {
+    const r = {
+      positions: m.positions.buffer, normals: m.normals.buffer,
+      colors: m.colors.buffer, indices: m.indices.buffer,
+      vertexCount: m.vertexCount, indexCount: m.indexCount
+    };
+    transfer.push(m.positions.buffer, m.normals.buffer, m.colors.buffer, m.indices.buffer);
+    return r;
   }
 
-  for (let iz = 0; iz < segs; iz++) {
-    for (let ix = 0; ix < segs; ix++) {
-      const a = iz * n + ix;
-      const b = a + 1;
-      const c = a + n;
-      const d = c + 1;
-      indices.push(a, c, b, b, c, d);
-    }
+  out.floor = pack(assembleChunkMesh({
+    segs: segs, step: step,
+    heightData: msg.floor.heightData, colorData: msg.floor.colorData, stride: msg.floor.stride
+  }));
+
+  // Потолок (ледяной панцирь / карстовый свод) строится здесь же: раньше он
+  // собирался на главном потоке и съедал бюджет кадра в биомах с потолком.
+  if (msg.ceiling) {
+    out.ceiling = pack(assembleChunkMesh({
+      segs: segs, step: step,
+      heightData: msg.ceiling.heightData, colorData: msg.ceiling.colorData,
+      stride: msg.ceiling.stride, mask: msg.ceiling.mask, flip: true
+    }));
   }
 
-  let vPtr = gridCount;
-  function addSkirtEdge(getGridIdx, reverse) {
-    const startPtr = vPtr;
-    for (let k = 0; k < n; k++) {
-      const gi = getGridIdx(k);
-      const g3 = gi * 3;
-      const t3 = vPtr * 3;
-      const b3 = (vPtr + 1) * 3;
-
-      pos[t3] = pos[g3]; pos[t3 + 1] = pos[g3 + 1]; pos[t3 + 2] = pos[g3 + 2];
-      pos[b3] = pos[g3]; pos[b3 + 1] = pos[g3 + 1] - 4.0; pos[b3 + 2] = pos[g3 + 2];
-
-      norm[t3] = norm[g3]; norm[t3 + 1] = norm[g3 + 1]; norm[t3 + 2] = norm[g3 + 2];
-      norm[b3] = norm[g3]; norm[b3 + 1] = norm[g3 + 1]; norm[b3 + 2] = norm[g3 + 2];
-
-      col[t3] = col[g3]; col[t3 + 1] = col[g3 + 1]; col[t3 + 2] = col[g3 + 2];
-      col[b3] = col[g3] * 0.85; col[b3 + 1] = col[g3 + 1] * 0.85; col[b3 + 2] = col[g3 + 2] * 0.85;
-      vPtr += 2;
-    }
-    for (let k = 0; k < segs; k++) {
-      const a = startPtr + k * 2;
-      const b = a + 1;
-      const c = a + 2;
-      const d = a + 3;
-      if (reverse) indices.push(a, c, b, b, c, d);
-      else indices.push(a, b, c, b, d, c);
-    }
-  }
-
-  addSkirtEdge((k) => k, false);
-  addSkirtEdge((k) => segs * n + k, true);
-  addSkirtEdge((k) => k * n, true);
-  addSkirtEdge((k) => k * n + segs, false);
-
-  const idxBuf = new Uint32Array(indices);
-
-  self.postMessage({
-    type: 'chunkBuilt',
-    cx, cz, segs,
-    positions: pos.buffer,
-    normals: norm.buffer,
-    colors: col.buffer,
-    indices: idxBuf.buffer,
-    vertexCount: totalVerts,
-    indexCount: idxBuf.length
-  }, [pos.buffer, norm.buffer, col.buffer, idxBuf.buffer]);
+  self.postMessage(out, transfer);
 };
 `;
 
@@ -197,141 +243,92 @@ self.onmessage = function (e) {
   /* ---- Построение меша одного чанка с юбками по краям (без швов между LOD) ---- */
   /* Геометрия строится относительно центра чанка (0,0,0 = угол чанка в мировом пространстве);
      мировая позиция задаётся через mesh.position = worldCenter - origin (Floating Origin). */
-  function buildChunkGeometry(cx, cz, segs) {
-    const x0 = cx * chunkSize; // абсолютный угол чанка (для запросов к биому)
-    const z0 = cz * chunkSize; // абсолютный угол чанка (для запросов к биому)
-    const step = chunkSize / segs;
-    const inv2Step = 1 / (2 * step);
-    const n = segs + 1;
-    const stride = n + 2; // +1 ячейка с каждой стороны для идентичных бесшовных нормалей
-    const hBuf = getHeightGridBuf(stride);
+  /* ---- Заполнение решёток высот и цветов, общих для воркера и синхронного пути ---- */
 
+  function fillHeightGrid(hBuf, stride, x0, z0, step, heightFn) {
     for (let gz = 0; gz < stride; gz++) {
       const absZ = z0 + (gz - 1) * step;
       const row = gz * stride;
       for (let gx = 0; gx < stride; gx++) {
-        const absX = x0 + (gx - 1) * step;
-        hBuf[row + gx] = biomeRef.getHeight(absX, absZ);
+        hBuf[row + gx] = heightFn(x0 + (gx - 1) * step, absZ);
       }
     }
+  }
 
-    const gridCount = n * n;
-    const skirtVerts = n * 4 * 2; // 4 ребра * (верх+низ)
-    const totalVerts = gridCount + skirtVerts;
-
-    const pos = new Float32Array(totalVerts * 3);
-    const norm = new Float32Array(totalVerts * 3);
-    const col = new Float32Array(totalVerts * 3);
-
+  /* Цвета вершин считаем в основной поток (нужен градиент высот для затенения
+     текстуры), а собирает геометрию уже assembleChunkMesh. */
+  function fillColorGrid(colorData, hBuf, stride, segs, x0, z0, step, colorFn) {
+    const n = segs + 1;
+    const inv2Step = 1 / (2 * step);
     for (let iz = 0; iz <= segs; iz++) {
       const absZ = z0 + iz * step;
-      const relZ = absZ - z0; // относительно угла чанка
       const gRow = (iz + 1) * stride;
       for (let ix = 0; ix <= segs; ix++) {
         const absX = x0 + ix * step;
-        const relX = absX - x0; // относительно угла чанка
         const gIdx = gRow + (ix + 1);
-        const y = hBuf[gIdx];
-        const idx = iz * n + ix;
-        const p3 = idx * 3;
-
-        pos[p3] = relX;
-        pos[p3 + 1] = y;
-        pos[p3 + 2] = relZ;
-
-        const hL = hBuf[gIdx - 1];
-        const hR = hBuf[gIdx + 1];
-        const hD = hBuf[gIdx - stride];
-        const hU = hBuf[gIdx + stride];
-        const nx = (hL - hR) * inv2Step;
-        const ny = 1.0;
-        const nz = (hD - hU) * inv2Step;
+        const h = hBuf[gIdx];
+        const nx = (hBuf[gIdx - 1] - hBuf[gIdx + 1]) * inv2Step;
+        const nz = (hBuf[gIdx - stride] - hBuf[gIdx + stride]) * inv2Step;
         const gradMag = Math.hypot(nx, nz);
-        const len = Math.hypot(gradMag, ny) || 1;
-        norm[p3] = nx / len;
-        norm[p3 + 1] = ny / len;
-        norm[p3 + 2] = nz / len;
-
-        biomeRef.getTerrainColor(absX, y, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
-        col[p3] = _tmpCol.r;
-        col[p3 + 1] = _tmpCol.g;
-        col[p3 + 2] = _tmpCol.b;
+        colorFn(absX, h, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
+        const c3 = gIdx * 3;
+        colorData[c3] = _tmpCol.r;
+        colorData[c3 + 1] = _tmpCol.g;
+        colorData[c3 + 2] = _tmpCol.b;
       }
     }
+  }
 
-    const indices = [];
-    for (let iz = 0; iz < segs; iz++) {
-      for (let ix = 0; ix < segs; ix++) {
-        const a = iz * n + ix;
-        const b = a + 1;
-        const c = a + n;
-        const d = c + 1;
-        indices.push(a, c, b, b, c, d);
-      }
-    }
-
-    // Юбки по 4 краям чанка (скрывают любые стыки при смене LOD)
-    let vPtr = gridCount;
-    function addSkirtEdge(getGridIdx, reverse) {
-      const startPtr = vPtr;
-      for (let k = 0; k < n; k++) {
-        const gi = getGridIdx(k);
-        const g3 = gi * 3;
-        const t3 = vPtr * 3;
-        const b3 = (vPtr + 1) * 3;
-
-        pos[t3] = pos[g3]; pos[t3 + 1] = pos[g3 + 1]; pos[t3 + 2] = pos[g3 + 2];
-        pos[b3] = pos[g3]; pos[b3 + 1] = pos[g3 + 1] - 4.0; pos[b3 + 2] = pos[g3 + 2];
-
-        norm[t3] = norm[g3]; norm[t3 + 1] = norm[g3 + 1]; norm[t3 + 2] = norm[g3 + 2];
-        norm[b3] = norm[g3]; norm[b3 + 1] = norm[g3 + 1]; norm[b3 + 2] = norm[g3 + 2];
-
-        col[t3] = col[g3]; col[t3 + 1] = col[g3 + 1]; col[t3 + 2] = col[g3 + 2];
-        col[b3] = col[g3] * 0.85; col[b3 + 1] = col[g3 + 1] * 0.85; col[b3 + 2] = col[g3 + 2] * 0.85;
-        vPtr += 2;
-      }
-      for (let k = 0; k < segs; k++) {
-        const a = startPtr + k * 2;
-        const b = a + 1;
-        const c = a + 2;
-        const d = a + 3;
-        if (reverse) indices.push(a, c, b, b, c, d);
-        else indices.push(a, b, c, b, d, c);
-      }
-    }
-
-    addSkirtEdge((k) => k, false);                      // верхний край (z = z0)
-    addSkirtEdge((k) => segs * n + k, true);            // нижний край (z = z0 + size)
-    addSkirtEdge((k) => k * n, true);                   // левый край (x = x0)
-    addSkirtEdge((k) => k * n + segs, false);           // правый край (x = x0 + size)
-
+  function geometryFromMesh(m) {
     const geo = new T.BufferGeometry();
-    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new T.BufferAttribute(norm, 3));
-    geo.setAttribute('color', new T.BufferAttribute(col, 3));
-    geo.setIndex(indices);
+    geo.setAttribute('position', new T.BufferAttribute(m.positions, 3));
+    geo.setAttribute('normal', new T.BufferAttribute(m.normals, 3));
+    geo.setAttribute('color', new T.BufferAttribute(m.colors, 3));
+    geo.setIndex(new T.BufferAttribute(m.indices, 1));
     geo.computeBoundingSphere();
     return geo;
   }
 
+  /* ---- Построение меша одного чанка с юбками по краям (без швов между LOD) ---- */
+  /* Геометрия строится относительно угла чанка (0,0,0 = угол чанка в мировом
+     пространстве); мировая позиция задаётся через mesh.position (Floating Origin). */
+  function buildChunkGeometry(cx, cz, segs) {
+    const x0 = cx * chunkSize; // абсолютный угол чанка (для запросов к биому)
+    const z0 = cz * chunkSize;
+    const step = chunkSize / segs;
+    const n = segs + 1;
+    const stride = n + 2; // +1 ячейка с каждой стороны для идентичных бесшовных нормалей
+    const hBuf = getHeightGridBuf(stride);
+
+    fillHeightGrid(hBuf, stride, x0, z0, step, (x, z) => biomeRef.getHeight(x, z));
+
+    const colorData = new Float32Array(stride * stride * 3);
+    fillColorGrid(colorData, hBuf, stride, segs, x0, z0, step, (x, y, z, out, g) => biomeRef.getTerrainColor(x, y, z, out, g));
+
+    return geometryFromMesh(assembleChunkMesh({ segs, step, heightData: hBuf, colorData, stride }));
+  }
+
+  /* ---- Потолок: ледяной панцирь Европы или карстовый свод ---- */
+  /* Возвращает null, если в этом чанке потолка нет (например, открытый шахтный
+     ствол cenote), чтобы не создавать пустой меш. */
   function buildCeilingChunkGeometry(cx, cz, segs) {
     const x0 = cx * chunkSize;
     const z0 = cz * chunkSize;
     const step = chunkSize / segs;
-    const inv2Step = 1 / (2 * step);
     const n = segs + 1;
     const stride = n + 2;
     const hBuf = getHeightGridBuf(stride);
-    const gridCount = n * n;
-    const skirtVerts = n * 4 * 2;
-    const totalVerts = gridCount + skirtVerts;
 
-    const pos = new Float32Array(totalVerts * 3);
-    const norm = new Float32Array(totalVerts * 3);
-    const col = new Float32Array(totalVerts * 3);
-    const openMask = new Uint8Array(gridCount);
+    const colorFn = biomeRef.getCeilingColor
+      ? (x, y, z, out, g) => biomeRef.getCeilingColor(x, y, z, out)
+      : (x, y, z, out, g) => biomeRef.getTerrainColor(x, y, z, out, g);
 
+    // Маска «открытого» потолка: 1 = в этом кваде потолка нет (ствол, разлом).
+    // Индексы решётки берём из счётчиков циклов, а не восстанавливаем из x/z —
+    // округление плавающей точки на границах ячеек давало бы сбои маски.
+    const mask = new Uint8Array(n * n);
     let anyClosed = false;
+
     for (let gz = 0; gz < stride; gz++) {
       const absZ = z0 + (gz - 1) * step;
       const row = gz * stride;
@@ -342,106 +339,21 @@ self.onmessage = function (e) {
         hBuf[row + gx] = y;
         if (gx >= 1 && gx <= n && gz >= 1 && gz <= n) {
           const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(absX, absZ) : (rawY > 38.0);
-          openMask[(gz - 1) * n + (gx - 1)] = isOpen ? 1 : 0;
+          mask[(gz - 1) * n + (gx - 1)] = isOpen ? 1 : 0;
           if (!isOpen) anyClosed = true;
         }
       }
     }
-
     if (!anyClosed) return null;
 
-    for (let iz = 0; iz <= segs; iz++) {
-      const absZ = z0 + iz * step;
-      const relZ = absZ - z0;
-      const gRow = (iz + 1) * stride;
-      for (let ix = 0; ix <= segs; ix++) {
-        const absX = x0 + ix * step;
-        const relX = absX - x0;
-        const gIdx = gRow + (ix + 1);
-        const y = hBuf[gIdx];
-        const idx = iz * n + ix;
-        const p3 = idx * 3;
+    const colorData = new Float32Array(stride * stride * 3);
+    fillColorGrid(colorData, hBuf, stride, segs, x0, z0, step, colorFn);
 
-        pos[p3] = relX;
-        pos[p3 + 1] = y;
-        pos[p3 + 2] = relZ;
-
-        const hL = hBuf[gIdx - 1];
-        const hR = hBuf[gIdx + 1];
-        const hD = hBuf[gIdx - stride];
-        const hU = hBuf[gIdx + stride];
-        const nx = (hR - hL) * inv2Step;
-        const ny = -1.0;
-        const nz = (hU - hD) * inv2Step;
-        const len = Math.hypot(nx, ny, nz) || 1;
-        norm[p3] = nx / len;
-        norm[p3 + 1] = ny / len;
-        norm[p3 + 2] = nz / len;
-
-        if (biomeRef.getCeilingColor) biomeRef.getCeilingColor(absX, y, absZ, _tmpCol);
-        else biomeRef.getTerrainColor(absX, y, absZ, _tmpCol);
-        col[p3] = _tmpCol.r;
-        col[p3 + 1] = _tmpCol.g;
-        col[p3 + 2] = _tmpCol.b;
-      }
-    }
-
-    const indices = [];
-    for (let iz = 0; iz < segs; iz++) {
-      for (let ix = 0; ix < segs; ix++) {
-        const a = iz * n + ix;
-        const b = a + 1;
-        const c = a + n;
-        const d = c + 1;
-        if (openMask[a] && openMask[b] && openMask[c] && openMask[d]) continue;
-        indices.push(a, b, c, b, d, c);
-      }
-    }
-    if (!indices.length) return null;
-
-    // Юбки потолка уходят вверх (+4 м в толщу карста), чтобы скрывать переходы LOD
-    let vPtr = gridCount;
-    function addCeilSkirtEdge(getGridIdx, reverse) {
-      const startPtr = vPtr;
-      for (let k = 0; k < n; k++) {
-        const gi = getGridIdx(k);
-        const g3 = gi * 3;
-        const t3 = vPtr * 3;
-        const b3 = (vPtr + 1) * 3;
-
-        pos[t3] = pos[g3]; pos[t3 + 1] = pos[g3 + 1]; pos[t3 + 2] = pos[g3 + 2];
-        pos[b3] = pos[g3]; pos[b3 + 1] = pos[g3 + 1] + 4.0; pos[b3 + 2] = pos[g3 + 2];
-
-        norm[t3] = norm[g3]; norm[t3 + 1] = norm[g3 + 1]; norm[t3 + 2] = norm[g3 + 2];
-        norm[b3] = norm[g3]; norm[b3 + 1] = norm[g3 + 1]; norm[b3 + 2] = norm[g3 + 2];
-
-        col[t3] = col[g3]; col[t3 + 1] = col[g3 + 1]; col[t3 + 2] = col[g3 + 2];
-        col[b3] = col[g3] * 0.85; col[b3 + 1] = col[g3 + 1] * 0.85; col[b3 + 2] = col[g3 + 2] * 0.85;
-        vPtr += 2;
-      }
-      for (let k = 0; k < segs; k++) {
-        if (openMask[getGridIdx(k)] && openMask[getGridIdx(k + 1)]) continue;
-        const a = startPtr + k * 2;
-        const b = a + 1;
-        const c = a + 2;
-        const d = a + 3;
-        if (reverse) indices.push(a, b, c, b, d, c);
-        else indices.push(a, c, b, b, c, d);
-      }
-    }
-
-    addCeilSkirtEdge((k) => k, false);
-    addCeilSkirtEdge((k) => segs * n + k, true);
-    addCeilSkirtEdge((k) => k * n, true);
-    addCeilSkirtEdge((k) => k * n + segs, false);
-
-    const geo = new T.BufferGeometry();
-    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new T.BufferAttribute(norm, 3));
-    geo.setAttribute('color', new T.BufferAttribute(col, 3));
-    geo.setIndex(indices);
-    geo.computeBoundingSphere();
-    return geo;
+    const mesh = assembleChunkMesh({
+      segs, step, heightData: hBuf, colorData, stride, mask, flip: true
+    });
+    if (!mesh.indexCount) return null; // весь чанк — открытый ствол
+    return geometryFromMesh(mesh);
   }
 
   function desiredSegs(dist, q) {
@@ -463,7 +375,7 @@ self.onmessage = function (e) {
     // Свои данные для каждой записи очереди: чанк мог быть перезапрошен с другим
     // LOD, и тогда запись в pendingChunkData уже перезаписана.
     const pd = next.pd || pendingChunkData.get(key);
-    if (!pd || !pendingChunkData.has(key)) {
+    if (!pd || !pendingChunkData.has(key) || !pd.floor) {
       workerBusy = false;
       processWorkerQueue();
       return;
@@ -471,160 +383,154 @@ self.onmessage = function (e) {
     // Буферы уходят в worker как Transferable — после передачи они отсоединены,
     // и повторная передача того же буфера бросает DataCloneError
     // («An ArrayBuffer is detached and could not be cloned»).
-    if (pd.heightData.buffer.byteLength === 0 || pd.colorData.buffer.byteLength === 0) {
+    const detached = (a) => !a || !a.buffer || a.buffer.byteLength === 0;
+    if (detached(pd.floor.heightData) || detached(pd.floor.colorData) ||
+        (pd.ceiling && (detached(pd.ceiling.heightData) || detached(pd.ceiling.colorData)))) {
       workerBusy = false;
       processWorkerQueue();
       return;
     }
-    // Копируем буферы перед передачей в Worker, чтобы не нейтрализовать
-    // общий heightGridBuf (getHeightGridBuf переиспользует один буфер).
-    // Transferable переносит владение буфером — после этого источник становится
-    // неиспользуемым (detached), и все следующие чанки получают нулевые высоты.
-    const hCopy = new Float32Array(pd.heightData);
-    const cCopy = new Float32Array(pd.colorData);
-    terrainWorker.postMessage({
+    // Копируем перед передачей: Transferable отсоединяет источник, а решётки
+    // Pending-записи могут понадобиться повторно (тот же чанк, другой LOD).
+    const transfer = [];
+    const packGrid = (g) => {
+      const h = new Float32Array(g.heightData);
+      const c = new Float32Array(g.colorData);
+      transfer.push(h.buffer, c.buffer);
+      const out = { heightData: h, colorData: c, stride: g.stride };
+      if (g.mask) {
+        const m = new Uint8Array(g.mask);
+        transfer.push(m.buffer);
+        out.mask = m;
+      }
+      return out;
+    };
+
+    const payload = {
       type: 'buildChunk',
       cx: next.rec.cx,
       cz: next.rec.cz,
       segs: pd.segs,
       chunkSize: chunkSize,
-      heightData: hCopy,
-      colorData: cCopy,
-      stride: pd.stride
-    }, [hCopy.buffer, cCopy.buffer]);
+      floor: packGrid(pd.floor)
+    };
+    if (pd.ceiling) payload.ceiling = packGrid(pd.ceiling);
+
+    terrainWorker.postMessage(payload, transfer);
   }
 
-  function buildChunkFromWorkerData(rec, segs, positions, normals, colors, indices, vertexCount, indexCount) {
-    const geo = new T.BufferGeometry();
-    geo.setAttribute('position', new T.BufferAttribute(new Float32Array(positions), 3));
-    geo.setAttribute('normal', new T.BufferAttribute(new Float32Array(normals), 3));
-    geo.setAttribute('color', new T.BufferAttribute(new Float32Array(colors), 3));
-    geo.setIndex(new T.BufferAttribute(new Uint32Array(indices), 1));
-    geo.computeBoundingSphere();
+  /* Геометрия, собранная воркером: остаётся только надеть её на меши. */
+  function buildChunkFromWorkerData(rec, segs, msg) {
+    const f = msg.floor;
+    if (!f) return;
+    const floorGeo = new T.BufferGeometry();
+    floorGeo.setAttribute('position', new T.BufferAttribute(new Float32Array(f.positions), 3));
+    floorGeo.setAttribute('normal', new T.BufferAttribute(new Float32Array(f.normals), 3));
+    floorGeo.setAttribute('color', new T.BufferAttribute(new Float32Array(f.colors), 3));
+    floorGeo.setIndex(new T.BufferAttribute(new Uint32Array(f.indices), 1));
+    floorGeo.computeBoundingSphere();
 
-    const origin = getOriginRef();
-    const ox = origin ? origin.x : 0;
-    const oz = origin ? origin.z : 0;
-
-    if (rec.mesh) {
-      rec.mesh.geometry.dispose();
-      rec.mesh.geometry = geo;
-    } else {
-      rec.mesh = new T.Mesh(geo, terrainMat);
-      rec.mesh.userData.key = 'floor';
-      group.add(rec.mesh);
+    let ceilGeo = null;
+    const c = msg.ceiling;
+    if (c && c.indexCount) {
+      ceilGeo = new T.BufferGeometry();
+      ceilGeo.setAttribute('position', new T.BufferAttribute(new Float32Array(c.positions), 3));
+      ceilGeo.setAttribute('normal', new T.BufferAttribute(new Float32Array(c.normals), 3));
+      ceilGeo.setAttribute('color', new T.BufferAttribute(new Float32Array(c.colors), 3));
+      ceilGeo.setIndex(new T.BufferAttribute(new Uint32Array(c.indices), 1));
+      ceilGeo.computeBoundingSphere();
     }
-    rec.mesh.position.set(rec.wx - ox, 0, rec.wz - oz);
 
-    if (ceilingMat && biomeRef.getCeilingHeight) {
-      const cGeo = buildCeilingChunkGeometry(rec.cx, rec.cz, segs);
-      if (cGeo) {
-        if (rec.ceilMesh) {
-          rec.ceilMesh.geometry.dispose();
-          rec.ceilMesh.geometry = cGeo;
-          rec.ceilMesh.visible = rec.mesh.visible;
-          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
-        } else {
-          rec.ceilMesh = new T.Mesh(cGeo, ceilingMat);
-          rec.ceilMesh.userData.key = 'floor';
-          rec.ceilMesh.visible = rec.mesh.visible;
-          rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
-          group.add(rec.ceilMesh);
-        }
-      } else if (rec.ceilMesh) {
-        group.remove(rec.ceilMesh);
-        rec.ceilMesh.geometry.dispose();
-        rec.ceilMesh = null;
-      }
-    }
-    rec.segs = segs;
+    applyChunkGeometry(rec, segs, floorGeo, ceilGeo);
   }
 
-function createOrUpdateChunk(rec, segs) {
-    if (rec.segs === segs && rec.mesh) return;
+  /* Готовит решётки высот/цветов для дна и (если есть) потолка и ставит чанк
+     в очередь воркера. Все обращения к биому (getHeight, getTerrainColor,
+     getCeilingHeight, isCeilingOpen) делаются здесь, в основном потоке; воркер
+     получает уже готовые числа и только собирает геометрию. */
+  function queueChunkBuild(rec, segs) {
     const key = chunkKey(rec.cx, rec.cz);
+    const x0 = rec.cx * chunkSize;
+    const z0 = rec.cz * chunkSize;
+    const step = chunkSize / segs;
+    const n = segs + 1;
+    const stride = n + 2;
 
-    // Если Worker доступен — используем асинхронную постройку
-    if (terrainWorker) {
-      // Подготавливаем height и color данные в основном потоке (вызовы getHeight/getTerrainColor)
-      const x0 = rec.cx * chunkSize;
-      const z0 = rec.cz * chunkSize;
-      const step = chunkSize / segs;
-      const inv2Step = 1 / (2 * step);
-      const n = segs + 1;
-      const stride = n + 2;
-      // Для worker-пути нужен ОТДЕЛЬНЫЙ буфер на чанк: общий scratch-буфер
-      // отсоединяется после первой передачи в worker и ломает следующий чанк.
+    // Для worker-пути нужен ОТДЕЛЬНЫЙ буфер на чанк: общий scratch-буфер
+    // отсоединяется после первой передачи в worker и ломает следующий чанк.
+    const floor = {
+      heightData: new Float32Array(stride * stride),
+      colorData: new Float32Array(stride * stride * 3), // паддингованная сетка, как у высот
+      stride: stride
+    };
+    fillHeightGrid(floor.heightData, stride, x0, z0, step, (x, z) => biomeRef.getHeight(x, z));
+    fillColorGrid(floor.colorData, floor.heightData, stride, segs, x0, z0, step,
+      (x, y, z, out, g) => biomeRef.getTerrainColor(x, y, z, out, g));
+
+    let ceiling = null;
+    if (ceilingMat && biomeRef.getCeilingHeight) {
       const hBuf = new Float32Array(stride * stride);
-
+      const mask = new Uint8Array(n * n);
+      let anyClosed = false;
       for (let gz = 0; gz < stride; gz++) {
         const absZ = z0 + (gz - 1) * step;
         const row = gz * stride;
         for (let gx = 0; gx < stride; gx++) {
           const absX = x0 + (gx - 1) * step;
-          hBuf[row + gx] = biomeRef.getHeight(absX, absZ);
+          const rawY = biomeRef.getCeilingHeight(absX, absZ);
+          const y = Math.min(22.0, rawY);
+          hBuf[row + gx] = y;
+          if (gx >= 1 && gx <= n && gz >= 1 && gz <= n) {
+            const isOpen = biomeRef.isCeilingOpen ? biomeRef.isCeilingOpen(absX, absZ) : (rawY > 38.0);
+            mask[(gz - 1) * n + (gx - 1)] = isOpen ? 1 : 0;
+            if (!isOpen) anyClosed = true;
+          }
         }
       }
-
-      // Решётка цветов индексируется тем же gIdx, что и решётка высот, то есть по
-      // ПАДДИНГОВАННОЙ сетке (stride x stride), а не по n x n. При размере n*n*3
-      // записи последних строк уходили за границу буфера и молча отбрасывались,
-      // а воркер читал оттуда undefined — получались NaN-цвета вершин (~13 %).
-      const colorData = new Float32Array(stride * stride * 3);
-      for (let iz = 0; iz <= segs; iz++) {
-        const absZ = z0 + iz * step;
-        const gRow = (iz + 1) * stride;
-        for (let ix = 0; ix <= segs; ix++) {
-          const absX = x0 + ix * step;
-          const gIdx = gRow + (ix + 1);
-          const h = hBuf[gIdx];
-          // Градиент высот для правильного затенения текстуры (как в buildChunkGeometry)
-          const hL = hBuf[gIdx - 1];
-          const hR = hBuf[gIdx + 1];
-          const hD = hBuf[gIdx - stride];
-          const hU = hBuf[gIdx + stride];
-          const nx = (hL - hR) * inv2Step;
-          const nz = (hD - hU) * inv2Step;
-          const gradMag = Math.hypot(nx, nz);
-          biomeRef.getTerrainColor(absX, h, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
-          const c3 = gIdx * 3;
-          colorData[c3] = _tmpCol.r;
-          colorData[c3 + 1] = _tmpCol.g;
-          colorData[c3 + 2] = _tmpCol.b;
-        }
+      if (anyClosed) {
+        ceiling = {
+          heightData: hBuf,
+          colorData: new Float32Array(stride * stride * 3),
+          mask: mask,
+          stride: stride
+        };
+        const colorFn = biomeRef.getCeilingColor
+          ? (x, y, z, out, g) => biomeRef.getCeilingColor(x, y, z, out)
+          : (x, y, z, out, g) => biomeRef.getTerrainColor(x, y, z, out, g);
+        fillColorGrid(ceiling.colorData, hBuf, stride, segs, x0, z0, step, colorFn);
       }
-
-      pendingChunkData.set(key, { heightData: hBuf, colorData, stride, segs });
-      workerQueue.push({ rec, segs, pd: pendingChunkData.get(key) });
-      processWorkerQueue();
-      return; // Чанк будет построен асинхронно
     }
 
-    // Fallback: синхронная постройка (если Worker недоступен)
-    const geo = buildChunkGeometry(rec.cx, rec.cz, segs);
-    if (rec.mesh) {
-      rec.mesh.geometry.dispose();
-      rec.mesh.geometry = geo;
-    } else {
-      rec.mesh = new T.Mesh(geo, terrainMat);
-      rec.mesh.userData.key = 'floor';
-      group.add(rec.mesh);
-    }
+    pendingChunkData.set(key, { floor, ceiling, segs });
+    workerQueue.push({ rec, segs, pd: pendingChunkData.get(key) });
+    processWorkerQueue();
+  }
+
+  /* Надеть готовую геометрию дна и (опционально) потолка на меши чанка. */
+  function applyChunkGeometry(rec, segs, floorGeo, ceilingGeo) {
     const origin = getOriginRef();
     const ox = origin ? origin.x : 0;
     const oz = origin ? origin.z : 0;
+
+    if (rec.mesh) {
+      rec.mesh.geometry.dispose();
+      rec.mesh.geometry = floorGeo;
+    } else {
+      rec.mesh = new T.Mesh(floorGeo, terrainMat);
+      rec.mesh.userData.key = 'floor';
+      group.add(rec.mesh);
+    }
     rec.mesh.position.set(rec.wx - ox, 0, rec.wz - oz);
 
     if (ceilingMat && biomeRef.getCeilingHeight) {
-      const cGeo = buildCeilingChunkGeometry(rec.cx, rec.cz, segs);
-      if (cGeo) {
+      if (ceilingGeo) {
         if (rec.ceilMesh) {
           rec.ceilMesh.geometry.dispose();
-          rec.ceilMesh.geometry = cGeo;
+          rec.ceilMesh.geometry = ceilingGeo;
           rec.ceilMesh.visible = rec.mesh.visible;
           rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
         } else {
-          rec.ceilMesh = new T.Mesh(cGeo, ceilingMat);
+          rec.ceilMesh = new T.Mesh(ceilingGeo, ceilingMat);
           rec.ceilMesh.userData.key = 'floor';
           rec.ceilMesh.visible = rec.mesh.visible;
           rec.ceilMesh.position.set(rec.wx - ox, 0, rec.wz - oz);
@@ -637,6 +543,21 @@ function createOrUpdateChunk(rec, segs) {
       }
     }
     rec.segs = segs;
+  }
+
+  function createOrUpdateChunk(rec, segs) {
+    if (rec.segs === segs && rec.mesh) return;
+
+    // Если Worker доступен — используем асинхронную постройку
+    if (terrainWorker) {
+      queueChunkBuild(rec, segs);
+      return; // Чанк будет построен асинхронно
+    }
+
+    // Fallback: синхронная постройка (если Worker недоступен)
+    applyChunkGeometry(rec, segs,
+      buildChunkGeometry(rec.cx, rec.cz, segs),
+      (ceilingMat && biomeRef.getCeilingHeight) ? buildCeilingChunkGeometry(rec.cx, rec.cz, segs) : null);
   }
 
   /* ---- Внешний горизонт дна за пределами детальной карты (только для ограниченных миров) ---- */
@@ -694,16 +615,16 @@ function createOrUpdateChunk(rec, segs) {
           const blob = new Blob([TERRAIN_WORKER_SRC], { type: 'application/javascript' });
           terrainWorker = new Worker(URL.createObjectURL(blob));
           terrainWorker.onmessage = (e) => {
-            const { type, cx, cz, segs, positions, normals, colors, indices, vertexCount, indexCount } = e.data;
-            if (type !== 'chunkBuilt') return;
-            const key = chunkKey(cx, cz);
+            const msg = e.data;
+            if (!msg || msg.type !== 'chunkBuilt') return;
+            const key = chunkKey(msg.cx, msg.cz);
             const rec = chunks.get(key);
             // Очередь воркера должна освобождаться даже если чанк успели выбросить
             // (переключение биома): иначе асинхронная постройка встаёт навсегда.
             workerBusy = false;
             processWorkerQueue();
             if (!rec) return;
-            buildChunkFromWorkerData(rec, segs, positions, normals, colors, indices, vertexCount, indexCount);
+            buildChunkFromWorkerData(rec, msg.segs, msg);
           };
           terrainWorker.onerror = (err) => {
             console.warn('Terrain worker error:', err);

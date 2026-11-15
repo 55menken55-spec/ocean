@@ -160,24 +160,30 @@ sandbox.window.addEventListener = () => {};
    ошибка размера буфера цветов: синхронный путь считает цвета на месте и корректен,
    а воркерный читал за границей буфера и получал undefined -> NaN-цвета вершин.
    Воркер выполняется синхронно в том же контексте, поэтому детерминирован. */
-const TERRAIN_WORKER_SRC = (() => {
-  const src = fs.readFileSync(path.join(ROOT, 'src', 'engine', 'terrain.js'), 'utf8');
-  const m = src.match(/const TERRAIN_WORKER_SRC = `([\s\S]*?)`;/);
-  assert(m, 'terrain.js must define TERRAIN_WORKER_SRC');
-  return m[1];
-})();
+/* Исходник воркера забираем из Blob, который создаёт сам terrain.js: так в
+   песочницу попадает ровно тот текст, что уходит в настоящий Worker (включая
+   подставленный через toString() исходник assembleChunkMesh), а не шаблонная
+   строка до подстановки. */
 let fakeWorkerInstance = null;
-sandbox.Blob = class { constructor(parts) { this.parts = parts; } };
+let fakeBlobInstance = null;
+sandbox.Blob = class { constructor(parts) { this.parts = parts; fakeBlobInstance = this; } };
 sandbox.URL = { createObjectURL: () => 'blob:terrain-worker', revokeObjectURL: () => {} };
+let forceSyncPath = false; // заставляет конструктор падать, чтобы terrain.js ушёл в синхронный fallback
 sandbox.Worker = class FakeWorker {
   constructor() {
+    // Если флаг взведён — бросаем: terrain.js перехватывает ошибку создания
+    // воркера и строит чанки синхронно. Так получается «чистый» синхронный снимок.
+    if (forceSyncPath) { fakeWorkerInstance = null; throw new Error('forced sync fallback'); }
     this.onmessage = null;
     this.onerror = null;
     fakeWorkerInstance = this;
   }
   postMessage(msg) {
+    assert(fakeBlobInstance && fakeBlobInstance.parts[0], 'terrain.js must create the worker from a Blob');
     const self = { onmessage: null, postMessage: (r) => { if (this.onmessage) this.onmessage({ data: r }); } };
-    vm.runInNewContext(TERRAIN_WORKER_SRC, { self, Math, Float32Array, Uint32Array, console }, { filename: 'terrain-worker.js' });
+    vm.runInNewContext(fakeBlobInstance.parts[0],
+      { self, Math, Float32Array, Uint32Array, Uint8Array, console },
+      { filename: 'terrain-worker.js' });
     if (self.onmessage) self.onmessage({ data: msg });
   }
   terminate() {}
@@ -501,6 +507,101 @@ function assertNoNaNGeometry(label, root, attrs) {
     }
   });
   assert(checked > 0, `${label}: no geometry attributes to check`);
+}
+
+/* ---- Паритет путей постройки чанков: Web Worker и синхронный fallback ----
+   Обе ветки обязаны выдавать одну и ту же геометрию. Исторически они были двумя
+   независимыми копиями кода и расходились: воркерная потеряла расчёт градиента
+   высот, из-за чего дно в браузере (воркер) затенялось иначе, чем в тестах
+   (синхронный fallback). Теперь обе собирают геометрию через assembleChunkMesh,
+   и это закреплено проверкой. */
+function snapshotTerrain(scene) {
+  const root = terrainRoot(scene);
+  const out = new Map();
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const nrm = o.geometry.attributes.normal;
+    if (!nrm || !nrm.count) return;
+    const isCeil = nrm.getY(0) < 0; // у потолка нормали смотрят вниз
+    const k = `${Math.round(o.position.x)}|${Math.round(o.position.z)}|${isCeil ? 'c' : 'f'}`;
+    out.set(k, {
+      position: o.geometry.attributes.position.array,
+      normal: nrm.array,
+      color: o.geometry.attributes.color ? o.geometry.attributes.color.array : null,
+      index: o.geometry.index ? o.geometry.index.array : null
+    });
+  });
+  return out;
+}
+
+function compareSnapshots(a, b, label) {
+  const keysA = [...a.keys()].sort();
+  const keysB = [...b.keys()].sort();
+  assert.deepEqual(keysA, keysB, `${label}: набор чанков (дно + потолок) должен совпадать`);
+  for (const k of keysA) {
+    const gA = a.get(k), gB = b.get(k);
+    for (const attr of ['position', 'normal', 'color', 'index']) {
+      const arrA = gA[attr], arrB = gB[attr];
+      assert(arrA && arrB, `${label}: чанк ${k} без атрибута ${attr}`);
+      assert.equal(arrA.length, arrB.length, `${label}: чанк ${k} атрибут ${attr} разной длины`);
+      for (let i = 0; i < arrA.length; i++) {
+        if (attr === 'index') {
+          assert.equal(arrA[i], arrB[i], `${label}: чанк ${k} индекс ${i} расходится`);
+        } else {
+          const d = Math.abs(arrA[i] - arrB[i]);
+          assert(d < 1e-4, `${label}: чанк ${k} атрибут ${attr} расходится в ${i} (${arrA[i]} vs ${arrB[i]})`);
+        }
+      }
+    }
+  }
+}
+
+/* Точка замера подбирается так, чтобы в кадр попадали и дно, и потолок, и —
+   для cenote — ОТКРЫТЫЕ участки свода (стволы шахт), иначе маска потолка в
+   тесте не участвует и расхождение путей остаётся незамеченным. */
+const PARITY_PROBE = {
+  cenote_caves: (b) => new T.Vector3(0, b.getHeight(0, -60) + 3.0, -60),
+  europa_ocean: (b) => new T.Vector3(-68, b.getHeight(-68, 214) + 4.0, 214),
+  great_barrier_reef: (b) => new T.Vector3(b.spawn.pos[0], b.spawn.pos[1], b.spawn.pos[2])
+};
+
+for (const bId of ['cenote_caves', 'europa_ocean', 'great_barrier_reef']) {
+  const parBiome = OC.Biomes.get(bId);
+  const parPos = PARITY_PROBE[bId](parBiome);
+
+  // 1) Чисто синхронный снимок: конструктор воркера падает, поэтому и стартовая
+  //    окрестность из init, и все чанки из update строятся синхронно.
+  // Воркер мог остаться живым от предыдущего биома, а init создаёт его только
+  // если terrainWorker уже пуст — сначала гасим текущий через onerror, которым
+  // terrain.js сам сбрасывает terrainWorker в null.
+  forceSyncPath = true;
+  if (fakeWorkerInstance) fakeWorkerInstance.onerror(new Error('drop worker before sync snapshot'));
+  OC.Terrain.init(scene, parBiome, parPos);
+  assert(!fakeWorkerInstance, `${bId}: при forceSyncPath воркер не должен создаваться`);
+  for (let i = 0; i < 4; i++) OC.Terrain.update(parPos);
+  const syncSnap = snapshotTerrain(scene);
+
+  // 2) Чисто воркерный снимок: тот же биом, но воркер создаётся и работает.
+  forceSyncPath = false;
+  OC.Terrain.init(scene, parBiome, parPos);
+  assert(fakeWorkerInstance, `${bId}: воркер должен создаваться при init`);
+  for (let i = 0; i < 4; i++) OC.Terrain.update(parPos);
+  const workerSnap = snapshotTerrain(scene);
+
+  assert(syncSnap.size > 0, `${bId}: не построено ни одного чанка`);
+  const ceilKeys = [...workerSnap.keys()].filter((k) => k.endsWith('|c')).length;
+  if (parBiome.getCeilingHeight) {
+    assert(ceilKeys > 0, `${bId}: потолок должен строиться и на пути Web Worker`);
+    if (parBiome.isCeilingOpen) {
+      // В кадре должен быть чанк с вырезами в своде: иначе маска не проверяется
+      const openNear = parBiome.isCeilingOpen(parPos.x, parPos.z) ||
+        parBiome.isCeilingOpen(parPos.x + 90, parPos.z) || parBiome.isCeilingOpen(parPos.x - 90, parPos.z) ||
+        parBiome.isCeilingOpen(parPos.x, parPos.z + 90) || parBiome.isCeilingOpen(parPos.x, parPos.z - 90);
+      assert(openNear, `${bId}: точка замера паритета должна содержать открытый участок потолка`);
+    }
+  }
+  compareSnapshots(syncSnap, workerSnap, `${bId} worker-vs-sync`);
+  console.log(`   ${bId}: worker и синхронный fallback дают identical geometry (${workerSnap.size} мешей, из них потолков ${ceilKeys}).`);
 }
 
 // Verify Abyssal Hydrothermal thermal plume updraft (+Y > 1.5 m/s over main smoker) & signature flora density
