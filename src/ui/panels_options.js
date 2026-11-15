@@ -197,7 +197,11 @@ window.OC = window.OC || {};
       const contextKey = state.id + ':' + state.hemisphere;
       if (seasonLabel && (text !== lastSeasonText || contextKey !== lastSeasonContext)) {
         seasonLabel.textContent = text;
-        seasonLabel.title = 'Мягкий годовой переход · ' + (state.hemisphere === 'south' ? 'Южное полушарие' : (state.hemisphere === 'north' ? 'Северное полушарие' : 'Экваториальная область'));
+        const bio = activeBiome();
+        const hemisphereNote = (bio && bio.id === 'europa_ocean')
+          ? 'Спутник Юпитера · ось наклонена на 0,1° · год = 3,53 года оборота вокруг Юпитера'
+          : (state.hemisphere === 'south' ? 'Южное полушарие' : (state.hemisphere === 'north' ? 'Северное полушарие' : 'Экваториальная область'));
+        seasonLabel.title = 'Мягкий годовой переход · ' + hemisphereNote;
         lastSeasonText = text;
         lastSeasonContext = contextKey;
       }

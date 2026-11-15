@@ -24,7 +24,11 @@ window.OC = window.OC || {};
     cenote_caves: { hemisphere: 'north', amplitudeC: 1.1, depthScaleM: 28, lightAmplitude: 0.035 },
     galapagos_upwelling: { hemisphere: 'equatorial', amplitudeC: 0.35, depthScaleM: 85, lightAmplitude: 0.015 },
     amazon_igapo: { hemisphere: 'south', amplitudeC: 0.8, depthScaleM: 32, lightAmplitude: 0.025 },
-    baikal: { hemisphere: 'north', amplitudeC: 3.2, depthScaleM: 58, lightAmplitude: 0.11 }
+    baikal: { hemisphere: 'north', amplitudeC: 3.2, depthScaleM: 58, lightAmplitude: 0.11 },
+    /* Европа: ось наклонена на 0,1°, год — это 3,53-летний оборот вокруг Юпитера.
+       Сезонных температурных контрастов нет: цикл задаёт приливной нагрев и
+       интенсивность серпентинитового флюида, поэтому амплитуда минимальна. */
+    europa_ocean: { hemisphere: 'equatorial', amplitudeC: 0.15, depthScaleM: 40, lightAmplitude: 0.0 }
   };
 
   let phase = 0.5; // Стартовая экспедиция: лето в северном полушарии.
@@ -51,17 +55,20 @@ window.OC = window.OC || {};
     const isBaikal = biome && biome.id === 'baikal';
     const isArctic = biome && biome.id === 'arctic_sea';
     const isKelp = biome && biome.id === 'kelp_forest';
+    const isEuropa = biome && biome.id === 'europa_ocean';
     const isDeep = biome && (biome.id === 'hydrothermal_vents' || biome.id === 'mariana_trench' || biome.id === 'brine_pool');
     const floodFactor = isAmazon ? 0.5 + 0.5 * Math.cos((localPhase - 0.34) * TAU) : 0;
     const upwellingFactor = isGalapagos ? 1.0 - warmFactor * 0.28 : 1.0;
-    const iceFactor = isBaikal ? winterFactor : (isArctic ? 0.68 + winterFactor * 0.32 : 0);
+    const iceFactor = isBaikal ? winterFactor : (isArctic ? 0.68 + winterFactor * 0.32 : (isEuropa ? 1.0 : 0));
     const currentFactor = isGalapagos
       ? 0.78 + upwellingFactor * 0.22
-      : (isAmazon ? 0.84 + floodFactor * 0.28 : (isKelp ? 1.0 + warmFactor * 0.1 : (biome && biome.id === 'great_barrier_reef' ? 1.0 + warmFactor * 0.045 : 1.0)));
+      : (isAmazon ? 0.84 + floodFactor * 0.28 : (isKelp ? 1.0 + warmFactor * 0.1 : (isEuropa ? 0.94 + warmFactor * 0.08 : (biome && biome.id === 'great_barrier_reef' ? 1.0 + warmFactor * 0.045 : 1.0))));
     const faunaActivity = isGalapagos
       ? 0.82 + upwellingFactor * 0.2
-      : (isKelp ? 0.92 + warmFactor * 0.08 : (isAmazon ? 0.92 + floodFactor * 0.12 : (isDeep ? 1.0 : 1.0 + warmFactor * 0.035)));
-    const productivityFactor = isKelp ? 0.88 + (0.5 + 0.5 * warmFactor) * 0.24 : 1.0;
+      : (isKelp ? 0.92 + warmFactor * 0.08 : (isAmazon ? 0.92 + floodFactor * 0.12 : (isEuropa ? 0.9 + warmFactor * 0.1 : (isDeep ? 1.0 : 1.0 + warmFactor * 0.035))));
+    const productivityFactor = isKelp
+      ? 0.88 + (0.5 + 0.5 * warmFactor) * 0.24
+      : (isEuropa ? 0.86 + (0.5 + 0.5 * warmFactor) * 0.24 : 1.0);
     return {
       id: season.id,
       label: season.label,
@@ -94,7 +101,12 @@ window.OC = window.OC || {};
   function getTemperatureDelta(biome, depthM) {
     const climate = climateFor(biome);
     const phaseLocal = localPhaseFor(climate);
-    const depth = Number.isFinite(depthM) ? Math.abs(depthM) : 0;
+    const isEuropa = biome && biome.id === 'europa_ocean';
+    // У Европы «поверхность» воды — основание ледяного панциря на 25 км глубже,
+    // поэтому глубину считаем от основания панциря, а не от поверхности спутника.
+    const depth = isEuropa
+      ? Math.max(0, Math.abs(Number.isFinite(depthM) ? depthM : 0) - (biome.depthOffset || 0))
+      : (Number.isFinite(depthM) ? Math.abs(depthM) : 0);
     const surfaceInfluence = Math.exp(-Math.max(0, depth) / climate.depthScaleM);
     return climate.amplitudeC * -Math.cos(phaseLocal * TAU) * surfaceInfluence;
   }

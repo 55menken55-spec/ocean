@@ -460,8 +460,18 @@ self.onmessage = function (e) {
     const next = workerQueue.shift();
     workerBusy = true;
     const key = chunkKey(next.rec.cx, next.rec.cz);
-    const pd = pendingChunkData.get(key);
-    if (!pd) {
+    // Свои данные для каждой записи очереди: чанк мог быть перезапрошен с другим
+    // LOD, и тогда запись в pendingChunkData уже перезаписана.
+    const pd = next.pd || pendingChunkData.get(key);
+    if (!pd || !pendingChunkData.has(key)) {
+      workerBusy = false;
+      processWorkerQueue();
+      return;
+    }
+    // Буферы уходят в worker как Transferable — после передачи они отсоединены,
+    // и повторная передача того же буфера бросает DataCloneError
+    // («An ArrayBuffer is detached and could not be cloned»).
+    if (pd.heightData.buffer.byteLength === 0 || pd.colorData.buffer.byteLength === 0) {
       workerBusy = false;
       processWorkerQueue();
       return;
@@ -534,7 +544,60 @@ function createOrUpdateChunk(rec, segs) {
     if (rec.segs === segs && rec.mesh) return;
     const key = chunkKey(rec.cx, rec.cz);
 
-    // Синхронная постройка чанка (Worker отключён для отладки прозрачного дна)
+    // Если Worker доступен — используем асинхронную постройку
+    if (terrainWorker) {
+      // Подготавливаем height и color данные в основном потоке (вызовы getHeight/getTerrainColor)
+      const x0 = rec.cx * chunkSize;
+      const z0 = rec.cz * chunkSize;
+      const step = chunkSize / segs;
+      const inv2Step = 1 / (2 * step);
+      const n = segs + 1;
+      const stride = n + 2;
+      // Для worker-пути нужен ОТДЕЛЬНЫЙ буфер на чанк: общий scratch-буфер
+      // отсоединяется после первой передачи в worker и ломает следующий чанк.
+      const hBuf = new Float32Array(stride * stride);
+
+      for (let gz = 0; gz < stride; gz++) {
+        const absZ = z0 + (gz - 1) * step;
+        const row = gz * stride;
+        for (let gx = 0; gx < stride; gx++) {
+          const absX = x0 + (gx - 1) * step;
+          hBuf[row + gx] = biomeRef.getHeight(absX, absZ);
+        }
+      }
+
+      const gridCount = n * n;
+      const colorData = new Float32Array(gridCount * 3);
+      for (let iz = 0; iz <= segs; iz++) {
+        const absZ = z0 + iz * step;
+        const gRow = (iz + 1) * stride;
+        for (let ix = 0; ix <= segs; ix++) {
+          const absX = x0 + ix * step;
+          const gIdx = gRow + (ix + 1);
+          const h = hBuf[gIdx];
+          // Градиент высот для правильного затенения текстуры (как в buildChunkGeometry)
+          const hL = hBuf[gIdx - 1];
+          const hR = hBuf[gIdx + 1];
+          const hD = hBuf[gIdx - stride];
+          const hU = hBuf[gIdx + stride];
+          const nx = (hL - hR) * inv2Step;
+          const nz = (hD - hU) * inv2Step;
+          const gradMag = Math.hypot(nx, nz);
+          biomeRef.getTerrainColor(absX, h, absZ, _tmpCol, gradMag > 0.0001 ? Math.min(1, gradMag * 0.95) : 0);
+          const c3 = gIdx * 3;
+          colorData[c3] = _tmpCol.r;
+          colorData[c3 + 1] = _tmpCol.g;
+          colorData[c3 + 2] = _tmpCol.b;
+        }
+      }
+
+      pendingChunkData.set(key, { heightData: hBuf, colorData, stride, segs });
+      workerQueue.push({ rec, segs, pd: pendingChunkData.get(key) });
+      processWorkerQueue();
+      return; // Чанк будет построен асинхронно
+    }
+
+    // Fallback: синхронная постройка (если Worker недоступен)
     const geo = buildChunkGeometry(rec.cx, rec.cz, segs);
     if (rec.mesh) {
       rec.mesh.geometry.dispose();
@@ -632,9 +695,11 @@ function createOrUpdateChunk(rec, segs) {
             if (type !== 'chunkBuilt') return;
             const key = chunkKey(cx, cz);
             const rec = chunks.get(key);
-            if (!rec) return;
+            // Очередь воркера должна освобождаться даже если чанк успели выбросить
+            // (переключение биома): иначе асинхронная постройка встаёт навсегда.
             workerBusy = false;
             processWorkerQueue();
+            if (!rec) return;
             buildChunkFromWorkerData(rec, segs, positions, normals, colors, indices, vertexCount, indexCount);
           };
           terrainWorker.onerror = (err) => {
@@ -671,7 +736,13 @@ function createOrUpdateChunk(rec, segs) {
           roughness: 0.92,
           metalness: 0.02
         });
-        OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true });
+        /* Потолок освещён только «земной» полусферой. Под 25 км льда (noSurface)
+           она практически чёрная, поэтому ледяной панцирь перестаёт читаться —
+           даём ему рассеянный свет, сопоставимый с освещением дна. */
+        const ceilGlow = (typeof biome.ceilingGlow === 'number')
+          ? biome.ceilingGlow
+          : (biome.noSurface ? 0.34 : 0.14);
+        OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true, ceilGlow });
       }
 
       // Горизонтный фартук только для ограниченных миров
@@ -802,6 +873,53 @@ function createOrUpdateChunk(rec, segs) {
         if (r.mesh) { built++; if (r.mesh.visible) visible++; }
       });
       return { total: chunks.size, built, visible, max: MAX_ACTIVE_CHUNKS };
+    },
+
+    /* Диагностика ледяного/карстового потолка: сколько чанков реально имеют
+       ceilMesh и в каком диапазоне высот он построен. Читающий API. */
+    getCeilingStats() {
+      let meshes = 0, visible = 0, withCeiling = 0;
+      let minY = Infinity, maxY = -Infinity;
+      chunks.forEach((r) => {
+        if (r.mesh) withCeiling += 0;
+        if (!r.ceilMesh) return;
+        meshes++;
+        if (r.ceilMesh.visible) visible++;
+        const bb = r.ceilMesh.geometry.boundingSphere;
+        if (bb) {
+          minY = Math.min(minY, bb.center.y - bb.radius);
+          maxY = Math.max(maxY, bb.center.y + bb.radius);
+        }
+      });
+      chunks.forEach((r) => { if (r.mesh) withCeiling++; });
+      return {
+        material: !!ceilingMat,
+        biomeHasCeiling: !!(biomeRef && typeof biomeRef.getCeilingHeight === 'function'),
+        floorChunks: withCeiling,
+        ceilingMeshes: meshes,
+        ceilingVisible: visible,
+        minY: Number.isFinite(minY) ? minY : null,
+        maxY: Number.isFinite(maxY) ? maxY : null
+      };
+    },
+
+    /* Положение построенных чанков в мировых координатах — регрессионный
+       контроль выравнивания геометрии по сетке чанков (смещение на chunkSize/2
+       ломало и текстуру, и коллизию). Читающий API, ничего не меняет. */
+    getChunkOrigins() {
+      const origin = getOriginRef();
+      const ox = origin ? origin.x : 0;
+      const oz = origin ? origin.z : 0;
+      const list = [];
+      chunks.forEach((r) => {
+        if (!r.mesh) return;
+        list.push({
+          cx: r.cx, cz: r.cz, segs: r.segs,
+          localX: r.mesh.position.x, localZ: r.mesh.position.z,
+          originX: ox, originZ: oz
+        });
+      });
+      return { chunkSize, originX: ox, originZ: oz, chunks: list };
     }
   };
 })(window.OC);

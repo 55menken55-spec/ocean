@@ -31,7 +31,7 @@ window.OC = window.OC || {};
         id: b.id,
         name: b.name,
         region: b.region,
-        depthRange: b.depthRange,
+        depthRange: b.depthRange || (b.globe && b.globe.depthSpan) || '—',
         discovered: sum.discovered,
         speciesTotal: sum.speciesTotal,
         missionsDone: sum.missionsDone,
@@ -55,7 +55,7 @@ window.OC = window.OC || {};
     return {
       schemaVersion: '1.0',
       generatedAt: new Date().toISOString(),
-      expeditionTitle: 'Научный отчёт экспедиции · Океаны Земли 3D',
+      expeditionTitle: 'Научный отчёт экспедиции · Океаны планет 3D',
       activeBiome: activeBiome ? { id: activeBiome.id, name: activeBiome.name, region: activeBiome.region } : null,
       summary: {
         biomesCount: biomes.length,
@@ -133,7 +133,9 @@ window.OC = window.OC || {};
       lines.push(`- Зона: **${rep.ctdCast.zoneName}** (${rep.ctdCast.minDepthM}–${rep.ctdCast.maxDepthM} м, до ${rep.ctdCast.maxPressureAtm} атм)`);
       lines.push(`- Температура (поверхн. / дно): **${rep.ctdCast.surfaceTempC} °C / ${rep.ctdCast.bottomTempC} °C** · Термоклин: **${rep.ctdCast.thermoclineM} м** · Мин. O₂: **${rep.ctdCast.minO2} мг/л**`);
       if (Number.isFinite(rep.ctdCast.conductivityUSCm)) {
-        lines.push(`- Пресноводная химия: **${rep.ctdCast.conductivityUSCm} µS/см**, TDS **${rep.ctdCast.tdsMgL} мг/л**, минерализация **${rep.ctdCast.mineralizationPpt}‰**, pH **${rep.ctdCast.pH}**`);
+        const chemLabel = rep.ctdCast.waterType === 'freshwater' ? 'Пресноводная химия'
+          : (rep.ctdCast.waterType === 'subglacial' ? 'Химия подлёдного рассола' : 'Химия морской воды');
+        lines.push(`- ${chemLabel}: **${rep.ctdCast.conductivityUSCm} µS/см**, TDS **${rep.ctdCast.tdsMgL} мг/л**, минерализация **${rep.ctdCast.mineralizationPpt}‰**, pH **${rep.ctdCast.pH}**`);
       }
       if (rep.ctdCast.oxygenProfile.length) {
         const top = rep.ctdCast.oxygenProfile[0];

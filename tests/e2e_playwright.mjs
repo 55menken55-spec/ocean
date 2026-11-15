@@ -85,6 +85,120 @@ try {
   assert(renderCheck.ok, `Main WebGL #scene failed render check: ${JSON.stringify(renderCheck)}`);
   console.log(`   WebGL frame rendered (${renderCheck.width}x${renderCheck.height}, drawCalls=${renderCheck.drawCalls}, sampleRGB=${renderCheck.rgbSum}).`);
 
+  enterStage('terrain-alignment');
+  // Chunks must sit exactly on their grid corner (cx*chunkSize). A half-chunk
+  // offset desyncs the rendered seafloor from the collision heightfield.
+  const chunkAlign = await page.evaluate(async () => {
+    const deadline = performance.now() + 20000;
+    let info = null;
+    while (performance.now() < deadline) {
+      if (window.OC.Terrain && window.OC.Terrain.getChunkOrigins) {
+        info = window.OC.Terrain.getChunkOrigins();
+        if (info && info.chunks && info.chunks.length > 4) break;
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    if (!info || !info.chunks || !info.chunks.length) return { bad: [{ reason: 'no chunks built' }], count: 0 };
+    const bad = [];
+    for (const c of info.chunks) {
+      const worldX = c.localX + c.originX;
+      const worldZ = c.localZ + c.originZ;
+      const dx = worldX - c.cx * info.chunkSize;
+      const dz = worldZ - c.cz * info.chunkSize;
+      if (Math.abs(dx) > 0.5 || Math.abs(dz) > 0.5) {
+        bad.push({ cx: c.cx, cz: c.cz, dx: Number(dx.toFixed(2)), dz: Number(dz.toFixed(2)) });
+      }
+    }
+    return { bad, count: info.chunks.length, chunkSize: info.chunkSize };
+  });
+  assert.equal(chunkAlign.bad.length, 0,
+    `Terrain chunks are offset from the chunk grid (geometry vs collision desync): ${JSON.stringify(chunkAlign)}`);
+  console.log(`   Terrain chunk alignment verified in Chromium (${chunkAlign.count} chunks on the ${chunkAlign.chunkSize} m grid).`);
+
+  enterStage('europa-ice-ceiling');
+  /* Регрессия: базальный слой ледяного панциря Европы должен читаться на глаз.
+     Потолок обращён нормалями вниз, поэтому он не получает ни солнца, ни небесной
+     полусферы — без отдельной рассеянной подсветки он уходит в чёрный и ледяной
+     панцирь (и канал рассола в нём) перестают быть видны. */
+  await page.evaluate(() => window.OC.switchBiome('europa_ocean'));
+  await page.waitForFunction(() => window.OC.getPerfStats().biomeId === 'europa_ocean' && window.OC.getPerfStats().drawCalls > 0, { timeout: 25000 });
+  await page.waitForTimeout(2500);
+  const ceilingProbe = await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const sample = () => new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        const c = document.getElementById('scene');
+        const gl = c.getContext('webgl2') || c.getContext('webgl');
+        const px = new Uint8Array(4);
+        const pts = [];
+        for (const fx of [0.25, 0.35, 0.5, 0.65, 0.75]) for (const fy of [0.25, 0.4, 0.55, 0.7]) pts.push([Math.floor(c.width * fx), Math.floor(c.height * fy)]);
+        let r = 0, g = 0, b = 0, n = 0;
+        for (const [x, y] of pts) { gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); r += px[0]; g += px[1]; b += px[2]; n++; }
+        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n) });
+      });
+    });
+    const b = window.OC.Biomes.getActive();
+    const lm = b.landmarks.find((l) => l.id === 'basal_ice_view');
+    const out = { landmark: lm ? lm.id : null, ceiling: window.OC.Terrain.getCeilingStats(), flashlightWas: window.OC.isFlashlightOn() };
+    // Прожектор выключаем: иначе в кадр попадает аддитивный луч и замер становится замером луча
+    window.OC.setFlashlight(false);
+    window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, -1.25);
+    await sleep(2200);
+    out.floor = await sample();
+    window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, 1.25);
+    await sleep(2200);
+    out.ice = await sample();
+    window.OC.setFlashlight(out.flashlightWas);
+    return out;
+  });
+  assert(ceilingProbe.ceiling.ceilingMeshes > 0 && ceilingProbe.ceiling.ceilingVisible > 0,
+    `Europa must build and show ice ceiling chunks, got ${JSON.stringify(ceilingProbe.ceiling)}`);
+  assert(ceilingProbe.ice.lum >= 55,
+    `Europa basal ice shell is not readable without the flashlight (looking up luminance ${ceilingProbe.ice.lum}, sample ${JSON.stringify(ceilingProbe.ice)})`);
+  assert(ceilingProbe.ice.lum >= ceilingProbe.floor.lum * 2.5,
+    `Europa ice ceiling must read brighter than the abyssal floor (ice ${ceilingProbe.ice.lum} vs floor ${ceilingProbe.floor.lum})`);
+  console.log(`   Europa basal ice shell readable in Chromium: looking up luminance ${ceilingProbe.ice.lum} vs abyssal floor ${ceilingProbe.floor.lum} (${ceilingProbe.ceiling.ceilingVisible} ceiling chunks).`);
+
+  enterStage('europa-atlas-previews');
+  /* Регрессия: карточки Атласа «Базальный слой ледяного панциря» и «Канал рассола»
+     раньше показывали чёрный овал: записи без своей 3D-модели падали на заглушку-сферу,
+     а материал заглушки использовал vertexColors при отсутствующем атрибуте color. */
+  await page.keyboard.press('KeyK');
+  await page.waitForTimeout(700);
+  const atlasProbe = await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const sampleAtlas = () => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const c = document.getElementById('atlas-3d');
+        const gl = c.getContext('webgl2') || c.getContext('webgl');
+        const px = new Uint8Array(4);
+        const pts = [];
+        for (const fx of [0.35, 0.5, 0.65]) for (const fy of [0.3, 0.5, 0.7]) pts.push([Math.floor(c.width * fx), Math.floor(c.height * fy)]);
+        let r = 0, g = 0, b = 0, a = 0, n = 0;
+        for (const [x, y] of pts) { gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); r += px[0]; g += px[1]; b += px[2]; a += px[3]; n++; }
+        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), a: Math.round(a / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n) });
+      }));
+    });
+    const out = {};
+    for (const key of ['basal_ice', 'brine_channel']) {
+      const card = document.querySelector(`.atlas-card[data-key="${key}"]`);
+      if (!card) { out[key] = { missing: true }; continue; }
+      card.click();
+      await sleep(900);
+      out[key] = await sampleAtlas();
+    }
+    return out;
+  });
+  for (const key of ['basal_ice', 'brine_channel']) {
+    const p = atlasProbe[key];
+    assert(p && !p.missing, `Atlas must have a card for ${key}`);
+    assert(p.a > 8 && p.lum > 24,
+      `Atlas 3D preview for "${key}" renders as a black blob (a=${p.a}, luminance=${p.lum}, rgb=${p.r},${p.g},${p.b})`);
+  }
+  console.log(`   Europa atlas previews render geometry: basal_ice lum ${atlasProbe.basal_ice.lum} (a=${atlasProbe.basal_ice.a}), brine_channel lum ${atlasProbe.brine_channel.lum} (a=${atlasProbe.brine_channel.a}).`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+
   enterStage('desktop-hotkeys');
   // Exercise core hotkeys: B (sub HUD), F (flashlight), G (3D multibeam sonar), ` (hydrophone), Z (ROV grab), I (CTD), K (Atlas), O (Globe), L (EcoLab), P/Enter (Photo), N/X (Cinema), / (Quick-Help)
   for (const code of ['KeyB', 'KeyF', 'KeyG', 'Backquote', 'KeyZ', 'KeyI', 'KeyI', 'KeyL', 'KeyL', 'KeyO', 'Escape', 'KeyK', 'Escape', 'KeyP', 'Enter', 'KeyP', 'KeyN', 'KeyX', 'KeyN', 'Slash', 'Escape']) {
@@ -98,13 +212,13 @@ try {
   enterStage('desktop-biomes');
   // Profile every ocean biome across live Chromium frames
   const biomeIds = await page.evaluate(() => window.OC.Biomes.list().map((b) => b.id));
-  assert(biomeIds.length >= 11, `Expected >= 11 biomes, found ${biomeIds.length}`);
+  assert(biomeIds.length >= 14, `Expected >= 14 biomes, found ${biomeIds.length}`);
 
   const reportMeta = await page.evaluate(() => {
     const exp = window.OC.Expedition && window.OC.Expedition.exportReport ? window.OC.Expedition.exportReport('md') : null;
     return exp ? { len: exp.content.length, biomes: exp.report.biomes.length } : null;
   });
-  assert(reportMeta && reportMeta.biomes === 11 && reportMeta.len > 400, `Playwright report export failed: ${JSON.stringify(reportMeta)}`);
+  assert(reportMeta && reportMeta.biomes === 14 && reportMeta.len > 400, `Playwright report export failed: ${JSON.stringify(reportMeta)}`);
 
   const report = [];
   for (const id of biomeIds) {
@@ -303,6 +417,13 @@ try {
       return { before, atlasOpen: window.OC.Atlas.isOpen() };
     });
     await mobilePage.waitForTimeout(450); // ждём завершения перехода прозрачности
+    // Под SwiftShader главный поток загружен рендером, поэтому CSS-переход
+    // прозрачности может дойти до конца заметно позже номинальных 250 мс —
+    // ждём фактического достижения целевой прозрачности, а не фиксированной паузы.
+    await mobilePage.waitForFunction(() => {
+      const v = (sel) => Number(getComputedStyle(document.querySelector(sel)).opacity);
+      return v('#topright') < 0.05 && v('.brand') < 0.05 && v('.telemetry') < 0.05;
+    }, null, { timeout: 15000 }).catch(() => {});
     modalHud.open = await mobilePage.evaluate(() => {
       const vis = (sel) => Number(window.getComputedStyle(document.querySelector(sel)).opacity);
       return {
@@ -312,11 +433,15 @@ try {
     });
     await mobilePage.evaluate(() => window.OC.Atlas.toggle());
     await mobilePage.waitForTimeout(450);
+    await mobilePage.waitForFunction(() => {
+      const v = (sel) => Number(getComputedStyle(document.querySelector(sel)).opacity);
+      return v('#topright') > 0.95 && v('.brand') > 0.95;
+    }, null, { timeout: 15000 }).catch(() => {});
     modalHud.closed = await mobilePage.evaluate(() => {
       const vis = (sel) => Number(window.getComputedStyle(document.querySelector(sel)).opacity);
       return { class: document.body.classList.contains('modal-open'), rail: vis('#topright'), brand: vis('.brand') };
     });
-    assert(modalHud.open.atlasOpen, 'Атлас не открылся в тесте модалок');
+    assert(modalHud.atlasOpen, 'Атлас не открылся в тесте модалок');
     assert(modalHud.open.class === true, 'Открытая модалка должна ставить body.modal-open');
     assert(modalHud.open.rail < 0.05 && modalHud.open.brand < 0.05 && modalHud.open.tele < 0.05,
       `HUD не скрылся под модалкой: ${JSON.stringify(modalHud.open)}`);

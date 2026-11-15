@@ -166,7 +166,9 @@
     color:var(--accent);font:600 10px inherit;white-space:nowrap}
 
   /* ---------- Статус ---------- */
-  .status{position:fixed;right:20px;bottom:14px;z-index:20;font-size:10.5px;letter-spacing:.14em;
+  /* Статус (регион + FPS) стоит НАД плашкой оптики в правом нижнем углу:
+     обе метки были в одной точке и плашка «Оптика» перекрывала FPS. */
+  .status{position:fixed;right:20px;bottom:30px;z-index:20;font-size:10.5px;letter-spacing:.14em;
     color:rgba(155,195,215,.72);text-transform:uppercase;pointer-events:none;display:flex;gap:12px}
 
   /* ---------- Режим батискафа и Эхолот ---------- */
@@ -190,7 +192,8 @@
   .sub-cell b{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--accent)}
   .sub-cell b.warn{color:var(--accent2)}
 
-  .sonar-box{position:fixed;right:20px;bottom:42px;z-index:22;width:266px;padding:10px;border-radius:16px;
+  /* Эхолот встаёт выше строки статуса, чтобы панели не наезжали друг на друга */
+  .sonar-box{position:fixed;right:20px;bottom:56px;z-index:22;width:266px;padding:10px;border-radius:16px;
     background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
     box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none;transition:opacity .3s, transform .3s}
   .sonar-box.hidden{opacity:0;transform:translateY(14px);pointer-events:none}
@@ -395,6 +398,9 @@
     background:rgba(4,18,32,.84);border:1px solid rgba(88,224,255,.45);font-size:11.5px;color:#eafaff;
     pointer-events:none;backdrop-filter:blur(8px);transition:opacity .15s}
   .globe-hover-tip.hidden{opacity:0}
+  .globe-planet{position:absolute;right:12px;top:12px;padding:5px 12px;border-radius:999px;
+    background:rgba(4,18,32,.84);border:1px solid rgba(140,210,255,.5);font-size:11.5px;color:#eafaff;
+    letter-spacing:.06em;pointer-events:none;backdrop-filter:blur(8px)}
   .globe-hint{position:absolute;left:12px;bottom:10px;font-size:10.5px;color:rgba(195,235,255,.72);
     pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.8)}
   .globe-side{display:flex;flex-direction:column;gap:12px;min-width:0}
@@ -535,7 +541,8 @@
     .brand{max-width:150px}
     .brand p{display:none}
     .status{display:none}
-    .telemetry{max-width:70vw}
+    /* Телеметрия по центру не должна доезжать до плашки «Оптика» справа */
+    .telemetry{max-width:min(70vw, calc(100vw - 420px))}
   }
   @media (max-width:720px){
     .brand{left:14px;top:calc(10px + env(safe-area-inset-top, 0px))}
@@ -582,9 +589,13 @@
     .panel{max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 20px)}
     .touch-nav{bottom:10px}
     /* Ландшафт телефона: развёрнутый рейл занимает два ряда сверху,
-       поэтому быстрые действия начинаются под ним, а не под кнопкой «›» */
+       поэтому быстрые действия начинаются под ним, а не под кнопкой «›».
+       Блок быстрых действий (3 ряда кнопок) не должен вылезать за нижний край
+       экрана 390 px: позицию ограничиваем через min(), а высоту — max-height. */
     .touch-actions{bottom:auto;right:10px;flex-direction:row;flex-wrap:wrap;max-width:132px;
-      top:calc(var(--rail-top) + var(--rail-bottom) + 52px)}
+      top:min(calc(var(--rail-top) + var(--rail-bottom) + 36px), calc(100vh - 152px));
+      max-height:calc(100vh - var(--rail-top) - var(--rail-bottom) - 44px);overflow-y:auto}
+    .touch-act{width:44px;height:44px;font-size:13px}
     .telemetry{bottom:8px}
   }
 </style>
@@ -992,14 +1003,15 @@
 <div class="atlas-modal hidden" id="globe-modal" role="dialog" aria-modal="true" aria-label="3D-глобус планеты и экспедиции">
   <div class="globe-box">
     <div class="atlas-header">
-      <div><h3>3D-глобус планеты</h3><small>13 водных экспедиций · 67 этапа гида</small></div>
+      <div><h3 id="globe-title">3D-глобус: Земля</h3><small>14 водных экспедиций · 73 этапа гида</small></div>
       <button class="btn" id="globe-close" style="flex:0 0 auto;padding:7px 14px">Закрыть (Esc)</button>
     </div>
     <div class="globe-body">
       <div class="globe-stage">
         <canvas id="globe-3d" width="460" height="390"></canvas>
         <div class="globe-hover-tip hidden" id="globe-hover-tip">—</div>
-        <div class="globe-hint">Вращайте Землю мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть</div>
+        <div class="globe-planet" id="globe-planet">Земля</div>
+        <div class="globe-hint" id="globe-hint">Вращайте Землю мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть</div>
       </div>
       <div class="globe-side">
         <div class="globe-list" id="globe-list"></div>

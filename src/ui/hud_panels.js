@@ -27,7 +27,8 @@ window.OC = window.OC || {};
     amazon_igapo: 'Амазония',
     baikal: 'Байкал',
     red_sea: 'Красное море',
-    florida_caves: 'Пещеры Флориды'
+    florida_caves: 'Пещеры Флориды',
+    europa_ocean: 'Океан Европы'
   };
 
   const BIOME_REGION = {
@@ -43,7 +44,8 @@ window.OC = window.OC || {};
     amazon_igapo: 'Рио-Негру · Игапо 28 м',
     baikal: 'Сибирь · Байкальский рифт 1 642 м',
     red_sea: 'Рас Мохаммед · Красное море',
-    florida_caves: 'Океола · Флоридский аквифер'
+    florida_caves: 'Океола · Флоридский аквифер',
+    europa_ocean: 'Европа · Юпитер · подлёдный океан'
   };
 
   // Капли воды на стекле маски при выныривании или шторме (fixed pool, без GC)

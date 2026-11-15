@@ -69,7 +69,7 @@ window.OC = window.OC || {};
           const mesh = new T.Mesh(geo, OC._FaunaCtx.creatureMat);
           mesh.scale.setScalar(cr.scale || 0.8);
           mesh.userData.key = cr.key;
-          scene.add(mesh);
+          faunaGroup.add(mesh);
           const ra = new T.Vector3(), rb = new T.Vector3();
           agents.push({
             key: cr.key,
@@ -365,6 +365,35 @@ window.OC = window.OC || {};
       for (const fm of (plan.fumaroles || [])) {
         const fmo = OC._FaunaBuilders.makeFumaroleVents(faunaGroup, biome, fm);
         agents.push(fmo);
+      }
+
+      /* --- Подлёдный океан Европы: гипотетическая криобиота --- */
+
+      for (const cr of (plan.cryoRays || [])) {
+        const a = OC._FaunaBuilders.makeCryoRay(faunaGroup, biome, cr);
+        agents.push(a);
+        predatorAgents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const as of (plan.armoredSwimmers || [])) {
+        const a = OC._FaunaBuilders.makeArmoredSwimmer(faunaGroup, biome, as);
+        agents.push(a);
+        predatorAgents.push(a);
+        huntingAgents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const cm of (plan.cryoMedusae || [])) {
+        const a = OC._FaunaBuilders.makeCryoMedusa(faunaGroup, cm);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const vc of (plan.ventCrabs || [])) {
+        const a = OC._FaunaBuilders.makeVentCrab(faunaGroup, biome, vc);
+        agents.push(a);
+        sonarTargets.push(a);
       }
 
     return { whale, whalesList, primaryVessel };

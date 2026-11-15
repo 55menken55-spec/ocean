@@ -49,6 +49,8 @@ window.OC = window.OC || {};
       if (!S.muted && S.ctx && S.ctx.state === 'running') {
         if (S.currentBiomeId === 'arctic_sea') {
           if (S.currentDepth < 32 && Math.random() < 0.55) S.iceCrack();
+        } else if (S.currentBiomeId === 'europa_ocean') {
+          if (Math.random() < 0.22) S.europaIceGroan();
         } else if (S.currentBiomeId === 'cenote_caves') {
           if (Math.random() < 0.25) S.caveDrip();
         } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') {
@@ -118,6 +120,29 @@ window.OC = window.OC || {};
     if (pan) { pan.pan.value = rnd(-0.85, 0.85); g.connect(pan); pan.connect(S.master); }
     else g.connect(S.master);
     osc.start(now); osc.stop(now + 0.18);
+  };
+
+  /* Стон ледяного панциря Европы: низкочастотный скрип 25-километровой толщи льда
+     и редкий криобиотический «звон» — под базальным льдом Европы слышно всё. */
+  S.europaIceGroan = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const lp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(rnd(58, 96), now);
+    osc.frequency.exponentialRampToValueAtTime(rnd(26, 44), now + 1.6);
+    lp.type = 'lowpass';
+    lp.frequency.value = rnd(180, 320);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.030, now + 0.42);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+    osc.connect(lp); lp.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.6, 0.6); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
+    osc.start(now); osc.stop(now + 1.85);
   };
 
   S.scheduleCreak = function () {

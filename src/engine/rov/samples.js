@@ -21,6 +21,8 @@ window.OC = window.OC || {};
   const VOLCANIC_SPECIES = new Set(['galapagos_barnacle', 'darwins_arch']);
   const WRECK_SPECIES = new Set(['wreck_anchor']);
   const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag', 'charophyte_bed']);
+  /* Криобиота подлёдного океана Европы — гипотетические виды без земных аналогов */
+  const CRYO_SPECIES = new Set(['cryo_forest', 'ice_veil', 'serpentine_chimney', 'brine_polyp', 'chemo_mat', 'cryo_tubeworm', 'sulfate_crust']);
 
 
     function scanManipulatorTarget(biome, pos, fwd, out) {
@@ -59,7 +61,7 @@ window.OC = window.OC || {};
       out.label = floorEnc ? floorEnc[0] : 'Донный осадок';
       out.latin = floorEnc ? floorEnc[1] : 'Керн морского дна';
       out.dist = Math.max(1.0, clearance);
-      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : (biome.id === 'baikal' ? 0x71857d : 0xe8d9b5)));
+      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : (biome.id === 'baikal' ? 0x71857d : (biome.id === 'europa_ocean' ? 0x4b5468 : 0xe8d9b5))));
       return out;
     }
 
@@ -68,13 +70,16 @@ window.OC = window.OC || {};
 
   function classifySample(target, biome, depthM, labState, atPos, seq) {
     const pos = atPos || (target && target.pos) || _probe;
+    const isEuropa = biome.id === 'europa_ocean';
+    // Эко-лаборатория — инструмент рифового стресс-теста; для Европы его химия неприменима
+    const lab = isEuropa ? null : labState;
     const tempBase = biome.getTemperatureAt
       ? biome.getTemperatureAt(pos.x, depthM, biome.getZoneAt(pos.x, pos.y, pos.z))
       : (biome.getZoneAt(pos.x, pos.y, pos.z).tempC || 18);
-    const delta = labState ? labState.tempDelta : 0;
+    const delta = lab ? lab.tempDelta : 0;
     const waterTemp = Math.max(-1.9, tempBase + delta);
-    const pH = labState ? labState.pH : 8.10;
-    const o2 = labState ? labState.dissolvedO2 : 7.2;
+    const pH = lab ? lab.pH : (isEuropa ? 11.2 : 8.10);
+    const o2 = lab ? lab.dissolvedO2 : (isEuropa ? 0.4 : 7.2);
     const bleachPct = labState ? Math.round(labState.bleaching * 100) : 0;
     const calcPct = labState ? Math.round(labState.calcification) : 100;
 
@@ -145,6 +150,30 @@ window.OC = window.OC || {};
         category = 'Пресноводный губочный био-риф';
         chemNote = 'Кремнистый скелет · эндемик Байкала · пресная вода';
         colorHex = 0x88b89b;
+      } else if (CRYO_SPECIES.has(sp)) {
+        colorHex = 0x9fe8ff;
+        if (sp === 'cryo_forest') {
+          category = 'Криолес';
+          chemNote = 'Окисление H₂ · протонные насосы · нет фотосинтеза';
+        } else if (sp === 'ice_veil') {
+          category = 'Ледяной занавес';
+          chemNote = 'Базальный лёд · карманы рассола 120‰';
+        } else if (sp === 'serpentine_chimney') {
+          category = 'Серпентинитовая труба';
+          chemNote = 'Брусит + арагонит · H₂ + CH₄ · ~340 атм';
+        } else if (sp === 'brine_polyp') {
+          category = 'Рассольный полип';
+          chemNote = 'Fe(III)-оксиды · рассол 120‰ · pH 11';
+        } else if (sp === 'chemo_mat') {
+          category = 'Хемосинтетический мат';
+          chemNote = 'H₂-сульфидная плёнка · O₂ 0,4 мг/л';
+        } else if (sp === 'cryo_tubeworm') {
+          category = 'Криотрубчатый червь';
+          chemNote = 'Симбионты H₂-окисления · до 200 лет';
+        } else {
+          category = 'Сульфатная корка';
+          chemNote = 'Na/Mg-сульфаты · осадок морской воды Европы';
+        }
       } else {
         category = 'Образец бентоса';
         chemNote = sp === 'hadal_sponge'
@@ -165,7 +194,9 @@ window.OC = window.OC || {};
                 ? `Базальт и Fe-Mn корки · ${depthM.toFixed(0)} м`
                 : (biome.id === 'arctic_sea'
                   ? `Полярный ил · ${waterTemp.toFixed(1)} °C`
-                  : (biome.id === 'baikal' ? `Диатомовый ил рифта · ${depthM.toFixed(0)} м · пресная вода` : `Карбонатный ил · ${pH.toFixed(2)} pH`))))));
+                  : (biome.id === 'europa_ocean'
+                    ? `Серпентинитовый базальт и сульфатный ил · ${depthM.toFixed(0)} м · ~340 атм`
+                    : (biome.id === 'baikal' ? `Диатомовый ил рифта · ${depthM.toFixed(0)} м · пресная вода` : `Карбонатный ил · ${pH.toFixed(2)} pH`)))))));
     }
 
     return {
@@ -194,15 +225,19 @@ window.OC = window.OC || {};
     const minDepthM = off > 0 ? off : 0;
     const maxDepthM = Math.max(minDepthM + 10, off + (off > 0 ? -fl : Math.max(4, seasonWaterLevel - fl)));
     const binsCount = 24;
-    const deltaT = labState ? labState.tempDelta : 0;
-    const labO2 = labState ? labState.dissolvedO2 : 7.2;
-    const nutrients = labState ? labState.nutrients : 0.18;
+    const lab = (biome.id === 'europa_ocean') ? null : labState;
+    const deltaT = lab ? lab.tempDelta : 0;
+    const labO2 = lab ? lab.dissolvedO2 : 7.2;
+    const nutrients = lab ? lab.nutrients : 0.18;
 
     const bins = [];
     let thermoclineM = 0;
     let maxSlope = -1;
     let prevT = null;
     let minO2 = 99;
+    const isEuropa = biome.id === 'europa_ocean';
+    // Гравитация Европы — 1/7 земной, поэтому гидростатика в 7 раз слабее
+    const pScale = biome.pressureScale || 1;
 
     for (let i = 0; i < binsCount; i++) {
       const f = i / (binsCount - 1);
@@ -238,6 +273,9 @@ window.OC = window.OC || {};
       } else if (biome.id === 'brine_pool') {
         // Придонный геотермальный галоклин соляного озера слегка теплее
         Tval += OC.smoothstep(0.76, 1.0, f) * 1.4;
+      } else if (isEuropa) {
+        // Европа: лёд сверху холодный (−1,6 °C), у серпентинитовых труб — тёплый флюид (+2…+4 °C)
+        Tval += OC.smoothstep(0.72, 1.0, f) * 1.6;
       }
       Tval = Math.max(-1.9, Tval);
 
@@ -252,6 +290,11 @@ window.OC = window.OC || {};
       } else {
         o2Val = OC.clamp(labO2 * 0.65 - f * 0.6, 1.8, 7.5);
       }
+      if (isEuropa) {
+        // Океан Европы бескислородный: света нет 25 км, фотосинтез невозможен.
+        // Кислород есть только как продукт радиолиза льда — десятые доли мг/л.
+        o2Val = OC.clamp(0.42 - f * 0.18 + OC.smoothstep(0.7, 1.0, f) * 0.35, 0.12, 0.9);
+      }
       if (o2Val < minO2) minO2 = o2Val;
 
       let conductivityUSCm = null, tdsMgL = null, mineralizationPpt = null;
@@ -264,6 +307,12 @@ window.OC = window.OC || {};
         }
         conductivityUSCm = OC.clamp(122 + d * 0.008 + seepInfluence * 20, 105, 158);
         tdsMgL = conductivityUSCm * 0.68;
+        mineralizationPpt = tdsMgL / 1000;
+      } else if (isEuropa) {
+        // Океан Европы втрое солёче земного: ~110–130 г/л рассола (Karavel et al., 2022)
+        const ventInfluence = OC.smoothstep(120, 12, Math.hypot(x + 292, z - 138));
+        conductivityUSCm = OC.clamp(112000 + ventInfluence * 20000, 108000, 136000);
+        tdsMgL = conductivityUSCm * 0.93;
         mineralizationPpt = tdsMgL / 1000;
       }
 
@@ -281,7 +330,7 @@ window.OC = window.OC || {};
     const surfaceTemp = bins[0].tempC;
     const bottomTemp = bins[bins.length - 1].tempC;
     const bottomBin = bins[bins.length - 1];
-    const maxPressureAtm = 1 + maxDepthM / 10.08;
+    const maxPressureAtm = 1 + (maxDepthM / 10.08) * pScale;
 
     return {
       biomeId: biome.id,
@@ -296,8 +345,10 @@ window.OC = window.OC || {};
       bottomTemp: Number(bottomTemp.toFixed(1)),
       thermoclineM: Number(thermoclineM.toFixed(0)),
       minO2: Number(minO2.toFixed(1)),
-      waterType: biome.id === 'baikal' || biome.id === 'amazon_igapo' ? 'freshwater' : (biome.id === 'brine_pool' ? 'brine' : 'marine'),
-      pH: labState ? Number(labState.pH.toFixed(2)) : 8.1,
+      waterType: biome.id === 'baikal' || biome.id === 'amazon_igapo' ? 'freshwater'
+        : (biome.id === 'brine_pool' ? 'brine'
+          : (biome.id === 'europa_ocean' ? 'subglacial' : 'marine')),
+      pH: lab ? Number(lab.pH.toFixed(2)) : (isEuropa ? 11.2 : 8.1),
       conductivityUSCm: bottomBin.conductivityUSCm === null ? null : Number(bottomBin.conductivityUSCm.toFixed(0)),
       tdsMgL: bottomBin.tdsMgL === null ? null : Number(bottomBin.tdsMgL.toFixed(0)),
       mineralizationPpt: bottomBin.mineralizationPpt === null ? null : Number(bottomBin.mineralizationPpt.toFixed(3)),

@@ -6,6 +6,22 @@ window.OC = window.OC || {};
 
   const GLOBE_R = 1.42;
 
+  /* Планеты глобуса: Земля (13 биомов) и Европа — ледяной спутник Юпитера.
+     Выбор планеты определяется полем biome.globe.world, а не координатами. */
+  const WORLD_INFO = {
+    earth: {
+      label: 'Земля',
+      hint: 'Вращайте Землю мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть'
+    },
+    europa: {
+      label: 'Европа',
+      hint: 'Вращайте Европу мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть'
+    }
+  };
+  function worldOf(biome) {
+    return (biome && biome.globe && biome.globe.world) || 'earth';
+  }
+
   const CONTINENTS = [
     // Северная Америка
     [
@@ -197,6 +213,131 @@ window.OC = window.OC || {};
     return { map, specMap };
   }
 
+  /* ---------- Планета: Европа — ледяной спутник Юпитера ---------- */
+  /* Своя текстура: белая ледяная поверхность, длинные красно-бурые lineae,
+     хаос-террен Тары с выходами соли и несколько ударных кратеров. */
+  function createEuropaTextures() {
+    const w = 768, h = 384;
+    const cColor = document.createElement('canvas');
+    cColor.width = w; cColor.height = h;
+    const ctx = cColor.getContext('2d');
+    const cSpec = document.createElement('canvas');
+    cSpec.width = w; cSpec.height = h;
+    const sctx = cSpec.getContext('2d');
+
+    const chaosPatches = [];
+    if (ctx) {
+      // Ледяная поверхность Европы: холодный белый с голубыми тенями
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0.0, '#f2f9fc');
+      grad.addColorStop(0.22, '#dcecf5');
+      grad.addColorStop(0.5, '#cbdfec');
+      grad.addColorStop(0.78, '#dcecf5');
+      grad.addColorStop(1.0, '#f2f9fc');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Термохаластические циркуляции: тонкая ледяная «рябь»
+      ctx.save();
+      for (let i = 0; i < 150; i++) {
+        const cx = (i * 97.3) % w;
+        const cy = (i * 61.7) % h;
+        const r = 11 + (i % 9) * 7;
+        ctx.globalAlpha = 0.10 + (i % 5) * 0.02;
+        ctx.strokeStyle = i % 2 ? '#9dbacd' : '#ffffff';
+        ctx.lineWidth = 1 + (i % 3) * 0.6;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, r, r * 0.55, (i % 7) * 0.4, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Lineae — длинные красно-бурые трещины «великих линий»
+      const lineae = [
+        { lat: 6, lon: -168, len: 190, tilt: 32, wid: 4.0 },
+        { lat: 18, lon: -122, len: 150, tilt: -26, wid: 3.2 },
+        { lat: -14, lon: -186, len: 165, tilt: 18, wid: 2.8 },
+        { lat: 34, lon: -158, len: 120, tilt: -40, wid: 2.4 },
+        { lat: -34, lon: -104, len: 135, tilt: 24, wid: 2.2 },
+        { lat: 46, lon: -176, len: 110, tilt: -12, wid: 2.0 }
+      ];
+      ctx.lineCap = 'round';
+      for (let i = 0; i < lineae.length; i++) {
+        const L = lineae[i];
+        const x0 = lonX(L.lon, w);
+        const y0 = latY(L.lat, h);
+        const dx = Math.cos(L.tilt * Math.PI / 180) * (L.len / 360) * w;
+        const dy = Math.sin(L.tilt * Math.PI / 180) * (L.len / 360) * h;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.quadraticCurveTo(x0 + dx * 0.5 + 24, y0 + dy * 0.5 - 16, x0 + dx, y0 + dy);
+        ctx.strokeStyle = 'rgba(206,128,102,0.30)';
+        ctx.lineWidth = L.wid * 2.6;
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(142,70,54,0.66)';
+        ctx.lineWidth = L.wid;
+        ctx.stroke();
+      }
+
+      // Хаос-террен Тары: разрушенный лёд с выходами океанской соли
+      const chaosX = lonX(-142.1, w);
+      const chaosY = latY(14.2, h);
+      for (let i = 0; i < 26; i++) {
+        const a = (i / 26) * Math.PI * 2;
+        const rr = 10 + (i % 7) * 5.5;
+        const px = chaosX + Math.cos(a) * rr * 1.5;
+        const py = chaosY + Math.sin(a) * rr * 0.75;
+        chaosPatches.push([px, py, 6 + (i % 5) * 2.4]);
+      }
+      for (let i = 0; i < chaosPatches.length; i++) {
+        const p = chaosPatches[i];
+        ctx.fillStyle = i % 3 === 0 ? 'rgba(150,104,74,0.46)' : 'rgba(176,132,96,0.34)';
+        ctx.beginPath();
+        ctx.ellipse(p[0], p[1], p[2], p[2] * 0.72, i * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Отложения соли на краю хаос-террена (JWST, 2025)
+      ctx.strokeStyle = 'rgba(248,250,252,0.55)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.ellipse(chaosX, chaosY, 42, 22, 0.2, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Ударные кратеры
+      const craters = [[-24, -40, 13], [52, -176, 9], [-58, 96, 11], [8, 160, 7], [-72, -150, 15]];
+      for (let i = 0; i < craters.length; i++) {
+        const cx = lonX(craters[i][1], w);
+        const cy = latY(craters[i][0], h);
+        const r = craters[i][2];
+        const rg = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
+        rg.addColorStop(0, 'rgba(120,146,166,0.42)');
+        rg.addColorStop(1, 'rgba(214,234,245,0)');
+        ctx.fillStyle = rg;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (sctx) {
+      // Лёд — сильный спекуляр; хаос-террен и кратеры — матовые
+      sctx.fillStyle = '#e2f6ff';
+      sctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < chaosPatches.length; i++) {
+        const p = chaosPatches[i];
+        sctx.fillStyle = '#1b2630';
+        sctx.beginPath();
+        sctx.ellipse(p[0], p[1], p[2], p[2] * 0.72, i * 0.4, 0, Math.PI * 2);
+        sctx.fill();
+      }
+    }
+
+    const map = new T.CanvasTexture(cColor);
+    map.anisotropy = 4;
+    const specMap = new T.CanvasTexture(cSpec);
+    return { map, specMap };
+  }
+
   function latLonToVec3(lat, lon, r) {
     const phi = (90 - lat) * Math.PI / 180;
     const theta = (lon + 180) * Math.PI / 180;
@@ -207,10 +348,10 @@ window.OC = window.OC || {};
     );
   }
 
-  function createAtmosphereMaterial() {
+  function createAtmosphereMaterial(colorHex) {
     return new T.ShaderMaterial({
       uniforms: {
-        uColor: { value: new T.Color(0x4be3ff) }
+        uColor: { value: new T.Color(colorHex === undefined ? 0x4be3ff : colorHex) }
       },
       vertexShader: [
         'varying vec3 vNormal;',
@@ -256,12 +397,17 @@ window.OC = window.OC || {};
   let summaryEl = null;
   let goBtn = null;
   let tourBtn = null;
+  let globeTitleEl = null;
+  let globeHintEl = null;
+  let planetLabelEl = null;
 
   let renderer = null;
   let scene = null;
   let camera = null;
   let earthGroup = null;
+  let europaGroup = null;
   let orbitRing = null;
+  let currentWorld = 'earth';
   let raycaster = null;
   let rafId = 0;
   let stageFailed = false;
@@ -302,10 +448,23 @@ window.OC = window.OC || {};
         lat: b.globe.lat,
         lon: b.globe.lon,
         pos,
+        world: worldOf(b),
         colorHex: b.globe.color || '#58e0ff'
       });
     }
     return out;
+  }
+
+  /* Переключение планеты глобуса: Земля ↔ Европа */
+  function setPlanet(world) {
+    const key = WORLD_INFO[world] ? world : 'earth';
+    currentWorld = key;
+    if (earthGroup) earthGroup.visible = key === 'earth';
+    if (europaGroup) europaGroup.visible = key === 'europa';
+    if (orbitRing) orbitRing.visible = key === 'earth';
+    if (planetLabelEl) planetLabelEl.textContent = WORLD_INFO[key].label;
+    if (globeHintEl) globeHintEl.textContent = WORLD_INFO[key].hint;
+    if (globeTitleEl) globeTitleEl.textContent = '3D-глобус: ' + WORLD_INFO[key].label;
   }
 
   function ensureStage() {
@@ -361,6 +520,24 @@ window.OC = window.OC || {};
       });
       earthGroup.add(new T.Mesh(earthGeo, earthMat));
 
+      // Европа — ледяной спутник Юпитера: своя планета глобуса
+      europaGroup = new T.Group();
+      europaGroup.visible = false;
+      scene.add(europaGroup);
+      const eTex = createEuropaTextures();
+      const europaMat = new T.MeshPhongMaterial({
+        map: eTex.map,
+        specularMap: eTex.specMap,
+        specular: new T.Color(0xd8f2ff),
+        shininess: 58,
+        emissive: new T.Color(0x14202e),
+        emissiveIntensity: 0.3
+      });
+      europaGroup.add(new T.Mesh(new T.SphereGeometry(GLOBE_R, 48, 32), europaMat));
+      // Лёд Европы отражает холодный свет Юпитера
+      const europaGlow = new T.Mesh(new T.SphereGeometry(GLOBE_R * 1.045, 40, 28), createAtmosphereMaterial(0x9fd8ff));
+      europaGroup.add(europaGlow);
+
       // Атмосферное гало
       const atmoGeo = new T.SphereGeometry(GLOBE_R * 1.07, 40, 28);
       scene.add(new T.Mesh(atmoGeo, createAtmosphereMaterial()));
@@ -373,7 +550,7 @@ window.OC = window.OC || {};
       orbitRing.rotation.y = 0.28;
       scene.add(orbitRing);
 
-      // Маяки 8 биомов + соединительные дуги маршрутов
+      // Маяки всех биомов + соединительные дуги маршрутов
       buildBeaconsOnGlobe();
 
       raycaster = new T.Raycaster();
@@ -424,7 +601,8 @@ window.OC = window.OC || {};
       hit.userData.biomeId = it.id;
 
       g.add(core, spire, halo, hit);
-      earthGroup.add(g);
+      const host = (it.world === 'europa') ? europaGroup : earthGroup;
+      if (host) host.add(g);
 
       it.group = g;
       it.core = core;
@@ -487,7 +665,7 @@ window.OC = window.OC || {};
     if (depthEl) depthEl.textContent = g.depthSpan || '—';
     if (tempEl) tempEl.textContent = g.tempSpan || '—';
     if (countryEl) countryEl.textContent = g.country || '—';
-    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле' };
+    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле', subglacial: 'Подлёдный океан' };
     if (waterTypeEl) waterTypeEl.textContent = g.waterType ? (waterTypeLabels[g.waterType] || g.waterType) : '—';
     if (protectionEl) protectionEl.textContent = g.protectionStatus || '—';
     if (notableEl) notableEl.textContent = g.notableFor || '—';
@@ -512,15 +690,21 @@ window.OC = window.OC || {};
 
     if (listEl) {
       listEl.innerHTML = '';
-      for (let i = 0; i < beacons.length; i++) {
-        const item = beacons[i];
+      const sorted = beacons.slice().sort((a, b) => {
+        const aw = (a.world || 'earth') === currentWorld ? 0 : 1;
+        const bw = (b.world || 'earth') === currentWorld ? 0 : 1;
+        return aw - bw;
+      });
+      for (let i = 0; i < sorted.length; i++) {
+        const item = sorted[i];
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'globe-loc' + (item.id === it.id ? ' on' : '') + (item.id === activeId ? ' cur' : '');
         const p = callbacks.getProgress ? callbacks.getProgress(item.id) : null;
         const badge = item.id === activeId ? 'Текущий' : (p ? `${p.discovered}/${p.speciesTotal}` : item.biome.globe.coordLabel);
+        const wLabel = WORLD_INFO[item.world] ? WORLD_INFO[item.world].label : 'Земля';
         btn.innerHTML = `<span class="globe-dot" style="background:${item.colorHex};box-shadow:0 0 8px ${item.colorHex}"></span>` +
-          `<span class="globe-loc-txt"><b>${item.biome.name}</b><small>${item.biome.globe.ocean}</small></span>` +
+          `<span class="globe-loc-txt"><b>${item.biome.name}</b><small>${wLabel} · ${item.biome.globe.ocean}</small></span>` +
           `<span class="globe-loc-meta">${badge}</span>`;
         btn.addEventListener('click', () => {
           focusBiome(item.id, true);
@@ -536,7 +720,10 @@ window.OC = window.OC || {};
     if (!it) return null;
     selectedId = it.id;
 
-    // Поворачиваем Землю так, чтобы точка (lat, lon) оказалась напротив камеры (+Z)
+    // Планета определяется биомом: Европа — отдельный ледяной спутник
+    if (it.world && it.world !== currentWorld) setPlanet(it.world);
+
+    // Поворачиваем планету так, чтобы точка (lat, lon) оказалась напротив камеры (+Z)
     targetRotY = -Math.atan2(it.pos.x, it.pos.z);
     targetRotX = OC.clamp((it.lat * Math.PI) / 180, -1.25, 1.25);
     if (pauseAuto) autoSpinPauseUntil = performance.now() + 5500;
@@ -554,7 +741,7 @@ window.OC = window.OC || {};
     raycaster.setFromCamera(ptr, camera);
     const hitsTargets = [];
     for (let i = 0; i < beacons.length; i++) {
-      if (beacons[i].hit) hitsTargets.push(beacons[i].hit);
+      if (beacons[i].hit && (!beacons[i].world || beacons[i].world === currentWorld)) hitsTargets.push(beacons[i].hit);
     }
     const hits = raycaster.intersectObjects(hitsTargets, false);
     if (hits.length && hits[0].object.userData.biomeId) {
@@ -580,6 +767,10 @@ window.OC = window.OC || {};
     if (earthGroup) {
       earthGroup.rotation.y = rotY;
       earthGroup.rotation.x = rotX;
+    }
+    if (europaGroup) {
+      europaGroup.rotation.y = rotY;
+      europaGroup.rotation.x = rotX;
     }
     if (orbitRing) {
       orbitRing.rotation.z = t * 0.12;
@@ -690,6 +881,7 @@ window.OC = window.OC || {};
     if (it) {
       rotY = targetRotY - 0.35;
       rotX = targetRotX;
+      setPlanet(it.world || 'earth');
     }
     if (rafId) cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(tick);
@@ -725,6 +917,9 @@ window.OC = window.OC || {};
       summaryEl = document.getElementById('globe-b-summary');
       goBtn = document.getElementById('globe-go-btn');
       tourBtn = document.getElementById('globe-tour-btn');
+      globeTitleEl = document.getElementById('globe-title');
+      globeHintEl = document.getElementById('globe-hint');
+      planetLabelEl = document.getElementById('globe-planet');
 
       const closeBtn = document.getElementById('globe-close');
       if (closeBtn) closeBtn.addEventListener('click', close);
@@ -759,6 +954,7 @@ window.OC = window.OC || {};
         x: b.pos.x,
         y: b.pos.y,
         z: b.pos.z,
+        world: b.world || 'earth',
         color: b.colorHex
       }));
     }

@@ -215,7 +215,9 @@ window.OC = window.OC || {};
       if (rovCtdO2) rovCtdO2.textContent = cast.minO2.toFixed(1) + ' мг/л';
       if (rovCtdPress) rovCtdPress.textContent = cast.maxPressureAtm.toFixed(1) + ' атм';
       if (rovCtdWater) {
-        const typeLabel = cast.waterType === 'freshwater' ? 'Пресная' : (cast.waterType === 'brine' ? 'Рассол' : 'Морская');
+        const typeLabel = cast.waterType === 'freshwater' ? 'Пресная'
+          : (cast.waterType === 'brine' ? 'Рассол'
+            : (cast.waterType === 'subglacial' ? 'Подлёдный океан' : 'Морская'));
         rovCtdWater.textContent = Number.isFinite(cast.mineralizationPpt)
           ? typeLabel + ' · ' + cast.mineralizationPpt.toFixed(2) + '‰'
           : typeLabel;
