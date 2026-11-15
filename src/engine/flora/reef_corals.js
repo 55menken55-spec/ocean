@@ -205,4 +205,69 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
   BUILDERS.buildCrustCoral = buildCrustCoral;
+
+  /* Ветвистый Acropora (Красное море). От buildStaghorn отличается более
+     короткими плотными ветвями и выраженными радиальными кораллитами — так
+     выглядят быстрорастущие акропоры мелководного рифа. */
+  function buildAcroporaBranch(hue, rng) {
+    const list = [];
+    const baseCol = COL().setHSL(hue, 0.62, 0.34);
+    const midCol = COL().setHSL((hue + 0.03) % 1, 0.72, 0.5);
+    const tipCol = COL().setHSL((hue + 0.06) % 1, 0.5, 0.82); // светлые кончики роста
+    const tmpQ = new T.Quaternion();
+    const up = new T.Vector3(0, 1, 0);
+
+    function branch(p0, dir, len, rad, depth) {
+      const p1 = p0.clone().addScaledVector(dir, len);
+      const geo = new T.CylinderGeometry(rad * 0.72, rad, len, 4, 1, false);
+      geo.translate(0, len * 0.5, 0);
+      tmpQ.setFromUnitVectors(up, dir.clone().normalize());
+      geo.applyMatrix4(new T.Matrix4().makeRotationFromQuaternion(tmpQ));
+      geo.translate(p0.x, p0.y, p0.z);
+      OC.geoPrep(geo);
+      OC.paint(geo, (x, y, z, c) => {
+        const t = OC.clamp(y / 2.4, 0, 1);
+        c.copy(baseCol).lerp(midCol, OC.smoothstep(0.05, 0.5, t)).lerp(tipCol, OC.smoothstep(0.62, 1.0, t));
+      });
+      OC.withSway(geo, () => 0);
+      list.push(geo);
+
+      // Радиальные кораллиты: мутовки из мелких боковых веточек
+      const whorls = depth === 0 ? 2 : 1;
+      for (let w = 0; w < whorls; w++) {
+        const wt = (w + 0.6) / (whorls + 0.6);
+        const wp = p0.clone().addScaledVector(dir, len * wt);
+        const n = depth === 0 ? 3 : 2;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + w * 0.7 + rng() * 0.4;
+          const perp = new T.Vector3(Math.cos(a), 0, Math.sin(a));
+          const nd = dir.clone().multiplyScalar(0.35).add(perp).add(new T.Vector3(0, 0.25, 0)).normalize();
+          const cl = len * OC.lerp(0.18, 0.34, rng());
+          const cg = new T.CylinderGeometry(rad * 0.16, rad * 0.3, cl, 3, 1, false);
+          cg.translate(0, cl * 0.5, 0);
+          tmpQ.setFromUnitVectors(up, nd);
+          cg.applyMatrix4(new T.Matrix4().makeRotationFromQuaternion(tmpQ));
+          cg.translate(wp.x, wp.y, wp.z);
+          OC.geoPrep(cg);
+          OC.paint(cg, (x, y, z, c) => c.copy(midCol).lerp(tipCol, OC.clamp((y - wp.y) / cl, 0, 1)));
+          OC.withSway(cg, () => 0);
+          list.push(cg);
+        }
+      }
+
+      if (depth < 1) {
+        const n = 3;
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * Math.PI * 2 + (rng() - 0.5) * 0.9;
+          const tilt = OC.lerp(0.45, 1.0, rng());
+          const nd = dir.clone().multiplyScalar(0.5)
+            .add(new T.Vector3(Math.cos(ang) * tilt, 1.05, Math.sin(ang) * tilt)).normalize();
+          branch(p1, nd, len * OC.lerp(0.55, 0.74, rng()), rad * 0.62, depth + 1);
+        }
+      }
+    }
+    branch(new T.Vector3(0, 0, 0), new T.Vector3(0, 1, 0), OC.lerp(1.1, 1.6, rng()), OC.lerp(0.3, 0.42, rng()), 0);
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildAcroporaBranch = buildAcroporaBranch;
 })(window.OC);

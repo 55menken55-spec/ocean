@@ -6693,11 +6693,14 @@ window.OC = window.OC || {};
         if (fl < -2.0) {
           const rPick = rng();
           items.push({
-            species: rPick < 0.58 ? 'seagrass' : (rPick < 0.88 ? 'coral_crust' : 'shell_triton'),
+            /* Харовые водоросли вместо тритонова рога: Charonia tritonis —
+               индо-пацифический морской моллюск, в пресноводном сеноте его быть
+               не должно, а вид без записи в энциклопедии биома пропадал из Атласа. */
+            species: rPick < 0.58 ? 'seagrass' : (rPick < 0.88 ? 'coral_crust' : 'charophyte_bed'),
             x, y: fl - 0.08, z,
             ry: rng() * 6.28,
             scale: OC.lerp(0.75, 1.25, rng()),
-            tint: rPick < 0.58 ? 0x9de69c : 0xc6cbb8
+            tint: rPick < 0.58 ? 0x9de69c : (rPick < 0.88 ? 0xc6cbb8 : 0x8fd08a)
           });
         }
         continue;
@@ -6803,7 +6806,9 @@ window.OC = window.OC || {};
     island_palm: ['Прибрежная пальма кромки сенота', 'Sabal yapa (Yucatan Palm)', 'Флора', 'Портал сенота', 'Над водой',
       'Тропическая веерная пальма джунглей Юкатана, венчающая 14-метровую известняковую стену карстового провала.'],
     coral_crust: ['Пресноводные строматолиты', 'Microbialite Travertine Crust', 'Кораллы', 'Портал сенота', '8 – 30 м',
-      'Органо-минеральные карбонатные корки, нарастающие на подводных валунах благодаря цианобактериям.']
+      'Органо-минеральные карбонатные корки, нарастающие на подводных валунах благодаря цианобактериям.'],
+    charophyte_bed: ['Харовые водоросли чаши', 'Chara spp.', 'Водоросли', 'Чаша сенота', '0 – 6 м',
+      'Мутовчатые побеги харовых водорослей на мелководье открытой чаши: жёсткие на ощупь, они инкрустированы карбонатом кальция и служат укрытием для молоди рыб.']
   };
 
   const FAUNA_PLAN = {
@@ -8062,6 +8067,8 @@ window.OC = window.OC || {};
       'Эндемичная пресноводная губка, образующая зелёные ветвистые колонии на каменистых склонах и фильтрующая воду.' ],
     charophyte_bed: ['Харовые водоросли Байкала', 'Chara baicalensis', 'Флора', 'Прибрежье', '1 – 18 м',
       'Подводные луга холодноводных харовых водорослей на светлых прибрежных террасах.' ],
+    ice_floe: ['Байкальский сезонный лёд', 'Glacies baicalensis', 'Геология', 'Прибрежье', '0 – 4 м',
+      'Пресноводный лёд Байкала: зимой озеро замерзает почти полностью, а у глубокой кромки прибрежья ещё долго дрейфуют отдельные льдины с прозрачно-голубыми подводными кромками.' ],
     fish_omul: ['Байкальский омуль', 'Coregonus migratorius', 'Рыбы', 'Прибрежье и котловина', '10 – 500 м',
       'Эндемичный сиг Байкала, совершающий сезонные кормовые перемещения между прибрежными и глубокими водами.' ],
     fish_golomyanka: ['Большая голомянка', 'Comephorus baikalensis', 'Рыбы', 'Центральная котловина', '50 – 1 200 м',
@@ -8424,6 +8431,8 @@ window.OC = window.OC || {};
   }));
 
   const ENCYCLOPEDIA = {
+    floor: ['Дно рифа и карбонатный песок', 'Reef floor / Carbonate sand', 'Геология', 'Все зоны', '0 – 200 м',
+      'Белый карбонатный песок из обломков кораллов и раковин, известняковые плиты рифового плато и крутой обрыв континентального склона.' ],
     coral_branch: ['Ветвистый коралл Acropora', 'Acropora spp.', 'Кораллы', 'Коралловый сад', '12 – 35 м', 'Быстрорастущий ветвистый коралл, создающий сложное укрытие для рифовых рыб.'],
     coral_table: ['Столешница коралла', 'Acropora / Echinopora', 'Кораллы', 'Коралловый сад', '10 – 30 м', 'Плоская столешневидная колония коралла, ловящая планктон в течении.'],
     coral_plate: ['Пластинчатый коралл', 'Porites / Montipora', 'Кораллы', 'Коралловый сад', '8 – 25 м', 'Массивные пластинчатые колонии, растущие медленно и достигающие метра в диаметре.'],
@@ -8822,6 +8831,8 @@ window.OC = window.OC || {};
   }));
 
   const ENCYCLOPEDIA = {
+    floor: ['Дно источника и карстовое ложе', 'Spring basin floor', 'Геология', 'Все зоны', '0 – 60 м',
+      'Промытый известняк Флоридского аквифера: белый карбонатный песок в чаше источника и илистые наносы в узких проходах сифона.' ],
     water_lily: ['Водяная лилия', 'Nymphaea odorata', 'Растения', 'Бассейн источника', '0 – 8 м', 'Белоцветущая лилия на поверхности пресноводных источников Флориды.'],
     reed: ['Тростник прибрежный', 'Typha domingensis', 'Растения', 'Бассейн источника', '0 – 4 м', 'Тростник на мелководье у входа в пещерную систему, укрытие для молодняка рыб.'],
     stalactite: ['Сталактит из известняка', 'Calcite speleothem', 'Геология', 'Карстовый зал', '8 – 25 м', 'Каменная игла, свисающая с потолка пещеры, образованная из капель известковой воды.'],
@@ -12669,6 +12680,71 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
   BUILDERS.buildCrustCoral = buildCrustCoral;
+
+  /* Ветвистый Acropora (Красное море). От buildStaghorn отличается более
+     короткими плотными ветвями и выраженными радиальными кораллитами — так
+     выглядят быстрорастущие акропоры мелководного рифа. */
+  function buildAcroporaBranch(hue, rng) {
+    const list = [];
+    const baseCol = COL().setHSL(hue, 0.62, 0.34);
+    const midCol = COL().setHSL((hue + 0.03) % 1, 0.72, 0.5);
+    const tipCol = COL().setHSL((hue + 0.06) % 1, 0.5, 0.82); // светлые кончики роста
+    const tmpQ = new T.Quaternion();
+    const up = new T.Vector3(0, 1, 0);
+
+    function branch(p0, dir, len, rad, depth) {
+      const p1 = p0.clone().addScaledVector(dir, len);
+      const geo = new T.CylinderGeometry(rad * 0.72, rad, len, 4, 1, false);
+      geo.translate(0, len * 0.5, 0);
+      tmpQ.setFromUnitVectors(up, dir.clone().normalize());
+      geo.applyMatrix4(new T.Matrix4().makeRotationFromQuaternion(tmpQ));
+      geo.translate(p0.x, p0.y, p0.z);
+      OC.geoPrep(geo);
+      OC.paint(geo, (x, y, z, c) => {
+        const t = OC.clamp(y / 2.4, 0, 1);
+        c.copy(baseCol).lerp(midCol, OC.smoothstep(0.05, 0.5, t)).lerp(tipCol, OC.smoothstep(0.62, 1.0, t));
+      });
+      OC.withSway(geo, () => 0);
+      list.push(geo);
+
+      // Радиальные кораллиты: мутовки из мелких боковых веточек
+      const whorls = depth === 0 ? 2 : 1;
+      for (let w = 0; w < whorls; w++) {
+        const wt = (w + 0.6) / (whorls + 0.6);
+        const wp = p0.clone().addScaledVector(dir, len * wt);
+        const n = depth === 0 ? 3 : 2;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + w * 0.7 + rng() * 0.4;
+          const perp = new T.Vector3(Math.cos(a), 0, Math.sin(a));
+          const nd = dir.clone().multiplyScalar(0.35).add(perp).add(new T.Vector3(0, 0.25, 0)).normalize();
+          const cl = len * OC.lerp(0.18, 0.34, rng());
+          const cg = new T.CylinderGeometry(rad * 0.16, rad * 0.3, cl, 3, 1, false);
+          cg.translate(0, cl * 0.5, 0);
+          tmpQ.setFromUnitVectors(up, nd);
+          cg.applyMatrix4(new T.Matrix4().makeRotationFromQuaternion(tmpQ));
+          cg.translate(wp.x, wp.y, wp.z);
+          OC.geoPrep(cg);
+          OC.paint(cg, (x, y, z, c) => c.copy(midCol).lerp(tipCol, OC.clamp((y - wp.y) / cl, 0, 1)));
+          OC.withSway(cg, () => 0);
+          list.push(cg);
+        }
+      }
+
+      if (depth < 1) {
+        const n = 3;
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * Math.PI * 2 + (rng() - 0.5) * 0.9;
+          const tilt = OC.lerp(0.45, 1.0, rng());
+          const nd = dir.clone().multiplyScalar(0.5)
+            .add(new T.Vector3(Math.cos(ang) * tilt, 1.05, Math.sin(ang) * tilt)).normalize();
+          branch(p1, nd, len * OC.lerp(0.55, 0.74, rng()), rad * 0.62, depth + 1);
+        }
+      }
+    }
+    branch(new T.Vector3(0, 0, 0), new T.Vector3(0, 1, 0), OC.lerp(1.1, 1.6, rng()), OC.lerp(0.3, 0.42, rng()), 0);
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildAcroporaBranch = buildAcroporaBranch;
 })(window.OC);
 
 // === engine/flora/reef_soft.js ===
@@ -14213,7 +14289,7 @@ window.OC = window.OC || {};
 })(window.OC);
 
 // === engine/flora/caves_brine.js ===
-/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: карст, сеноты и соляные шпили ================= */
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: карст, сеноты, соляные шпили и пресноводные пещеры ================= */
 /* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
    Материалы и реестр прототипов живут в engine/flora_library.js. */
 window.OC = window.OC || {};
@@ -14395,6 +14471,241 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
   BUILDERS.buildVolcanicFumarole = buildVolcanicFumarole;
+
+  /* ---- Пресноводные карстовые пещеры Флориды (биом florida_caves) ---- */
+
+  /* Водяная лилия Nymphaea odorata: плавающие листья с радиальным разрывом
+     и белый цветок. Держится у самой поверхности в бассейне источника. */
+  function buildWaterLily(rng) {
+    const list = [];
+    const cPad = COL(0x2f7a3a);
+    const cPadRim = COL(0x8fbf6a);
+    const cPetal = COL(0xfffdf2);
+    const cCore = COL(0xffd75e);
+    const pads = 2 + Math.floor(rng() * 2);
+
+    for (let i = 0; i < pads; i++) {
+      const a = (i / pads) * Math.PI * 2 + rng() * 0.7;
+      const d = i === 0 ? 0 : OC.lerp(0.45, 0.8, rng());
+      const r = i === 0 ? OC.lerp(0.5, 0.68, rng()) : OC.lerp(0.34, 0.5, rng());
+      const g = new T.CylinderGeometry(r, r * 0.98, 0.035, 16, 1, false);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
+        const rr = Math.hypot(x, z);
+        if (rr > 1e-5) {
+          const ang = Math.atan2(z, x);
+          // Лист нимфеи разорван от края к центру — узкий клин у черешка
+          const notch = 1 - 0.55 * Math.exp(-Math.abs(Math.sin(ang * 0.5)) * 6);
+          const curl = (rr / r) * (rr / r) * 0.09;
+          p.setXYZ(k, x * notch, y + curl, z * notch);
+        }
+      }
+      g.computeVertexNormals();
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const rr = Math.hypot(x, z) / r;
+        c.copy(cPad).lerp(cPadRim, OC.smoothstep(0.55, 1.0, rr));
+      });
+      OC.xform(g, { p: [Math.cos(a) * d, 0.02, Math.sin(a) * d] });
+      OC.withSway(g, () => 0.12);
+      list.push(g);
+    }
+
+    if (rng() < 0.85) {
+      const fx = (rng() - 0.5) * 0.45;
+      const fz = (rng() - 0.5) * 0.45;
+      const petals = 7;
+      for (let i = 0; i < petals; i++) {
+        const a = (i / petals) * Math.PI * 2;
+        const pet = new T.ConeGeometry(0.055, 0.19, 4);
+        OC.geoPrep(pet);
+        OC.paint(pet, (x, y, z, c) => c.copy(cPetal).lerp(cCore, y < -0.02 ? 0.5 : 0));
+        OC.xform(pet, { r: [Math.sin(a) * 0.75, a, -Math.cos(a) * 0.75], p: [fx + Math.cos(a) * 0.05, 0.12, fz + Math.sin(a) * 0.05] });
+        OC.withSway(pet, () => 0.2);
+        list.push(pet);
+      }
+      const core = new T.SphereGeometry(0.045, 8, 6);
+      OC.geoPrep(core);
+      OC.paint(core, cCore);
+      OC.xform(core, { p: [fx, 0.13, fz] });
+      OC.withSway(core, () => 0.2);
+      list.push(core);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildWaterLily = buildWaterLily;
+
+  /* Тростник Typha domingensis: пучок изогнутых листьев и 1–2 початка рогоза. */
+  function buildReed(rng) {
+    const list = [];
+    const cBase = COL(0x2f5d2a);
+    const cTip = COL(0x9ede6a);
+    const cSpike = COL(0x6b4423);
+    const n = 7 + Math.floor(rng() * 5);
+
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rng() * 0.5;
+      const d = rng() * 0.34;
+      const h = OC.lerp(1.7, 3.1, rng());
+      const w = OC.lerp(0.055, 0.11, rng());
+      const blade = new T.PlaneGeometry(w, h, 1, 6);
+      const bp = blade.attributes.position;
+      for (let k = 0; k < bp.count; k++) {
+        const x = bp.getX(k), y = bp.getY(k);
+        const t = (y + h * 0.5) / h;
+        bp.setXYZ(k, x * (1 - t * 0.55), y, Math.sin(t * 1.6) * 0.22 * t);
+      }
+      blade.computeVertexNormals();
+      OC.geoPrep(blade);
+      OC.paint(blade, (x, y, z, c) => {
+        const t = OC.clamp((y + h * 0.5) / h, 0, 1);
+        c.copy(cBase).lerp(cTip, t * 0.85);
+      });
+      OC.xform(blade, { r: [0, a + rng(), (rng() - 0.5) * 0.3], p: [Math.cos(a) * d, h * 0.5, Math.sin(a) * d] });
+      OC.withSway(blade, (x, y) => Math.max(0, y) * 0.5);
+      list.push(blade);
+    }
+
+    const spikes = 1 + (rng() < 0.5 ? 1 : 0);
+    for (let s = 0; s < spikes; s++) {
+      const a = rng() * 6.28;
+      const d = rng() * 0.28;
+      const h = OC.lerp(2.0, 2.8, rng());
+      const stem = new T.CylinderGeometry(0.022, 0.032, h, 5, 1);
+      OC.geoPrep(stem);
+      OC.paint(stem, cBase);
+      OC.xform(stem, { p: [Math.cos(a) * d, h * 0.5, Math.sin(a) * d] });
+      OC.withSway(stem, (x, y) => Math.max(0, y) * 0.35);
+      list.push(stem);
+
+      const head = new T.CylinderGeometry(0.052, 0.052, 0.34, 7, 2);
+      OC.geoPrep(head);
+      OC.paint(head, (x, y, z, c) => c.copy(cSpike).offsetHSL(0, 0, OC.clamp((y + 0.17) / 0.34, 0, 1) * 0.12));
+      OC.xform(head, { p: [Math.cos(a) * d, h + 0.13, Math.sin(a) * d] });
+      OC.withSway(head, () => 0.9);
+      list.push(head);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildReed = buildReed;
+
+  /* Известняковый уступ: плоские эродированные плиты со слоистостью. */
+  function buildLimestoneLedge(rng) {
+    const list = [];
+    const cTop = COL(0xd8d2c0);
+    const cFace = COL(0xa9a292);
+    const cBand = COL(0x8b8378);
+    const slabs = 2 + Math.floor(rng() * 2);
+
+    for (let i = 0; i < slabs; i++) {
+      const w = i === 0 ? OC.lerp(2.2, 3.4, rng()) : OC.lerp(1.1, 1.9, rng());
+      const d = i === 0 ? OC.lerp(1.1, 1.8, rng()) : OC.lerp(0.7, 1.2, rng());
+      const h = i === 0 ? OC.lerp(0.42, 0.7, rng()) : OC.lerp(0.28, 0.5, rng());
+      const g = new T.BoxGeometry(w, h, d, 5, 2, 4);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
+        const rug = 1 + 0.06 * Math.sin(x * 2.2 + z * 1.7) + 0.05 * OC.noise2(x * 1.5 + i * 7, z * 1.5);
+        p.setXYZ(k, x * rug, y * (1 + 0.04 * Math.cos(x * 3.1)), z * rug);
+      }
+      g.computeVertexNormals();
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const band = 0.5 + 0.5 * Math.sin(y * 9.0 + x * 0.4);
+        if (y > h * 0.42) c.copy(cTop).lerp(cFace, 0.25);
+        else c.copy(cFace).lerp(cBand, band * 0.6);
+      });
+      OC.xform(g, {
+        r: [(rng() - 0.5) * 0.12, rng() * 6.28, (rng() - 0.5) * 0.12],
+        p: [i === 0 ? 0 : (rng() - 0.5) * 1.4, h * 0.46, i === 0 ? 0 : (rng() - 0.5) * 1.0]
+      });
+      OC.withSway(g, () => 0);
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildLimestoneLedge = buildLimestoneLedge;
+
+  /* Илистый валун: округлая глыба, присыпанная осадком, с натёком ила у подножия. */
+  function buildMudRock(rng) {
+    const list = [];
+    const cRock = COL(0x4a4a58);
+    const cSilt = COL(0x6d6a63);
+    const cWet = COL(0x2f3138);
+    const sx = OC.lerp(0.78, 1.18, rng());
+    const sz = OC.lerp(0.78, 1.18, rng());
+
+    const g = new T.SphereGeometry(1, 14, 10);
+    const p = g.attributes.position;
+    for (let k = 0; k < p.count; k++) {
+      const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
+      const n = OC.fbm2(x * 1.6 + 11, z * 1.6, 3);
+      const rug = 1 + 0.18 * n + 0.09 * Math.sin(Math.atan2(z, x) * 3 + y * 2.4);
+      p.setXYZ(k, x * rug, Math.max(-0.62, y * 0.72 * rug), z * rug);
+    }
+    g.computeVertexNormals();
+    OC.geoPrep(g);
+    OC.paint(g, (x, y, z, c) => {
+      const t = OC.clamp((y + 0.6) / 1.3, 0, 1);
+      c.copy(cWet).lerp(cRock, OC.smoothstep(0.05, 0.55, t)).lerp(cSilt, OC.smoothstep(0.62, 1.0, t));
+    });
+    OC.xform(g, { r: [rng() * 0.2, rng() * 6.28, rng() * 0.2], s: [sx, 1, sz] });
+    OC.withSway(g, () => 0);
+    list.push(g);
+
+    const skirt = new T.CylinderGeometry(1.02, 1.24, 0.16, 14, 1, false);
+    const sp = skirt.attributes.position;
+    for (let k = 0; k < sp.count; k++) {
+      const x = sp.getX(k), z = sp.getZ(k);
+      const rug = 1 + 0.12 * OC.noise2(x * 2.2 + 5, z * 2.2);
+      sp.setXYZ(k, x * rug, sp.getY(k), z * rug);
+    }
+    skirt.computeVertexNormals();
+    OC.geoPrep(skirt);
+    OC.paint(skirt, (x, y, z, c) => c.copy(cSilt).lerp(cWet, OC.clamp((y + 0.08) / 0.16, 0, 1) * 0.45));
+    OC.xform(skirt, { s: [sx, 1, sz], p: [0, -0.52, 0] });
+    OC.withSway(skirt, () => 0);
+    list.push(skirt);
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildMudRock = buildMudRock;
+
+  /* Пещерные водоросли: тонкая биоплёнка пятнами на известняке в зоне рассеянного света. */
+  function buildCaveAlgae(rng) {
+    const list = [];
+    const cDark = COL(0x1f6b46);
+    const cLit = COL(0x6ee7b7);
+    const patches = 5 + Math.floor(rng() * 4);
+
+    for (let i = 0; i < patches; i++) {
+      const a = (i / patches) * Math.PI * 2 + rng() * 0.8;
+      const d = OC.lerp(0.05, 0.55, rng());
+      const w = OC.lerp(0.34, 0.72, rng());
+      const g = new T.PlaneGeometry(w, w * OC.lerp(0.7, 1.2, rng()), 4, 4);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k), y = p.getY(k);
+        const rr = Math.min(1, Math.hypot(x, y) / (w * 0.5));
+        p.setZ(k, Math.cos(rr * Math.PI * 0.5) * 0.075 + OC.noise2(x * 6 + i, y * 6) * 0.02);
+      }
+      g.computeVertexNormals();
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const m = 0.5 + 0.5 * OC.noise2(x * 7.5 + 3, y * 7.5);
+        c.copy(cDark).lerp(cLit, OC.smoothstep(0.15, 0.85, m));
+      });
+      /* Пятно ложится плашмя ещё до поворота: PlaneGeometry стоит в плоскости XY,
+         а поворот вокруг Y в xform крутил бы его как флаг, а не раскладывал по дну
+         (замер: так пятно получалось высотой 0.72 м вместо 0.07 м). */
+      g.rotateX(-Math.PI / 2);
+      OC.xform(g, { r: [(rng() - 0.5) * 0.22, a, (rng() - 0.5) * 0.22], p: [Math.cos(a) * d, 0.035, Math.sin(a) * d] });
+      OC.withSway(g, () => 0.35);
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildCaveAlgae = buildCaveAlgae;
 })(window.OC);
 
 // === engine/flora/amazon_igapo.js ===
@@ -15047,6 +15358,10 @@ window.OC = window.OC || {};
           mat: matCoralRigid, maxInstances: 2000, cullDist: 460,
           geos: [need('buildStaghorn')(0.94, rng), need('buildStaghorn')(0.55, rng), need('buildStaghorn')(0.76, rng), need('buildStaghorn')(0.11, rng)]
         },
+        coral_branch: {
+          mat: matCoralRigid, maxInstances: 1600, cullDist: 460,
+          geos: [need('buildAcroporaBranch')(0.98, rng), need('buildAcroporaBranch')(0.06, rng), need('buildAcroporaBranch')(0.72, rng)]
+        },
         coral_table: {
           mat: matCoralRigid, maxInstances: 1700, cullDist: 560,
           geos: [need('buildTable')(0.09, rng), need('buildTable')(0.44, rng), need('buildTable')(0.86, rng), need('buildTable')(0.96, rng)]
@@ -15082,6 +15397,13 @@ window.OC = window.OC || {};
         crinoid: {
           mat: matSoft, maxInstances: 1100, cullDist: 230,
           geos: [need('buildCrinoid')(0.11, rng), need('buildCrinoid')(0.96, rng), need('buildCrinoid')(0.78, rng)]
+        },
+        /* Морская лилия — тоже Crinoidea, но глубже и мельче: отдельная запись
+           Атласа и отдельный вид в генераторе Красного моря. Геометрия общая
+           с crinoid, оттенки — глубоководные (фиолетово-сиреневые). */
+        sea_lily: {
+          mat: matSoft, maxInstances: 700, cullDist: 260,
+          geos: [need('buildCrinoid')(0.74, rng), need('buildCrinoid')(0.83, rng), need('buildCrinoid')(0.69, rng)]
         },
         sponge_tube: {
           mat: matRigid, maxInstances: 700, cullDist: 420,
@@ -15234,6 +15556,28 @@ window.OC = window.OC || {};
         cenote_vine: {
           mat: matSoft, maxInstances: 320, cullDist: 520,
           geos: [need('buildCenoteVine')(rng), need('buildCenoteVine')(rng)]
+        },
+        /* Пресноводные карстовые пещеры Флориды: уступы, валуны, биоплёнка на
+           стенах и растительность у выхода источника. */
+        limestone_ledge: {
+          mat: matRigid, maxInstances: 900, cullDist: 520,
+          geos: [need('buildLimestoneLedge')(rng), need('buildLimestoneLedge')(rng), need('buildLimestoneLedge')(rng)]
+        },
+        mud_rock: {
+          mat: matRigid, maxInstances: 800, cullDist: 420,
+          geos: [need('buildMudRock')(rng), need('buildMudRock')(rng)]
+        },
+        cave_algae: {
+          mat: matPlant, maxInstances: 900, cullDist: 340,
+          geos: [need('buildCaveAlgae')(rng), need('buildCaveAlgae')(rng)]
+        },
+        reed: {
+          mat: matPlant, maxInstances: 900, cullDist: 420,
+          geos: [need('buildReed')(rng), need('buildReed')(rng)]
+        },
+        water_lily: {
+          mat: matFoliage, maxInstances: 620, cullDist: 520,
+          geos: [need('buildWaterLily')(rng), need('buildWaterLily')(rng)]
         },
         volcanic_fumarole: {
           mat: matChimney, maxInstances: 260, cullDist: 560,

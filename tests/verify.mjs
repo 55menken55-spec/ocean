@@ -406,7 +406,11 @@ assert(allBiomes.length === 14, `Expected 14 registered aquatic biomes, got ${al
 assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
 assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
-for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll', 'mariana_trench', 'brine_pool', 'cenote_caves', 'galapagos_upwelling', 'europa_ocean']) {
+/* Биомы заморского пополнения (red_sea, florida_caves, amazon_igapo, baikal)
+   раньше в этот обход не попадали вовсе: стриминг, атлас и навигация по ним
+   не проверялись ничем, из-за чего четыре биома генерировали виды флоры без
+   прототипов в FloraLibrary, а те молча выбрасывались при раскладке. */
+for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll', 'mariana_trench', 'brine_pool', 'cenote_caves', 'galapagos_upwelling', 'europa_ocean', 'red_sea', 'florida_caves', 'amazon_igapo', 'baikal']) {
   const b = OC.Biomes.setActive(bId);
   assert(b && b.id === bId, `Failed to activate biome ${bId}`);
   assert(b.zones && b.zones.length >= 4, `${bId} needs >= 4 ecological zones`);
@@ -447,15 +451,29 @@ for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_ato
     }
   });
 
-  // Verify chunk flora generator emits valid species in FloraLibrary & encyclopedia
+  /* Проверяем генератор флоры по сетке чанков вокруг спавна, а не только на
+     чанках маяков: виды жёстко привязаны к диапазонам глубин, и на одних только
+     маяках половина зон не попадается. Так и жили незамеченными coral_branch и
+     sea_lily (red_sea), water_lily, reed, limestone_ledge, mud_rock, cave_algae
+     (florida_caves): генератор их выдавал, прототипа в FloraLibrary не было, и
+     FloraStreamer молча выбрасывал вид при раскладке инстансов — 27,7 % и 55,3 %
+     флоры этих биомов были невидимы в мире и показывались серой сферой в Атласе. */
   const rngB = OC.mulberry32(4242);
-  for (const lm of b.landmarks) {
-    const cx = Math.floor(lm.x / b.chunkSize), cz = Math.floor(lm.z / b.chunkSize);
-    const items = b.generateChunkFlora(cx, cz, b.chunkSize, 1.32, rngB);
+  const spCx = Math.floor(b.spawn.pos[0] / b.chunkSize);
+  const spCz = Math.floor(b.spawn.pos[2] / b.chunkSize);
+  const floraProbes = [];
+  for (let dz = -3; dz <= 3; dz++) {
+    for (let dx = -3; dx <= 3; dx++) floraProbes.push([spCx + dx, spCz + dz]);
+  }
+  for (const lm of b.landmarks) floraProbes.push([Math.floor(lm.x / b.chunkSize), Math.floor(lm.z / b.chunkSize)]);
+  for (const [pcx, pcz] of floraProbes) {
+    const items = b.generateChunkFlora(pcx, pcz, b.chunkSize, 1.32, rngB);
     for (const it of items) {
       assert(floraProtos[it.species], `${bId} generated unknown flora species ${it.species}`);
       assert(b.encyclopedia[it.species], `${bId} flora species ${it.species} missing from encyclopedia`);
     }
+  }
+  for (const lm of b.landmarks) {
     OC.Navigation.flyTo(lm.x, lm.y, lm.z, lm.yaw, lm.pitch);
     for (let s = 0; s < 6; s++) {
       OC.uTime.value += 0.16;
@@ -2050,7 +2068,12 @@ assert.equal(baikalReportData.ctdCast.oxygenProfile.length, ctdBaikal.bins.lengt
 assert.equal(baikalReportData.ctdCast.profile[0].conductivityUSCm, ctdBaikal.bins[0].conductivityUSCm, 'JSON report must retain the conductivity/TDS vertical profile');
 const parsedRep = JSON.parse(repJson.content);
 assert.equal(parsedRep.biomes.length, 14, 'JSON scientific report must contain all 14 biomes');
-assert(parsedRep.summary.missionsTotal === 56 && parsedRep.summary.speciesTotal === 285, `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)}`);
+/* Число записей Атласа считаем из самих биомов, а не константой: иначе любая
+   новая запись энциклопедии (например, документирование вида, который биом
+   генерировал без записи) ломает отчёт экспедиции. */
+const atlasTotal = OC.Biomes.list().reduce((n, bm) => n + Object.keys(bm.encyclopedia || {}).length, 0);
+assert(parsedRep.summary.missionsTotal === 56 && parsedRep.summary.speciesTotal === atlasTotal,
+  `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)} (ожидалось ${atlasTotal} записей Атласа)`);
 
 assert(typeof OC.Quality.evaluateAutoLod === 'function' && typeof OC.Quality.setAutoLod === 'function' && typeof OC.Quality.getAutoLodState === 'function', 'OC.Quality must expose adaptive Auto-LOD controller');
 OC.Quality.set('high');
