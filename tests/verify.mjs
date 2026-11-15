@@ -49,6 +49,7 @@ import { run as runEngineCore } from './stages/engine_core.mjs';
 import { run as runVentsVolcano } from './stages/vents_volcano.mjs';
 import { run as runArcticSea } from './stages/arctic_sea.mjs';
 import { run as runBiomeSwitch } from './stages/biome_switch.mjs';
+import { run as runPerfGateSelfcheck } from './stages/perf_gate_selfcheck.mjs';
 
 console.log('1) Checking syntax of all source modules...');
 const parsedCount = parseAllSources();
@@ -84,6 +85,9 @@ const T = h.T;
 const OC = h.OC;
 const biome = h.biome;
 
+
+// Perf-гейт проверяет сам себя: порог, поднятый «чтобы не мешал», ломает прогон
+runPerfGateSelfcheck();
 
 // A-B) Батиметрия, зоны, маяки и точка спавна активного биома
 const { sp } = runBathyLandmarks({ biome });

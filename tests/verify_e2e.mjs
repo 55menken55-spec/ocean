@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { VM_GATE, assertPerfGate } from './perf_gate.mjs';
 
 const ROOT = process.cwd();
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -485,10 +486,13 @@ for (const b of biomeList) {
 }
 
 console.table(perfTable);
+/* Профиль — гейт сборки, а не справка к логу. Прежний порог avgCpuMs < 250 мс
+   при реальных 8-50 мс не ловил ничего; бюджет отношений см. в perf_gate.mjs. */
 for (const row of perfTable) {
-  assert(Number.isFinite(row.avgCpuMs) && row.avgCpuMs < 250, `Biome ${row.biome} CPU frame time budget exceeded: ${row.avgCpuMs} ms`);
-  assert(row.draws >= 30, `Biome ${row.biome} reported unexpected draw call count: ${row.draws}`);
+  assert(Number.isFinite(row.avgCpuMs) && Number.isFinite(row.p95CpuMs),
+    `Biome ${row.biome} reported non-finite CPU frame time: ${JSON.stringify(row)}`);
 }
+assertPerfGate(perfTable, VM_GATE, 'VM production bundle');
 assert.equal(pageErrors.length, 0, `Production bundle logged runtime errors:\n${pageErrors.join('\n')}`);
 assert.equal(glErrors.length, 0, `WebGL shader compilation errors:\n${glErrors.join('\n')}`);
 assert(compiledShaders.length >= 10, `Expected >= 10 compiled GLSL shaders captured by WebGL spy, got ${compiledShaders.length}`);

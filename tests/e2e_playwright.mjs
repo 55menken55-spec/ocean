@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { BROWSER_GATE, checkPerfRows } from './perf_gate.mjs';
 
 let chromium;
 try {
@@ -280,6 +281,17 @@ try {
   console.log('\nBiome FPS & Draw-Call Profile (Headless Chromium SwiftShader):');
   console.table(report);
 
+  /* Профиль как гейт сборки. Абсолютных порогов времени здесь нет: скорость
+     SwiftShader зависит от железа раннера в разы, поэтому сравниваются только
+     отношения внутри одного прогона (см. tests/perf_gate.mjs). */
+  enterStage('desktop-perf-gate');
+  const gate = checkPerfRows(report, BROWSER_GATE, 'Chromium SwiftShader');
+  if (gate.violations.length) {
+    const detail = gate.violations.join('\n  - ');
+    throw new Error(`Perf gate exceeded: ${detail} (медиана avg ${gate.medAvg.toFixed(2)} мс)`);
+  }
+  console.log(`   Perf gate: медиана avg ${gate.medAvg.toFixed(2)} мс, худший биом ${gate.worst.biome} ${gate.worst.rel.toFixed(2)}× медианы (порог ${BROWSER_GATE.maxRelativeAvgCpuMs}×), худшие зубья ${gate.worstSpike.biome} p95/avg ${gate.worstSpike.spikes.toFixed(2)}× (порог ${BROWSER_GATE.maxP95OverAvg}×).`);
+
   if (SUMMARY_MD) {
     const lines = [
       '### WebGL Headless Chromium (SwiftShader) Biome E2E Profile',
@@ -290,6 +302,8 @@ try {
     for (const r of report) {
       lines.push(`| \`${r.biomeId}\` | ${r.fps} | ${r.avgCpuMs} | ${r.p95CpuMs} | ${r.maxCpuMs} | ${r.drawCalls} | ${r.triangles} | ${r.chunksVisible} | ${r.floraInstances} | ${r.schoolFish} |`);
     }
+    lines.push('');
+    lines.push(`Perf gate: медиана avg **${gate.medAvg.toFixed(2)} ms**, худший биом \`${gate.worst.biome}\` **${gate.worst.rel.toFixed(2)}x** медианы (порог ${BROWSER_GATE.maxRelativeAvgCpuMs}x), худшие зубья \`${gate.worstSpike.biome}\` p95/avg **${gate.worstSpike.spikes.toFixed(2)}x** (порог ${BROWSER_GATE.maxP95OverAvg}x).`);
     fs.appendFileSync(SUMMARY_MD, lines.join('\n') + '\n');
   }
 
