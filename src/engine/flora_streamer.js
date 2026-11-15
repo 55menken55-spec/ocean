@@ -279,9 +279,13 @@ function buildChunkData(cx, cz, density) {
 
         for (let v = 0; v < vCount; v++) {
           const mesh = new T.InstancedMesh(spec.geos[v], spec.mat, perVarMax);
-          // Включаем отсечение по視русна — критично для больших миров:
-          // экземпляры за кадром не попадают в draw calls.
-          mesh.frustumCulled = true;
+          // InstancedMesh хранит все экземпляры в одном меше в (0,0,0). При
+          // frustumCulled = true Three.js отсекает ВЕСЬ InstancedMesh целиком,
+          // если его единый bounding box попадает за視русна — и вся флора
+          // исчезает при повороте камеры. Точное отсечение каждой особи
+          // выполняется вручную в rebuildActiveInstances (по дистанции до
+          // камеры), поэтому здесь frustumCulled выключен.
+          mesh.frustumCulled = false;
           mesh.userData.key = species;
           mesh.count = 0;
           mesh.setColorAt(0, new T.Color(1, 1, 1));
