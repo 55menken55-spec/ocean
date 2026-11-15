@@ -115,11 +115,15 @@ try {
     `Terrain chunks are offset from the chunk grid (geometry vs collision desync): ${JSON.stringify(chunkAlign)}`);
   console.log(`   Terrain chunk alignment verified in Chromium (${chunkAlign.count} chunks on the ${chunkAlign.chunkSize} m grid).`);
 
-  enterStage('DIAG-europa-ceiling');
+  enterStage('europa-ice-ceiling');
+  /* Регрессия: базальный слой ледяного панциря Европы должен читаться на глаз.
+     Потолок обращён нормалями вниз, поэтому он не получает ни солнца, ни небесной
+     полусферы — без отдельной рассеянной подсветки он уходит в чёрный и ледяной
+     панцирь (и канал рассола в нём) перестают быть видны. */
   await page.evaluate(() => window.OC.switchBiome('europa_ocean'));
   await page.waitForFunction(() => window.OC.getPerfStats().biomeId === 'europa_ocean' && window.OC.getPerfStats().drawCalls > 0, { timeout: 25000 });
   await page.waitForTimeout(2500);
-  const diag = await page.evaluate(async () => {
+  const ceilingProbe = await page.evaluate(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const sample = () => new Promise((resolve) => {
       requestAnimationFrame(() => {
@@ -128,36 +132,72 @@ try {
         const px = new Uint8Array(4);
         const pts = [];
         for (const fx of [0.25, 0.35, 0.5, 0.65, 0.75]) for (const fy of [0.25, 0.4, 0.55, 0.7]) pts.push([Math.floor(c.width * fx), Math.floor(c.height * fy)]);
-        const lums = [];
         let r = 0, g = 0, b = 0, n = 0;
-        for (const [x, y] of pts) {
-          gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-          r += px[0]; g += px[1]; b += px[2]; n++;
-          lums.push(Math.round(0.299 * px[0] + 0.587 * px[1] + 0.114 * px[2]));
-        }
-        lums.sort((a, z) => a - z);
-        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n), minL: lums[0], maxL: lums[lums.length - 1], medL: lums[Math.floor(lums.length / 2)] });
+        for (const [x, y] of pts) { gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); r += px[0]; g += px[1]; b += px[2]; n++; }
+        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n) });
       });
     });
-    const out = { ceiling: window.OC.Terrain.getCeilingStats() };
     const b = window.OC.Biomes.getActive();
-    const lm = b.landmarks.find((l) => l.id === 'basal_ice_view') || b.landmarks[0];
-    out.ceilAtLandmark = b.getCeilingHeight(lm.x, lm.z);
-    out.floorAtLandmark = b.getHeight(lm.x, lm.z);
+    const lm = b.landmarks.find((l) => l.id === 'basal_ice_view');
+    const out = { landmark: lm ? lm.id : null, ceiling: window.OC.Terrain.getCeilingStats(), flashlightWas: window.OC.isFlashlightOn() };
+    // Прожектор выключаем: иначе в кадр попадает аддитивный луч и замер становится замером луча
     window.OC.setFlashlight(false);
     window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, -1.25);
-    await sleep(2500);
-    out.floorNoFlash = await sample();
+    await sleep(2200);
+    out.floor = await sample();
     window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, 1.25);
-    await sleep(2500);
-    out.ceilNoFlash = await sample();
-    window.OC.setFlashlight(true);
-    await sleep(2500);
-    out.ceilFlash = await sample();
+    await sleep(2200);
+    out.ice = await sample();
+    window.OC.setFlashlight(out.flashlightWas);
     return out;
   });
-  console.log('::error title=EUROPA_CEILING_DIAG::' + JSON.stringify(diag));
-  assert.fail('DIAG STOP');
+  assert(ceilingProbe.ceiling.ceilingMeshes > 0 && ceilingProbe.ceiling.ceilingVisible > 0,
+    `Europa must build and show ice ceiling chunks, got ${JSON.stringify(ceilingProbe.ceiling)}`);
+  assert(ceilingProbe.ice.lum >= 55,
+    `Europa basal ice shell is not readable without the flashlight (looking up luminance ${ceilingProbe.ice.lum}, sample ${JSON.stringify(ceilingProbe.ice)})`);
+  assert(ceilingProbe.ice.lum >= ceilingProbe.floor.lum * 2.5,
+    `Europa ice ceiling must read brighter than the abyssal floor (ice ${ceilingProbe.ice.lum} vs floor ${ceilingProbe.floor.lum})`);
+  console.log(`   Europa basal ice shell readable in Chromium: looking up luminance ${ceilingProbe.ice.lum} vs abyssal floor ${ceilingProbe.floor.lum} (${ceilingProbe.ceiling.ceilingVisible} ceiling chunks).`);
+
+  enterStage('europa-atlas-previews');
+  /* Регрессия: карточки Атласа «Базальный слой ледяного панциря» и «Канал рассола»
+     раньше показывали чёрный овал: записи без своей 3D-модели падали на заглушку-сферу,
+     а материал заглушки использовал vertexColors при отсутствующем атрибуте color. */
+  await page.keyboard.press('KeyK');
+  await page.waitForTimeout(700);
+  const atlasProbe = await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const sampleAtlas = () => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const c = document.getElementById('atlas-3d');
+        const gl = c.getContext('webgl2') || c.getContext('webgl');
+        const px = new Uint8Array(4);
+        const pts = [];
+        for (const fx of [0.35, 0.5, 0.65]) for (const fy of [0.3, 0.5, 0.7]) pts.push([Math.floor(c.width * fx), Math.floor(c.height * fy)]);
+        let r = 0, g = 0, b = 0, a = 0, n = 0;
+        for (const [x, y] of pts) { gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); r += px[0]; g += px[1]; b += px[2]; a += px[3]; n++; }
+        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), a: Math.round(a / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n) });
+      }));
+    });
+    const out = {};
+    for (const key of ['basal_ice', 'brine_channel']) {
+      const card = document.querySelector(`.atlas-card[data-key="${key}"]`);
+      if (!card) { out[key] = { missing: true }; continue; }
+      card.click();
+      await sleep(900);
+      out[key] = await sampleAtlas();
+    }
+    return out;
+  });
+  for (const key of ['basal_ice', 'brine_channel']) {
+    const p = atlasProbe[key];
+    assert(p && !p.missing, `Atlas must have a card for ${key}`);
+    assert(p.a > 8 && p.lum > 24,
+      `Atlas 3D preview for "${key}" renders as a black blob (a=${p.a}, luminance=${p.lum}, rgb=${p.r},${p.g},${p.b})`);
+  }
+  console.log(`   Europa atlas previews render geometry: basal_ice lum ${atlasProbe.basal_ice.lum} (a=${atlasProbe.basal_ice.a}), brine_channel lum ${atlasProbe.brine_channel.lum} (a=${atlasProbe.brine_channel.a}).`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
 
   enterStage('desktop-hotkeys');
   // Exercise core hotkeys: B (sub HUD), F (flashlight), G (3D multibeam sonar), ` (hydrophone), Z (ROV grab), I (CTD), K (Atlas), O (Globe), L (EcoLab), P/Enter (Photo), N/X (Cinema), / (Quick-Help)

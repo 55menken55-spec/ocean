@@ -37,9 +37,9 @@ window.OC = window.OC || {};
 
   /* Каналы рассола, спускающиеся из панциря (аналог хаос-террен Тары) */
   const BRINE_CHANNELS = [
-    { x: 74, z: -126, r: 46, bottom: 2.2, name: 'karma' },
-    { x: -68, z: 214, r: 38, bottom: 3.0, name: 'tara' },
-    { x: 196, z: 268, r: 42, bottom: 1.6, name: 'powys' }
+    { x: 74, z: -126, r: 46, bottom: -1.0, name: 'karma' },
+    { x: -68, z: 214, r: 38, bottom: -0.4, name: 'tara' },
+    { x: 196, z: 268, r: 42, bottom: -1.6, name: 'powys' }
   ];
 
   /* Зоны экологии (от базального льда к глубоководной равнине) */
@@ -185,7 +185,7 @@ window.OC = window.OC || {};
       }
     }
 
-    return OC.clamp(ceil, 1.2, 21.5);
+    return OC.clamp(ceil, -3.0, 21.5);
   }
 
   function getCeilingColor(x, y, z, out) {

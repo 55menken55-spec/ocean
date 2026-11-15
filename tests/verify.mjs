@@ -1725,6 +1725,56 @@ for (let cz = -3; cz < 3; cz++) {
   }
 }
 assert(europaCryoFlora > 0 && europaVeilFlora > 0 && europaChimneyFlora > 0, 'Europa flora stream must seed cryoforest, ceiling-hanging ice veils and serpentinite chimneys');
+
+/* Базальный лёд и канал рассола должны быть различимы и в мире, и в Атласе.
+   Ранее воронка рассола была пологой и одного цвета с панцирем, а обе записи
+   Атласа не имели своей 3D-модели и показывались чёрным овалом. */
+const BRINE_CHANNELS = [{ x: 74, z: -126 }, { x: -68, z: 214 }, { x: 196, z: 268 }];
+for (const ch of BRINE_CHANNELS) {
+  const throatY = europa.getCeilingHeight(ch.x, ch.z);
+  const rimY = europa.getCeilingHeight(ch.x + 78, ch.z + 78);
+  assert(rimY - throatY >= 8.0,
+    `Brine channel at (${ch.x}, ${ch.z}) must cut at least 8 m into the ice shell to be visible (throat ${throatY.toFixed(1)} m vs rim ${rimY.toFixed(1)} m)`);
+  const cThroat = europa.getCeilingColor(ch.x, throatY, ch.z, new T.Color());
+  const cPlain = europa.getCeilingColor(ch.x + 220, europa.getCeilingHeight(ch.x + 220, ch.z + 220), ch.z + 220, new T.Color());
+  const contrast = Math.abs(cThroat.r - cPlain.r) + Math.abs(cThroat.g - cPlain.g) + Math.abs(cThroat.b - cPlain.b);
+  assert(contrast > 0.18, `Brine channel throat must contrast with the surrounding ice (got ${contrast.toFixed(3)})`);
+}
+let brineRimVeils = 0;
+for (let cz = -3; cz < 4; cz++) {
+  for (let cx = -3; cx < 4; cx++) {
+    const items = europa.generateChunkFlora(cx, cz, europa.chunkSize, 1.2, OC.mulberry32(((cx * 40691) ^ (cz * 9137) ^ 0x5a17) >>> 0));
+    for (const it of items) {
+      if (it.species !== 'ice_veil') continue;
+      for (const ch of BRINE_CHANNELS) {
+        const d = Math.hypot(it.x - ch.x, it.z - ch.z);
+        if (d > 15 && d < 52) brineRimVeils++;
+      }
+    }
+  }
+}
+assert(brineRimVeils >= 12, `Brine channel rims must be outlined by hanging ice (got ${brineRimVeils} veils)`);
+for (const k of ['basal_ice', 'brine_channel']) {
+  const preview = OC.FaunaEngine.createPreviewMesh(k, europa);
+  assert(preview && preview.children.length > 0, `Europa Atlas preview missing for ${k}`);
+  const mesh = preview.children[0];
+  const gp = mesh.geometry && mesh.geometry.parameters;
+  assert(!(gp && gp.radius === 0.8 && gp.widthSegments === 48),
+    `Europa Atlas entry "${k}" falls back to the placeholder sphere and shows as a black oval`);
+  assert(!(mesh.material && mesh.material.vertexColors && !mesh.geometry.attributes.color),
+    `Europa Atlas entry "${k}" uses vertexColors without a color attribute - it renders pure black`);
+}
+/* Ни одна запись энциклопедии не должна превращаться в чёрный овал: заглушка
+   обязана быть видимой, то есть не использовать vertexColors без атрибута color. */
+for (const b of OC.Biomes.list()) {
+  for (const k of Object.keys(b.encyclopedia || {})) {
+    const preview = OC.FaunaEngine.createPreviewMesh(k, b);
+    const mesh = preview && preview.children[0];
+    if (!mesh || !mesh.material) continue;
+    assert(!(mesh.material.vertexColors && !mesh.geometry.attributes.color),
+      `Atlas entry "${k}" of ${b.id} renders black: vertexColors material without a color attribute`);
+  }
+}
 for (const k of ['cryo_forest', 'ice_veil', 'serpentine_chimney', 'brine_polyp', 'chemo_mat', 'cryo_tubeworm', 'sulfate_crust', 'cryo_glider', 'cryo_krill', 'cryo_shrimp', 'cryo_ray', 'armored_swimmer', 'cryo_medusa', 'vent_crab']) {
   assert(europa.encyclopedia[k], `Europa encyclopedia missing key ${k}`);
   assert(OC.sound.getVoiceLabel(k).length > 4, `Europa acoustic label missing for ${k}`);

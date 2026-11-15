@@ -741,7 +741,7 @@ function createOrUpdateChunk(rec, segs) {
            даём ему рассеянный свет, сопоставимый с освещением дна. */
         const ceilGlow = (typeof biome.ceilingGlow === 'number')
           ? biome.ceilingGlow
-          : (biome.noSurface ? 0.58 : 0.16);
+          : (biome.noSurface ? 0.34 : 0.14);
         OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true, ceilGlow });
       }
 
