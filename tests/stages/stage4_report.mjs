@@ -5,7 +5,8 @@ export function run(ctx) {
   const { OC, amz, baikal } = ctx; // amz/baikal — данные CTD-зондирований из стадий 10-го и 11-го биомов
   assert(typeof OC.Expedition.buildScientificReport === 'function' && typeof OC.Expedition.exportReport === 'function', 'OC.Expedition must expose scientific report builder & exporter');
   const repMd = OC.Expedition.exportReport('md', { biome: amz.biome, ctdCast: amz.ctd, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
-  assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes('Сводка по 14 биомам'), 'Markdown report must summarize all 14 biomes & CTD data');
+  const biomesTotal = OC.Biomes.list().length;
+  assert(repMd && repMd.filename.endsWith('.md') && repMd.content.includes('Амазония') && repMd.content.includes(`Сводка по ${biomesTotal} биомам`), `Markdown report must summarize all ${biomesTotal} biomes & CTD data`);
   const repJson = OC.Expedition.exportReport('json', { biome: amz.biome, ctdCast: amz.ctd, ecoState: OC.EcoLab.getState(), mapCoveragePct: 42 });
   const baikalReportMd = OC.Expedition.exportReport('md', { biome: baikal.biome, ctdCast: baikal.ctd });
   const baikalReportJson = OC.Expedition.exportReport('json', { biome: baikal.biome, ctdCast: baikal.ctd });
@@ -15,13 +16,13 @@ export function run(ctx) {
   assert.equal(baikalReportData.ctdCast.oxygenProfile.length, baikal.ctd.bins.length, 'JSON report must export every CTD oxygen-depth sample');
   assert.equal(baikalReportData.ctdCast.profile[0].conductivityUSCm, baikal.ctd.bins[0].conductivityUSCm, 'JSON report must retain the conductivity/TDS vertical profile');
   const parsedRep = JSON.parse(repJson.content);
-  assert.equal(parsedRep.biomes.length, 14, 'JSON scientific report must contain all 14 biomes');
+  assert.equal(parsedRep.biomes.length, biomesTotal, `JSON scientific report must contain all ${biomesTotal} biomes`);
   /* Число записей Атласа считаем из самих биомов, а не константой: иначе любая
      новая запись энциклопедии (например, документирование вида, который биом
      генерировал без записи) ломает отчёт экспедиции. */
   const atlasTotal = OC.Biomes.list().reduce((n, bm) => n + Object.keys(bm.encyclopedia || {}).length, 0);
-  assert(parsedRep.summary.missionsTotal === 56 && parsedRep.summary.speciesTotal === atlasTotal,
-    `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)} (ожидалось ${atlasTotal} записей Атласа)`);
+  assert(parsedRep.summary.missionsTotal === OC.Expedition.MISSIONS.length && parsedRep.summary.speciesTotal === atlasTotal,
+    `Report summary totals mismatch: ${JSON.stringify(parsedRep.summary)} (ожидалось ${atlasTotal} записей Атласа и ${OC.Expedition.MISSIONS.length} миссий)`);
 
   assert(typeof OC.Quality.evaluateAutoLod === 'function' && typeof OC.Quality.setAutoLod === 'function' && typeof OC.Quality.getAutoLodState === 'function', 'OC.Quality must expose adaptive Auto-LOD controller');
   OC.Quality.set('high');

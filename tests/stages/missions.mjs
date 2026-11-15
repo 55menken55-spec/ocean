@@ -1,10 +1,14 @@
-// H) Verify Direction 1 + All 10 Biome Missions (Camera, 40 Scientific Missions, Minimap Waypoints, Persistence)
+// H) Verify Direction 1 + All Biome Missions (Camera, Scientific Missions, Minimap Waypoints, Persistence)
+/* Число миссий считается из реестра биомов, а не константой: при добавлении
+   биома (Титан) жёсткое 56 ломало бы отчёт там, где регрессии нет. */
 import assert from 'node:assert/strict';
 
 export function run(ctx) {
   const { OC, arcticBiome, biome, camera, gbrBack, gbrFauna, getEl, memStorage, scene } = ctx;
   assert(OC.Expedition && Array.isArray(OC.Expedition.MISSIONS), 'OC.Expedition module required');
-  assert.equal(OC.Expedition.MISSIONS.length, 56, `Expected 56 missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
+  const biomesTotal = OC.Biomes.list().length;
+  assert.equal(OC.Expedition.MISSIONS.length, biomesTotal * 4,
+    `Expected ${biomesTotal * 4} missions (4 per biome), got ${OC.Expedition.MISSIONS.length}`);
   for (const b of OC.Biomes.list()) {
     const bMissions = OC.Expedition.MISSIONS.filter((m) => m.biomeId === b.id);
     assert.equal(bMissions.length, 4, `Expected 4 missions for ${b.id}, got ${bMissions.length}`);

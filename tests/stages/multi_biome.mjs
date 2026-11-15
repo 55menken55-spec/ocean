@@ -1,4 +1,4 @@
-/* ================= СТАДИЯ G: ПЛАНЕТАРНАЯ ПЛАТФОРМА ИЗ 14 БИОМОВ ================= */
+/* ================= СТАДИЯ G: ПЛАНЕТАРНАЯ ПЛАТФОРМА ВСЕХ БИОМОВ ================= */
 /* Горячая смена биома: стриминг террейна, прототипы флоры, энциклопедия,
    навигация по маякам и отсутствие NaN в геометрии чанков — для каждого биома. */
 import assert from 'node:assert/strict';
@@ -7,17 +7,19 @@ import { terrainRoot, assertNoNaNGeometry } from '../lib/terrain_checks.mjs';
 export function run(ctx) {
   const { T, OC, scene, camera, html, floraProtos, worldSrc } = ctx;
   const allBiomes = OC.Biomes.list();
-  assert(allBiomes.length === 14, `Expected 14 registered aquatic biomes, got ${allBiomes.length}`);
+  assert(allBiomes.length >= 14, `Expected at least 14 registered aquatic biomes, got ${allBiomes.length}`);
   assert(html.includes('id="biome-bar"') && html.includes('id="biome-btns"'), 'index.html missing multi-biome expedition selector');
   assert(worldSrc.includes('uAurora'), 'world.js missing uAurora northern lights shader');
 
-  /* Биомы заморского пополнения (red_sea, florida_caves, amazon_igapo, baikal)
-     раньше в этот обход не попадали вовсе: стриминг, атлас и навигация по ним
-     не проверялись ничем, из-за чего четыре биома генерировали виды флоры без
-     прототипов в FloraLibrary, а те молча выбрасывались при раскладке. */
-  for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_atoll', 'mariana_trench', 'brine_pool', 'cenote_caves', 'galapagos_upwelling', 'europa_ocean', 'red_sea', 'florida_caves', 'amazon_igapo', 'baikal']) {
-    const b = OC.Biomes.setActive(bId);
-    assert(b && b.id === bId, `Failed to activate biome ${bId}`);
+  /* Обход идёт по реестру, а не по списку id: четыре биома заморского
+     пополнения (red_sea, florida_caves, amazon_igapo, baikal) раньше в него не
+     попадали вовсе — стриминг, атлас и навигация по ним не проверялись ничем,
+     из-за чего они генерировали виды флоры без прототипов в FloraLibrary, а те
+     молча выбрасывались при раскладке. Новый биом подхватывается автоматически. */
+  for (const b of allBiomes) {
+    const bId = b.id;
+    const activated = OC.Biomes.setActive(bId);
+    assert(activated && activated.id === bId, `Failed to activate biome ${bId}`);
     assert(b.zones && b.zones.length >= 4, `${bId} needs >= 4 ecological zones`);
     assert(b.landmarks && b.landmarks.length >= 4, `${bId} needs >= 4 landmarks`);
     assert(typeof b.getCurrentAt === 'function', `${bId} needs getCurrentAt`);

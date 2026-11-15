@@ -255,9 +255,10 @@ try {
 
   const reportMeta = await page.evaluate(() => {
     const exp = window.OC.Expedition && window.OC.Expedition.exportReport ? window.OC.Expedition.exportReport('md') : null;
-    return exp ? { len: exp.content.length, biomes: exp.report.biomes.length } : null;
+    return exp ? { len: exp.content.length, biomes: exp.report.biomes.length, total: window.OC.Biomes.list().length } : null;
   });
-  assert(reportMeta && reportMeta.biomes === 14 && reportMeta.len > 400, `Playwright report export failed: ${JSON.stringify(reportMeta)}`);
+  assert(reportMeta && reportMeta.biomes === reportMeta.total && reportMeta.len > 400,
+    `Playwright report export must cover every registered biome: ${JSON.stringify(reportMeta)}`);
 
   const report = [];
   for (const id of biomeIds) {

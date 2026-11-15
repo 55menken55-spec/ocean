@@ -18,7 +18,8 @@ export function run(ctx) {
   });
 
   const beacons = OC.Globe.getBeacons();
-  assert.equal(beacons.length, 14, '3D Globe must expose 14 expedition beacons');
+  assert.equal(beacons.length, OC.Biomes.list().length,
+    `3D Globe must expose one beacon per biome (${OC.Biomes.list().length}), got ${beacons.length}`);
   let totalTourStages = 0;
   for (const b of OC.Biomes.list()) {
     assert(b.globe && Number.isFinite(b.globe.lat) && Number.isFinite(b.globe.lon), `Biome ${b.id} missing globe coordinates`);

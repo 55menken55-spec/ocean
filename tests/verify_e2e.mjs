@@ -455,7 +455,8 @@ assert.equal(OC.ROV.getBuoys().length, 0, 'ROV buoy recall must clear active buo
 
 // Stage 4 E2E checks: Scientific Report Export & Adaptive Auto-LOD inside production bundle
 const repE2E = OC.Expedition.exportReport('md', { perfStats: OC.getPerfStats(), mapCoveragePct: OC.Minimap.getCoverage() });
-assert(repE2E && repE2E.content.includes('Большой Барьерный риф') && repE2E.report.biomes.length === 14, 'E2E production scientific report export must include all 14 biomes');
+assert(repE2E && repE2E.content.includes('Большой Барьерный риф') && repE2E.report.biomes.length === OC.Biomes.list().length,
+  `E2E production scientific report export must include all ${OC.Biomes.list().length} biomes, got ${repE2E && repE2E.report.biomes.length}`);
 OC.Quality.setAutoLod(true);
 for (let i = 0; i < 3; i++) OC.Quality.evaluateAutoLod(44.0, 1.0);
 assert.equal(OC.Quality.getId(), 'medium', 'Production Auto-LOD must downgrade high -> medium under simulated frame pressure');
@@ -464,7 +465,7 @@ stepFrames(2);
 
 console.log('3) Profiling 14 biomes × 100 continuous frames (1400 frames + 3D Multibeam Sonar scans)...');
 const biomeList = OC.Biomes.list();
-assert.equal(biomeList.length, 14, 'All 14 biomes must be registered in production bundle');
+assert(biomeList.length >= 14, `All registered biomes must be present in the production bundle, got ${biomeList.length}`);
 
 const perfTable = [];
 for (const b of biomeList) {
