@@ -76,6 +76,7 @@ ORDER = [
     'engine/fauna/cetaceans.js',
     'engine/fauna/galapagos.js',
     'engine/fauna/amazon_river.js',
+    'engine/fauna/florida_springs.js',
     'engine/fauna/baikal.js',
     'engine/fauna/europa_cryo.js',
     'engine/fauna/particles.js',

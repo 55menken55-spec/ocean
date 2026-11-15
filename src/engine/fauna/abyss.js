@@ -609,4 +609,87 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeWhaleFall = makeWhaleFall;
   OC._FaunaBuilders.makeHadalSnailfish = makeHadalSnailfish;
   OC._FaunaBuilders.makeSeaPig = makeSeaPig;
+
+  /* ---------- Подводный вулкан-сеаунд ---------- */
+  /* Запись Атласа hydrothermal_vents: спящий океанический вулкан с кратером,
+     лавовыми языками на склонах и серными наростами у жерла. В мире конус
+     задан рельефом и событиями OC.Volcano, поэтому модель используется
+     только как объёмная иллюстрация в 3D-студии Атласа. */
+  function makeSeamountVolcano(scene, biome, opts) {
+    const group = new T.Group();
+    const cBasalt = new T.Color(0x24262e);
+    const cRust = new T.Color(0x5a3a22);
+    const cAsh = new T.Color(0x3a3d44);
+    const cGlow = new T.Color(0xff6a1e);
+    const cSulfur = new T.Color(0xb0a02e);
+    const rng = OC.mulberry32((opts && opts.seed) || 7717);
+
+    // Усечённый конус с неровными, изборождёнными склонами
+    const cone = new T.CylinderGeometry(0.62, 1.75, 1.5, 26, 6, false);
+    const cp = cone.attributes.position;
+    for (let i = 0; i < cp.count; i++) {
+      const x = cp.getX(i), y = cp.getY(i), z = cp.getZ(i);
+      const a = Math.atan2(z, x);
+      const h = (y + 0.75) / 1.5;
+      const rr = 1 + 0.11 * Math.sin(a * 5 + h * 3.1) + 0.08 * Math.sin(a * 11 - h * 2.0) + 0.05 * rng();
+      cp.setXYZ(i, x * rr, y, z * rr);
+    }
+    cone.computeVertexNormals();
+    OC.geoPrep(cone);
+    OC.paint(cone, (x, y, z, c) => {
+      const h = (y + 0.75) / 1.5;
+      c.copy(cBasalt).lerp(cAsh, h * 0.55).lerp(cRust, OC.smoothstep(0.72, 1.0, h) * 0.5);
+      // Застывшие потоки лавы — радиальные полосы по склону
+      const flow = Math.sin(Math.atan2(z, x) * 9 + y * 2.2);
+      if (flow > 0.72) c.lerp(cRust, 0.35);
+    });
+    group.add(new T.Mesh(cone, OC._FaunaCtx.creatureMat));
+
+    // Кратер: воронка с раскалённым жерлом
+    const crater = new T.CylinderGeometry(0.46, 0.14, 0.42, 20, 2, true);
+    OC.geoPrep(crater);
+    OC.paint(crater, (x, y, z, c) => {
+      const d = Math.hypot(x, z) / 0.46;
+      c.copy(cGlow).lerp(cSulfur, OC.clamp(d * 0.8, 0, 1)).lerp(cBasalt, OC.smoothstep(0.75, 1.0, d));
+    });
+    const cm = new T.Mesh(crater, OC._FaunaCtx.creatureMat);
+    cm.position.set(0, 0.62, 0);
+    group.add(cm);
+    const floor = new T.CircleGeometry(0.15, 14);
+    floor.rotateX(-Math.PI / 2);
+    OC.geoPrep(floor);
+    OC.paint(floor, 0xff8a2e);
+    const fm = new T.Mesh(floor, OC._FaunaCtx.creatureMat);
+    fm.position.set(0, 0.42, 0);
+    group.add(fm);
+
+    // Лавовые языки на склонах и серные наросты у жерла
+    for (let i = 0; i < 7; i++) {
+      const a = rng() * Math.PI * 2;
+      const h = OC.lerp(0.1, 0.85, rng());
+      const rad = OC.lerp(1.66, 0.72, h);
+      const lobe = new T.SphereGeometry(1, 10, 7);
+      lobe.scale(OC.lerp(0.16, 0.3, rng()), 0.09, OC.lerp(0.3, 0.6, rng()));
+      OC.geoPrep(lobe);
+      OC.paint(lobe, (x, y, z, c) => c.copy(cBasalt).lerp(cRust, OC.clamp(y * 3.2 + 0.35, 0, 0.7)));
+      const lm = new T.Mesh(lobe, OC._FaunaCtx.creatureMat);
+      lm.position.set(Math.cos(a) * rad, -0.75 + h * 1.5, Math.sin(a) * rad);
+      lm.rotation.y = a;
+      group.add(lm);
+    }
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + rng() * 0.5;
+      const chim = new T.ConeGeometry(0.055, 0.2, 5);
+      OC.geoPrep(chim);
+      OC.paint(chim, (x, y, z, c) => c.copy(cSulfur).lerp(cRust, OC.clamp(y * 4 + 0.4, 0, 0.6)));
+      const chm = new T.Mesh(chim, OC._FaunaCtx.creatureMat);
+      chm.position.set(Math.cos(a) * 0.36, 0.78, Math.sin(a) * 0.36);
+      group.add(chm);
+    }
+
+    group.userData.key = 'submarine_volcano';
+    scene.add(group);
+    return { key: 'submarine_volcano', getPosition: () => group.position, update() {} };
+  }
+  OC._FaunaBuilders.makeSeamountVolcano = makeSeamountVolcano;
 })(window.OC);

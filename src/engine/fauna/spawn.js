@@ -45,8 +45,20 @@ window.OC = window.OC || {};
         agents.push(OC._FaunaBuilders.makeMoray(faunaGroup, biome, mor));
       }
 
+      /* Медузы в планах пишутся в двух разных форматах: старые биомы дают
+         x/y/z/size, а kelp_forest и hydrothermal_vents — cx/cz/scale. makeJelly
+         читает первый вариант, поэтому в этих двух биомах все 6 медуз получали
+         позицию NaN и не существовали; hue не задаёт никто — оттенок был NaN,
+         то есть чёрный. Приводим к единому виду. */
       for (const j of (plan.jellies || [])) {
-        agents.push(OC._FaunaBuilders.makeJelly(faunaGroup, j));
+        agents.push(OC._FaunaBuilders.makeJelly(faunaGroup, {
+          x: j.x !== undefined ? j.x : j.cx,
+          y: j.y,
+          z: j.z !== undefined ? j.z : j.cz,
+          size: j.size || j.scale || 1.1,
+          hue: j.hue !== undefined ? j.hue : (j.deep ? 0.58 : 0.72),
+          deep: !!j.deep
+        }));
       }
 
       for (const dg of (plan.dugongs || [])) {
@@ -55,12 +67,40 @@ window.OC = window.OC || {};
         sonarTargets.push(a);
       }
 
+      /* Мегафауна и хищники читаются по ключу. Раньше из megafauna высаживался
+         только florida_manatee, а массив predators не читался вовсе — поэтому
+         рифовая акула, черепаха и дюгонь Красного моря, мягкокрылая черепаха,
+         игла-панцирник и аллигатор Флориды существовали только как записи
+         Атласа. Планы новых биомов пишут радиус как `radius`, старые билдеры
+         ждут `r` — приводим к общему виду. */
+      const norm = (o) => Object.assign({}, o, { r: o.r || o.radius || 24 });
+
       for (const m of (plan.megafauna || [])) {
-        if (m.key === 'florida_manatee') {
-          const a = OC._FaunaBuilders.makeManatee(faunaGroup, biome, m);
-          agents.push(a);
-          sonarTargets.push(a);
-        }
+        const mo = norm(m);
+        let a = null;
+        if (m.key === 'florida_manatee') a = OC._FaunaBuilders.makeManatee(faunaGroup, biome, mo);
+        else if (m.key === 'reef_shark') a = OC._FaunaBuilders.makeShark(faunaGroup, biome, Object.assign({ speciesKey: 'reef_shark' }, mo));
+        else if (m.key === 'turtle') a = OC._FaunaBuilders.makeTurtle(faunaGroup, biome, Object.assign({}, mo, { size: mo.scale || 1.1 }));
+        else if (m.key === 'dugong') a = OC._FaunaBuilders.makeDugong(faunaGroup, biome, mo);
+        else if (m.key === 'florida_softshell') a = OC._FaunaBuilders.makeSoftshellTurtle(faunaGroup, biome, mo);
+        if (!a) continue;
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const pr of (plan.predators || [])) {
+        const po = norm(pr);
+        let a = null;
+        // Мурена (и осьминог) сидят в точке, а не ходят по кругу: им нужны x/z
+        if (pr.key === 'moray') a = OC._FaunaBuilders.makeMoray(faunaGroup, biome, { x: po.cx, z: po.cz, scale: po.scale || 1 });
+        else if (pr.key === 'lionfish') a = OC._FaunaBuilders.makeLionfish(faunaGroup, biome, po);
+        else if (pr.key === 'napoleon') a = OC._FaunaBuilders.makeNapoleon(faunaGroup, biome, po);
+        else if (pr.key === 'florida_gar') a = OC._FaunaBuilders.makeFloridaGar(faunaGroup, biome, po);
+        else if (pr.key === 'american_alligator') a = OC._FaunaBuilders.makeAlligator(faunaGroup, biome, po);
+        if (!a) continue;
+        agents.push(a);
+        predatorAgents.push(a);
+        sonarTargets.push(a);
       }
 
       for (const cr of (plan.crustaceans || [])) {

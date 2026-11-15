@@ -864,7 +864,7 @@ window.OC = window.OC || {};
             const fg = OC._FaunaBuilders.makeFishGeo(spec.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563, eyeScale: 0 });
             built = new T.Mesh(fg, previewMat);
           }
-        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark') {
+        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark' || key === 'reef_shark') {
           OC._FaunaBuilders.makeShark(tmpGroup, dummyBiome, {
             cx: 0, cz: 0, y: 0, r: 10, speed: 2,
             speciesKey: key, whaleShark: key === 'shark_whale'
@@ -947,6 +947,20 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makePinkDolphin(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'arapaima') {
           OC._FaunaBuilders.makeArapaima(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'napoleon') {
+          OC._FaunaBuilders.makeNapoleon(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: -8, speed: 2, scale: 1.35 });
+        } else if (key === 'nudibranch') {
+          OC._FaunaBuilders.makeNudibranch(tmpGroup, dummyBiome, { hue: 0.82, scale: 1 });
+        } else if (key === 'florida_gar') {
+          OC._FaunaBuilders.makeFloridaGar(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 6, y: -4, speed: 2, scale: 1.1 });
+        } else if (key === 'american_alligator') {
+          OC._FaunaBuilders.makeAlligator(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: -3, speed: 1.4, scale: 1.5 });
+        } else if (key === 'florida_softshell') {
+          OC._FaunaBuilders.makeSoftshellTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: -4, speed: 1.8, scale: 1.2 });
+        } else if (key === 'submarine_volcano') {
+          OC._FaunaBuilders.makeSeamountVolcano(tmpGroup, dummyBiome, {});
+        } else if (key === 'methane_seep_baikal') {
+          OC._FaunaBuilders.makeMethaneSeep(tmpGroup, dummyBiome, {});
         } else if (key === 'seal_baikal') {
           OC._FaunaBuilders.makeBaikalSeal(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 0, y: 0, scale: 0.8 });
         } else if (key === 'electric_eel') {
@@ -1007,11 +1021,14 @@ window.OC = window.OC || {};
         if (!built) {
           /* Заглушка для записей Атласа без собственной 3D-модели. Материал НЕ
              использует vertexColors: у SphereGeometry нет атрибута color, и шейдер
-             получал бы (0,0,0) — на экране это был бы чёрный овал вместо модели. */
+             получал бы (0,0,0) — на экране это был бы чёрный овал вместо модели.
+             Флаг в userData помечает такую модель: tests/verify.mjs проверяет,
+             что ни одна запись Атласа ни одного биома до заглушки не доходит. */
           const placeholderMat = new T.MeshStandardMaterial({
             color: 0x8fa6b8, roughness: 0.55, metalness: 0.05, side: T.DoubleSide
           });
           built = new T.Mesh(new T.SphereGeometry(0.8, 48, 24), placeholderMat);
+          built.userData.isAtlasPlaceholder = true;
         }
 
         // Обнуляем возможный сдвиг (напр. позиция группы в мировой точке) и приводим к единому масштабу 2.6 м
@@ -1032,6 +1049,7 @@ window.OC = window.OC || {};
         wrapper.add(built);
         wrapper.scale.setScalar(s);
         wrapper.updateMatrixWorld(true);
+        if (built.userData && built.userData.isAtlasPlaceholder) wrapper.userData.isAtlasPlaceholder = true;
         return wrapper;
       } finally {
         OC._FaunaCtx.creatureMat = savedMat;

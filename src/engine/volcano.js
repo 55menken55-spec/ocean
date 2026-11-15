@@ -823,9 +823,14 @@ window.OC = window.OC || {};
     rimMesh = new T.Mesh(rimGeo, rimMat);
     group.add(rimMesh);
 
-    // Газовый шлейф (переиспользуем шлейф курильщиков с холодной палитрой)
+    /* Газовый шлейф (переиспользуем шлейф курильщиков с холодной палитрой).
+       Ключ задаём явно: без него makeVentPlume по coldSeep подставляет
+       'serpentinite_vent' — серпентинитовый сип Марианской впадины, которого
+       в энциклопедии hydrothermal_vents нет (вулкан тогда высаживал в мир
+       объект без записи в Атласе). */
     gasPlume = OC._FaunaBuilders.makeVentPlume(scene, biome, fx && fx.texSoft, {
-      x: SITE.x, z: SITE.z, chimneyH: 5.0, height: 24, n: 140, coldSeep: true, light: false
+      x: SITE.x, z: SITE.z, chimneyH: 5.0, height: 24, n: 140, coldSeep: true, light: false,
+      key: 'volcanic_fumarole'
     });
     if (gasPlume && gasPlume.pts) gasPlume.pts.visible = false;
 

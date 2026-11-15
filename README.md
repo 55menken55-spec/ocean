@@ -144,7 +144,8 @@ src/
 │   ├── volcano.js           # Подводный вулкан-сеаунд: редкие события с предвестниками (сейсмика, шлейф, газ, течения)
 │   ├── fauna/               # 3D-животные по акваториям: schools, reef_life, rays_sharks, whales,
 │   │                        # polar, abyss, brine_cave, surface_birds, cetaceans, galapagos,
-│   │                        # amazon_river, baikal, europa_cryo (криобиота Европы); spawn (высадка по faunaPlan),
+│   │                        # amazon_river, florida_springs (игла-панцирник, аллигатор, мягкокрылая черепаха),
+│   │                        # baikal (нерпа, метановый сип), europa_cryo (криобиота Европы); spawn (высадка по faunaPlan),
 │   │                        # particles/splash/haze
 │   │                        # (эффекты среды), systems (реестр OC._FaunaSystems);
 │   │                        # brine_lake (рассол/галоклин/нить Ариадны), cave_twilight (глубины и пещеры)
