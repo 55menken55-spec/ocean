@@ -12417,6 +12417,25 @@ function createOrUpdateChunk(rec, segs) {
         if (r.mesh) { built++; if (r.mesh.visible) visible++; }
       });
       return { total: chunks.size, built, visible, max: MAX_ACTIVE_CHUNKS };
+    },
+
+    /* Положение построенных чанков в мировых координатах — регрессионный
+       контроль выравнивания геометрии по сетке чанков (смещение на chunkSize/2
+       ломало и текстуру, и коллизию). Читающий API, ничего не меняет. */
+    getChunkOrigins() {
+      const origin = getOriginRef();
+      const ox = origin ? origin.x : 0;
+      const oz = origin ? origin.z : 0;
+      const list = [];
+      chunks.forEach((r) => {
+        if (!r.mesh) return;
+        list.push({
+          cx: r.cx, cz: r.cz, segs: r.segs,
+          localX: r.mesh.position.x, localZ: r.mesh.position.z,
+          originX: ox, originZ: oz
+        });
+      });
+      return { chunkSize, originX: ox, originZ: oz, chunks: list };
     }
   };
 })(window.OC);

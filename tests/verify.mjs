@@ -293,6 +293,23 @@ for (const lm of biome.landmarks) {
 }
 console.log('   End-to-end streaming simulation passed across all', biome.landmarks.length, 'Great Barrier Reef landmarks.');
 
+// Chunk alignment: every built chunk must sit exactly on its grid corner.
+// A half-chunk offset (centre vs corner of the chunk) desyncs the rendered
+// seafloor from the collision/heightfield — the "transparent bottom" bug.
+const chunkOrigins = OC.Terrain.getChunkOrigins();
+assert(chunkOrigins.chunks.length > 0, 'Terrain must expose built chunk origins for the alignment check');
+for (const c of chunkOrigins.chunks) {
+  const worldX = c.localX + c.originX;
+  const worldZ = c.localZ + c.originZ;
+  const expX = c.cx * chunkOrigins.chunkSize;
+  const expZ = c.cz * chunkOrigins.chunkSize;
+  assert(Math.abs(worldX - expX) < 0.5,
+    `Terrain chunk ${c.cx},${c.cz} is offset in X by ${(worldX - expX).toFixed(2)} m — geometry and collision are desynced`);
+  assert(Math.abs(worldZ - expZ) < 0.5,
+    `Terrain chunk ${c.cx},${c.cz} is offset in Z by ${(worldZ - expZ).toFixed(2)} m — geometry and collision are desynced`);
+}
+console.log(`   Terrain chunk alignment verified (${chunkOrigins.chunks.length} chunks on the ${chunkOrigins.chunkSize} m grid).`);
+
 // E) Stage 2 verification: faunaPlan, nocturnal fish_lantern, Boids, Navigation vectors, Sonar scan, Audio & Minimap
 assert(biome.faunaPlan && Array.isArray(biome.faunaPlan.schools) && biome.faunaPlan.schools.length >= 16, 'biome.faunaPlan.schools must have >= 16 schools');
 assert(Array.isArray(biome.faunaPlan.cleaningStations) && biome.faunaPlan.cleaningStations.length >= 2, 'biome.faunaPlan.cleaningStations must exist');

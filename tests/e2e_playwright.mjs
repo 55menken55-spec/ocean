@@ -85,6 +85,36 @@ try {
   assert(renderCheck.ok, `Main WebGL #scene failed render check: ${JSON.stringify(renderCheck)}`);
   console.log(`   WebGL frame rendered (${renderCheck.width}x${renderCheck.height}, drawCalls=${renderCheck.drawCalls}, sampleRGB=${renderCheck.rgbSum}).`);
 
+  enterStage('terrain-alignment');
+  // Chunks must sit exactly on their grid corner (cx*chunkSize). A half-chunk
+  // offset desyncs the rendered seafloor from the collision heightfield.
+  const chunkAlign = await page.evaluate(async () => {
+    const deadline = performance.now() + 20000;
+    let info = null;
+    while (performance.now() < deadline) {
+      if (window.OC.Terrain && window.OC.Terrain.getChunkOrigins) {
+        info = window.OC.Terrain.getChunkOrigins();
+        if (info && info.chunks && info.chunks.length > 4) break;
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    if (!info || !info.chunks || !info.chunks.length) return { bad: [{ reason: 'no chunks built' }], count: 0 };
+    const bad = [];
+    for (const c of info.chunks) {
+      const worldX = c.localX + c.originX;
+      const worldZ = c.localZ + c.originZ;
+      const dx = worldX - c.cx * info.chunkSize;
+      const dz = worldZ - c.cz * info.chunkSize;
+      if (Math.abs(dx) > 0.5 || Math.abs(dz) > 0.5) {
+        bad.push({ cx: c.cx, cz: c.cz, dx: Number(dx.toFixed(2)), dz: Number(dz.toFixed(2)) });
+      }
+    }
+    return { bad, count: info.chunks.length, chunkSize: info.chunkSize };
+  });
+  assert.equal(chunkAlign.bad.length, 0,
+    `Terrain chunks are offset from the chunk grid (geometry vs collision desync): ${JSON.stringify(chunkAlign)}`);
+  console.log(`   Terrain chunk alignment verified in Chromium (${chunkAlign.count} chunks on the ${chunkAlign.chunkSize} m grid).`);
+
   enterStage('desktop-hotkeys');
   // Exercise core hotkeys: B (sub HUD), F (flashlight), G (3D multibeam sonar), ` (hydrophone), Z (ROV grab), I (CTD), K (Atlas), O (Globe), L (EcoLab), P/Enter (Photo), N/X (Cinema), / (Quick-Help)
   for (const code of ['KeyB', 'KeyF', 'KeyG', 'Backquote', 'KeyZ', 'KeyI', 'KeyI', 'KeyL', 'KeyL', 'KeyO', 'Escape', 'KeyK', 'Escape', 'KeyP', 'Enter', 'KeyP', 'KeyN', 'KeyX', 'KeyN', 'Slash', 'Escape']) {
