@@ -118,7 +118,7 @@ try {
   enterStage('DIAG-europa-ceiling');
   await page.evaluate(() => window.OC.switchBiome('europa_ocean'));
   await page.waitForFunction(() => window.OC.getPerfStats().biomeId === 'europa_ocean' && window.OC.getPerfStats().drawCalls > 0, { timeout: 25000 });
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(2500);
   const diag = await page.evaluate(async () => {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const sample = () => new Promise((resolve) => {
@@ -138,12 +138,12 @@ try {
     const lm = b.landmarks.find((l) => l.id === 'basal_ice_view') || b.landmarks[0];
     out.ceilAtLandmark = b.getCeilingHeight(lm.x, lm.z);
     out.floorAtLandmark = b.getHeight(lm.x, lm.z);
-    window.OC.Navigation.flyTo(lm.x, lm.y, lm.z, 0.0, -1.25);
-    await sleep(3200);
+    window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, -1.25);
+    await sleep(2500);
     out.camDown = { ...window.OC.Navigation.getPosition() };
     out.floorSample = await sample();
-    window.OC.Navigation.flyTo(lm.x, lm.y, lm.z, 0.0, 1.25);
-    await sleep(3200);
+    window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, 1.25);
+    await sleep(2500);
     out.camUp = { ...window.OC.Navigation.getPosition() };
     out.ceilSample = await sample();
     return out;

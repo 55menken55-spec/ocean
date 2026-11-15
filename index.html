@@ -30181,6 +30181,21 @@ window.OC = window.OC || {};
       if (state.mode === 'orbit') setMode('swim');
     },
 
+    /* Мгновенная постановка аппарата в точку (без 1.6-с подлёта).
+       Нужна там, где позицию надо задать точно и сразу: прыжок по маяку из
+       Атласа на слабом железе и покадровые проверки кадра в E2E. */
+    setPosition(x, y, z, yaw, pitch) {
+      if (state.mode === 'tour') setMode('swim');
+      if (state.mode === 'orbit') setMode('swim');
+      state.glide = null;
+      state.vel.set(0, 0, 0);
+      state.pos.set(x, y, z);
+      clampPosition(state.pos);
+      if (yaw !== undefined) { state.yaw = yaw; state.targetYaw = yaw; }
+      if (pitch !== undefined) { state.pitch = pitch; state.targetPitch = pitch; }
+      return state.pos.clone();
+    },
+
     /* Виртуальный импульс для мобильных кнопок */
     nudgeForward(amount) {
       _fwd.set(
