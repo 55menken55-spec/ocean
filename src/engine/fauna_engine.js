@@ -965,6 +965,10 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeCryoMedusa(tmpGroup, { x: 0, y: 0, z: 0, scale: 1 });
         } else if (key === 'vent_crab') {
           OC._FaunaBuilders.makeVentCrab(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: 0, speed: 0.8, scale: 1 });
+        } else if (key === 'basal_ice') {
+          OC._FaunaBuilders.makeBasalIceSlab(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'brine_channel') {
+          OC._FaunaBuilders.makeBrineChannel(tmpGroup, dummyBiome, { preview: true });
         } else {
           // Ищем либо параметры стаи / одиночной рыбы в фауне биомов, либо прототип из FloraLibrary
           let fishSpec = null;
@@ -1001,7 +1005,13 @@ window.OC = window.OC || {};
           tmpGroup.remove(built);
         }
         if (!built) {
-          built = new T.Mesh(new T.SphereGeometry(0.8, 48, 24), previewMat);
+          /* Заглушка для записей Атласа без собственной 3D-модели. Материал НЕ
+             использует vertexColors: у SphereGeometry нет атрибута color, и шейдер
+             получал бы (0,0,0) — на экране это был бы чёрный овал вместо модели. */
+          const placeholderMat = new T.MeshStandardMaterial({
+            color: 0x8fa6b8, roughness: 0.55, metalness: 0.05, side: T.DoubleSide
+          });
+          built = new T.Mesh(new T.SphereGeometry(0.8, 48, 24), placeholderMat);
         }
 
         // Обнуляем возможный сдвиг (напр. позиция группы в мировой точке) и приводим к единому масштабу 2.6 м

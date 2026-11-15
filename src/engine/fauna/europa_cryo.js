@@ -539,4 +539,148 @@ window.OC = window.OC || {};
     };
   }
   B.makeVentCrab = makeVentCrab;
+
+  /* ---------- Атлас: базальный слой ледяного панциря ----------
+     Статичный превью-объект для карточки Атласа. Без него карточка показывала
+     заглушку-сферу, а материал заглушки использует vertexColors при отсутствующем
+     атрибуте color — на экране это чёрный овал. */
+  function makeBasalIceSlab(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    group.userData.key = 'basal_ice';
+
+    const cIce = COL(0x9fd4ea);
+    const cPale = COL(0xd8f2ff);
+    const cVein = COL(0x8d4a46);
+    const cDeep = COL(0x4d86a8);
+
+    const parts = [];
+
+    // Плита базального льда: неровная нижняя граница панциря
+    const slab = new T.BoxGeometry(3.5, 0.5, 3.5, 10, 2, 10);
+    const sp = slab.attributes.position;
+    for (let i = 0; i < sp.count; i++) {
+      const x = sp.getX(i), y = sp.getY(i), z = sp.getZ(i);
+      if (y < 0) {
+        sp.setY(i, y - OC.fbm2(x * 1.35 + 3.1, z * 1.35 - 1.7, 2) * 0.42);
+      } else {
+        sp.setY(i, y + OC.fbm2(x * 0.9 - 2.2, z * 0.9 + 4.4, 2) * 0.16);
+      }
+    }
+    slab.computeVertexNormals();
+    OC.geoPrep(slab);
+    OC.paint(slab, (x, y, z, c) => {
+      const n = OC.fbm2(x * 1.9 + 9.1, z * 1.9 - 5.4, 2) * 0.5 + 0.5;
+      c.copy(cIce).lerp(cPale, n * 0.85);
+      // Прожилки облучённых солей (lineae Европы)
+      const vein = OC.fbm2(x * 3.1 - 2.2, z * 3.1 + 6.6, 2);
+      if (vein > 0.12) c.lerp(cVein, OC.smoothstep(0.12, 0.44, vein) * 0.6);
+      if (y < -0.2) c.lerp(cDeep, 0.35);
+    });
+    parts.push(slab);
+
+    // Сосульки и бахрома, свисающие с нижней границы льда
+    const nIcicles = 14;
+    for (let i = 0; i < nIcicles; i++) {
+      const a = (i / nIcicles) * 6.283 + 0.4;
+      const rad = 0.55 + (i % 4) * 0.42;
+      const len = OC.lerp(0.7, 1.9, ((i * 37) % 11) / 11);
+      const ic = new T.ConeGeometry(OC.lerp(0.05, 0.13, (i % 3) / 3), len, 6);
+      OC.geoPrep(ic);
+      OC.paint(ic, (x, y, z, c) => c.copy(cPale).lerp(cIce, OC.clamp(-y / len + 0.5, 0, 1)));
+      OC.xform(ic, { r: [Math.PI, 0, 0], p: [Math.cos(a) * rad, -0.28 - len * 0.5, Math.sin(a) * rad] });
+      parts.push(ic);
+    }
+
+    const mat = new T.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.42, metalness: 0.06, side: T.DoubleSide,
+      emissive: new T.Color(0x245f86), emissiveIntensity: 0.42
+    });
+    const mesh = new T.Mesh(OC.mergeGeometries(parts), mat);
+    group.add(mesh);
+
+    if (opts.scale) group.scale.setScalar(opts.scale);
+    scene.add(group);
+    return { key: 'basal_ice', getPosition: () => group.position, update() {} };
+  }
+  B.makeBasalIceSlab = makeBasalIceSlab;
+
+  /* ---------- Атлас: канал рассола под панцирем ----------
+     Воронка в базальном льду: океанская вода вмерзает в панцирь, а тяжёлый рассол
+     стекает вниз. Тёмное жерло, светлая соляная кромка и бахрома сосулек. */
+  function makeBrineChannel(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    group.userData.key = 'brine_channel';
+
+    const cIce = COL(0x9fd4ea);
+    const cPale = COL(0xd8f2ff);
+    const cSalt = COL(0xcfd8c4);
+    const cThroat = COL(0x123243);
+    const cBrine = COL(0x2b4f6b);
+
+    const parts = [];
+
+    // Кольцевая плита льда вокруг воронки
+    const plate = new T.CylinderGeometry(2.75, 2.62, 0.34, 34, 1);
+    const pp = plate.attributes.position;
+    for (let i = 0; i < pp.count; i++) {
+      const x = pp.getX(i), z = pp.getZ(i);
+      if (pp.getY(i) < 0) pp.setY(i, -0.17 - OC.fbm2(x * 1.5, z * 1.5, 2) * 0.16);
+    }
+    plate.computeVertexNormals();
+    OC.geoPrep(plate);
+    OC.paint(plate, (x, y, z, c) => {
+      const d = Math.hypot(x, z);
+      c.copy(cIce).lerp(cPale, OC.fbm2(x * 1.7 + 2.2, z * 1.7 - 3.1, 2) * 0.5 + 0.25);
+      // Светлая соляная кайма на кромке воронки
+      c.lerp(cSalt, OC.smoothstep(2.7, 1.95, d) * 0.55);
+    });
+    OC.xform(plate, { p: [0, 0.72, 0] });
+    parts.push(plate);
+
+    // Воронка: выпуклость, свисающая вниз от панциря к океану
+    const profile = [];
+    for (let i = 0; i <= 14; i++) {
+      const t = i / 14;
+      const r = t * 1.95;
+      const y = 0.72 - Math.pow(t, 1.55) * 2.55;
+      profile.push(new T.Vector2(Math.max(0.02, r), y));
+    }
+    const funnel = new T.LatheGeometry(profile, 36);
+    funnel.computeVertexNormals();
+    OC.geoPrep(funnel);
+    OC.paint(funnel, (x, y, z, c) => {
+      const d = Math.hypot(x, z);
+      c.copy(cIce).lerp(cBrine, OC.smoothstep(1.5, 0.35, d) * 0.8);
+      c.lerp(cThroat, OC.smoothstep(0.85, 0.05, d) * 0.75);
+      c.lerp(cSalt, OC.smoothstep(1.95, 1.45, d) * OC.smoothstep(1.2, 1.9, d) * 0.5);
+    });
+    parts.push(funnel);
+
+    // Бахрома сосулек по кромке воронки
+    const nIc = 16;
+    for (let i = 0; i < nIc; i++) {
+      const a = (i / nIc) * 6.283;
+      const rad = 2.0 + (i % 3) * 0.22;
+      const len = OC.lerp(0.55, 1.5, ((i * 29) % 9) / 9);
+      const ic = new T.ConeGeometry(0.075, len, 6);
+      OC.geoPrep(ic);
+      OC.paint(ic, (x, y, z, c) => c.copy(cPale).lerp(cIce, OC.clamp(-y / len + 0.5, 0, 1)));
+      OC.xform(ic, { r: [Math.PI, 0, 0], p: [Math.cos(a) * rad, 0.55 - len * 0.5, Math.sin(a) * rad] });
+      parts.push(ic);
+    }
+
+    const mat = new T.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.46, metalness: 0.05, side: T.DoubleSide,
+      emissive: new T.Color(0x1d5578), emissiveIntensity: 0.45
+    });
+    const mesh = new T.Mesh(OC.mergeGeometries(parts), mat);
+    group.add(mesh);
+
+    if (opts.scale) group.scale.setScalar(opts.scale);
+    scene.add(group);
+    return { key: 'brine_channel', getPosition: () => group.position, update() {} };
+  }
+  B.makeBrineChannel = makeBrineChannel;
 })(window.OC);

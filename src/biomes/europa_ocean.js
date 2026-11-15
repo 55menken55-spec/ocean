@@ -172,13 +172,16 @@ window.OC = window.OC || {};
     const dome = OC.fbm2(x * 0.0132 - 4.4, z * 0.0132 + 2.6, 2) * 2.4;
     ceil += dome;
 
-    // Каналы рассола: вода из океана замерзает в панцире и стекает вниз тяжёлым рассолом
+    // Каналы рассола: вода из океана замерзает в панцире и стекает вниз тяжёлым рассолом.
+    // Стенки воронки делаем крутыми, иначе карман рассола на фоне панциря не читается.
     for (let i = 0; i < BRINE_CHANNELS.length; i++) {
       const b = BRINE_CHANNELS[i];
       const d = Math.hypot(x - b.x, z - b.z);
       if (d < b.r * 1.25) {
-        const w = OC.smoothstep(b.r * 1.2, b.r * 0.22, d);
-        ceil = OC.lerp(ceil, b.bottom, w * 0.94);
+        const w = OC.smoothstep(b.r * 1.04, b.r * 0.30, d);
+        // Концентрические уступы на стенке воронки — следы циклов замерзания
+        const rings = Math.sin(d * 0.155) * 1.35 * w * (1.0 - w) * 4.0;
+        ceil = OC.lerp(ceil, b.bottom + rings, w * 0.99);
       }
     }
 
@@ -195,10 +198,13 @@ window.OC = window.OC || {};
     if (vein > 0.14) {
       out.lerp(_colC.set(0x8d4a46), OC.smoothstep(0.14, 0.42, vein) * 0.62);
     }
-    // Тёмные участки над карманами рассола
+    // Карман рассола: тёмное жерло с соляной каймой по кромке воронки
     const bd = nearestBrineDist(x, z);
-    if (bd < 70) {
-      out.lerp(_colC.set(0x2b4f6b), OC.smoothstep(70, 12, bd) * 0.55);
+    if (bd < 96) {
+      const core = OC.smoothstep(46, 4, bd);          // жерло канала
+      const rim = OC.smoothstep(96, 44, bd) * (1.0 - core); // валик солей на кромке
+      out.lerp(_colC.set(0x123243), core * 0.82);
+      out.lerp(_colC.set(0xcfd8c4), rim * 0.45);
     }
     return out;
   }
@@ -400,6 +406,22 @@ window.OC = window.OC || {};
         if (px >= x0 && px < x0 + chunkSize && pz >= z0 && pz < z0 + chunkSize) {
           add('brine_polyp', px, pz, OC.lerp(0.8, 1.45, rng()), 0xff9a7a);
         }
+      }
+    }
+
+    // 4b. Бахрома ледяных сосулек по кромке воронки рассола: без неё карман
+    //     рассола сливается с ровным панцирем и на глаз не находится.
+    for (let b = 0; b < BRINE_CHANNELS.length; b++) {
+      const ch = BRINE_CHANNELS[b];
+      if (ch.x + 80 < x0 || ch.x - 80 > x0 + chunkSize || ch.z + 80 < z0 || ch.z - 80 > z0 + chunkSize) continue;
+      const icicles = Math.round(20 * density);
+      for (let i = 0; i < icicles; i++) {
+        const a = rng() * 6.283;
+        const r = OC.lerp(ch.r * 0.32, ch.r * 1.08, rng());
+        const px = ch.x + Math.cos(a) * r;
+        const pz = ch.z + Math.sin(a) * r;
+        if (px < x0 || px >= x0 + chunkSize || pz < z0 || pz >= z0 + chunkSize) continue;
+        add('ice_veil', px, pz, OC.lerp(1.2, 2.1, rng()), 0xd9f0ff, getCeilingHeight(px, pz) - 0.5);
       }
     }
 

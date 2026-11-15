@@ -91,6 +91,10 @@ window.OC = window.OC || {};
     const isTerrain = !!opts.isTerrain;
     const fishSwim = !!opts.fishSwim;
     const bleachable = !!opts.bleachable;
+    /* Подсветка поверхностей, обращённых вниз (ледяной панцирь, карстовый свод):
+       потолок не получает ни солнца, ни небесной полусферы, поэтому в биомах без
+       поверхности он уходит в чистый чёрный и перестаёт читаться. */
+    const ceilGlow = opts.ceilGlow || 0;
 
     const cacheKey = [
       'oc',
@@ -98,7 +102,8 @@ window.OC = window.OC || {};
       swayAmp.toFixed(2),
       isTerrain ? 'T' : '0',
       fishSwim ? 'F' : '0',
-      bleachable ? 'B' : '0'
+      bleachable ? 'B' : '0',
+      ceilGlow.toFixed(2)
     ].join('_');
 
     mat.onBeforeCompile = (sh) => {
@@ -110,6 +115,7 @@ window.OC = window.OC || {};
       sh.uniforms.uSunProj = causticU.uSunProj;
       sh.uniforms.uWaveAmp = causticU.uWaveAmp;
       sh.uniforms.uBleach = causticU.uBleach;
+      sh.uniforms.uCeilGlow = { value: ceilGlow };
       sh.uniforms.uShadowA = causticU.uShadowA;
       sh.uniforms.uShadowB = causticU.uShadowB;
       sh.uniforms.uCStrength = { value: cStr };
@@ -183,6 +189,7 @@ window.OC = window.OC || {};
         uniform float uBleachable;
         uniform vec4 uShadowA;
         uniform vec4 uShadowB;
+        uniform float uCeilGlow;
       `;
 
       const fColor = `
@@ -264,6 +271,14 @@ window.OC = window.OC || {};
           vec3 causRGB = pow(max(vec3(0.0), vec3(cR, cG, cB) * 2.95), vec3(1.12));
           vec3 prismCol = causRGB * mix(vec3(1.0), uCausticCol, 0.55);
           gl_FragColor.rgb += prismCol * upMask * underwaterMask * focusCurve * uCStrength * uCausticI * (0.52 + uWaveAmp * 0.14) * mix(0.22, 1.0, ocShadow);
+        `;
+      }
+      if (ceilGlow > 0.0) {
+        fInject += `
+          // Обращённые вниз грани (потолок) не видят ни солнца, ни небесной полусферы:
+          // добавляем им долю собственного альбедо как рассеянный свет от льда и прожектора.
+          float downMask = clamp(-vCNormal.y, 0.0, 1.0);
+          gl_FragColor.rgb += diffuseColor.rgb * uCeilGlow * downMask;
         `;
       }
       fInject += '\n#include <fog_fragment>';

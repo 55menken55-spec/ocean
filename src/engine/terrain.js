@@ -736,7 +736,13 @@ function createOrUpdateChunk(rec, segs) {
           roughness: 0.92,
           metalness: 0.02
         });
-        OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true });
+        /* Потолок освещён только «земной» полусферой. Под 25 км льда (noSurface)
+           она практически чёрная, поэтому ледяной панцирь перестаёт читаться —
+           даём ему рассеянный свет, сопоставимый с освещением дна. */
+        const ceilGlow = (typeof biome.ceilingGlow === 'number')
+          ? biome.ceilingGlow
+          : (biome.noSurface ? 0.58 : 0.16);
+        OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true, ceilGlow });
       }
 
       // Горизонтный фартук только для ограниченных миров
