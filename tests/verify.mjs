@@ -153,6 +153,36 @@ sandbox.window.innerWidth = 1440;
 sandbox.window.innerHeight = 900;
 sandbox.window.addEventListener = () => {};
 
+/* ---- Фейковый Web Worker для террейна ----
+   Без него verify.mjs проверял только синхронный fallback: `typeof Worker` в
+   песочнице всегда undefined, то есть основной (и единственный в браузере) путь
+   постройки чанков оставался непроверенным. Именно так незамеченной прошла
+   ошибка размера буфера цветов: синхронный путь считает цвета на месте и корректен,
+   а воркерный читал за границей буфера и получал undefined -> NaN-цвета вершин.
+   Воркер выполняется синхронно в том же контексте, поэтому детерминирован. */
+const TERRAIN_WORKER_SRC = (() => {
+  const src = fs.readFileSync(path.join(ROOT, 'src', 'engine', 'terrain.js'), 'utf8');
+  const m = src.match(/const TERRAIN_WORKER_SRC = `([\s\S]*?)`;/);
+  assert(m, 'terrain.js must define TERRAIN_WORKER_SRC');
+  return m[1];
+})();
+let fakeWorkerInstance = null;
+sandbox.Blob = class { constructor(parts) { this.parts = parts; } };
+sandbox.URL = { createObjectURL: () => 'blob:terrain-worker', revokeObjectURL: () => {} };
+sandbox.Worker = class FakeWorker {
+  constructor() {
+    this.onmessage = null;
+    this.onerror = null;
+    fakeWorkerInstance = this;
+  }
+  postMessage(msg) {
+    const self = { onmessage: null, postMessage: (r) => { if (this.onmessage) this.onmessage({ data: r }); } };
+    vm.runInNewContext(TERRAIN_WORKER_SRC, { self, Math, Float32Array, Uint32Array, console }, { filename: 'terrain-worker.js' });
+    if (self.onmessage) self.onmessage({ data: msg });
+  }
+  terminate() {}
+};
+
 vm.createContext(sandbox);
 const threeCode = fs.readFileSync(path.join(ROOT, 'three.min.js'), 'utf8');
 vm.runInContext(threeCode, sandbox, { filename: 'three.min.js' });
@@ -432,7 +462,45 @@ for (const bId of ['kelp_forest', 'hydrothermal_vents', 'arctic_sea', 'wreck_ato
   }
   assert(OC.Terrain.getStats().visible > 0, `${bId} must stream terrain chunks`);
   assert(OC.FloraStreamer.getStats().cachedChunks > 0, `${bId} must cache flora chunks`);
+  assertNoNaNGeometry(`${bId} terrain`, terrainRoot(scene), 'position|normal|color');
   console.log(`   Biome "${b.name}" (${b.landmarks.length} landmarks, encyclopedia & streaming) verified.`);
+}
+
+/* Корень группы террейна: сцена одна на все биомы, поэтому ищем группу чанков. */
+function terrainRoot(sc) {
+  if (!sc) return null;
+  let found = null;
+  for (const c of sc.children) {
+    if (c.type !== 'Group') continue;
+    let hasFloor = false;
+    c.traverse((o) => { if (o.isMesh && o.userData && o.userData.key === 'floor') hasFloor = true; });
+    if (hasFloor) { found = c; break; }
+  }
+  return found;
+}
+
+/* Ни один атрибут построенной геометрии не должен содержать NaN/Infinity.
+   NaN в цвете вершины гасит треугольник до чёрного — именно так выглядела
+   ошибка размера буфера цветов на пути Web Worker. */
+function assertNoNaNGeometry(label, root, attrs) {
+  assert(root, `${label}: terrain group not found`);
+  const wanted = attrs.split('|');
+  let checked = 0;
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    for (const a of wanted) {
+      const at = o.geometry.attributes[a];
+      if (!at) continue;
+      const arr = at.array;
+      for (let i = 0; i < arr.length; i++) {
+        if (!Number.isFinite(arr[i])) {
+          assert.fail(`${label}: attribute "${a}" of a chunk mesh contains ${arr[i]} at index ${i} (${checked} components checked)`);
+        }
+      }
+      checked += arr.length;
+    }
+  });
+  assert(checked > 0, `${label}: no geometry attributes to check`);
 }
 
 // Verify Abyssal Hydrothermal thermal plume updraft (+Y > 1.5 m/s over main smoker) & signature flora density

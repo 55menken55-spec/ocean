@@ -566,8 +566,11 @@ function createOrUpdateChunk(rec, segs) {
         }
       }
 
-      const gridCount = n * n;
-      const colorData = new Float32Array(gridCount * 3);
+      // Решётка цветов индексируется тем же gIdx, что и решётка высот, то есть по
+      // ПАДДИНГОВАННОЙ сетке (stride x stride), а не по n x n. При размере n*n*3
+      // записи последних строк уходили за границу буфера и молча отбрасывались,
+      // а воркер читал оттуда undefined — получались NaN-цвета вершин (~13 %).
+      const colorData = new Float32Array(stride * stride * 3);
       for (let iz = 0; iz <= segs; iz++) {
         const absZ = z0 + iz * step;
         const gRow = (iz + 1) * stride;
