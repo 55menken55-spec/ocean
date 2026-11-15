@@ -205,6 +205,43 @@ node tests/e2e_playwright.mjs
 python3 .agents/skills/validate_skills.py
 ```
 
+### Устройство верификации (`tests/`)
+
+`tests/verify.mjs` — это только раннер (~150 строк): он проверяет синтаксис всех модулей, собранный
+`index.html`, поднимает VM-песочницу и вызывает стадии в фиксированном порядке. Сами проверки
+разложены по файлам, чтобы блоки не превращались в простыню на две тысячи строк:
+
+```
+tests/
+├── verify.mjs             # раннер: подготовка + порядок вызова стадий
+├── verify_e2e.mjs         # E2E-прогон собранного index.html (14 биомов × 100 кадров)
+├── e2e_playwright.mjs     # E2E в реальном headless Chromium / SwiftShader
+├── lib/
+│   ├── harness.mjs        # общая VM-песочница: DOM-заглушки, three.js, фейковый Web Worker террейна
+│   └── terrain_checks.mjs # поиск группы чанков, проверка атрибутов на NaN, снимки геометрии
+└── stages/                # 36 стадий, по одной на смысловой блок
+    ├── bathy_landmarks.mjs  # батиметрия, зоны, маяки
+    ├── shader_patching.mjs  # GLSL-патчинг onBeforeCompile
+    ├── engine_core.mjs      # стриминг террейна, флора, фауна, навигация, течения
+    ├── multi_biome.mjs      # все 14 биомов и горячая смена
+    ├── chunk_path_parity.mjs# Web Worker против синхронного fallback
+    ├── missions.mjs … onboarding_ci.mjs   # направления 1-10: миссии, погода, Атлас,
+    │                                      # экосистема, сонар, гидрофон, музей, CI
+    ├── biome_amazon.mjs / biome_baikal.mjs / biome_europa.mjs
+    ├── stage2_optics.mjs … stage5_visual.mjs
+    ├── atlas_fauna.mjs      # у каждой записи Атласа своя модель, фауна без NaN
+    └── floating_origin.mjs  # сдвиг начала координат не рассинхронизирует рельеф и флору
+```
+
+Каждая стадия экспортирует `export function run(ctx)` и получает общий контекст (движок, сцену,
+собранные исходники, DOM-заглушки). Часть стадий кладёт в контекст свои результаты через
+`Object.assign(ctx, runX(ctx))` — поэтому **порядок вызовов в раннере важен**: `cenote_caves`
+публикует `ccBiome`, без которого сонар не отсканирует потолок, а `stage2_optics` отдаёт
+FaunaEngine и позицию кита для `stage3_rov`. Стадии биомов возвращают CTD-зондирования,
+которые `stage4_report` кладёт в научный отчёт, — эти связи передаются аргументами явно.
+`atlas_fauna` идёт после всех биомов, а `floating_origin` — последней: она меняет порог сдвига
+и origin навсегда, поэтому остальные проверки считают позиции в локальных координатах.
+
 ### Автоматический CI (`.github/workflows/ci.yml`)
 
 При каждом `push` / Pull Request на GitHub запускаются два последовательных джоба:
