@@ -127,10 +127,16 @@ try {
         const gl = c.getContext('webgl2') || c.getContext('webgl');
         const px = new Uint8Array(4);
         const pts = [];
-        for (const fx of [0.3, 0.4, 0.5, 0.6, 0.7]) for (const fy of [0.25, 0.4, 0.55, 0.7]) pts.push([Math.floor(c.width * fx), Math.floor(c.height * fy)]);
+        for (const fx of [0.25, 0.35, 0.5, 0.65, 0.75]) for (const fy of [0.25, 0.4, 0.55, 0.7]) pts.push([Math.floor(c.width * fx), Math.floor(c.height * fy)]);
+        const lums = [];
         let r = 0, g = 0, b = 0, n = 0;
-        for (const [x, y] of pts) { gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); r += px[0]; g += px[1]; b += px[2]; n++; }
-        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n) });
+        for (const [x, y] of pts) {
+          gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          r += px[0]; g += px[1]; b += px[2]; n++;
+          lums.push(Math.round(0.299 * px[0] + 0.587 * px[1] + 0.114 * px[2]));
+        }
+        lums.sort((a, z) => a - z);
+        resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n), minL: lums[0], maxL: lums[lums.length - 1], medL: lums[Math.floor(lums.length / 2)] });
       });
     });
     const out = { ceiling: window.OC.Terrain.getCeilingStats() };
@@ -138,14 +144,16 @@ try {
     const lm = b.landmarks.find((l) => l.id === 'basal_ice_view') || b.landmarks[0];
     out.ceilAtLandmark = b.getCeilingHeight(lm.x, lm.z);
     out.floorAtLandmark = b.getHeight(lm.x, lm.z);
+    window.OC.setFlashlight(false);
     window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, -1.25);
     await sleep(2500);
-    out.camDown = { ...window.OC.Navigation.getPosition() };
-    out.floorSample = await sample();
+    out.floorNoFlash = await sample();
     window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, 1.25);
     await sleep(2500);
-    out.camUp = { ...window.OC.Navigation.getPosition() };
-    out.ceilSample = await sample();
+    out.ceilNoFlash = await sample();
+    window.OC.setFlashlight(true);
+    await sleep(2500);
+    out.ceilFlash = await sample();
     return out;
   });
   console.log('::error title=EUROPA_CEILING_DIAG::' + JSON.stringify(diag));
