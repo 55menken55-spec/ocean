@@ -11539,9 +11539,19 @@ window.OC = window.OC || {};
       return target.set(c.x + o.x, c.y + o.y, c.z + o.z);
     },
 
-    /* Подписаться на событие сдвига начала координат. */
+    /* Подписаться на событие сдвига начала координат. Возвращает функцию
+       отписки: подписчики обычно регистрируются внутри init(), а init()
+       вызывается при каждой смене биома — без отписки слушатели накапливаются
+       и на каждом сдвиге выполняют одну и ту же работу по несколько раз.
+
+       Меш/лайт/спрайт сдвигает сам update() обходом сцены: повторно вычитать
+       delta в слушателе — значит сдвинуть объект дважды. */
     onShift(cb) {
       shiftListeners.push(cb);
+      return function offShift() {
+        const i = shiftListeners.indexOf(cb);
+        if (i >= 0) shiftListeners.splice(i, 1);
+      };
     },
 
     /* Вызывать каждый фрейм с камерой. Возвращает true, если сдвиг произошёл. */
@@ -11559,6 +11569,13 @@ window.OC = window.OC || {};
         if (scene) {
           scene.traverse((obj) => {
             if (obj.isMesh || obj.isInstancedMesh || obj.isLight || obj.isSprite) {
+              /* Контейнер инстансов (InstancedMesh) — это не объект в сцене, а
+                 просто якорь: позиции лежат в instanceMatrix уже в локальных
+                 координатах. Сдвигать его position — значит сдвинуть все
+                 экземпляры второй раз (владелец к тому же не знает про этот
+                 сдвиг и перезапишет матрицы по-своему). Такие меши помечают
+                 себя userData.noFloatingOrigin = true. */
+              if (obj.userData && obj.userData.noFloatingOrigin) return;
               obj.position.sub(delta);
               if (obj.isInstancedMesh && obj.instanceMatrix) {
                 obj.instanceMatrix.needsUpdate = true;
@@ -12148,6 +12165,12 @@ self.onmessage = function (e) {
   }
 
   /* ---- Внешний горизонт дна за пределами детальной карты (только для ограниченных миров) ---- */
+  /* Чанки стримятся только вокруг камеры (terrainFarDist 660...1180 м), а мир
+     ограничен worldRadius 1200 м. Фартук догружает дно до 2600 м, чтобы в
+     прозрачных водах (Байкал, fogDensity 0.0012) на горизонте не было видно
+     резкого обрыва детальной сетки. Внутри игровой зоны он утоплен на 12 м и
+     скрыт под настоящими чанками. Строится в мировом начале координат и вместе
+     со сценой сдвигается при Floating Origin. */
   function buildHorizonApron() {
     if (!biomeRef || biomeRef.worldRadius > 4000) return; // для unbounded worlds не строим фартук
     const g = new T.PlaneGeometry(5200, 5200, 48, 48);
@@ -12168,6 +12191,7 @@ self.onmessage = function (e) {
     g.setAttribute('color', new T.BufferAttribute(c, 3));
     g.deleteAttribute('uv');
     g.computeVertexNormals();
+    g.computeBoundingSphere(); // чтобы не считать её на первом же кадре
     const apron = new T.Mesh(g, terrainMat);
     apron.userData.key = 'floor';
     horizonApron = apron;
@@ -12189,6 +12213,7 @@ self.onmessage = function (e) {
       if (terrainMat) { terrainMat.dispose(); terrainMat = null; }
       if (ceilingMat) { ceilingMat.dispose(); ceilingMat = null; }
       chunks.clear();
+      horizonApron = null; // старый меш живёт в удаляемой группе
       workerQueue.length = 0;
       workerBusy = false;
       pendingChunkData.clear();
@@ -12225,15 +12250,13 @@ self.onmessage = function (e) {
         }
       }
 
-      // При сдвиге начала координат (Floating Origin) перепозиционируем все меши чанков
-      OC.FloatingOrigin.onShift((delta) => {
-        chunks.forEach((rec) => {
-          if (rec.mesh) rec.mesh.position.sub(delta);
-          if (rec.ceilMesh) rec.ceilMesh.position.sub(delta);
-        });
-        if (horizonApron) horizonApron.position.sub(delta);
-      });
-
+      /* Сдвиг начала координат (Floating Origin) здесь больше НЕ дублируется.
+         OC.FloatingOrigin.update() сам обходит сцену и сдвигает все меши, а
+         чанки — обычные меши в group, то есть они уже сдвинуты. Раньше этот
+         слушатель вычитал delta ещё раз, и после любого сдвига дальше 1000 м от
+         начала координат рельеф уезжал от своего высотного поля ровно на delta
+         (замер: 1100 м на всех 28 чанках). Слушатель к тому же копился при
+         каждой смене биома, умножая ошибку на число смен. */
       terrainMat = new T.MeshStandardMaterial({
         vertexColors: true,
         roughness: 0.9,
@@ -12256,8 +12279,11 @@ self.onmessage = function (e) {
         OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true, ceilGlow });
       }
 
-      // Горизонтный фартук только для ограниченных миров
-      // buildHorizonApron(); // отключён для отладки прозрачного дна
+      // Горизонтный фартук только для ограниченных миров.
+      // Он был отключён в PR #4 «для отладки прозрачного дна», но к тому багу
+      // (чанки якоря по центру вместо угла) отношения не имел — с тех пор якорь
+      // исправлен, и фартук возвращён.
+      buildHorizonApron();
 
       // Синхронно строим только стартовую окрестность вокруг камеры (~25 чанков, < 20 мс)
       const q = OC.Quality.get();
@@ -15412,21 +15438,23 @@ function buildChunkData(cx, cz, density) {
     const rng = OC.mulberry32(seed);
     const raw = biomeRef.generateChunkFlora(cx, cz, chunkSize, density, rng);
     const items = [];
-    const origin = getOriginRef();
-    const ox = origin ? origin.x : 0;
-    const oz = origin ? origin.z : 0;
 
     for (let i = 0; i < raw.length; i++) {
       const it = raw[i];
       const basePool = poolLookup.get(it.species + ':0');
       const vCount = basePool ? basePool.variantCount : 1;
       const variant = Math.floor(rng() * vCount);
+      /* Кэш хранит ИСТИННЫЕ мировые координаты. Раньше тут сразу вычитался
+         origin, и после сдвига Floating Origin весь кэш оказывался в системе
+         координат прошлого origin: флора уезжала от дна ровно на delta и
+         возвращалась на место только по мере вытеснения чанков из кэша.
+         Перевод в локальные координаты делается в момент использования. */
       items.push({
         species: it.species,
         variant,
-        x: it.x - ox, // относительно начала координат (Floating Origin)
+        x: it.x,
         y: it.y,
-        z: it.z - oz, // относительно начала координат (Floating Origin)
+        z: it.z,
         ry: it.ry,
         scale: it.scale,
         tint: it.tint || 0xffffff
@@ -15442,6 +15470,7 @@ function buildChunkData(cx, cz, density) {
     const activeR2 = activeR * activeR;
     const origin = getOriginRef();
     const ox = origin ? origin.x : 0;
+    const oy = origin ? origin.y : 0;
     const oz = origin ? origin.z : 0;
 
     // Истинная мировая позиция камеры (локальная + origin)
@@ -15451,7 +15480,7 @@ function buildChunkData(cx, cz, density) {
     // Потолочное отсечение для пещерных биомов:
     // если камера под сводом, объекты над сводом в своей точке за потолком — не рисуем
     const hasCeiling = biomeRef && typeof biomeRef.getCeilingHeight === 'function';
-    const camY = camPos.y + (origin ? origin.y : 0);
+    const camY = camPos.y + oy;
     let camCeilY = null;
     if (hasCeiling) {
       camCeilY = biomeRef.getCeilingHeight(trueCamX, trueCamZ);
@@ -15481,16 +15510,18 @@ function buildChunkData(cx, cz, density) {
 
         for (let i = 0; i < items.length; i++) {
           const it = items[i];
-          const dx = it.x - camPos.x;
-          const dz = it.z - camPos.z;
+          // Истинные мировые координаты -> локальные сцены (Floating Origin)
+          const lx = it.x - ox;
+          const lz = it.z - oz;
+          const ly = it.y - oy;
+          const dx = lx - camPos.x;
+          const dz = lz - camPos.z;
           const d2 = dx * dx + dz * dz;
           if (d2 > activeR2) continue;
 
           // Потолочное отсечение: объект над сводом пещеры, камера под сводом — объект за потолком
           if (hasCeiling && camCeilY !== null && camY < camCeilY) {
-            const objWorldX = it.x + ox;
-            const objWorldZ = it.z + oz;
-            const objCeilY = biomeRef.getCeilingHeight(objWorldX, objWorldZ);
+            const objCeilY = biomeRef.getCeilingHeight(it.x, it.z);
             if (it.y > objCeilY) continue;
           }
 
@@ -15506,7 +15537,7 @@ function buildChunkData(cx, cz, density) {
             dmg = OC.Volcano.getDamageFactor(it.x, it.z);
           }
           const idx = pool.count++;
-          _pos.set(it.x, it.y, it.z);
+          _pos.set(lx, ly, lz);
           _euler.set(0, it.ry, 0);
           _quat.setFromEuler(_euler);
           _scale.setScalar(it.scale * (1 - dmg * 0.45));
@@ -15566,13 +15597,11 @@ function buildChunkData(cx, cz, density) {
       cacheComplete = false;
       lastCacheCheckPos.set(1e9, 1e9, 1e9);
 
-      // При сдвиге начала координат (Floating Origin) сдвигаем все пулы инстансов
-      OC.FloatingOrigin.onShift((delta) => {
-        for (let i = 0; i < pools.length; i++) {
-          pools[i].mesh.position.sub(delta);
-          if (pools[i].mesh.instanceMatrix) pools[i].mesh.instanceMatrix.needsUpdate = true;
-        }
-      });
+      /* Сдвиг начала координат (Floating Origin) здесь больше НЕ дублируется:
+         пулы — это InstancedMesh внутри group, а OC.FloatingOrigin.update()
+         обходит сцену и сдвигает их сам (и помечает instanceMatrix). Прежний
+         слушатель вычитал delta повторно, из-за чего вся флора уезжала вместе с
+         двойным сдвигом рельефа; вдобавок он копился при каждой смене биома. */
 
       group = new T.Group();
       scene.add(group);
@@ -15585,6 +15614,10 @@ function buildChunkData(cx, cz, density) {
 
         for (let v = 0; v < vCount; v++) {
           const mesh = new T.InstancedMesh(spec.geos[v], spec.mat, perVarMax);
+          /* Якорь контейнера всегда в (0,0,0): позиции экземпляров лежат в
+             instanceMatrix. Без флага FloatingOrigin сдвинул бы и его, и
+             матрицы — то есть дважды (см. комментарий в floating_origin.js). */
+          mesh.userData.noFloatingOrigin = true;
           // InstancedMesh хранит все экземпляры в одном меше в (0,0,0). При
           // frustumCulled = true Three.js отсекает ВЕСЬ InstancedMesh целиком,
           // если его единый bounding box попадает за視русна — и вся флора
@@ -15706,8 +15739,15 @@ function buildChunkData(cx, cz, density) {
       if (!pos || !biomeRef) return null;
       const maxD = maxDist || 16;
       const maxD2 = maxD * maxD;
-      const scx = Math.floor(pos.x / chunkSize);
-      const scz = Math.floor(pos.z / chunkSize);
+      // pos — локальная позиция камеры, кэш хранит мировые координаты
+      const o = getOriginRef();
+      const ox = o ? o.x : 0;
+      const oy = o ? o.y : 0;
+      const oz = o ? o.z : 0;
+      const wx = pos.x + ox;
+      const wz = pos.z + oz;
+      const scx = Math.floor(wx / chunkSize);
+      const scz = Math.floor(wz / chunkSize);
       let best = null;
       let bestD2 = maxD2;
       for (let dz = -1; dz <= 1; dz++) {
@@ -15718,9 +15758,9 @@ function buildChunkData(cx, cz, density) {
           if (!items) continue;
           for (let i = 0; i < items.length; i++) {
             const it = items[i];
-            const ddx = it.x - pos.x;
-            const ddy = it.y - pos.y;
-            const ddz = it.z - pos.z;
+            const ddx = it.x - wx;
+            const ddy = it.y - (pos.y + oy);
+            const ddz = it.z - wz;
             const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
             if (d2 < bestD2) {
               bestD2 = d2;
@@ -15731,10 +15771,11 @@ function buildChunkData(cx, cz, density) {
       }
       if (!best) return null;
       const dst = out || {};
+      // Возвращаем в той же системе координат, что и входной pos (локальной)
       dst.species = best.species;
-      dst.x = best.x;
-      dst.y = best.y;
-      dst.z = best.z;
+      dst.x = best.x - ox;
+      dst.y = best.y - oy;
+      dst.z = best.z - oz;
       dst.scale = best.scale;
       dst.tint = best.tint;
       dst.dist = Math.sqrt(bestD2);
@@ -15906,6 +15947,11 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     mesh.count = n;
     mesh.frustumCulled = false;
     mesh.userData.key = opts.key || 'fish_blue';
+    /* Якорь контейнера всегда в (0,0,0): позиции рыб лежат в instanceMatrix и
+       каждый кадр пересчитываются симуляцией в локальных координатах. Без
+       этого флага FloatingOrigin сдвинул бы контейнер, и стая уехала бы от
+       дна на delta (см. комментарий в floating_origin.js). */
+    mesh.userData.noFloatingOrigin = true;
     mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
     scene.add(mesh);
 

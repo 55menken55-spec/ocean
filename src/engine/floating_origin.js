@@ -35,9 +35,19 @@ window.OC = window.OC || {};
       return target.set(c.x + o.x, c.y + o.y, c.z + o.z);
     },
 
-    /* Подписаться на событие сдвига начала координат. */
+    /* Подписаться на событие сдвига начала координат. Возвращает функцию
+       отписки: подписчики обычно регистрируются внутри init(), а init()
+       вызывается при каждой смене биома — без отписки слушатели накапливаются
+       и на каждом сдвиге выполняют одну и ту же работу по несколько раз.
+
+       Меш/лайт/спрайт сдвигает сам update() обходом сцены: повторно вычитать
+       delta в слушателе — значит сдвинуть объект дважды. */
     onShift(cb) {
       shiftListeners.push(cb);
+      return function offShift() {
+        const i = shiftListeners.indexOf(cb);
+        if (i >= 0) shiftListeners.splice(i, 1);
+      };
     },
 
     /* Вызывать каждый фрейм с камерой. Возвращает true, если сдвиг произошёл. */
@@ -55,6 +65,13 @@ window.OC = window.OC || {};
         if (scene) {
           scene.traverse((obj) => {
             if (obj.isMesh || obj.isInstancedMesh || obj.isLight || obj.isSprite) {
+              /* Контейнер инстансов (InstancedMesh) — это не объект в сцене, а
+                 просто якорь: позиции лежат в instanceMatrix уже в локальных
+                 координатах. Сдвигать его position — значит сдвинуть все
+                 экземпляры второй раз (владелец к тому же не знает про этот
+                 сдвиг и перезапишет матрицы по-своему). Такие меши помечают
+                 себя userData.noFloatingOrigin = true. */
+              if (obj.userData && obj.userData.noFloatingOrigin) return;
               obj.position.sub(delta);
               if (obj.isInstancedMesh && obj.instanceMatrix) {
                 obj.instanceMatrix.needsUpdate = true;

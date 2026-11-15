@@ -561,6 +561,12 @@ self.onmessage = function (e) {
   }
 
   /* ---- Внешний горизонт дна за пределами детальной карты (только для ограниченных миров) ---- */
+  /* Чанки стримятся только вокруг камеры (terrainFarDist 660...1180 м), а мир
+     ограничен worldRadius 1200 м. Фартук догружает дно до 2600 м, чтобы в
+     прозрачных водах (Байкал, fogDensity 0.0012) на горизонте не было видно
+     резкого обрыва детальной сетки. Внутри игровой зоны он утоплен на 12 м и
+     скрыт под настоящими чанками. Строится в мировом начале координат и вместе
+     со сценой сдвигается при Floating Origin. */
   function buildHorizonApron() {
     if (!biomeRef || biomeRef.worldRadius > 4000) return; // для unbounded worlds не строим фартук
     const g = new T.PlaneGeometry(5200, 5200, 48, 48);
@@ -581,6 +587,7 @@ self.onmessage = function (e) {
     g.setAttribute('color', new T.BufferAttribute(c, 3));
     g.deleteAttribute('uv');
     g.computeVertexNormals();
+    g.computeBoundingSphere(); // чтобы не считать её на первом же кадре
     const apron = new T.Mesh(g, terrainMat);
     apron.userData.key = 'floor';
     horizonApron = apron;
@@ -602,6 +609,7 @@ self.onmessage = function (e) {
       if (terrainMat) { terrainMat.dispose(); terrainMat = null; }
       if (ceilingMat) { ceilingMat.dispose(); ceilingMat = null; }
       chunks.clear();
+      horizonApron = null; // старый меш живёт в удаляемой группе
       workerQueue.length = 0;
       workerBusy = false;
       pendingChunkData.clear();
@@ -638,15 +646,13 @@ self.onmessage = function (e) {
         }
       }
 
-      // При сдвиге начала координат (Floating Origin) перепозиционируем все меши чанков
-      OC.FloatingOrigin.onShift((delta) => {
-        chunks.forEach((rec) => {
-          if (rec.mesh) rec.mesh.position.sub(delta);
-          if (rec.ceilMesh) rec.ceilMesh.position.sub(delta);
-        });
-        if (horizonApron) horizonApron.position.sub(delta);
-      });
-
+      /* Сдвиг начала координат (Floating Origin) здесь больше НЕ дублируется.
+         OC.FloatingOrigin.update() сам обходит сцену и сдвигает все меши, а
+         чанки — обычные меши в group, то есть они уже сдвинуты. Раньше этот
+         слушатель вычитал delta ещё раз, и после любого сдвига дальше 1000 м от
+         начала координат рельеф уезжал от своего высотного поля ровно на delta
+         (замер: 1100 м на всех 28 чанках). Слушатель к тому же копился при
+         каждой смене биома, умножая ошибку на число смен. */
       terrainMat = new T.MeshStandardMaterial({
         vertexColors: true,
         roughness: 0.9,
@@ -669,8 +675,11 @@ self.onmessage = function (e) {
         OC.enhanceMaterial(ceilingMat, { causticStrength: 0.35, isTerrain: true, ceilGlow });
       }
 
-      // Горизонтный фартук только для ограниченных миров
-      // buildHorizonApron(); // отключён для отладки прозрачного дна
+      // Горизонтный фартук только для ограниченных миров.
+      // Он был отключён в PR #4 «для отладки прозрачного дна», но к тому багу
+      // (чанки якоря по центру вместо угла) отношения не имел — с тех пор якорь
+      // исправлен, и фартук возвращён.
+      buildHorizonApron();
 
       // Синхронно строим только стартовую окрестность вокруг камеры (~25 чанков, < 20 мс)
       const q = OC.Quality.get();
