@@ -436,6 +436,21 @@ window.OC = window.OC || {};
         sonarTargets.push(a);
       }
 
+      /* --- Кракеново море Титана: гипотетическая метанотрофная биота --- */
+
+      for (const mg of (plan.methaneGliders || [])) {
+        const a = OC._FaunaBuilders.makeMethaneGlider(faunaGroup, biome, mg);
+        agents.push(a);
+        predatorAgents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const nb of (plan.nitrogenBubbles || [])) {
+        const a = OC._FaunaBuilders.makeNitrogenBubble(faunaGroup, biome, nb);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
     return { whale, whalesList, primaryVessel };
   }
 

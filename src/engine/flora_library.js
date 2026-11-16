@@ -368,6 +368,45 @@ window.OC = window.OC || {};
         sulfate_crust: {
           mat: matRigid, maxInstances: 1300, cullDist: 300,
           geos: [need('buildSulfateCrust')(rng), need('buildSulfateCrust')(rng)]
+        },
+        /* --- Кракеново море Титана: осадки и лёд углеводородного моря --- */
+        organic_silt: {
+          mat: matRigid, maxInstances: 1600, cullDist: 300,
+          geos: [need('buildOrganicSilt')(rng), need('buildOrganicSilt')(rng), need('buildOrganicSilt')(rng)]
+        },
+        ice_boulder: {
+          mat: matRigid, maxInstances: 520, cullDist: 520,
+          geos: [need('buildIceBoulder')(rng), need('buildIceBoulder')(rng), need('buildIceBoulder')(rng)]
+        },
+        tholin_dune: {
+          mat: matRigid, maxInstances: 420, cullDist: 460,
+          geos: [need('buildTholinDune')(rng), need('buildTholinDune')(rng)]
+        },
+        evaporite_crust: {
+          mat: matRigid, maxInstances: 900, cullDist: 300,
+          geos: [need('buildEvaporiteCrust')(rng), need('buildEvaporiteCrust')(rng)]
+        },
+        nitrile_drift: {
+          mat: matRigid, maxInstances: 1100, cullDist: 300,
+          geos: [need('buildNitrileDrift')(rng), need('buildNitrileDrift')(rng)]
+        },
+        shoreline_ice: {
+          mat: matRigid, maxInstances: 620, cullDist: 340,
+          geos: [need('buildShorelineIce')(rng), need('buildShorelineIce')(rng)]
+        },
+        /* Явления Кракенова моря: модели нужны Атласу, в мир их раскладывает не
+           стример флоры, а генератор пузырей из faunaPlan. */
+        tidal_bore: {
+          mat: matRigid, maxInstances: 120, cullDist: 520,
+          geos: [need('buildTidalBore')(rng), need('buildTidalBore')(rng)]
+        },
+        methane_rain: {
+          mat: matRigid, maxInstances: 220, cullDist: 460,
+          geos: [need('buildMethaneRain')(rng), need('buildMethaneRain')(rng)]
+        },
+        magic_island: {
+          mat: matRigid, maxInstances: 160, cullDist: 460,
+          geos: [need('buildBubblePatch')(rng), need('buildBubblePatch')(rng)]
         }
       };
 

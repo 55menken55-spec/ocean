@@ -1743,19 +1743,22 @@ window.OC = window.OC || {};
     const isArctic = biome && biome.id === 'arctic_sea';
     const isKelp = biome && biome.id === 'kelp_forest';
     const isEuropa = biome && biome.id === 'europa_ocean';
+    const isTitan = biome && biome.id === 'titan_kraken';
     const isDeep = biome && (biome.id === 'hydrothermal_vents' || biome.id === 'mariana_trench' || biome.id === 'brine_pool');
     const floodFactor = isAmazon ? 0.5 + 0.5 * Math.cos((localPhase - 0.34) * TAU) : 0;
     const upwellingFactor = isGalapagos ? 1.0 - warmFactor * 0.28 : 1.0;
     const iceFactor = isBaikal ? winterFactor : (isArctic ? 0.68 + winterFactor * 0.32 : (isEuropa ? 1.0 : 0));
     const currentFactor = isGalapagos
       ? 0.78 + upwellingFactor * 0.22
-      : (isAmazon ? 0.84 + floodFactor * 0.28 : (isKelp ? 1.0 + warmFactor * 0.1 : (isEuropa ? 0.94 + warmFactor * 0.08 : (biome && biome.id === 'great_barrier_reef' ? 1.0 + warmFactor * 0.045 : 1.0))));
+      : (isAmazon ? 0.84 + floodFactor * 0.28 : (isKelp ? 1.0 + warmFactor * 0.1 : (isEuropa ? 0.94 + warmFactor * 0.08 : (isTitan ? 0.9 + warmFactor * 0.06 : (biome && biome.id === 'great_barrier_reef' ? 1.0 + warmFactor * 0.045 : 1.0)))));
     const faunaActivity = isGalapagos
       ? 0.82 + upwellingFactor * 0.2
-      : (isKelp ? 0.92 + warmFactor * 0.08 : (isAmazon ? 0.92 + floodFactor * 0.12 : (isEuropa ? 0.9 + warmFactor * 0.1 : (isDeep ? 1.0 : 1.0 + warmFactor * 0.035))));
+      /* Химия при 94 К идёт в тысячи раз медленнее земной: гипотетическая биота
+         Титана почти неподвижна, и сезонный размах активности у неё мизерный. */
+      : (isKelp ? 0.92 + warmFactor * 0.08 : (isAmazon ? 0.92 + floodFactor * 0.12 : (isEuropa ? 0.9 + warmFactor * 0.1 : (isTitan ? 0.62 + warmFactor * 0.05 : (isDeep ? 1.0 : 1.0 + warmFactor * 0.035)))));
     const productivityFactor = isKelp
       ? 0.88 + (0.5 + 0.5 * warmFactor) * 0.24
-      : (isEuropa ? 0.86 + (0.5 + 0.5 * warmFactor) * 0.24 : 1.0);
+      : (isEuropa ? 0.86 + (0.5 + 0.5 * warmFactor) * 0.24 : (isTitan ? 0.34 + (0.5 + 0.5 * warmFactor) * 0.12 : 1.0));
     return {
       id: season.id,
       label: season.label,
@@ -1789,6 +1792,7 @@ window.OC = window.OC || {};
     const climate = climateFor(biome);
     const phaseLocal = localPhaseFor(climate);
     const isEuropa = biome && biome.id === 'europa_ocean';
+    const isTitan = biome && biome.id === 'titan_kraken';
     // У Европы «поверхность» воды — основание ледяного панциря на 25 км глубже,
     // поэтому глубину считаем от основания панциря, а не от поверхности спутника.
     const depth = isEuropa
@@ -9567,6 +9571,493 @@ window.OC = window.OC || {};
   });
 })(window.OC);
 
+// === biomes/titan_kraken.js ===
+/* ================= БИОМ: КРАКЕНОВО МОРЕ (ТИТАН, СПУТНИК САТУРНА) =================
+   Единственное тело Солнечной системы кроме Земли со стабильной жидкостью на
+   поверхности — но это не вода, а жидкие углеводороды при 93,6 К (−179,6 °C).
+
+   Реальные данные, на которых построена локация:
+   • Состав Кракенова моря ≈ 70 % CH₄ / 16 % N₂ / 14 % C₂H₆, глубина более
+     300 м, площадь ~490 000 км², ~80 % всех поверхностных жидкостей Титана
+     (Poggiali et al., JGR Planets 2020; Nature Communications 2024).
+   • Морей-Синус — эстуарий на севере, батиметрия до 85 м.
+   • Плотность смеси 660 кг/м³, скорость звука 1420 м/с при 94 К
+     (Younglove & Ely, 1987), ускорение свободного падения 1,352 м/с²,
+     давление у поверхности 1,45 атм (Huygens / API-V).
+   • Лигея — почти чистый метан (радар «просветил» 170 м), средняя глубина ~50 м.
+   • Метановый цикл вместо водного: осадки CH₄, речные каналы, сток в моря,
+     испарение. Берега сложены водяным льдом, который при 94 К твёрже гранита
+     и работает как скальная порода, а не как лёд.
+   • Приливы Сатурна поднимают уровень морей примерно на метр; «магические
+     острова», всплывающие на радаре, объясняют всплывающими пузырями азота.
+
+   Флора в этом море — отложения и корки, фауна — ГИПОТЕТИЧЕСКАЯ: азотозомные
+   мембраны (Stevenson et al., Science Advances 2015) и метанотрофный метаболизм
+   H₂ + C₂H₂ → CH₄. Ничего из живого здесь не открыто: каждая запись помечена
+   в энциклопедии как гипотеза.                                                */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+
+  const _colA = new T.Color();
+  const _colB = new T.Color();
+  const _colC = new T.Color();
+  const _fogCol = new T.Color();
+  const _waterCol = new T.Color();
+  const _skyTop = new T.Color();
+  const _skyBot = new T.Color();
+  const _aboveHoriz = new T.Color();
+
+  /* Геометрия моря: берег водяного льда на западе, шельф, бровка, котловина */
+  const SHORE_X = -700;   // линия берега (водяной лёд как коренная порода)
+  const SHELF_EDGE = -240; // бровка шельфа
+  const BASIN_CX = 520;   // центр глубоководной котловины Кракена
+  const ESTUARY_Z = 620;  // ось эстуария Морей-Синус
+
+  /* Поля всплывающих пузырей азота («магические острова») */
+  const BUBBLE_FIELDS = [
+    { x: 300, z: -180, r: 96, peak: -42.0 },
+    { x: -120, z: 340, r: 68, peak: -26.0 }
+  ];
+
+  const SEA_TEMP = -179.6; // °C (93,6 К) — почти изотермическое море
+
+  /* ---- Зоны экологии (от прибойной полосы к абиссали котловины) ---- */
+  const ZONES = [
+    {
+      id: 'ice_shore',
+      name: 'Прибойная полоса: берег водяного льда',
+      shortName: 'Ледяной берег',
+      color: '#d8c9a8',
+      depthLabel: '0 – 8 м',
+      tempC: SEA_TEMP,
+      description: 'Берег Кракенова моря сложен водяным льдом — при −179,6 °C он твёрже гранита и ведёт себя как скала: обрывы, глыбы и галечник из толинов. Волны здесь сантиметровые: метан в семь раз легче воды по тяжёлой среде.'
+    },
+    {
+      id: 'methane_shelf',
+      name: 'Шельф метанового моря',
+      shortName: 'Шельф',
+      color: '#c08a4d',
+      depthLabel: '8 – 45 м',
+      tempC: SEA_TEMP,
+      description: 'Мелководье Кракенова моря: ровное дно из органического ила под слоем углеводородов. Свет Сатурна доходит сюда ослабленным в тысячи раз туманом, поэтому видимость зависит не от мутности жидкости, а от нехватки света.'
+    },
+    {
+      id: 'estuary_channel',
+      name: 'Эстуарий Морей-Синус',
+      shortName: 'Эстуарий',
+      color: '#9c7b46',
+      depthLabel: '5 – 85 м',
+      tempC: SEA_TEMP,
+      description: 'Канал стока, по которому метановые дожди стекают в море: здесь течение ощутимее всего, а дно промыто до плотного льда. Земные эстуарии выглядят так же, только вместо воды — жидкий метан с этаном.'
+    },
+    {
+      id: 'slope',
+      name: 'Континентальный склон',
+      shortName: 'Склон',
+      color: '#6f4f2c',
+      depthLabel: '45 – 180 м',
+      tempC: SEA_TEMP,
+      description: 'Ступенчатый спуск в котловину: уступы водяного льда, осыпи толинов и гряды эвапоритовой корки, осевшей при испарении моря. Давление здесь меньше четырёх атмосфер — для сравнения, в земном океане на этой глубине уже восемнадцать.'
+    },
+    {
+      id: 'abyssal_basin',
+      name: 'Котловина Кракена',
+      shortName: 'Абиссаль',
+      color: '#3d2a17',
+      depthLabel: '180 – 320 м',
+      tempC: SEA_TEMP,
+      description: 'Дно крупнейшего моря Титана: 320 метров жидкого метана, полная темнота и ровный холод. По составу донного осадка здесь ищут ответ, куда девается этан, который атмосферная химия должна поставлять в моря.'
+    }
+  ];
+
+  /* Высоты маяков и этапов тура считаются от рельефа, а не пишутся руками:
+     рельеф процедурный, и вручную заданная высота легко оказывается под дном. */
+  const LANDMARKS = [
+    {
+      id: 'kraken_shore', name: 'Берег Кракенова моря', zoneId: 'ice_shore',
+      x: -600, z: -60, gap: 5.0, yaw: 0.35, pitch: -0.08,
+      description: 'Обрывистый берег из водяного льда. При 94 К он работает как скальная порода: не тает, не плывёт и держит вертикальные стенки.'
+    },
+    {
+      id: 'moray_sinus', name: 'Эстуарий Морей-Синус', zoneId: 'estuary_channel',
+      x: -180, z: ESTUARY_Z, gap: 12.0, yaw: 1.05, pitch: -0.22,
+      description: 'Устье метановой реки. Кассини измерил здесь глубину около 85 м: именно от неё экстраполировали глубину центральной части Кракенова моря.'
+    },
+    {
+      id: 'shelf_break', name: 'Бровка шельфа', zoneId: 'methane_shelf',
+      x: SHELF_EDGE, z: 120, gap: 14.0, yaw: 0.62, pitch: -0.30,
+      description: 'Кромка, за которой дно уходит к котловине. По ней проходит граница прогреваемого слоя: ниже температура моря постоянна до сотых долей кельвина.'
+    },
+    {
+      id: 'nitrogen_bubbles', name: 'Поле пузырей азота', zoneId: 'methane_shelf',
+      x: 300, z: -180, gap: 16.0, yaw: 0.0, pitch: -0.14,
+      description: 'Место, где на радаре Кассини всплывали «магические острова»: их объясняют всплывающими пузырями азота, которые поднимаются со дна после прилива.'
+    },
+    {
+      id: 'kraken_deep', name: 'Котловина Кракена', zoneId: 'abyssal_basin',
+      x: BASIN_CX, z: 40, gap: 18.0, yaw: -0.42, pitch: -0.36,
+      description: 'Самая глубокая точка моря: более 300 м жидких углеводородов. Давление у дна около 4 атмосфер против 31 атмосферы на такой же глубине в земном океане.'
+    }
+  ];
+
+  /* ---- Рельеф ---- */
+  function landHeight(x, z) {
+    /* Берег: водяной лёд как коренная порода. Обрывы, глыбы, галечник. */
+    /* Единица — в глубине суши (x ≲ −880), ноль — в открытом море (x ≳ −620):
+       smoothstep(e0, e1, x) равен 1 при x ≥ e1, поэтому берег задан «наоборот»,
+       убыванием по x от моря к суше. Переход шириной 260 м — пологий пляж
+       водяного льда, по которому море отступало при испарении. */
+    const shoreMix = OC.smoothstep(-620, -880, x);
+    if (shoreMix <= 0.001) return null;
+    const base = 12 + OC.fbm2(x * 0.0062 + 2.1, z * 0.0062 - 1.3, 3) * 11;
+    const cliffs = Math.max(0, Math.sin(x * 0.011 + z * 0.004)) * 6.5;
+    const hLand = (base + cliffs) * shoreMix;
+    /* Урез воды там, где лёд поднимается выше 0,4 м. Без этого порога суша
+       тянулась бы тонким слоем на сотни метров в море и перекрывала шельф. */
+    return hLand > 0.4 ? hLand : null;
+  }
+
+  function getHeight(x, z) {
+    const onLand = landHeight(x, z);
+    if (onLand !== null) return onLand;
+
+    const offshore = OC.smoothstep(SHORE_X, -120, x);   // 0 у берега → 1 в открытом море
+    const slope = OC.smoothstep(SHELF_EDGE, 320, x);
+    const basin = OC.smoothstep(80, 620, x) * OC.smoothstep(1100, 260, Math.abs(z));
+
+    let h = -5.5 - offshore * 24 - slope * 118 - basin * 200;
+
+    // Мелкая рябь ила и осыпи склона
+    h += OC.fbm2(x * 0.0115 + 3.4, z * 0.0115 - 2.2, 3) * 5.4;
+    h += OC.fbm2(x * 0.047, z * 0.047, 2) * 1.35;
+
+    // Эстуарий Морей-Синус: промытый канал стока
+    const est = Math.exp(-Math.pow((z - ESTUARY_Z) / 165, 2)) * OC.smoothstep(-620, -220, x);
+    h -= est * 42.0;
+
+    // Поля пузырей азота: вспученные купола дна
+    for (let i = 0; i < BUBBLE_FIELDS.length; i++) {
+      const s = BUBBLE_FIELDS[i];
+      const d = Math.hypot(x - s.x, z - s.z);
+      if (d < s.r * 1.8) {
+        const w = OC.smoothstep(s.r * 1.7, 8, d);
+        h = OC.lerp(h, s.peak + (OC.noise2(x * 0.055, z * 0.055) - 0.5) * 3.0, w * 0.85);
+      }
+    }
+    return OC.clamp(h, -326, -1.2);
+  }
+
+  function getZoneAt(x, y, z) {
+    const onLand = landHeight(x, z);
+    if (onLand !== null && y > 0) return ZONES[0];
+    const est = Math.exp(-Math.pow((z - ESTUARY_Z) / 210, 2)) * OC.smoothstep(-620, -220, x);
+    if (est > 0.35 && y > -95) return ZONES[2];
+    const depth = -y;
+    if (depth < 8) return ZONES[0];
+    if (depth < 45) return ZONES[1];
+    if (depth < 180) return ZONES[3];
+    return ZONES[4];
+  }
+
+  /* ---- Цвет дна: толины, органический ил, водяной лёд ---- */
+  function getTerrainColor(x, y, z, outColor) {
+    const c = outColor || new T.Color();
+    const depth = Math.max(0, -y);
+    const grain = OC.noise2(x * 0.021, z * 0.021) * 0.5 + 0.5;
+    if (depth < 6) {
+      _colA.setHex(0xcbb494); _colB.setHex(0x8d6f47); // галечник и дюны толинов
+    } else if (depth < 45) {
+      _colA.setHex(0x9c7a48); _colB.setHex(0x5c4526); // органический ил
+    } else if (depth < 180) {
+      _colA.setHex(0x6b5030); _colB.setHex(0x3a2c19); // склон, осыпи
+    } else {
+      _colA.setHex(0x4a3720); _colB.setHex(0x241a0f); // абиссаль котловины
+    }
+    c.copy(_colA).lerp(_colB, grain);
+    // Ледяные выходы водяного льда на склоне и у берега
+    const ice = OC.smoothstep(0.62, 0.9, OC.noise2(x * 0.009 - 4.2, z * 0.009 + 1.8) * 0.5 + 0.5);
+    _colC.setHex(0xbfd8e8);
+    c.lerp(_colC, ice * 0.35);
+    return c;
+  }
+
+  /* ---- Оптика: свет Сатурна ослаблен в тысячи раз, метан прозрачен ---- */
+  function getOpticalProfile(x, y, z, timeOfDay) {
+    const depth = Math.max(0, -y);
+    const day = OC.clamp(timeOfDay === undefined ? 0.62 : timeOfDay, 0, 1);
+    /* Жидкий метан сам по себе прозрачен: радар Кассини «просветил» 170 м
+       толщи Лигеи. Плохая видимость здесь не от мутности жидкости, а от
+       нехватки света — на поверхность Титана доходит около 0,1 % земной
+       освещённости. Поэтому туман плотный по плотности, но не по цвету. */
+    _fogCol.setHex(0x2a1d10).lerp(_waterCol.setHex(0x0d0805), OC.clamp(depth / 150, 0, 1) * 0.72);
+    _fogCol.lerp(_waterCol.setHex(0x4a2f16), day * 0.22);
+    return {
+      fogColor: _fogCol.clone(),
+      fogDensity: OC.lerp(0.0078, 0.0186, OC.clamp(depth / 240, 0, 1)) * (0.55 + day * 0.45),
+      causticStrength: OC.clamp(0.16 - depth * 0.0016, 0, 1) * day,
+      rayStrength: OC.clamp(0.34 - depth * 0.0032, 0.02, 1) * (0.35 + day * 0.65),
+      bioGlow: 0.02 + OC.smoothstep(120, 300, depth) * 0.05,
+      surfaceHaze: 0.62
+    };
+  }
+
+  /* ---- Температура: море почти изотермично (вариация < 2 К за 6 лет) ---- */
+  function getTemperatureAt(x, depthM, zone) {
+    const swell = Math.sin(depthM * 0.012) * 0.18;
+    return SEA_TEMP + swell + OC.smoothstep(0, 6, depthM) * 0.25;
+  }
+
+  /* ---- Течения: прилив Сатурна + сток метановых рек ---- */
+  const _cur = new T.Vector3();
+  function getCurrentAt(x, y, z, timeOfDay, out) {
+    const v = out || _cur;
+    const depth = Math.max(0, -y);
+    /* Прилив Сатурна поднимает уровень морей Титана примерно на метр и
+       гонит воду вдоль оси моря; период — около 16 земных суток. */
+    const t = (OC.uTime ? OC.uTime.value : 0) * 0.0026;
+    const tide = Math.sin(t) * 0.42;
+    v.set(tide, 0, 0);
+
+    // Сток эстуария: течение вдоль канала к котловине
+    const est = Math.exp(-Math.pow((z - ESTUARY_Z) / 180, 2)) * OC.smoothstep(-640, -200, x);
+    v.x += est * 0.55;
+    v.z -= est * 0.18;
+
+    // Слабый ветровой дрейф у самой поверхности (ветер на Титане 0,5–1 м/с)
+    const wind = OC.smoothstep(28, 0, depth) * 0.16;
+    v.x += wind;
+    v.z += wind * 0.4 + (OC.noise2(x * 0.004, z * 0.004) - 0.5) * 0.12;
+
+    // В котловине течение затухает
+    const damp = 1 - OC.smoothstep(180, 320, depth) * 0.55;
+    v.multiplyScalar(damp);
+    v.y = 0;
+    return v;
+  }
+
+  /* ---- Раскладка донных отложений и корок ---- */
+  function generateChunkFlora(cx, cz, chunkSize, density, rng) {
+    const items = [];
+    const x0 = cx * chunkSize;
+    const z0 = cz * chunkSize;
+
+    function add(species, x, z, scale, tint, yOverride) {
+      const y = (yOverride !== undefined) ? yOverride : (getHeight(x, z) - 0.08);
+      if (y > -0.4) return; // выше уровня моря раскладка не нужна
+      items.push({ species, x, y, z, ry: rng() * 6.283, scale, tint: tint || 0xffffff });
+    }
+
+    // 1. Органический ил котловины и склона
+    const siltSlots = Math.round(26 * density);
+    for (let i = 0; i < siltSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const fl = getHeight(x, z);
+      if (fl < -42 && fl > -300) add('organic_silt', x, z, OC.lerp(0.7, 1.5, rng()), 0x8a6a3c);
+    }
+
+    // 2. Глыбы и осыпи водяного льда (берег и бровка шельфа)
+    const rockSlots = Math.round(10 * density);
+    for (let i = 0; i < rockSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const fl = getHeight(x, z);
+      if (fl > -180 && fl < -2.5 && rng() < 0.72) {
+        add('ice_boulder', x, z, OC.lerp(0.6, 1.35, rng()), 0xd7e6f0);
+      }
+    }
+
+    // 3. Толиновые дюны на мелководье у берега
+    const duneSlots = Math.round(9 * density);
+    for (let i = 0; i < duneSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const fl = getHeight(x, z);
+      if (fl > -26 && fl < -1.5) add('tholin_dune', x, z, OC.lerp(0.9, 1.6, rng()), 0x9d6f3f);
+    }
+
+    // 4. Эвапоритовая корка — след испарения моря на мелководье
+    const crustSlots = Math.round(7 * density);
+    for (let i = 0; i < crustSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const fl = getHeight(x, z);
+      if (fl > -48 && fl < -6) add('evaporite_crust', x, z, OC.lerp(0.8, 1.4, rng()), 0xc4a271);
+    }
+
+    // 5. Нитриловые наносы в эстуарии
+    const driftSlots = Math.round(6 * density);
+    for (let i = 0; i < driftSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const est = Math.exp(-Math.pow((z - ESTUARY_Z) / 190, 2));
+      if (est > 0.25 && rng() < 0.7) add('nitrile_drift', x, z, OC.lerp(0.7, 1.3, rng()), 0x7c5c34);
+    }
+
+    // 6. Зубцы льда по урезу: полоса, где море касается водяного льда
+    const iceSlots = Math.round(6 * density);
+    for (let i = 0; i < iceSlots; i++) {
+      const x = x0 + rng() * chunkSize;
+      const z = z0 + rng() * chunkSize;
+      const fl = getHeight(x, z);
+      if (fl > -8.5 && fl < -0.5) add('shoreline_ice', x, z, OC.lerp(0.8, 1.5, rng()), 0xdfeef8);
+    }
+
+    return items;
+  }
+
+  /* Высоты маяков и этапов тура: от рельефа + зазор. */
+  const landmarks = LANDMARKS.map((lm) => ({
+    id: lm.id, name: lm.name, zoneId: lm.zoneId,
+    x: lm.x, y: getHeight(lm.x, lm.z) + lm.gap, z: lm.z,
+    yaw: lm.yaw, pitch: lm.pitch, description: lm.description
+  }));
+
+  const TOUR_POINTS = [
+    {
+      x: -600, z: -60, gap: 6.0, look: [-760, 6, -40], title: 'Берег водяного льда', duration: 11,
+      fact: 'Берега Кракенова моря сложены водяным льдом. При −179,6 °C он твёрже гранита и ведёт себя как коренная порода: держит обрывы, а не плавает.'
+    },
+    {
+      x: -420, z: 220, gap: 12.0, look: [-240, -22, 420], title: 'Шельф и донные наносы', duration: 13,
+      fact: 'Дно покрыто илом из толинов — органики, которая непрерывно синтезируется в атмосфере под ультрафиолетом и выпадает на поверхность осадком.'
+    },
+    {
+      x: -180, z: ESTUARY_Z, gap: 13.0, look: [-40, -34, 760], title: 'Эстуарий Морей-Синус', duration: 12,
+      fact: 'Кассини измерил в заливе Морей-Синус глубину около 85 м. От этой точки и экстраполировали глубину центральной части Кракенова моря — более 300 м.'
+    },
+    {
+      x: 300, z: -180, gap: 17.0, look: [360, -60, -240], title: 'Пузыри азота', duration: 11,
+      fact: 'Светлые пятна, появлявшиеся и исчезавшие на радарных снимках Лигеи в 2013–2014 годах, объясняют всплывающими пузырями азота — «магическими островами».'
+    },
+    {
+      x: BASIN_CX, z: 40, gap: 19.0, look: [BASIN_CX + 120, -312, -60], title: 'Котловина Кракена', duration: 13,
+      fact: 'Котловина — самая глубокая точка моря: более 300 м жидких углеводородов. Но давление у дна всего около 4 атмосфер против 31 в земном океане на той же глубине.'
+    }
+  ];
+  const tourLegs = TOUR_POINTS.map((p) => ({
+    pos: [p.x, getHeight(p.x, p.z) + p.gap, p.z],
+    look: p.look,
+    title: p.title,
+    fact: p.fact,
+    duration: p.duration
+  }));
+
+  /* ---- Фауна: гипотетическая метанотрофная биота ---- */
+  const FAUNA_PLAN = {
+    cleaningStations: [],
+    predators: [],
+    schools: [
+      { key: 'azotosome_drifter', n: 46, cx: -420, cz: 180, radius: 52, yDepth: -18, yAmp: 4.2, spread: 20, speed: 1.5, scale: 0.9,
+        geoKey: 'azotosome_drifter', diel: 'cathemeral', biolum: true, shyness: 0.15, curious: 0.4, dvmAmp: 4 },
+      { key: 'azotosome_drifter', n: 38, cx: 120, cz: -240, radius: 44, yDepth: -34, yAmp: 5.0, spread: 18, speed: 1.3, scale: 1.0,
+        geoKey: 'azotosome_drifter', diel: 'cathemeral', biolum: true, shyness: 0.2, curious: 0.35, dvmAmp: 4 },
+      { key: 'nitrile_motile', n: 64, cx: -180, cz: ESTUARY_Z, radius: 38, yDepth: -22, yAmp: 3.4, spread: 16, speed: 1.8, scale: 0.7,
+        geoKey: 'nitrile_motile', diel: 'cathemeral', biolum: true, shyness: 0.08, curious: 0.3, dvmAmp: 6 }
+    ],
+    /* Орбиты планировщиков и высоты пузырей считаются от рельефа: дно Кракенова
+       моря — процедурное, и глубина в конкретной точке заранее неизвестна. */
+    methaneGliders: [
+      { cx: -60, cz: 90, r: 120, speed: 1.1, scale: 1.2,
+        y: Math.min(-24, getHeight(60, 90) + 52) },
+      { cx: 340, cz: -120, r: 150, speed: 0.9, scale: 1.35,
+        y: Math.min(-30, getHeight(490, -120) + 60) }
+    ],
+    nitrogenBubbles: [
+      { x: 300, z: -180, radius: 14, n: 90,
+        y: getHeight(300, -180) + 1.0, height: Math.max(8, -getHeight(300, -180) - 4) },
+      { x: -120, z: 340, radius: 11, n: 70,
+        y: getHeight(-120, 340) + 1.0, height: Math.max(8, -getHeight(-120, 340) - 4) }
+    ]
+  };
+
+  /* ---- Энциклопедия ---- */
+  const ENCYCLOPEDIA = {
+    floor: ['Дно Кракенова моря', 'Органический ил и толины', 'Дно', 'Шельф / склон / абиссаль', '0 – 320 м',
+      'Дно Кракенова моря — не песок и не ил в земном смысле. Атмосферная химия Титана непрерывно производит толины — тяжёлые органогенные частицы, возникающие при разрыве молекул азота и метана ультрафиолетом и частицами магнитосферы Сатурна. Из атмосферы они выпадают на поверхность, оседают в море и формируют слой органического ила. Давление у дна всего около 4 атмосфер против 31 на той же глубине в земном океане: притяжение Титана 1,352 м/с² и плотность жидкости 660 кг/м³ дают ход давления 113,6 метра на атмосферу.'],
+    ice_boulder: ['Глыба водяного льда', 'H₂O (водяной лёд при 94 К)', 'Рельеф', 'Ледяной берег / склон', '0 – 180 м',
+      'На Титане водяной лёд — не плавучий материал, а коренная порода: при −179,6 °C он твёрже гранита и держит обрывы. Глыбы и осыпи у берега сложены именно им, а углеводородное море омывает их как воду скалы.'],
+    tholin_dune: ['Толиновая дюна', 'Tholins (органические аэрозоли)', 'Рельеф', 'Ледяной берег', '0 – 26 м',
+      'Толины — тёмно-оранжевая органика, которая выпадает из атмосферы Титана и сбивается ветром в дюны, похожие на земные пески Намибии. У берега они уходят под уровень моря и продолжаются подводными грядами.'],
+    organic_silt: ['Органический ил', 'Углеводородные отложения', 'Дно', 'Шельф / склон / абиссаль', '42 – 300 м',
+      'Дно Кракенова моря покрыто илом из осевших фотопродуктов атмосферы: толины, нитрилы, следы этана. Его состав — один из главных аргументов в споре, куда девается этан, который химия атмосферы должна поставлять в моря.'],
+    evaporite_crust: ['Эвапоритовая корка', 'Осадок испарения CH₄/C₂H₆', 'Дно', 'Шельф', '6 – 48 м',
+      'При испарении моря растворённые углеводороды выпадают на мелководье коркой — так же, как соль в высыхающем земном озере. Корка растёт ступенями и трескается, выдавая уровень, до которого море отступало.'],
+    nitrile_drift: ['Нитриловые наносы', 'HCN / CH₃CN осадок', 'Дно', 'Эстуарий', '5 – 85 м',
+      'Метановые реки выносят в море взвесь, оседающую в устьях. Нитрилы тяжелее метана, поэтому в эстуарии они ложатся плотными линзами — именно там гипотетическая химия получает больше всего исходного материала.'],
+    azotosome_drifter: ['Азотозомный дрейфовик', 'Гипотетический метанотроф', 'Гипотеза', 'Шельф', '8 – 60 м',
+      'ГИПОТЕЗА (Stevenson et al., 2015): мембрана из акрилонитрила, устойчивая в жидком метане при 94 К, и метаболизм H₂ + C₂H₂ → CH₄. Ни одного наблюдения такой жизни не существует: модель показывает только, что chemistry допускает подобную мембрану.'],
+    nitrile_motile: ['Нитрильный подвижный колонист', 'Гипотетический метанотроф', 'Гипотеза', 'Эстуарий', '5 – 85 м',
+      'ГИПОТЕЗА: колонии, приуроченные к нитриловым наносам устья, где выше концентрация ацетилена. Скорость обмена веществ при 94 К в тысячи раз ниже земной, поэтому колонии растут годами, а не днями.'],
+    methane_glider: ['Метановый планировщик', 'Гипотетический крупный пловец', 'Гипотеза', 'Склон / абиссаль', '50 – 300 м',
+      'ГИПОТЕЗА: крупный свободноплавающий организм, держащийся над котловиной. В жидкости плотностью 660 кг/м³ при тяжести 1,35 м/с² плавучесть почти на порядок слабее земной, поэтому любая крупная форма здесь вынуждена быть почти невесомой.'],
+    nitrogen_bubble: ['Поле пузырей азота', 'N₂ (всплывающий газ)', 'Явление', 'Шельф', '20 – 45 м',
+      'Растворённый азот выделяется при потеплении или приливном перемешивании и всплывает. Этим объясняют «магические острова» — светлые пятна, которые появлялись и исчезали на радарных снимках Кассини.'],
+    magic_island: ['«Магический остров»', 'Радарный артефакт / пузыри', 'Явление', 'Шельф', '20 – 45 м',
+      'Яркое пятно, которое в 2013–2014 годах несколько раз появлялось на одном месте Лигеи и исчезало. Сейчас это считают либо всплывающими пузырями азота, либо рябью от ветра — постоянного острова там нет.'],
+    methane_rain: ['Метановый дождь', 'CH₄ (осадки)', 'Явление', 'Поверхность', '0 м',
+      'На Титане идёт дождь из жидкого метана: он вымывает русла, питает моря и испаряется обратно — полный аналог земного круговорота воды, только при −179 °C. Дождевые капли вдвое крупнее земных и падают втрое медленнее.'],
+    tidal_bore: ['Приливный бор Сатурна', 'Приливная волна', 'Явление', 'Эстуарий', '5 – 85 м',
+      'Притяжение Сатурна поднимает уровень морей Титана примерно на метр — это заметно на фоне сантиметровых волн. В узких каналах вроде Морей-Синус прилив идёт волной бора, поднимая сток и перемешивая донный осадок.'],
+    shoreline_ice: ['Ледяная береговая кромка', 'H₂O (прибойный лёд)', 'Рельеф', 'Ледяной берег', '0 – 8 м',
+      'Полоса, где углеводородное море касается водяного льда. Волны здесь высотой в считанные сантиметры: метан в полтора раза легче воды, а тяжесть Титана в семь раз слабее, поэтому море почти всегда зеркально гладкое.']
+  };
+
+  /* Точка спавна: над шельфом, лицом к открытому морю. Высота считается от
+     дна с запасом 6 м — рельеф процедурный, константа легко уходит под дно. */
+  const spawnX = -520;
+  const spawnZ = 90;
+  const spawnY = getHeight(spawnX, spawnZ) + 6.0;
+
+  OC.Biomes.register({
+    id: 'titan_kraken',
+    name: 'Кракеново море',
+    region: 'Титан · северное полярное море',
+    subtitle: 'Жидкий метан при −179,6 °C: метановый цикл, ледяные берега и гипотетическая биота',
+    /* Физика среды: не вода. Гидростатику, скорость звука и плавучесть
+       считает OC.Fluid по этим данным (см. src/engine/fluid.js). */
+    fluid: { kind: 'methane' },
+    isTitan: true,
+    globe: {
+      lat: 68.0,
+      lon: 310.0,
+      world: 'titan',
+      coordLabel: '68,0° с.ш., 310,0° з.д. (система Титана)',
+      ocean: 'Кракеново море · жидкие углеводороды',
+      depthSpan: '0 – 320 м',
+      tempSpan: '−179,8 … −179,4 °C',
+      color: '#c98f45',
+      country: 'Титан — спутник Сатурна (СП)',
+      waterType: 'methane',
+      protectionStatus: 'объект будущих миссий (Dragonfly, концепт подводного зонда)',
+      notableFor: 'жидкий метан вместо воды, метановый круговорот, ледяные берега, приливы Сатурна',
+      summary: 'Крупнейшее море Титана: больше 300 м жидкого метана с этаном и азотом при −179,6 °C, берега из водяного льда, работающего как скала, приливы Сатурна и гипотетическая метанотрофная жизнь, существующая пока только в моделях.'
+    },
+    worldRadius: 1200,
+    chunkSize: 150,
+    seaLevel: 0,
+    depthOffset: 0,
+    noSurface: false,
+    maxCamY: 9.0,
+    minimapTheme: 'titan',
+    spawn: { pos: [spawnX, spawnY, spawnZ], yaw: 0.28, pitch: -0.12 },
+    zones: ZONES,
+    landmarks,
+    tourLegs,
+    getHeight,
+    getZoneAt,
+    getTerrainColor,
+    getOpticalProfile,
+    getTemperatureAt,
+    getCurrentAt,
+    generateChunkFlora,
+    faunaPlan: FAUNA_PLAN,
+    encyclopedia: ENCYCLOPEDIA
+  });
+})(window.OC);
+
 // === engine/weather.js ===
 /* ================= ДИНАМИЧЕСКАЯ СИСТЕМА ПОГОДЫ: ШТИЛЬ, ЗЫБЬ, ШТОРМ, ПУРГА И МОЛНИИ ================= */
 window.OC = window.OC || {};
@@ -9806,6 +10297,10 @@ window.OC = window.OC || {};
     if (biome.id === 'galapagos_upwelling') return { baseTemp: 19.6, heatTolerance: 1.5, hasCorals: true, isAbyss: false };
     // Подлёдный океан Европы: ни кораллов, ни солнечного света — только хемосинтез
     if (biome.id === 'europa_ocean') return { baseTemp: -1.6, heatTolerance: 3.2, hasCorals: false, isAbyss: true };
+    /* Кракеново море Титана: метан замерзает при −182,5 °C, а кипит при −161,5 °C,
+       поэтому коридор устойчивости узкий, а «тепловой стресс» здесь — нагрев выше
+       точки кипения углеводородов, а не обесцвечивание кораллов. */
+    if (biome.id === 'titan_kraken') return { baseTemp: -179.6, heatTolerance: 2.9, hasCorals: false, isAbyss: true };
     return { baseTemp: 27.0, heatTolerance: 1.1, hasCorals: true, isAbyss: false };
   }
 
@@ -15280,6 +15775,387 @@ window.OC = window.OC || {};
   B.buildSulfateCrust = buildSulfateCrust;
 })(window.OC);
 
+// === engine/flora/titan_organics.js ===
+/* ================= ПРОЦЕДУРНАЯ «ФЛОРА» ТИТАНА: ОРГАНИКА, ЛЁД И ЭВАПОРИТЫ ================= */
+/* Здесь нет ни одного растения: при −179,6 °C в жидком метане земная биохимия не работает.
+   Все пять видов — формы рельефа и осадка дна Кракенова моря, которые симулятор раскладывает
+   тем же стримером, что и подводные растения Земли:
+     organic_silt   — слой осевших толинов на дне;
+     ice_boulder    — глыбы водяного льда (на Титане это коренная порода, а не плавучий лёд);
+     tholin_dune    — гряды органогенного аэрозоля, продолжающиеся под воду с берега;
+     evaporite_crust— корка, выпадающая при испарении моря на мелководье;
+     nitrile_drift  — плотные линзы нитрилов в устьях метановых рек. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  const B = (OC._FloraBuilders = OC._FloraBuilders || {});
+
+  const COL = (hex) => new T.Color(hex);
+
+  /* ---------- Органический ил: мягкие подушки осевших толинов ---------- */
+  function buildOrganicSilt(rng) {
+    const list = [];
+    const cDeep = COL(0x3a2a17);
+    const cMid = COL(0x6b4a26);
+    const cTop = COL(0x9c7038);
+
+    const mounds = 4 + Math.floor(rng() * 4);
+    for (let i = 0; i < mounds; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.25;
+      const r = OC.lerp(0.55, 1.35, rng());
+      const h = OC.lerp(0.16, 0.52, rng());
+
+      const mound = new T.SphereGeometry(r, 11, 7, 0, Math.PI * 2, 0, Math.PI * 0.5);
+      const mp = mound.attributes.position;
+      for (let v = 0; v < mp.count; v++) {
+        const x = mp.getX(v), y = mp.getY(v), z = mp.getZ(v);
+        const rr = Math.hypot(x, z) / r;
+        /* Края расплываются в ноль — ил не держит вертикальную стенку. */
+        const fall = 1 - Math.pow(rr, 2.6);
+        const lump = 1 + 0.22 * Math.sin(x * 4.3 + i) * Math.cos(z * 3.7 - i);
+        mp.setXYZ(v, x, y * h / r * fall * lump, z);
+      }
+      mound.computeVertexNormals();
+      OC.geoPrep(mound);
+      OC.paint(mound, (x, y, z, c) => {
+        const u = OC.clamp(y / 0.5, 0, 1);
+        c.copy(cDeep).lerp(cMid, OC.smoothstep(0.0, 0.5, u)).lerp(cTop, OC.smoothstep(0.55, 1.0, u));
+      });
+      OC.xform(mound, { r: [0, rng() * 6.28, 0], p: [Math.cos(a) * dist, 0, Math.sin(a) * dist] });
+      OC.withSway(mound, () => 0);
+      list.push(mound);
+    }
+
+    // Редкие тёмные конкреции: более тяжёлые фракции, провалившиеся сквозь ил
+    const nodes = 1 + Math.floor(rng() * 3);
+    for (let i = 0; i < nodes; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.15;
+      const r = OC.lerp(0.06, 0.15, rng());
+      const node = new T.DodecahedronGeometry(r, 0);
+      OC.geoPrep(node);
+      OC.paint(node, (x, y, z, c) => c.copy(cDeep).lerp(COL(0x211609), 0.4 + rng() * 0.3));
+      OC.xform(node, { r: [rng(), rng(), rng()], p: [Math.cos(a) * dist, r * 0.4, Math.sin(a) * dist] });
+      OC.withSway(node, () => 0);
+      list.push(node);
+    }
+    return OC.mergeGeometries(list);
+  }
+  B.buildOrganicSilt = buildOrganicSilt;
+
+  /* ---------- Глыба водяного льда: при 94 К это скальная порода ---------- */
+  function buildIceBoulder(rng) {
+    const list = [];
+    const cLight = COL(0xdfeffa);
+    const cMid = COL(0xa8c8de);
+    const cDeep = COL(0x6f93ad);
+
+    const blocks = 2 + Math.floor(rng() * 3);
+    for (let i = 0; i < blocks; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.05;
+      const r = OC.lerp(0.5, 1.25, rng());
+      const boulder = new T.IcosahedronGeometry(r, 1);
+      const bp = boulder.attributes.position;
+      for (let v = 0; v < bp.count; v++) {
+        const x = bp.getX(v), y = bp.getY(v), z = bp.getZ(v);
+        /* Сколы граней: лёд ломается плоскостями, а не округляется водой. */
+        const facet = 1 + 0.16 * Math.sin(x * 3.1 + z * 2.3) - 0.13 * Math.abs(Math.sin(y * 2.7));
+        bp.setXYZ(v, x * facet, y * facet * OC.lerp(0.62, 1.05, rng() * 0.4 + 0.6), z * facet);
+      }
+      boulder.computeVertexNormals();
+      OC.geoPrep(boulder);
+      OC.paint(boulder, (x, y, z, c) => {
+        const u = OC.clamp((y / r) * 0.5 + 0.5, 0, 1);
+        c.copy(cDeep).lerp(cMid, OC.smoothstep(0.15, 0.7, u)).lerp(cLight, OC.smoothstep(0.75, 1.0, u));
+      });
+      OC.xform(boulder, {
+        r: [(rng() - 0.5) * 0.5, rng() * 6.28, (rng() - 0.5) * 0.5],
+        p: [Math.cos(a) * dist, r * 0.42, Math.sin(a) * dist]
+      });
+      OC.withSway(boulder, () => 0);
+      list.push(boulder);
+    }
+
+    // Осыпь у подножия: осколки той же породы
+    const chips = 3 + Math.floor(rng() * 4);
+    for (let i = 0; i < chips; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.35;
+      const r = OC.lerp(0.07, 0.18, rng());
+      const chip = new T.TetrahedronGeometry(r, 0);
+      OC.geoPrep(chip);
+      OC.paint(chip, (x, y, z, c) => c.copy(cMid).lerp(cLight, 0.25 + rng() * 0.35));
+      OC.xform(chip, { r: [rng(), rng(), rng()], p: [Math.cos(a) * dist, r * 0.5, Math.sin(a) * dist] });
+      OC.withSway(chip, () => 0);
+      list.push(chip);
+    }
+    return OC.mergeGeometries(list);
+  }
+  B.buildIceBoulder = buildIceBoulder;
+
+  /* ---------- Толиновая дюна: гряда аэрозольной органики ---------- */
+  function buildTholinDune(rng) {
+    const list = [];
+    const cDark = COL(0x4a2f16);
+    const cWarm = COL(0x9a6431);
+    const cCrest = COL(0xc08b47);
+
+    const crests = 2 + Math.floor(rng() * 3);
+    for (let i = 0; i < crests; i++) {
+      const len = OC.lerp(2.2, 4.0, rng());
+      const wid = OC.lerp(0.7, 1.3, rng());
+      const h = OC.lerp(0.35, 0.95, rng());
+      const a = rng() * 6.283;
+      const dist = (i - (crests - 1) * 0.5) * 0.75;
+
+      const dune = new T.PlaneGeometry(len, wid, 12, 5);
+      const dp = dune.attributes.position;
+      for (let v = 0; v < dp.count; v++) {
+        const u = OC.clamp(dp.getX(v) / len + 0.5, 0, 1);
+        const w = OC.clamp(dp.getY(v) / wid + 0.5, 0, 1);
+        /* Асимметрия земной дюны: пологий наветренный склон, крутой подветренный. */
+        const prof = Math.pow(Math.sin(u * Math.PI), 0.7) * (1 - Math.pow(Math.abs(w - 0.5) * 2, 1.6));
+        dp.setZ(v, dp.getZ(v) + prof * h * (1 + 0.18 * Math.sin(u * 7.1 + i)));
+      }
+      dune.computeVertexNormals();
+      OC.geoPrep(dune);
+      OC.paint(dune, (x, y, z, c) => {
+        const t = OC.clamp(z / 0.9, 0, 1);
+        c.copy(cDark).lerp(cWarm, OC.smoothstep(0.0, 0.6, t)).lerp(cCrest, OC.smoothstep(0.65, 1.0, t));
+      });
+      OC.xform(dune, { r: [Math.PI / 2, 0, a], p: [Math.cos(a) * dist, 0, Math.sin(a) * dist] });
+      OC.withSway(dune, () => 0);
+      list.push(dune);
+    }
+    return OC.mergeGeometries(list);
+  }
+  B.buildTholinDune = buildTholinDune;
+
+  /* ---------- Эвапоритовая корка: ступенчатые плиты испарения ---------- */
+  function buildEvaporiteCrust(rng) {
+    const list = [];
+    const cPale = COL(0xd8bf94);
+    const cMid = COL(0xa8875c);
+    const cEdge = COL(0x6d5436);
+
+    const plates = 5 + Math.floor(rng() * 5);
+    for (let i = 0; i < plates; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.2;
+      const r = OC.lerp(0.22, 0.62, rng());
+      const thick = OC.lerp(0.04, 0.11, rng());
+      const sides = 5 + Math.floor(rng() * 3);
+
+      const plate = new T.CylinderGeometry(r, r * 0.94, thick, sides, 1);
+      const pp = plate.attributes.position;
+      for (let v = 0; v < pp.count; v++) {
+        const x = pp.getX(v), z = pp.getZ(v);
+        /* Края корки задираются вверх — так ведёт себя высыхающая соляная корка. */
+        const rr = Math.hypot(x, z) / r;
+        const lip = Math.pow(rr, 3) * thick * 1.35;
+        pp.setY(v, pp.getY(v) + lip);
+      }
+      plate.computeVertexNormals();
+      OC.geoPrep(plate);
+      OC.paint(plate, (x, y, z, c) => {
+        const rr = Math.hypot(x, z) / r;
+        c.copy(cMid).lerp(cPale, OC.clamp(0.4 + Math.sin(x * 6.1 + z * 5.3) * 0.3, 0, 1)).lerp(cEdge, OC.smoothstep(0.72, 1.0, rr));
+      });
+      OC.xform(plate, {
+        r: [(rng() - 0.5) * 0.14, rng() * 6.28, (rng() - 0.5) * 0.14],
+        p: [Math.cos(a) * dist, thick * 0.5 + (i % 2) * 0.03, Math.sin(a) * dist]
+      });
+      OC.withSway(plate, () => 0);
+      list.push(plate);
+    }
+    return OC.mergeGeometries(list);
+  }
+  B.buildEvaporiteCrust = buildEvaporiteCrust;
+
+  /* ---------- Нитриловые наносы: плотные линзы в устье ---------- */
+  function buildNitrileDrift(rng) {
+    const list = [];
+    const cDeep = COL(0x2b1d33);
+    const cMid = COL(0x5c3a58);
+    const cTop = COL(0x8f6a79);
+
+    const lenses = 3 + Math.floor(rng() * 3);
+    for (let i = 0; i < lenses; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.1;
+      const r = OC.lerp(0.42, 0.95, rng());
+      const h = OC.lerp(0.12, 0.34, rng());
+
+      const lens = new T.SphereGeometry(r, 12, 7, 0, Math.PI * 2, 0, Math.PI * 0.5);
+      const lp = lens.attributes.position;
+      for (let v = 0; v < lp.count; v++) {
+        const x = lp.getX(v), y = lp.getY(v), z = lp.getZ(v);
+        const rr = Math.hypot(x, z) / r;
+        /* Линза: плоская сверху, выпуклая по краям — так оседает тяжёлая взвесь. */
+        const prof = (1 - Math.pow(rr, 2.2)) * (1 + 0.35 * Math.pow(rr, 1.4));
+        lp.setXYZ(v, x, y * h / r * prof, z);
+      }
+      lens.computeVertexNormals();
+      OC.geoPrep(lens);
+      OC.paint(lens, (x, y, z, c) => {
+        const u = OC.clamp(y / 0.3, 0, 1);
+        c.copy(cDeep).lerp(cMid, OC.smoothstep(0.0, 0.55, u)).lerp(cTop, OC.smoothstep(0.6, 1.0, u));
+      });
+      OC.xform(lens, { r: [0, rng() * 6.28, 0], p: [Math.cos(a) * dist, 0, Math.sin(a) * dist] });
+      OC.withSway(lens, () => 0);
+      list.push(lens);
+    }
+
+    // Взвесь над линзами: лёгкая, едва колышется течением
+    const motes = 6 + Math.floor(rng() * 6);
+    for (let i = 0; i < motes; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.15;
+      const hgt = OC.lerp(0.25, 0.95, rng());
+      const r = OC.lerp(0.05, 0.11, rng());
+      const mote = new T.SphereGeometry(r, 6, 5);
+      OC.geoPrep(mote);
+      OC.paint(mote, (x, y, z, c) => c.copy(cMid).lerp(cTop, 0.45 + rng() * 0.3));
+      OC.xform(mote, { p: [Math.cos(a) * dist, hgt, Math.sin(a) * dist] });
+      OC.withSway(mote, (x, y) => OC.clamp(y / 1.0, 0, 1) * 0.32);
+      list.push(mote);
+    }
+    return OC.mergeGeometries(list);
+  }
+  B.buildNitrileDrift = buildNitrileDrift;
+
+  /* ---------- Ледяная береговая кромка: зубцы льда у уреза моря ---------- */
+  function buildShorelineIce(rng) {
+    const list = [];
+    const cClear = COL(0xe8f4fb);
+    const cBlue = COL(0x9fc4d8);
+    const cDeep = COL(0x6a90aa);
+
+    const spikes = 3 + Math.floor(rng() * 4);
+    for (let i = 0; i < spikes; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.15;
+      const h = OC.lerp(0.5, 1.6, rng());
+      const r = OC.lerp(0.16, 0.42, rng());
+      const spike = new T.ConeGeometry(r, h, 5 + Math.floor(rng() * 3), 2);
+      const sp = spike.attributes.position;
+      for (let v = 0; v < sp.count; v++) {
+        const u = OC.clamp(sp.getY(v) / h + 0.5, 0, 1);
+        /* Клин: грань, срезанная прибоем с одной стороны. */
+        sp.setX(v, sp.getX(v) * (1 + 0.22 * Math.sin(u * 3.4 + i)));
+        sp.setZ(v, sp.getZ(v) * (1 - 0.18 * u));
+      }
+      spike.computeVertexNormals();
+      OC.geoPrep(spike);
+      OC.paint(spike, (x, y, z, c) => {
+        const u = OC.clamp(y / h + 0.5, 0, 1);
+        c.copy(cDeep).lerp(cBlue, OC.smoothstep(0.0, 0.6, u)).lerp(cClear, OC.smoothstep(0.62, 1.0, u));
+      });
+      OC.xform(spike, {
+        r: [(rng() - 0.5) * 0.3, rng() * 6.28, (rng() - 0.5) * 0.3],
+        p: [Math.cos(a) * dist, h * 0.42, Math.sin(a) * dist]
+      });
+      OC.withSway(spike, () => 0);
+      list.push(spike);
+    }
+    return OC.mergeGeometries(list);
+  }
+  B.buildShorelineIce = buildShorelineIce;
+
+  /* ---------- Приливный бор: вал, идущий вверх по устью ---------- */
+  function buildTidalBore(rng) {
+    const list = [];
+    const cCrest = COL(0xd9c79c);
+    const cFace = COL(0x8a6b3d);
+    const cFoam = COL(0xf3e7c8);
+
+    const len = OC.lerp(3.0, 4.4, rng());
+    const h = OC.lerp(0.45, 0.9, rng());
+    const bore = new T.PlaneGeometry(len, 1.5, 16, 6);
+    const bp = bore.attributes.position;
+    for (let v = 0; v < bp.count; v++) {
+      const u = OC.clamp(bp.getX(v) / len + 0.5, 0, 1);
+      /* Крутой передний фронт и пологая тыльная сторона — профиль бора. */
+      const front = Math.pow(OC.clamp(1 - u * 3.2, 0, 1), 2.2);
+      const tail = Math.pow(OC.clamp((u - 0.31) / 0.69, 0, 1), 1.5);
+      const z = (front * 1.0 + (1 - tail) * 0.35) * h;
+      bp.setZ(v, bp.getZ(v) + z + Math.sin(u * 11.0 + bp.getY(v) * 2.3) * 0.05 * h);
+    }
+    bore.computeVertexNormals();
+    OC.geoPrep(bore);
+    OC.paint(bore, (x, y, z, c) => {
+      const t = OC.clamp(z / 0.9, 0, 1);
+      c.copy(cFace).lerp(cCrest, OC.smoothstep(0.15, 0.7, t)).lerp(cFoam, OC.smoothstep(0.78, 1.0, t));
+    });
+    OC.xform(bore, { r: [Math.PI / 2, 0, rng() * 6.28] });
+    OC.withSway(bore, () => 0);
+    list.push(bore);
+    return OC.mergeGeometries(list);
+  }
+  B.buildTidalBore = buildTidalBore;
+
+  /* ---------- Метановый дождь: струи осадков над поверхностью моря ---------- */
+  function buildMethaneRain(rng) {
+    const list = [];
+    const cDrop = COL(0xcfd9c0);
+    const cStreak = COL(0x9fb08a);
+
+    /* Капли метана вдвое крупнее земных и падают втрое медленнее: при
+       тяжести 1,35 м/с² и плотном воздухе они летят почти как в замедленной
+       съёмке — поэтому струи здесь длинные и редкие. */
+    const streaks = 10 + Math.floor(rng() * 8);
+    for (let i = 0; i < streaks; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.3;
+      const len = OC.lerp(0.7, 2.1, rng());
+      const drop = new T.CylinderGeometry(0.022, 0.035, len, 5, 1, true);
+      OC.geoPrep(drop);
+      OC.paint(drop, (x, y, z, c) => c.copy(cStreak).lerp(cDrop, OC.clamp(y / len + 0.5, 0, 1)));
+      OC.xform(drop, {
+        r: [(rng() - 0.5) * 0.12, rng() * 6.28, (rng() - 0.5) * 0.12],
+        p: [Math.cos(a) * dist, OC.lerp(0.6, 3.2, rng()), Math.sin(a) * dist]
+      });
+      OC.withSway(drop, (x, y) => OC.clamp(y / 3.0, 0, 1) * 0.2);
+      list.push(drop);
+    }
+    return OC.mergeGeometries(list);
+  }
+  B.buildMethaneRain = buildMethaneRain;
+
+  /* ---------- «Магический остров»: пятно всплывающих пузырей азота ---------- */
+  function buildBubblePatch(rng) {
+    const list = [];
+    const cBubble = COL(0xf3e3b6);
+    const cShade = COL(0xa98f57);
+
+    const bubbles = 8 + Math.floor(rng() * 7);
+    for (let i = 0; i < bubbles; i++) {
+      const a = rng() * 6.283;
+      const dist = rng() * 1.1;
+      const r = OC.lerp(0.08, 0.3, rng());
+      const bubble = new T.SphereGeometry(r, 9, 7);
+      bubble.scale(1, 0.86, 1);
+      OC.geoPrep(bubble);
+      OC.paint(bubble, (x, y, z, c) => c.copy(cShade).lerp(cBubble, OC.clamp(y / r * 0.5 + 0.62, 0, 1)));
+      OC.xform(bubble, { p: [Math.cos(a) * dist, OC.lerp(0.15, 2.4, rng()), Math.sin(a) * dist] });
+      OC.withSway(bubble, (x, y) => OC.clamp(y / 2.4, 0, 1) * 0.45);
+      list.push(bubble);
+    }
+    // Светлое пятно на поверхности над пятном пузырей
+    const slick = new T.CircleGeometry(1.5, 18);
+    OC.geoPrep(slick);
+    OC.paint(slick, (x, y, z, c) => c.copy(cShade).lerp(cBubble, OC.clamp(0.35 + Math.sin(x * 3.1 + z * 2.7) * 0.3, 0, 1)));
+    OC.xform(slick, { r: [Math.PI / 2, 0, 0], p: [0, 2.6, 0] });
+    OC.withSway(slick, () => 0.12);
+    list.push(slick);
+    return OC.mergeGeometries(list);
+  }
+  B.buildBubblePatch = buildBubblePatch;
+})(window.OC);
+
 // === engine/flora_library.js ===
 /* ================= БИБЛИОТЕКА ПРОТОТИПОВ ФЛОРА: МАТЕРИАЛЫ И РЕЕСТР ================= */
 /* Сами геометрии вынесены в engine/flora/*.js (9 тематических модулей) и публикуются
@@ -15651,6 +16527,45 @@ window.OC = window.OC || {};
         sulfate_crust: {
           mat: matRigid, maxInstances: 1300, cullDist: 300,
           geos: [need('buildSulfateCrust')(rng), need('buildSulfateCrust')(rng)]
+        },
+        /* --- Кракеново море Титана: осадки и лёд углеводородного моря --- */
+        organic_silt: {
+          mat: matRigid, maxInstances: 1600, cullDist: 300,
+          geos: [need('buildOrganicSilt')(rng), need('buildOrganicSilt')(rng), need('buildOrganicSilt')(rng)]
+        },
+        ice_boulder: {
+          mat: matRigid, maxInstances: 520, cullDist: 520,
+          geos: [need('buildIceBoulder')(rng), need('buildIceBoulder')(rng), need('buildIceBoulder')(rng)]
+        },
+        tholin_dune: {
+          mat: matRigid, maxInstances: 420, cullDist: 460,
+          geos: [need('buildTholinDune')(rng), need('buildTholinDune')(rng)]
+        },
+        evaporite_crust: {
+          mat: matRigid, maxInstances: 900, cullDist: 300,
+          geos: [need('buildEvaporiteCrust')(rng), need('buildEvaporiteCrust')(rng)]
+        },
+        nitrile_drift: {
+          mat: matRigid, maxInstances: 1100, cullDist: 300,
+          geos: [need('buildNitrileDrift')(rng), need('buildNitrileDrift')(rng)]
+        },
+        shoreline_ice: {
+          mat: matRigid, maxInstances: 620, cullDist: 340,
+          geos: [need('buildShorelineIce')(rng), need('buildShorelineIce')(rng)]
+        },
+        /* Явления Кракенова моря: модели нужны Атласу, в мир их раскладывает не
+           стример флоры, а генератор пузырей из faunaPlan. */
+        tidal_bore: {
+          mat: matRigid, maxInstances: 120, cullDist: 520,
+          geos: [need('buildTidalBore')(rng), need('buildTidalBore')(rng)]
+        },
+        methane_rain: {
+          mat: matRigid, maxInstances: 220, cullDist: 460,
+          geos: [need('buildMethaneRain')(rng), need('buildMethaneRain')(rng)]
+        },
+        magic_island: {
+          mat: matRigid, maxInstances: 160, cullDist: 460,
+          geos: [need('buildBubblePatch')(rng), need('buildBubblePatch')(rng)]
         }
       };
 
@@ -16132,6 +17047,121 @@ function buildChunkData(cx, cz, density) {
         activeInstances: totalVisibleInstances,
         maxCached: MAX_CACHED_CHUNKS
       };
+    }
+  };
+})(window.OC);
+
+// === engine/fluid.js ===
+/* ================= ФИЗИКА ЖИДКОСТИ (план 2.2: Титан) =================
+   До Титана движок молча предполагал воду: 1025 кг/м³, 9,81 м/с², 1500 м/с,
+   1 атм у поверхности, полярный растворитель. Числа были размазаны по
+   формулам давления и профилям CTD, поэтому «другая жидкость» означала бы
+   правку каждого места по отдельности.
+
+   Титан — единственное тело кроме Земли со стабильной жидкостью на
+   поверхности, но это жидкий метан с этаном и азотом при 94 К (−179,6 °C):
+   плотность в полтора раза ниже воды, тяжесть в семь раз слабее, скорость
+   звука почти та же, среда неполярная (проводимость и pH теряют смысл),
+   поверхностное давление 1,45 атм. Здесь эти Difference живут в одном месте.
+
+   Источники:
+   • Younglove & Ely (1987), данные при 94 К: метан ρ = 447 кг/м³,
+     c = 1506 м/с; смесь озёр ρ = 660 кг/м³, c = 1420 м/с (приведено в
+     arXiv:1905.11251, «Seismic Signal from Waves on Titan's Seas»).
+   • Poggiali et al., JGR Planets 2020 и Nature Communications 2024: состав
+     Кракенова моря ~70 % CH₄ / 16 % N₂ / 14 % C₂H₆, глубина > 300 м,
+     батиметрия Морей-Синус ~85 м.
+   • Huygens / API-V: скорость звука в атмосфере у поверхности 194 м/с,
+     давление 1,45 атм, температура 93,6 К.
+   • Лигея: радар Кассини «просветил» 170 м толщи — значит жидкость почти
+     чистый метан (этан был бы непрозрачен); средняя глубина ~50 м. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+
+  /* Эталон движка — океанская вода Земли. Все остальные жидкости описываются
+     относительно неё, поэтому существующие биомы считают ровно как раньше. */
+  const WATER = {
+    id: 'water',
+    name: 'Морская вода',
+    composition: 'H₂O, ~35 г/л растворённых солей',
+    density: 1025,          // кг/м³
+    gravity: 9.81,          // м/с²
+    soundSpeed: 1500,       // м/с
+    surfacePressureAtm: 1,
+    tempC: 4,
+    /* Гидростатический градиент в метрах на атмосферу. Для воды берётся
+       историческое значение движка 10,08 м/атм (ρg/101325 даёт 10,075 —
+       расхождение 0,05 %, но на 25 км Европы это уже 1,2 атм, поэтому
+       значение зафиксировано явно, чтобы не ломать устоявшиеся отсчёты). */
+    metresPerAtm: 10.08,
+    polar: true,            // полярный растворитель: conductivity/TDS/pH осмысленны
+    stateAt: 'жидкость при 0…+40 °C'
+  };
+
+  /* Жидкие углеводороды Кракенова моря: 70 % CH₄ / 16 % N₂ / 14 % C₂H₆.
+     Неполярная среда: проводимость исчезающе мала, pH не определён
+     (нет воды как растворителя), метан — растворитель, а не вещество. */
+  const METHANE = {
+    id: 'methane',
+    name: 'Жидкие углеводороды',
+    composition: '≈70 % CH₄ / 16 % N₂ / 14 % C₂H₆ (Кракеново море)',
+    density: 660,           // кг/м³ — смесь по Poggiali et al.
+    gravity: 1.352,         // м/с² — ускорение свободного падения Титана
+    soundSpeed: 1420,       // м/с при 94 К (Younglove & Ely, 1987)
+    surfacePressureAtm: 1.45, // атм — атмосферное давление у поверхности Титана
+    tempC: -179.6,          // °C (93,6 К)
+    // 1 атм = 101325 Па; столб ρ·g·h: 101325 / (660 · 1,352) ≈ 113,6 м
+    metresPerAtm: 113.6,
+    polar: false,
+    stateAt: 'жидкость при −179,6 °C / 93,6 К',
+    /* Для отчёта: на Титане «гидрология» идёт метаном, а не водой —
+       дожди, реки, озёра и испарение образуют метановый цикл (аналог
+       водного), а берега сложены водяным льдом: при 94 К он твёрже гранита
+       и ведёт себя как скальная порода, а не как лёд. */
+    note: 'Метановый цикл вместо водного: осадки, сток и испарение CH₄; берега сложены водяным льдом, который при 94 К работает как скальная порода.'
+  };
+
+  const FLUIDS = { water: WATER, methane: METHANE };
+
+  OC.Fluid = {
+    FLUIDS,
+
+    /* Жидкость биома. Биом задаёт только `fluid.kind`, остальное (плотность,
+       тяжесть, скорость звука) приходит из реестра — иначе каждое новое тело
+       приходилось бы описывать в каждом биоме заново. */
+    of(biome) {
+      const kind = biome && biome.fluid && biome.fluid.kind;
+      return FLUIDS[kind] || WATER;
+    },
+
+    /* Гидростатическое давление на глубине. Слагаемое поверхностного давления
+       важно только для неземных тел: у Титана у самой поверхности уже 1,45 атм,
+       а на 300 м — всего ≈4,1 атм против 31 атм у воды на той же глубине. */
+    pressureAtmAt(biome, depthM) {
+      const f = OC.Fluid.of(biome);
+      const scale = (biome && biome.pressureScale) || 1;
+      return f.surfacePressureAtm + (Math.max(0, depthM) / f.metresPerAtm) * scale;
+    },
+
+    /* Затухание звука с расстоянием считается по дистанции, но физическая
+       «картинка» среды другая: у метана акустический импеданс ρ·c = 0,94 МПа·с/м
+       против 1,54 у воды, то есть звук переходит через границу сред иначе.
+       Здесь возвращается сама скорость — гидрофон показывает её в подписи. */
+    soundSpeedOf(biome) { return OC.Fluid.of(biome).soundSpeed; },
+
+    /* Задержка прихода звука: время = расстояние / скорость звука. */
+    delayMs(biome, distM) {
+      const c = OC.Fluid.soundSpeedOf(biome);
+      return c > 0 ? (distM / c) * 1000 : 0;
+    },
+
+    /* Во сколько раз выталкивающая сила отличается от земной воды. Плавучий
+       аппарат, рассчитанный на воду, в метане тонет: при той же массе сила
+       Архимеда меньше почти вдвое. */
+    buoyancyRatio(biome) {
+      const f = OC.Fluid.of(biome);
+      return (f.density * f.gravity) / (WATER.density * WATER.gravity);
     }
   };
 })(window.OC);
@@ -23562,6 +24592,285 @@ window.OC = window.OC || {};
   B.makeBrineChannel = makeBrineChannel;
 })(window.OC);
 
+// === engine/fauna/titan_sea.js ===
+/* ================= ФАУНА КРАКЕНОВА МОРЯ: ГИПОТЕТИЧЕСКАЯ МЕТАНОТРОФНАЯ БИОТА ================= */
+/* Ни одного из этих существ не видел ни один прибор. Это визуализация гипотезы Stevenson et al.
+   (2015): мембрана из акрилонитрила (азотозома), устойчивая в жидком метане при 94 К, и
+   метаболизм на реакции H₂ + C₂H₂ → CH₄. Скорости такие организмы должны иметь на порядки
+   ниже земных — при 94 К химия идёт в тысячи раз медленнее, поэтому и плавают они медленно.
+   Плавучесть здесь другая: ρ среды 660 кг/м³ при g = 1,352 м/с² дают выталкивающую силу
+   примерно в 9 % земной, поэтому крупные формы вынуждены быть почти невесомыми и плоскими. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+  const T = THREE;
+  window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
+  const B = window.OC._FaunaBuilders;
+  const GEO = (B.geoBuilders = B.geoBuilders || {});
+
+  const COL = (hex) => new T.Color(hex);
+
+  /* ---------- Геометрии для стай (инстансинг) ---------- */
+
+  /* Азотозомный дрейфовик: тонкая мембранная пластинка с пузырьками азотозом по краю.
+     Не машет ничем: в метане при 94 К активное плавание почти ничего не стоит организму,
+     но и не даёт выигрыша — дрейфовик просто держит площадь в потоке. */
+  function buildAzotosomeDrifterGeo() {
+    const parts = [];
+    const cMem = COL(0xd8b27a);
+    const cCore = COL(0x8a5c2a);
+    const cNode = COL(0xf0d9a8);
+
+    const disc = new T.SphereGeometry(1, 16, 9);
+    disc.scale(0.6, 0.055, 0.34);
+    const dp = disc.attributes.position;
+    for (let i = 0; i < dp.count; i++) {
+      const x = dp.getX(i), z = dp.getZ(i);
+      const wob = 1 + 0.14 * Math.sin(x * 4.1) * Math.cos(z * 5.3);
+      dp.setXYZ(i, x * wob, dp.getY(i), z * wob);
+    }
+    disc.computeVertexNormals();
+    OC.geoPrep(disc);
+    OC.paint(disc, (x, y, z, c) => {
+      const rr = Math.hypot(x / 0.6, z / 0.34);
+      c.copy(cCore).lerp(cMem, OC.smoothstep(0.1, 0.85, rr));
+    });
+    parts.push(disc);
+
+    // Азотозомы: узлы мембраны по периметру
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const nx = Math.cos(a) * 0.58;
+      const nz = Math.sin(a) * 0.33;
+      const node = new T.SphereGeometry(0.055, 6, 5);
+      OC.geoPrep(node);
+      OC.paint(node, cNode);
+      OC.xform(node, { p: [nx, 0.02, nz] });
+      parts.push(node);
+    }
+
+    // Центральный тяжёлый узел — за счёт него пластинка держит ориентацию
+    const core = new T.SphereGeometry(0.1, 7, 6);
+    core.scale(1, 0.7, 1);
+    OC.geoPrep(core);
+    OC.paint(core, cCore);
+    parts.push(core);
+
+    return OC.mergeGeometries(parts);
+  }
+  GEO.azotosome_drifter = buildAzotosomeDrifterGeo;
+
+  /* Нитрильный подвижный колонист: комок, обросший короткими ресничками.
+     Держится у нитриловых наносов в устье, где выше концентрация ацетилена. */
+  function buildNitrileMotileGeo() {
+    const parts = [];
+    const cBody = COL(0x9c6a8e);
+    const cDark = COL(0x54304d);
+    const cCilia = COL(0xd9b9c8);
+
+    const body = new T.SphereGeometry(1, 12, 8);
+    body.scale(0.32, 0.26, 0.26);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const bump = 1 + 0.16 * Math.sin(x * 7.3 + y * 5.1) * Math.cos(z * 6.7);
+      bp.setXYZ(i, x * bump, y * bump, z * bump);
+    }
+    body.computeVertexNormals();
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => c.copy(cDark).lerp(cBody, OC.clamp(y * 3.0 + 0.6, 0, 1)));
+    parts.push(body);
+
+    // Реснички: короткие, жёсткие — в вязкой относительно воды среде они работают как вёсла
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      const tilt = (i % 3) * 0.35 - 0.35;
+      const cilia = new T.ConeGeometry(0.022, 0.2, 4);
+      OC.geoPrep(cilia);
+      OC.paint(cilia, cCilia);
+      OC.xform(cilia, {
+        r: [0, 0, Math.PI / 2 + tilt],
+        p: [Math.cos(a) * 0.3, Math.sin(a) * 0.24, Math.sin(a * 1.7) * 0.2]
+      });
+      parts.push(cilia);
+    }
+    return OC.mergeGeometries(parts);
+  }
+  GEO.nitrile_motile = buildNitrileMotileGeo;
+
+  /* ---------- Метановый планировщик: крупный обитатель котловины ---------- */
+  function makeMethaneGlider(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    group.userData.key = 'methane_glider';
+
+    const cBody = COL(0xbf9a5e);
+    const cEdge = COL(0xe6c88c);
+    const cVein = COL(0x7a5a2c);
+
+    const parts = [];
+    // Плоское лентовидное тело: почти невесомая форма в слабой плавучести Титана
+    const body = new T.SphereGeometry(1, 26, 12);
+    body.scale(2.6, 0.16, 0.95);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), z = bp.getZ(i);
+      const taper = 1 - 0.4 * Math.pow(OC.clamp(-x / 2.6, 0, 1), 1.4);
+      const ripple = 1 + 0.11 * Math.sin(x * 1.9 + z * 2.4);
+      bp.setXYZ(i, x, bp.getY(i) * taper * ripple, z * taper * ripple);
+    }
+    body.computeVertexNormals();
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      const t = OC.clamp(x / 2.6, -1, 1);
+      c.copy(cVein).lerp(cBody, OC.smoothstep(-0.8, 0.4, t)).lerp(cEdge, OC.smoothstep(0.5, 1.0, t));
+    });
+    parts.push(body);
+
+    // Две продольные складки-«кили»: увеличивают жёсткость без веса
+    for (const s of [-1, 1]) {
+      const keel = new T.BoxGeometry(4.4, 0.1, 0.06);
+      OC.geoPrep(keel);
+      OC.paint(keel, (x, y, z, c) => c.copy(cVein).lerp(cEdge, 0.35));
+      OC.xform(keel, { p: [0, -0.14, s * 0.62] });
+      parts.push(keel);
+    }
+
+    // Хвостовая нить-стабилизатор
+    const tail = new T.ConeGeometry(0.05, 2.2, 5);
+    OC.geoPrep(tail);
+    OC.paint(tail, (x, y, z, c) => c.copy(cVein).lerp(cEdge, OC.clamp(-y, 0, 1)));
+    OC.xform(tail, { r: [0, 0, Math.PI / 2], p: [-3.4, 0, 0] });
+    parts.push(tail);
+
+    const gliderMat = new T.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.62, metalness: 0.04,
+      transparent: true, opacity: 0.9, side: T.DoubleSide
+    });
+    const mesh = new T.Mesh(OC.mergeGeometries(parts), gliderMat);
+    group.add(mesh);
+
+    const scale = opts.scale || 1.2;
+    group.scale.setScalar(scale);
+    const cx = opts.cx || 0;
+    const cz = opts.cz || 0;
+    const orbitR = opts.r || 120;
+    const baseY = opts.y || -60;
+    const speed = opts.speed || 1.1;
+    group.position.set(cx + orbitR, baseY, cz);
+    scene.add(group);
+
+    const ph = Math.random() * 6.28;
+    const ang0 = Math.random() * 6.28;
+
+    return {
+      key: 'methane_glider',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(cx - camPos.x, cz - camPos.z) > 620) { group.visible = false; return; }
+        group.visible = true;
+        const ang = ang0 + time * speed / Math.max(20, orbitR) * 6.0;
+        const rad = orbitR * (0.82 + 0.18 * Math.sin(time * 0.11 + ang0));
+        const px = cx + Math.cos(ang) * rad;
+        const pz = cz + Math.sin(ang) * rad;
+        /* Планировщик почти не тратит усилий: медленный набор высоты и длинный
+           пологий спуск — в жидкости плотностью 660 кг/м³ это выгоднее всего. */
+        const py = baseY + Math.sin(time * 0.13 + ph) * 9.0;
+        group.position.set(px, py, pz);
+        group.rotation.y = -ang + Math.PI / 2;
+        group.rotation.z = Math.sin(time * 0.13 + ph) * 0.22;
+        group.rotation.x = Math.sin(time * 0.21 + ph) * 0.08;
+      }
+    };
+  }
+  B.makeMethaneGlider = makeMethaneGlider;
+
+  /* ---------- Поле пузырей азота: «магические острова» Кассини ---------- */
+  function makeNitrogenBubble(scene, biome, opts) {
+    opts = opts || {};
+    const group = new T.Group();
+    group.userData.key = 'nitrogen_bubble';
+
+    const n = Math.max(12, Math.round((opts.n || 90) * (OC.Quality ? OC.Quality.get().fishScale : 1)));
+    const radius = opts.radius || 14;
+    const riseHeight = opts.height || 42;
+    const x0 = opts.x || 0;
+    const z0 = opts.z || 0;
+    const y0 = opts.y || -40;
+
+    const pos = new Float32Array(n * 3);
+    const phase = new Float32Array(n);
+    const speed = new Float32Array(n);
+    const size = new Float32Array(n);
+    const off = new Float32Array(n * 2);
+    const rng = OC.mulberry32((Math.abs(Math.round(x0 * 13 + z0 * 71)) ^ (n * 2654435761)) >>> 0 || 7);
+
+    for (let i = 0; i < n; i++) {
+      const a = rng() * 6.283;
+      const rr = Math.sqrt(rng()) * radius;
+      off[i * 2] = Math.cos(a) * rr;
+      off[i * 2 + 1] = Math.sin(a) * rr;
+      phase[i] = rng();
+      /* Крупные пузыри всплывают быстрее: подъёмная сила ~ r³, сопротивление ~ r². */
+      size[i] = OC.lerp(0.5, 1.9, rng());
+      speed[i] = OC.lerp(1.4, 3.4, size[i] / 1.9);
+    }
+
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+    geo.setAttribute('aSize', new T.BufferAttribute(size, 1));
+    const mat = new T.PointsMaterial({
+      color: 0xf6e6bd,
+      size: 0.85,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.62,
+      depthWrite: false
+    });
+    const points = new T.Points(geo, mat);
+    points.frustumCulled = false;
+    group.add(points);
+
+    // Донное «устье»: воронка, из которой идёт газ
+    const cVent = COL(0x3b2a15);
+    const ring = new T.CylinderGeometry(radius * 0.34, radius * 0.5, 1.1, 12, 1);
+    OC.geoPrep(ring);
+    OC.paint(ring, (x, y, z, c) => c.copy(cVent).lerp(COL(0x7a5a30), OC.clamp(0.4 + Math.sin(x * 2.1 + z * 1.7) * 0.35, 0, 1)));
+    const vent = new T.Mesh(ring, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.02, side: T.DoubleSide }));
+    vent.position.set(0, -0.55, 0);
+    group.add(vent);
+
+    group.position.set(x0, y0, z0);
+    scene.add(group);
+
+    const attr = geo.attributes.position;
+
+    return {
+      key: 'nitrogen_bubble',
+      getPosition: () => group.position,
+      update(dt, time, camPos) {
+        if (Math.hypot(x0 - camPos.x, z0 - camPos.z) > 520) { group.visible = false; return; }
+        group.visible = true;
+        for (let i = 0; i < n; i++) {
+          /* Каждый пузырь проходит путь от дна до поверхности и начинает заново.
+             Азот выделяется неравномерно — из-за этого поле то густеет, то редеет:
+             именно так объясняют «магические острова» на радарных снимках Кассини. */
+          const u = (phase[i] + time * speed[i] / riseHeight) % 1;
+          const sway = Math.sin(time * 0.9 + i * 1.7) * (0.6 + u * 2.2);
+          attr.setXYZ(
+            i,
+            off[i * 2] + sway,
+            u * riseHeight,
+            off[i * 2 + 1] + Math.cos(time * 0.8 + i * 2.3) * (0.5 + u * 1.8)
+          );
+        }
+        attr.needsUpdate = true;
+      }
+    };
+  }
+  B.makeNitrogenBubble = makeNitrogenBubble;
+})(window.OC);
+
 // === engine/fauna/particles.js ===
 /* ================= ЧАСТИЦЫ СРЕДЫ: ПЛАНКТОН, СНЕГ, ПУЗЫРЬКИ, НЕРЕСТ КОРАЛЛОВ ================= */
 /* Камера-относительные поля частиц (планктон, морской снег, пузырьки) и ночной
@@ -24930,6 +26239,21 @@ window.OC = window.OC || {};
 
       for (const vc of (plan.ventCrabs || [])) {
         const a = OC._FaunaBuilders.makeVentCrab(faunaGroup, biome, vc);
+        agents.push(a);
+        sonarTargets.push(a);
+      }
+
+      /* --- Кракеново море Титана: гипотетическая метанотрофная биота --- */
+
+      for (const mg of (plan.methaneGliders || [])) {
+        const a = OC._FaunaBuilders.makeMethaneGlider(faunaGroup, biome, mg);
+        agents.push(a);
+        predatorAgents.push(a);
+        sonarTargets.push(a);
+      }
+
+      for (const nb of (plan.nitrogenBubbles || [])) {
+        const a = OC._FaunaBuilders.makeNitrogenBubble(faunaGroup, biome, nb);
         agents.push(a);
         sonarTargets.push(a);
       }
@@ -26868,6 +28192,14 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeArmoredSwimmer(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 12, y: 0, speed: 1.5, scale: 1 });
         } else if (key === 'cryo_medusa') {
           OC._FaunaBuilders.makeCryoMedusa(tmpGroup, { x: 0, y: 0, z: 0, scale: 1 });
+        } else if (key === 'azotosome_drifter' || key === 'nitrile_motile') {
+          // Метанотрофная биота Титана: собственные геометрии стай
+          const geoBuilder = OC._FaunaBuilders.geoBuilders && OC._FaunaBuilders.geoBuilders[key];
+          if (geoBuilder) built = new T.Mesh(geoBuilder(), previewBiolumMat);
+        } else if (key === 'methane_glider') {
+          OC._FaunaBuilders.makeMethaneGlider(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, y: 0, speed: 1, scale: 1 });
+        } else if (key === 'nitrogen_bubble') {
+          OC._FaunaBuilders.makeNitrogenBubble(tmpGroup, dummyBiome, { x: 0, y: 0, z: 0, n: 60, radius: 6, height: 12 });
         } else if (key === 'vent_crab') {
           OC._FaunaBuilders.makeVentCrab(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: 0, speed: 0.8, scale: 1 });
         } else if (key === 'basal_ice') {
@@ -27161,6 +28493,10 @@ window.OC = window.OC || {};
           if (Math.random() < 0.22) S.europaIceGroan();
         } else if (S.currentBiomeId === 'cenote_caves') {
           if (Math.random() < 0.25) S.caveDrip();
+        } else if (S.currentBiomeId === 'titan_kraken') {
+          /* В Кракеновом море вместо щелкунов рачков — всплывающие пузыри
+             азота: именно они выглядят «магическими островами» на радаре. */
+          if (Math.random() < 0.34) S.nitrogenBubble();
         } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') {
           S.shrimpSnap();
         }
@@ -27251,6 +28587,27 @@ window.OC = window.OC || {};
     if (pan) { pan.pan.value = rnd(-0.6, 0.6); g.connect(pan); pan.connect(S.master); }
     else g.connect(S.master);
     osc.start(now); osc.stop(now + 1.85);
+  };
+
+  /* Пузырь азота, всплывающий в жидком метане: тон поднимается, потому что
+     резонансная частота Миннаэрта обратно пропорциональна радиусу пузыря. */
+  S.nitrogenBubble = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    osc.type = 'sine';
+    const f0 = rnd(190, 320);
+    osc.frequency.setValueAtTime(f0, now);
+    osc.frequency.exponentialRampToValueAtTime(f0 * rnd(2.4, 3.6), now + rnd(0.06, 0.13));
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(rnd(0.018, 0.034), now + 0.014);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + rnd(0.09, 0.18));
+    osc.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.8, 0.8); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
+    osc.start(now); osc.stop(now + 0.2);
   };
 
   S.scheduleCreak = function () {
@@ -27709,6 +29066,15 @@ window.OC = window.OC || {};
     if (key === 'cryo_forest' || key === 'chemo_mat' || key === 'cryo_tubeworm' || key === 'brine_polyp' || key === 'sulfate_crust') return 'Холодное шёпот криолеса';
     if (key === 'ice_veil') return 'Звон ледяных занавесов';
     if (key === 'cryo_glider' || key === 'cryo_krill') return 'Мерцание стаи криобиоты';
+    /* --- Кракеново море Титана: биота и среда жидкого метана --- */
+    if (key === 'nitrogen_bubble' || key === 'magic_island') return 'Всплывающие пузыри азота';
+    if (key === 'methane_glider') return 'Свист метанового планировщика';
+    if (key === 'azotosome_drifter') return 'Шорох мембранных пластинок';
+    if (key === 'nitrile_motile') return 'Шелест нитрильных колоний';
+    if (key === 'tidal_bore') return 'Гул приливного бора Сатурна';
+    if (key === 'methane_rain') return 'Дробь метанового дождя';
+    if (key === 'shoreline_ice' || key === 'ice_boulder') return 'Скрип водяного льда';
+    if (key === 'organic_silt' || key === 'tholin_dune' || key === 'evaporite_crust' || key === 'nitrile_drift') return 'Шевеление органического дна';
     return 'Подводный отклик';
   };
 
@@ -28208,6 +29574,85 @@ window.OC = window.OC || {};
             g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 1.1);
             o.connect(g); g.connect(out);
             o.start(now + i * 0.08); o.stop(now + i * 0.08 + 1.15);
+          });
+        }
+      } else if (key === 'azotosome_drifter' || key === 'nitrile_motile' || key === 'methane_glider' || key === 'nitrogen_bubble' || key === 'magic_island' || key === 'tidal_bore' || key === 'methane_rain' || key === 'shoreline_ice' || key === 'ice_boulder' || key === 'organic_silt' || key === 'tholin_dune' || key === 'evaporite_crust' || key === 'nitrile_drift') {
+        /* Кракеново море: среда в полтора раза легче воды и в семь раз медленнее
+           по тяжести, поэтому всё звучит приглушённо, низко и растянуто. */
+        if (key === 'nitrogen_bubble' || key === 'magic_island') {
+          // Пузырь азота: короткий «бульк» с поднимающейся частотой
+          for (let i = 0; i < 9; i++) {
+            const t = now + i * 0.11 + Math.random() * 0.03;
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(210 + Math.random() * 90, t);
+            o.frequency.exponentialRampToValueAtTime(680 + Math.random() * 320, t + 0.07);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.075, t + 0.012);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.085);
+            o.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.09);
+          }
+        } else if (key === 'methane_glider') {
+          // Длинный пологий свист: почти невесомое тело в вязкой среде
+          const o = ctx.createOscillator();
+          const lp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(148, now);
+          o.frequency.exponentialRampToValueAtTime(62, now + 1.4);
+          lp.type = 'lowpass'; lp.frequency.value = 320;
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.linearRampToValueAtTime(0.11, now + 0.22);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+          o.connect(lp); lp.connect(g); g.connect(out);
+          o.start(now); o.stop(now + 1.5);
+        } else if (key === 'azotosome_drifter' || key === 'nitrile_motile') {
+          // Шорох мембран: серия коротких расстроенных щелчков
+          for (let i = 0; i < 11; i++) {
+            const t = now + i * 0.045 + Math.random() * 0.02;
+            const o = ctx.createOscillator();
+            const bp = ctx.createBiquadFilter();
+            const g = ctx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(900 + Math.random() * 700, t);
+            bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 2.4;
+            g.gain.setValueAtTime(0.03, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+            o.connect(bp); bp.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.045);
+          }
+        } else if (key === 'methane_rain') {
+          // Дробь по поверхности: редкие, медленно падающие капли
+          for (let i = 0; i < 7; i++) {
+            const t = now + i * 0.19;
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(620 - i * 40, t);
+            o.frequency.exponentialRampToValueAtTime(240, t + 0.12);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.055, t + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+            o.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.15);
+          }
+        } else {
+          // Гул углеводородного моря: два низких тона и шумовой подтон
+          [44, 67].forEach((f, i) => {
+            const o = ctx.createOscillator();
+            const lp = ctx.createBiquadFilter();
+            const g = ctx.createGain();
+            o.type = i === 0 ? 'sawtooth' : 'sine';
+            o.frequency.setValueAtTime(f, now);
+            o.frequency.linearRampToValueAtTime(f * 0.96, now + 1.7);
+            lp.type = 'lowpass'; lp.frequency.value = 165;
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.linearRampToValueAtTime(i === 0 ? 0.06 : 0.085, now + 0.4);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+            o.connect(lp); lp.connect(g); g.connect(out);
+            o.start(now); o.stop(now + 1.85);
           });
         }
       } else {
@@ -29047,6 +30492,9 @@ window.OC = window.OC || {};
   const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag', 'charophyte_bed']);
   /* Криобиота подлёдного океана Европы — гипотетические виды без земных аналогов */
   const CRYO_SPECIES = new Set(['cryo_forest', 'ice_veil', 'serpentine_chimney', 'brine_polyp', 'chemo_mat', 'cryo_tubeworm', 'sulfate_crust']);
+  /* Донные отложения Кракенова моря: это не биота, а осадок углеводородного моря */
+  const TITAN_SILT = new Set(['organic_silt', 'nitrile_drift', 'evaporite_crust', 'tholin_dune']);
+  const TITAN_ICE = new Set(['ice_boulder', 'shoreline_ice']);
 
 
     function scanManipulatorTarget(biome, pos, fwd, out) {
@@ -29085,7 +30533,7 @@ window.OC = window.OC || {};
       out.label = floorEnc ? floorEnc[0] : 'Донный осадок';
       out.latin = floorEnc ? floorEnc[1] : 'Керн морского дна';
       out.dist = Math.max(1.0, clearance);
-      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : (biome.id === 'baikal' ? 0x71857d : (biome.id === 'europa_ocean' ? 0x4b5468 : 0xe8d9b5))));
+      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : (biome.id === 'baikal' ? 0x71857d : (biome.id === 'europa_ocean' ? 0x4b5468 : (biome.id === 'titan_kraken' ? 0x6b4a26 : 0xe8d9b5)))));
       return out;
     }
 
@@ -29095,20 +30543,24 @@ window.OC = window.OC || {};
   function classifySample(target, biome, depthM, labState, atPos, seq) {
     const pos = atPos || (target && target.pos) || _probe;
     const isEuropa = biome.id === 'europa_ocean';
-    // Эко-лаборатория — инструмент рифового стресс-теста; для Европы его химия неприменима
-    const lab = isEuropa ? null : labState;
+    /* Метан Титана — неполярный растворитель: pH, минерализация и растворимый
+       кислород в земном смысле здесь не определены, а эко-лаборатория (инструмент
+       рифового стресс-теста) к этой среде неприменима — как и к Европе. */
+    const isTitan = !!biome.isTitan;
+    const lab = (isEuropa || isTitan) ? null : labState;
     const tempBase = biome.getTemperatureAt
       ? biome.getTemperatureAt(pos.x, depthM, biome.getZoneAt(pos.x, pos.y, pos.z))
       : (biome.getZoneAt(pos.x, pos.y, pos.z).tempC || 18);
     const delta = lab ? lab.tempDelta : 0;
-    const waterTemp = Math.max(-1.9, tempBase + delta);
-    const pH = lab ? lab.pH : (isEuropa ? 11.2 : 8.10);
-    const o2 = lab ? lab.dissolvedO2 : (isEuropa ? 0.4 : 7.2);
+    const waterTemp = Math.max(isTitan ? -182.5 : -1.9, tempBase + delta);
+    const pH = isTitan ? null : (lab ? lab.pH : (isEuropa ? 11.2 : 8.10));
+    const phText = pH === null ? 'pH не определён' : pH.toFixed(2) + ' pH';
+    const o2 = lab ? lab.dissolvedO2 : (isEuropa ? 0.4 : (isTitan ? 0.28 : 7.2));
     const bleachPct = labState ? Math.round(labState.bleaching * 100) : 0;
     const calcPct = labState ? Math.round(labState.calcification) : 100;
 
     let category = 'Проба воды';
-    let chemNote = `O₂ ${o2.toFixed(1)} мг/л · ${pH.toFixed(2)} pH`;
+    let chemNote = `O₂ ${o2.toFixed(1)} мг/л · ${phText}`;
     let colorHex = target.colorHex || 0x58e0ff;
 
     if (target.kind === 'flora') {
@@ -29174,6 +30626,34 @@ window.OC = window.OC || {};
         category = 'Пресноводный губочный био-риф';
         chemNote = 'Кремнистый скелет · эндемик Байкала · пресная вода';
         colorHex = 0x88b89b;
+      } else if (TITAN_SILT.has(sp) || TITAN_ICE.has(sp)) {
+        /* Пробы Кракенова моря: осадок углеводородного моря и водяной лёд,
+           который при 94 К работает как коренная порода, а не как лёд. */
+        if (sp === 'organic_silt') {
+          category = 'Органический ил Титана';
+          chemNote = `Толины и нитрилы · ${depthM.toFixed(0)} м · −179,6 °C · ${phText}`;
+          colorHex = 0x6b4a26;
+        } else if (sp === 'nitrile_drift') {
+          category = 'Нитриловые наносы';
+          chemNote = `HCN / CH₃CN в осадке · эстуарий Морей-Синус · ${phText}`;
+          colorHex = 0x5c3a58;
+        } else if (sp === 'evaporite_crust') {
+          category = 'Эвапоритовая корка';
+          chemNote = `Осадок испарения CH₄/C₂H₆ · след уровня моря · ${phText}`;
+          colorHex = 0xc4a271;
+        } else if (sp === 'tholin_dune') {
+          category = 'Толиновая дюна';
+          chemNote = 'Органический аэрозоль атмосферы · фотохимия CH₄ + N₂';
+          colorHex = 0x9d6f3f;
+        } else if (sp === 'ice_boulder') {
+          category = 'Глыба водяного льда';
+          chemNote = 'H₂O при 94 К · твёрже гранита · коренная порода Титана';
+          colorHex = 0xd7e6f0;
+        } else {
+          category = 'Ледяная береговая кромка';
+          chemNote = `Прибой жидкого метана о водяной лёд · ${depthM.toFixed(0)} м`;
+          colorHex = 0xdfeef8;
+        }
       } else if (CRYO_SPECIES.has(sp)) {
         colorHex = 0x9fe8ff;
         if (sp === 'cryo_forest') {
@@ -29202,11 +30682,13 @@ window.OC = window.OC || {};
         category = 'Образец бентоса';
         chemNote = sp === 'hadal_sponge'
           ? `Биогенный кремний SiO₂ · ~1090 атм`
-          : `${pH.toFixed(2)} pH · ${waterTemp.toFixed(1)} °C`;
+          : `${phText} · ${waterTemp.toFixed(1)} °C`;
       }
     } else if (target.kind === 'floor') {
       category = 'Керн грунта';
-      chemNote = biome.id === 'mariana_trench'
+      chemNote = biome.id === 'titan_kraken'
+        ? `Органический ил и толины · ${depthM.toFixed(0)} м · ~${(1.45 + depthM / 113.6).toFixed(1)} атм · ${phText}`
+        : (biome.id === 'mariana_trench'
         ? `Радиоляриевый ил · ${depthM.toFixed(0)} м`
         : (biome.id === 'brine_pool'
           ? `Рассол 230‰ и карбонатный ил · ${depthM.toFixed(0)} м`
@@ -29220,7 +30702,7 @@ window.OC = window.OC || {};
                   ? `Полярный ил · ${waterTemp.toFixed(1)} °C`
                   : (biome.id === 'europa_ocean'
                     ? `Серпентинитовый базальт и сульфатный ил · ${depthM.toFixed(0)} м · ~340 атм`
-                    : (biome.id === 'baikal' ? `Диатомовый ил рифта · ${depthM.toFixed(0)} м · пресная вода` : `Карбонатный ил · ${pH.toFixed(2)} pH`)))))));
+                    : (biome.id === 'baikal' ? `Диатомовый ил рифта · ${depthM.toFixed(0)} м · пресная вода` : `Карбонатный ил · ${phText}`))))))));
     }
 
     return {
@@ -29233,7 +30715,8 @@ window.OC = window.OC || {};
       category,
       depthM: Number(depthM.toFixed(1)),
       tempC: Number(waterTemp.toFixed(1)),
-      pH: Number(pH.toFixed(2)),
+      /* pH пробы: для неводной среды физически не определён. */
+      pH: pH === null ? null : Number(pH.toFixed(2)),
       o2: Number(o2.toFixed(1)),
       bleachPct,
       chemNote,
@@ -29260,6 +30743,10 @@ window.OC = window.OC || {};
     let prevT = null;
     let minO2 = 99;
     const isEuropa = biome.id === 'europa_ocean';
+    /* Физика жидкости вынесена в OC.Fluid: вода, жидкие углеводороды Титана и
+       будущие среды описываются в одном месте, а не дублируются формулами. */
+    const fluid = OC.Fluid ? OC.Fluid.of(biome) : null;
+    const isMethane = !!fluid && fluid.id === 'methane';
     // Гравитация Европы — 1/7 земной, поэтому гидростатика в 7 раз слабее
     const pScale = biome.pressureScale || 1;
 
@@ -29285,7 +30772,7 @@ window.OC = window.OC || {};
         Tval -= OC.smoothstep(2, 26, d) * 1.9;
       } else if (biome.id === 'baikal') {
         // Байкал использует собственный сезонный профиль getTemperatureAt и холодную изотерму глубин.
-      } else if (!biome.noSurface && !biome.hasAurora) {
+      } else if (!biome.noSurface && !biome.hasAurora && !isMethane) {
         const thermoDrop = OC.smoothstep(18, 65, d) * 3.8;
         Tval -= thermoDrop;
       } else if (biome.hasAurora) {
@@ -29301,7 +30788,10 @@ window.OC = window.OC || {};
         // Европа: лёд сверху холодный (−1,6 °C), у серпентинитовых труб — тёплый флюид (+2…+4 °C)
         Tval += OC.smoothstep(0.72, 1.0, f) * 1.6;
       }
-      Tval = Math.max(-1.9, Tval);
+      /* Порог замерзания своей среды: у морской воды −1,9 °C, у жидкого
+         метана Титана минус 182,5 °C. Один общий порог в −1,9 превращал бы
+         всё метановое море в «почти замёрзшую воду». */
+      Tval = Math.max(isMethane ? fluid.tempC - 3 : -1.9, Tval);
 
       // Байкал остаётся хорошо насыщенным кислородом до глубины; морская OMZ-модель к нему не применяется.
       let o2Val = labO2;
@@ -29318,6 +30808,12 @@ window.OC = window.OC || {};
         // Океан Европы бескислородный: света нет 25 км, фотосинтез невозможен.
         // Кислород есть только как продукт радиолиза льда — десятые доли мг/л.
         o2Val = OC.clamp(0.42 - f * 0.18 + OC.smoothstep(0.7, 1.0, f) * 0.35, 0.12, 0.9);
+      }
+      if (isMethane) {
+        /* Метановое море Титана: растворённый O₂ — следы (азот и CO из
+           атмосферы), а не продукт фотосинтеза. Для гипотетической
+           метанотрофной экологии значим не O₂, а пара H₂/C₂H₂. */
+        o2Val = OC.clamp(0.28 - f * 0.12 + OC.smoothstep(0.6, 1.0, f) * 0.14, 0.05, 0.4);
       }
       if (o2Val < minO2) minO2 = o2Val;
 
@@ -29338,6 +30834,13 @@ window.OC = window.OC || {};
         conductivityUSCm = OC.clamp(112000 + ventInfluence * 20000, 108000, 136000);
         tdsMgL = conductivityUSCm * 0.93;
         mineralizationPpt = tdsMgL / 1000;
+      } else if (isMethane) {
+        /* Углеводороды — неполярная среда и диэлектрик: проводимость на
+           семь-восемь порядков ниже морской воды, а TDS и минерализация в
+           земном смысле не определены (растворены CH₄, C₂H₆ и N₂). */
+        conductivityUSCm = 0.02;
+        tdsMgL = 0;
+        mineralizationPpt = 0;
       }
 
       if (prevT !== null) {
@@ -29354,7 +30857,10 @@ window.OC = window.OC || {};
     const surfaceTemp = bins[0].tempC;
     const bottomTemp = bins[bins.length - 1].tempC;
     const bottomBin = bins[bins.length - 1];
-    const maxPressureAtm = 1 + (maxDepthM / 10.08) * pScale;
+    /* Давление считает OC.Fluid: у воды 1 атм у поверхности и 10,08 м/атм
+       (как и раньше), у метана Титана 1,45 атм и 113,6 м/атм — на 300 м там
+       всего ≈4,1 атм против 31 атм в воде. */
+    const maxPressureAtm = fluid ? OC.Fluid.pressureAtmAt(biome, maxDepthM) : 1 + (maxDepthM / 10.08) * pScale;
 
     return {
       biomeId: biome.id,
@@ -29369,10 +30875,14 @@ window.OC = window.OC || {};
       bottomTemp: Number(bottomTemp.toFixed(1)),
       thermoclineM: Number(thermoclineM.toFixed(0)),
       minO2: Number(minO2.toFixed(1)),
-      waterType: biome.id === 'baikal' || biome.id === 'amazon_igapo' ? 'freshwater'
-        : (biome.id === 'brine_pool' ? 'brine'
-          : (biome.id === 'europa_ocean' ? 'subglacial' : 'marine')),
-      pH: lab ? Number(lab.pH.toFixed(2)) : (isEuropa ? 11.2 : 8.1),
+      waterType: isMethane ? 'methane'
+        : (biome.id === 'baikal' || biome.id === 'amazon_igapo' ? 'freshwater'
+          : (biome.id === 'brine_pool' ? 'brine'
+            : (biome.id === 'europa_ocean' ? 'subglacial' : 'marine'))),
+      /* pH определён только для полярного растворителя: в жидком метане нет
+         воды как среды, поэтому водородный показатель физически бессмыслен. */
+      pH: isMethane ? null : (lab ? Number(lab.pH.toFixed(2)) : (isEuropa ? 11.2 : 8.1)),
+      fluid: isMethane ? { kind: 'methane', density: 660, soundSpeed: 1420, note: fluid.note } : { kind: 'water', density: 1025, soundSpeed: 1500 },
       conductivityUSCm: bottomBin.conductivityUSCm === null ? null : Number(bottomBin.conductivityUSCm.toFixed(0)),
       tdsMgL: bottomBin.tdsMgL === null ? null : Number(bottomBin.tdsMgL.toFixed(0)),
       mineralizationPpt: bottomBin.mineralizationPpt === null ? null : Number(bottomBin.mineralizationPpt.toFixed(3)),
@@ -30247,6 +31757,12 @@ window.OC = window.OC || {};
     dbSPL: 92.0,
     peakHz: 180,
     bandLabel: '40–320 Гц',
+    /* Среда, в которой работает гидрофон. В воде 1500 м/с, в жидких
+       углеводородах Титана — 1420 м/с при 94 К (Younglove & Ely, 1987),
+       поэтому задержка прихода звука на той же дистанции другая. */
+    mediumLabel: 'Вода',
+    soundSpeed: 1500,
+    delayMs: 0,
     dominantKey: null,
     dominantLabel: 'Фоновый шум океана',
     dominantDist: 0,
@@ -30339,6 +31855,18 @@ window.OC = window.OC || {};
     if (key === 'cryo_forest' || key === 'ice_veil' || key === 'brine_polyp' || key === 'cryo_tubeworm' || key === 'sulfate_crust') {
       return { mode: 'bio', minHz: 140, maxHz: 780, label: 'Шёпот криобиоты Европы' };
     }
+    /* --- Кракеново море Титана: звук идёт по жидкому метану со скоростью
+           1420 м/с, поэтому задержки здесь другие, чем в воде (см. OC.Fluid). --- */
+    if (key === 'nitrogen_bubble' || key === 'magic_island') return { mode: 'bubbles', minHz: 220, maxHz: 1450, label: 'Всплывающие пузыри азота' };
+    if (key === 'methane_glider') return { mode: 'swim', minHz: 48, maxHz: 290, label: 'Гидродинамика метанового планировщика' };
+    if (key === 'azotosome_drifter') return { mode: 'bio', minHz: 260, maxHz: 1180, label: 'Шорох мембранных пластинок' };
+    if (key === 'nitrile_motile') return { mode: 'clicks', minHz: 1050, maxHz: 2900, label: 'Шелест нитрильных колоний' };
+    if (key === 'tidal_bore') return { mode: 'rumble', minHz: 26, maxHz: 210, label: 'Приливный бор Сатурна' };
+    if (key === 'methane_rain') return { mode: 'drip', minHz: 480, maxHz: 1320, label: 'Барабанная дробь метанового дождя' };
+    if (key === 'shoreline_ice' || key === 'ice_boulder') return { mode: 'ice', minHz: 170, maxHz: 1420, label: 'Скрип водяного льда' };
+    if (key === 'organic_silt' || key === 'tholin_dune' || key === 'evaporite_crust' || key === 'nitrile_drift') {
+      return { mode: 'rumble', minHz: 32, maxHz: 240, label: 'Шевеление органического дна' };
+    }
     if (key.startsWith('shark_') || key === 'manta' || key === 'mobula_ray' || key === 'ocean_sunfish' || key === 'oarfish' || key === 'galapagos_shark') {
       return { mode: 'swim', minHz: 90, maxHz: 420, label: 'Гидродинамика крупного вида' };
     }
@@ -30388,6 +31916,12 @@ window.OC = window.OC || {};
       addGaussianBand(760, 125, 0.58 * a * zap);
     } else if (p.mode === 'swim') {
       addGaussianBand(160, 75, 0.38 * a * (0.7 + 0.3 * Math.sin(t * 4.0)));
+    } else if (p.mode === 'bubbles') {
+      /* Всплывающий пузырь азота: тон растёт по мере подъёма, потому что
+         резонансная частота Миннаэрта обратно пропорциональна радиусу. */
+      const rise = Math.pow(Math.max(0, Math.sin(t * 6.4)), 3);
+      addGaussianBand(240 + 520 * rise, 90, 0.34 * a);
+      addGaussianBand(880 + 420 * rise, 180, 0.46 * a * rise);
     } else {
       addGaussianBand(480, 140, 0.25 * a);
     }
@@ -30537,6 +32071,13 @@ window.OC = window.OC || {};
     },
 
     update(dt, biome, fauna, camPos, yaw, depthM, stormMix) {
+      /* Среда пересчитывается каждый кадр: биом может смениться горячей
+         клавишей, и гидрофон обязан пересчитать скорость звука вместе с ним. */
+      if (OC.Fluid) {
+        const fl = OC.Fluid.of(biome);
+        state.soundSpeed = fl.soundSpeed;
+        state.mediumLabel = fl.name;
+      }
       const safeDt = Math.max(0.01, Math.min(0.1, dt || 0.03));
       simTime += safeDt;
       if (sonarFlash > 0) sonarFlash = Math.max(0, sonarFlash - safeDt * 2.1);
@@ -30664,6 +32205,7 @@ window.OC = window.OC || {};
           ? { x: bestSource.x, y: bestSource.y || 0, z: bestSource.z }
           : null;
         state.bandLabel = bestProfile.minHz + '–' + bestProfile.maxHz + ' Гц';
+        state.delayMs = OC.Fluid ? Number(OC.Fluid.delayMs(biome, bestSource.dist).toFixed(1)) : 0;
       } else if (hasShrimp) {
         state.dominantKey = null;
         state.dominantLabel = 'Хор рачков-щелкунов рифа';
@@ -32150,6 +33692,44 @@ window.OC = window.OC || {};
       landmarkId: 'tara_brine',
       goal: 1,
       progress: (ctx) => ctx.hasZone('basal_ice') && ctx.hasPhotoOrPing(['brine_polyp', 'ice_veil', 'cryo_medusa']) ? 1 : 0
+    },
+
+    /* ---- Кракеново море Титана ---- */
+    {
+      id: 'titan_shore_ice',
+      biomeId: 'titan_kraken',
+      title: 'Кромка водяного льда',
+      desc: 'Подойдите к ледяному берегу Кракенова моря и зафиксируйте глыбу льда или толиновую дюну, уходящую под уровень метана.',
+      landmarkId: 'kraken_shore',
+      goal: 2,
+      progress: (ctx) => (ctx.hasPhotoOrPing(['ice_boulder']) ? 1 : 0) + (ctx.hasPhotoOrPing(['tholin_dune']) ? 1 : 0)
+    },
+    {
+      id: 'titan_evaporite',
+      biomeId: 'titan_kraken',
+      title: 'След отступающего моря',
+      desc: 'На шельфе найдите эвапоритовую корку — осадок, который остаётся при испарении метана, и отсканируйте её сонаром или снимите.',
+      landmarkId: 'shelf_break',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('methane_shelf') && ctx.hasPhotoOrPing(['evaporite_crust', 'organic_silt']) ? 1 : 0
+    },
+    {
+      id: 'titan_estuary',
+      biomeId: 'titan_kraken',
+      title: 'Устье метановой реки',
+      desc: 'Зайдите в эстуарий Морей-Синус и зафиксируйте нитриловые наносы или гипотетических нитрильных колонистов.',
+      landmarkId: 'moray_sinus',
+      goal: 2,
+      progress: (ctx) => (ctx.hasPhotoOrPing(['nitrile_drift']) ? 1 : 0) + (ctx.hasPhotoOrPing(['nitrile_motile', 'azotosome_drifter']) ? 1 : 0)
+    },
+    {
+      id: 'titan_magic_island',
+      biomeId: 'titan_kraken',
+      title: 'Охота за «магическим островом»',
+      desc: 'Найдите поле пузырей азота на шельфе и подтвердите явление, которое на снимках Кассини выглядело как появляющийся остров.',
+      landmarkId: 'nitrogen_bubbles',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('methane_shelf') && ctx.hasPhotoOrPing(['nitrogen_bubble']) ? 1 : 0
     }
   ];
 
@@ -32653,9 +34233,17 @@ window.OC = window.OC || {};
       lines.push(`- Зона: **${rep.ctdCast.zoneName}** (${rep.ctdCast.minDepthM}–${rep.ctdCast.maxDepthM} м, до ${rep.ctdCast.maxPressureAtm} атм)`);
       lines.push(`- Температура (поверхн. / дно): **${rep.ctdCast.surfaceTempC} °C / ${rep.ctdCast.bottomTempC} °C** · Термоклин: **${rep.ctdCast.thermoclineM} м** · Мин. O₂: **${rep.ctdCast.minO2} мг/л**`);
       if (Number.isFinite(rep.ctdCast.conductivityUSCm)) {
-        const chemLabel = rep.ctdCast.waterType === 'freshwater' ? 'Пресноводная химия'
-          : (rep.ctdCast.waterType === 'subglacial' ? 'Химия подлёдного рассола' : 'Химия морской воды');
-        lines.push(`- ${chemLabel}: **${rep.ctdCast.conductivityUSCm} µS/см**, TDS **${rep.ctdCast.tdsMgL} мг/л**, минерализация **${rep.ctdCast.mineralizationPpt}‰**, pH **${rep.ctdCast.pH}**`);
+        const phText = Number.isFinite(rep.ctdCast.pH) ? `pH **${rep.ctdCast.pH}**` : 'pH **не определён** (неводная среда)';
+        if (rep.ctdCast.waterType === 'methane') {
+          /* Метан — неполярный растворитель: проводимость, TDS и минерализация
+             в земном смысле здесь не определены, и писать «0 µS/см» без
+             пояснения значило бы выдать поломку зонда за измерение. */
+          lines.push(`- Углеводородная среда: жидкий метан — диэлектрик, проводимость и TDS не определены (растворены CH₄, C₂H₆, N₂). ${phText}.`);
+        } else {
+          const chemLabel = rep.ctdCast.waterType === 'freshwater' ? 'Пресноводная химия'
+            : (rep.ctdCast.waterType === 'subglacial' ? 'Химия подлёдного рассола' : 'Химия морской воды');
+          lines.push(`- ${chemLabel}: **${rep.ctdCast.conductivityUSCm} µS/см**, TDS **${rep.ctdCast.tdsMgL} мг/л**, минерализация **${rep.ctdCast.mineralizationPpt}‰**, ${phText}`);
+        }
       }
       if (rep.ctdCast.oxygenProfile.length) {
         const top = rep.ctdCast.oxygenProfile[0];
@@ -32681,7 +34269,8 @@ window.OC = window.OC || {};
       lines.push('_Пробы пока не взяты._');
     } else {
       for (const s of rep.samples) {
-        lines.push(`- **${s.title}** (_${s.latin || s.species}_) — ${s.biomeName}, ${s.depthM} м, ${s.tempC} °C, pH ${s.pH}, O₂ ${s.o2} мг/л${s.chemNote ? ' · ' + s.chemNote : ''}`);
+        const samplePh = Number.isFinite(s.pH) ? `pH ${s.pH}` : 'pH не определён (неводная среда)';
+        lines.push(`- **${s.title}** (_${s.latin || s.species}_) — ${s.biomeName}, ${s.depthM} м, ${s.tempC} °C, ${samplePh}, O₂ ${s.o2} мг/л${s.chemNote ? ' · ' + s.chemNote : ''}`);
       }
     }
     if (rep.photos.length) {
@@ -32816,6 +34405,14 @@ window.OC = window.OC || {};
       if (y > -84) return [122, 112, 112];  // серпентинитовые трубы и тёплые поля
       if (y > -102) return [46, 60, 94];    // базальтовая равнина
       return [22, 32, 62];                  // глубокая океаническая котловина Европы
+    }
+    if (theme === 'titan') {
+      if (y > 0.05) return [214, 201, 168];  // берег водяного льда и галечник толинов
+      if (y > -8) return [176, 128, 68];     // прибойная полоса Кракенова моря
+      if (y > -45) return [136, 96, 50];     // шельф с органическим илом
+      if (y > -95) return [104, 70, 36];     // эстуарий Морей-Синус и бровка
+      if (y > -180) return [70, 48, 26];     // континентальный склон
+      return [40, 27, 15];                   // котловина Кракена
     }
     if (theme === 'atoll') {
       if (y > 1.2) return [72, 148, 86];   // зелёные шапки известняковых островков
@@ -33887,6 +35484,10 @@ window.OC = window.OC || {};
     europa: {
       label: 'Европа',
       hint: 'Вращайте Европу мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть'
+    },
+    titan: {
+      label: 'Титан',
+      hint: 'Вращайте Титан мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть'
     }
   };
   function worldOf(biome) {
@@ -33971,6 +35572,121 @@ window.OC = window.OC || {};
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
+  }
+
+  /* ---- Титан: оранжевый азотный туман, углеводородные моря, толиновые дюны ---- */
+  function createTitanTextures() {
+    const w = 768, h = 384;
+    const cColor = document.createElement('canvas');
+    cColor.width = w; cColor.height = h;
+    const ctx = cColor.getContext('2d');
+    const cSpec = document.createElement('canvas');
+    cSpec.width = w; cSpec.height = h;
+    const sctx = cSpec.getContext('2d');
+    const seaPatches = [];
+
+    if (ctx) {
+      /* Диск Титана в видимом свете ровный оранжевый: метановая дымка
+         рассеивает синее и пропускает красное, поэтому контраст низкий. */
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0.0, '#c98f45');
+      grad.addColorStop(0.28, '#d79a4e');
+      grad.addColorStop(0.5, '#e0a558');
+      grad.addColorStop(0.72, '#d3974d');
+      grad.addColorStop(1.0, '#c18540');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Мелкомасштабная рябь дымки
+      ctx.save();
+      for (let i = 0; i < 260; i++) {
+        const cx = (i * 79.7) % w;
+        const cy = (i * 53.1) % h;
+        const r = 8 + (i % 11) * 5;
+        ctx.globalAlpha = 0.05 + (i % 4) * 0.015;
+        ctx.strokeStyle = i % 2 ? '#e8b96a' : '#b87d38';
+        ctx.lineWidth = 1 + (i % 3) * 0.7;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, r, r * 0.42, (i % 9) * 0.35, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Экваториальные поля толиновых дюн: тёмные полосы вдоль экватора
+      for (let i = 0; i < 5; i++) {
+        const cy = latY(-8 + i * 7, h);
+        ctx.globalAlpha = 0.16;
+        ctx.fillStyle = '#8d5c22';
+        ctx.beginPath();
+        ctx.ellipse(w * 0.5 + (i % 2 ? 120 : -90), cy, 250 + i * 26, 9 + (i % 3) * 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      /* Моря: Кракеново (68° N, 310° W), Лигея (79° N, 248° W),
+         Пунга (85° N, 340° W). В видимом свете они темнее суши. */
+      const seas = [
+        { lat: 68, lon: 310, rx: 46, ry: 20, name: 'kraken' },
+        { lat: 79, lon: 248, rx: 30, ry: 14, name: 'ligeia' },
+        { lat: 85, lon: 340, rx: 18, ry: 9, name: 'punga' }
+      ];
+      for (let i = 0; i < seas.length; i++) {
+        const S = seas[i];
+        const sx = lonX(S.lon, w);
+        const sy = latY(S.lat, h);
+        seaPatches.push([sx, sy, S.rx, S.ry]);
+        const rg = ctx.createRadialGradient(sx, sy, 0, sx, sy, S.rx);
+        rg.addColorStop(0, 'rgba(46,32,20,0.86)');
+        rg.addColorStop(0.72, 'rgba(66,44,24,0.72)');
+        rg.addColorStop(1, 'rgba(120,84,44,0)');
+        ctx.fillStyle = rg;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, S.rx, S.ry, 0.25, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Более крупное море — с ответвлением Морей-Синус
+        if (S.name === 'kraken') {
+          ctx.strokeStyle = 'rgba(46,32,20,0.7)';
+          ctx.lineWidth = 13;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(sx + 30, sy + 12);
+          ctx.quadraticCurveTo(sx + 66, sy + 34, sx + 96, sy + 30);
+          ctx.stroke();
+        }
+      }
+
+      // Облака метана: редкие светлые пятна у южного полюса и на экваторе
+      for (let i = 0; i < 14; i++) {
+        const cx = (i * 137.5) % w;
+        const cy = latY(-52 + (i % 5) * 26, h);
+        ctx.globalAlpha = 0.14;
+        ctx.fillStyle = '#f6d9a2';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 26 + (i % 4) * 12, 8 + (i % 3) * 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    if (sctx) {
+      /* Спекуляр: суша матовая (толиновая пыль), моря блестят — их
+         поверхность гладкая в пределах миллиметров. */
+      sctx.fillStyle = '#2a2018';
+      sctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < seaPatches.length; i++) {
+        const p = seaPatches[i];
+        sctx.fillStyle = '#f0e2c4';
+        sctx.beginPath();
+        sctx.ellipse(p[0], p[1], p[2] * 0.92, p[3] * 0.92, 0.25, 0, Math.PI * 2);
+        sctx.fill();
+      }
+    }
+
+    const map = new T.CanvasTexture(cColor);
+    map.anisotropy = 4;
+    const specMap = new T.CanvasTexture(cSpec);
+    return { map, specMap };
   }
 
   function createEarthTextures() {
@@ -34277,6 +35993,7 @@ window.OC = window.OC || {};
   let camera = null;
   let earthGroup = null;
   let europaGroup = null;
+  let titanGroup = null;
   let orbitRing = null;
   let currentWorld = 'earth';
   let raycaster = null;
@@ -34332,6 +36049,7 @@ window.OC = window.OC || {};
     currentWorld = key;
     if (earthGroup) earthGroup.visible = key === 'earth';
     if (europaGroup) europaGroup.visible = key === 'europa';
+    if (titanGroup) titanGroup.visible = key === 'titan';
     if (orbitRing) orbitRing.visible = key === 'earth';
     if (planetLabelEl) planetLabelEl.textContent = WORLD_INFO[key].label;
     if (globeHintEl) globeHintEl.textContent = WORLD_INFO[key].hint;
@@ -34409,6 +36127,23 @@ window.OC = window.OC || {};
       const europaGlow = new T.Mesh(new T.SphereGeometry(GLOBE_R * 1.045, 40, 28), createAtmosphereMaterial(0x9fd8ff));
       europaGroup.add(europaGlow);
 
+      // Титан — спутник Сатурна: единственное тело кроме Земли с жидкостью на поверхности
+      titanGroup = new T.Group();
+      titanGroup.visible = false;
+      scene.add(titanGroup);
+      const tTex = createTitanTextures();
+      const titanMat = new T.MeshPhongMaterial({
+        map: tTex.map,
+        specularMap: tTex.specMap,
+        specular: new T.Color(0xffe6b0),
+        shininess: 22,
+        emissive: new T.Color(0x2a1806),
+        emissiveIntensity: 0.42
+      });
+      titanGroup.add(new T.Mesh(new T.SphereGeometry(GLOBE_R, 48, 32), titanMat));
+      // Плотная азотная дымка: гало толще и теплее, чем у Земли
+      titanGroup.add(new T.Mesh(new T.SphereGeometry(GLOBE_R * 1.075, 40, 28), createAtmosphereMaterial(0xffbe6a)));
+
       // Атмосферное гало
       const atmoGeo = new T.SphereGeometry(GLOBE_R * 1.07, 40, 28);
       scene.add(new T.Mesh(atmoGeo, createAtmosphereMaterial()));
@@ -34472,7 +36207,7 @@ window.OC = window.OC || {};
       hit.userData.biomeId = it.id;
 
       g.add(core, spire, halo, hit);
-      const host = (it.world === 'europa') ? europaGroup : earthGroup;
+      const host = (it.world === 'europa') ? europaGroup : (it.world === 'titan') ? titanGroup : earthGroup;
       if (host) host.add(g);
 
       it.group = g;
@@ -34536,7 +36271,7 @@ window.OC = window.OC || {};
     if (depthEl) depthEl.textContent = g.depthSpan || '—';
     if (tempEl) tempEl.textContent = g.tempSpan || '—';
     if (countryEl) countryEl.textContent = g.country || '—';
-    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле', subglacial: 'Подлёдный океан' };
+    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле', subglacial: 'Подлёдный океан', methane: 'Углеводородное море (жидкий CH₄)' };
     if (waterTypeEl) waterTypeEl.textContent = g.waterType ? (waterTypeLabels[g.waterType] || g.waterType) : '—';
     if (protectionEl) protectionEl.textContent = g.protectionStatus || '—';
     if (notableEl) notableEl.textContent = g.notableFor || '—';
@@ -35011,7 +36746,7 @@ window.OC = window.OC || {};
           '<div class="atlas-top"><span style="display:inline-flex;align-items:center;gap:6px"><i style="width:10px;height:10px;border-radius:50%;display:inline-block;background:' + colCss + ';box-shadow:0 0 8px ' + colCss + '"></i>' + s.category + ' · ' + s.biomeName + '</span><span class="atlas-badge ok">' + s.depthM + ' м</span></div>' +
           '<div class="atlas-name">' + s.title + '</div>' +
           '<div class="atlas-latin">' + (s.latin || s.chemNote) + '</div>' +
-          '<div class="atlas-desc">' + s.chemNote + ' · T=' + s.tempC + '°C · ' + s.pH + ' pH · O₂ ' + s.o2 + ' мг/л' + (s.bleachPct > 0 ? (' · обесцв. ' + s.bleachPct + '%') : '') + '</div>' +
+          '<div class="atlas-desc">' + s.chemNote + ' · T=' + s.tempC + '°C · ' + (Number.isFinite(s.pH) ? s.pH + ' pH' : 'pH не определён') + ' · O₂ ' + s.o2 + ' мг/л' + (s.bleachPct > 0 ? (' · обесцв. ' + s.bleachPct + '%') : '') + '</div>' +
           '<div class="atlas-foot"><span>' + new Date(s.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' +
           (hasEnc ? '<button class="atlas-go">3D-Атлас →</button>' : '<button class="atlas-go">В биом →</button>') + '</div>';
         const btn = card.querySelector('.atlas-go');
@@ -35402,15 +37137,20 @@ window.OC = window.OC || {};
       if (rovCtdWater) {
         const typeLabel = cast.waterType === 'freshwater' ? 'Пресная'
           : (cast.waterType === 'brine' ? 'Рассол'
-            : (cast.waterType === 'subglacial' ? 'Подлёдный океан' : 'Морская'));
+            : (cast.waterType === 'subglacial' ? 'Подлёдный океан'
+              : (cast.waterType === 'methane' ? 'Жидкий метан' : 'Морская')));
         rovCtdWater.textContent = Number.isFinite(cast.mineralizationPpt)
           ? typeLabel + ' · ' + cast.mineralizationPpt.toFixed(2) + '‰'
           : typeLabel;
       }
       if (rovCtdConductivity) {
-        rovCtdConductivity.textContent = Number.isFinite(cast.conductivityUSCm)
-          ? cast.conductivityUSCm + ' µS/см · ' + cast.tdsMgL + ' мг/л TDS'
-          : '—';
+        /* Жидкий метан — диэлектрик: нулевая проводимость здесь не ошибка
+           зонда, а свойство среды, поэтому подписываем её отдельно. */
+        rovCtdConductivity.textContent = cast.waterType === 'methane'
+          ? 'диэлектрик · неполярная среда'
+          : (Number.isFinite(cast.conductivityUSCm)
+            ? cast.conductivityUSCm + ' µS/см · ' + cast.tdsMgL + ' мг/л TDS'
+            : '—');
       }
       if (rovCtdPh) rovCtdPh.textContent = Number.isFinite(cast.pH) ? cast.pH.toFixed(2) : '—';
       if (rovCtdChart && activeBiome()) {
@@ -36305,9 +38045,10 @@ window.OC = window.OC || {};
         if (isSubMode()) {
           const flHere = biome.getHeight(craftPos.x, craftPos.z);
           const clearance = Math.max(0, craftPos.y - flHere);
-          // Гидростатическое давление: масштаб силы тяжести планеты (Европа — 1/7 земной)
-          const pScale = biome.pressureScale || 1;
-          const atm = (1 + (depthM / 10.08) * pScale).toFixed(2);
+          /* Гидростатическое давление: масштаб силы тяжести планеты
+             (Европа — 1/7 земной) и свойства жидкости (Титан: метан, 1,45 атм
+             у поверхности и 113,6 м/атм вместо 10,08). */
+          const atm = (OC.Fluid ? OC.Fluid.pressureAtmAt(biome, depthM) : 1 + (depthM / 10.08) * (biome.pressureScale || 1)).toFixed(2);
           const knots = (camSpeed * 1.94384).toFixed(1);
           const pitchDeg = OC.Navigation.getPitch() * 180 / Math.PI;
           if (subHorizon) subHorizon.style.transform = 'translateY(' + OC.clamp(-pitchDeg * 1.1, -36, 36).toFixed(1) + 'px)';

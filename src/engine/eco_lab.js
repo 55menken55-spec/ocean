@@ -101,6 +101,10 @@ window.OC = window.OC || {};
     if (biome.id === 'galapagos_upwelling') return { baseTemp: 19.6, heatTolerance: 1.5, hasCorals: true, isAbyss: false };
     // Подлёдный океан Европы: ни кораллов, ни солнечного света — только хемосинтез
     if (biome.id === 'europa_ocean') return { baseTemp: -1.6, heatTolerance: 3.2, hasCorals: false, isAbyss: true };
+    /* Кракеново море Титана: метан замерзает при −182,5 °C, а кипит при −161,5 °C,
+       поэтому коридор устойчивости узкий, а «тепловой стресс» здесь — нагрев выше
+       точки кипения углеводородов, а не обесцвечивание кораллов. */
+    if (biome.id === 'titan_kraken') return { baseTemp: -179.6, heatTolerance: 2.9, hasCorals: false, isAbyss: true };
     return { baseTemp: 27.0, heatTolerance: 1.1, hasCorals: true, isAbyss: false };
   }
 

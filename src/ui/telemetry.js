@@ -186,9 +186,10 @@ window.OC = window.OC || {};
         if (isSubMode()) {
           const flHere = biome.getHeight(craftPos.x, craftPos.z);
           const clearance = Math.max(0, craftPos.y - flHere);
-          // Гидростатическое давление: масштаб силы тяжести планеты (Европа — 1/7 земной)
-          const pScale = biome.pressureScale || 1;
-          const atm = (1 + (depthM / 10.08) * pScale).toFixed(2);
+          /* Гидростатическое давление: масштаб силы тяжести планеты
+             (Европа — 1/7 земной) и свойства жидкости (Титан: метан, 1,45 атм
+             у поверхности и 113,6 м/атм вместо 10,08). */
+          const atm = (OC.Fluid ? OC.Fluid.pressureAtmAt(biome, depthM) : 1 + (depthM / 10.08) * (biome.pressureScale || 1)).toFixed(2);
           const knots = (camSpeed * 1.94384).toFixed(1);
           const pitchDeg = OC.Navigation.getPitch() * 180 / Math.PI;
           if (subHorizon) subHorizon.style.transform = 'translateY(' + OC.clamp(-pitchDeg * 1.1, -36, 36).toFixed(1) + 'px)';

@@ -33,7 +33,11 @@ export function run(ctx) {
     const sum = OC.Expedition.getBiomeSummary(b);
     assert(sum.speciesTotal === Object.keys(b.encyclopedia).length && sum.missionsTotal === 4, `getBiomeSummary mismatch for ${b.id}`);
   }
-  assert(totalTourStages === 73, `Expected 73 total guided tour stages across 14 biomes, got ${totalTourStages}`);
+  /* Нижняя граница, а не константа: биомов становится больше (15-й — Кракеново море
+     Титана), и жёсткое 73 ломало бы отчёт там, где регрессии нет. */
+  const tourFloor = Math.max(73, OC.Biomes.list().length * 4);
+  assert(totalTourStages >= tourFloor,
+    `Expected at least ${tourFloor} total guided tour stages across ${OC.Biomes.list().length} biomes, got ${totalTourStages}`);
 
   for (const bc of beacons) {
     const rad = Math.hypot(bc.x, bc.y, bc.z);

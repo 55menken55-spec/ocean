@@ -28,6 +28,12 @@ window.OC = window.OC || {};
     dbSPL: 92.0,
     peakHz: 180,
     bandLabel: '40–320 Гц',
+    /* Среда, в которой работает гидрофон. В воде 1500 м/с, в жидких
+       углеводородах Титана — 1420 м/с при 94 К (Younglove & Ely, 1987),
+       поэтому задержка прихода звука на той же дистанции другая. */
+    mediumLabel: 'Вода',
+    soundSpeed: 1500,
+    delayMs: 0,
     dominantKey: null,
     dominantLabel: 'Фоновый шум океана',
     dominantDist: 0,
@@ -120,6 +126,18 @@ window.OC = window.OC || {};
     if (key === 'cryo_forest' || key === 'ice_veil' || key === 'brine_polyp' || key === 'cryo_tubeworm' || key === 'sulfate_crust') {
       return { mode: 'bio', minHz: 140, maxHz: 780, label: 'Шёпот криобиоты Европы' };
     }
+    /* --- Кракеново море Титана: звук идёт по жидкому метану со скоростью
+           1420 м/с, поэтому задержки здесь другие, чем в воде (см. OC.Fluid). --- */
+    if (key === 'nitrogen_bubble' || key === 'magic_island') return { mode: 'bubbles', minHz: 220, maxHz: 1450, label: 'Всплывающие пузыри азота' };
+    if (key === 'methane_glider') return { mode: 'swim', minHz: 48, maxHz: 290, label: 'Гидродинамика метанового планировщика' };
+    if (key === 'azotosome_drifter') return { mode: 'bio', minHz: 260, maxHz: 1180, label: 'Шорох мембранных пластинок' };
+    if (key === 'nitrile_motile') return { mode: 'clicks', minHz: 1050, maxHz: 2900, label: 'Шелест нитрильных колоний' };
+    if (key === 'tidal_bore') return { mode: 'rumble', minHz: 26, maxHz: 210, label: 'Приливный бор Сатурна' };
+    if (key === 'methane_rain') return { mode: 'drip', minHz: 480, maxHz: 1320, label: 'Барабанная дробь метанового дождя' };
+    if (key === 'shoreline_ice' || key === 'ice_boulder') return { mode: 'ice', minHz: 170, maxHz: 1420, label: 'Скрип водяного льда' };
+    if (key === 'organic_silt' || key === 'tholin_dune' || key === 'evaporite_crust' || key === 'nitrile_drift') {
+      return { mode: 'rumble', minHz: 32, maxHz: 240, label: 'Шевеление органического дна' };
+    }
     if (key.startsWith('shark_') || key === 'manta' || key === 'mobula_ray' || key === 'ocean_sunfish' || key === 'oarfish' || key === 'galapagos_shark') {
       return { mode: 'swim', minHz: 90, maxHz: 420, label: 'Гидродинамика крупного вида' };
     }
@@ -169,6 +187,12 @@ window.OC = window.OC || {};
       addGaussianBand(760, 125, 0.58 * a * zap);
     } else if (p.mode === 'swim') {
       addGaussianBand(160, 75, 0.38 * a * (0.7 + 0.3 * Math.sin(t * 4.0)));
+    } else if (p.mode === 'bubbles') {
+      /* Всплывающий пузырь азота: тон растёт по мере подъёма, потому что
+         резонансная частота Миннаэрта обратно пропорциональна радиусу. */
+      const rise = Math.pow(Math.max(0, Math.sin(t * 6.4)), 3);
+      addGaussianBand(240 + 520 * rise, 90, 0.34 * a);
+      addGaussianBand(880 + 420 * rise, 180, 0.46 * a * rise);
     } else {
       addGaussianBand(480, 140, 0.25 * a);
     }
@@ -318,6 +342,13 @@ window.OC = window.OC || {};
     },
 
     update(dt, biome, fauna, camPos, yaw, depthM, stormMix) {
+      /* Среда пересчитывается каждый кадр: биом может смениться горячей
+         клавишей, и гидрофон обязан пересчитать скорость звука вместе с ним. */
+      if (OC.Fluid) {
+        const fl = OC.Fluid.of(biome);
+        state.soundSpeed = fl.soundSpeed;
+        state.mediumLabel = fl.name;
+      }
       const safeDt = Math.max(0.01, Math.min(0.1, dt || 0.03));
       simTime += safeDt;
       if (sonarFlash > 0) sonarFlash = Math.max(0, sonarFlash - safeDt * 2.1);
@@ -445,6 +476,7 @@ window.OC = window.OC || {};
           ? { x: bestSource.x, y: bestSource.y || 0, z: bestSource.z }
           : null;
         state.bandLabel = bestProfile.minHz + '–' + bestProfile.maxHz + ' Гц';
+        state.delayMs = OC.Fluid ? Number(OC.Fluid.delayMs(biome, bestSource.dist).toFixed(1)) : 0;
       } else if (hasShrimp) {
         state.dominantKey = null;
         state.dominantLabel = 'Хор рачков-щелкунов рифа';

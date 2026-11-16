@@ -88,6 +88,6 @@ export function run(ctx) {
         assert(fbKeys.has(k), `${ab.id}: ${k} есть в faunaPlan, но не высажен — spawn.js не читает этот массив`);
       }
     }
-    console.log('   Fauna: агенты всех 14 биомов конечны, задокументированы и высаживаются по плану.');
+    console.log(`   Fauna: агенты всех ${atlasBiomes.length} биомов конечны, задокументированы и высаживаются по плану.`);
 
 }

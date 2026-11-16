@@ -20,6 +20,7 @@ import { run as runMultiBiome } from './stages/multi_biome.mjs';
 import { run as runBiomeAmazon } from './stages/biome_amazon.mjs';
 import { run as runBiomeBaikal } from './stages/biome_baikal.mjs';
 import { run as runBiomeEuropa } from './stages/biome_europa.mjs';
+import { run as runBiomeTitan } from './stages/biome_titan.mjs';
 import { run as runStage2Optics } from './stages/stage2_optics.mjs';
 import { run as runStage3Rov } from './stages/stage3_rov.mjs';
 import { run as runStage4Report } from './stages/stage4_report.mjs';
@@ -50,6 +51,7 @@ import { run as runVentsVolcano } from './stages/vents_volcano.mjs';
 import { run as runArcticSea } from './stages/arctic_sea.mjs';
 import { run as runBiomeSwitch } from './stages/biome_switch.mjs';
 import { run as runPerfGateSelfcheck } from './stages/perf_gate_selfcheck.mjs';
+import { run as runFluidPhysics } from './stages/fluid_physics.mjs';
 
 console.log('1) Checking syntax of all source modules...');
 const parsedCount = parseAllSources();
@@ -88,6 +90,9 @@ const biome = h.biome;
 
 // Perf-гейт проверяет сам себя: порог, поднятый «чтобы не мешал», ломает прогон
 runPerfGateSelfcheck();
+
+// Физика жидкости: гидростатика, плавучесть и акустика воды и неводных сред
+runFluidPhysics({ OC });
 
 // A-B) Батиметрия, зоны, маяки и точка спавна активного биома
 const { sp } = runBathyLandmarks({ biome });
@@ -145,6 +150,7 @@ Object.assign(ctx, runOnboardingCi(ctx));
 const amz = runBiomeAmazon({ T, OC });
 const baikal = runBiomeBaikal({ T, OC, scene, amz });
 runBiomeEuropa({ T, OC, scene });
+runBiomeTitan({ T, OC, scene });
 const fx = runStage2Optics({ T, OC, scene, worldSrc });
 runStage3Rov({ T, OC, camera, fx });
 runStage4Report({ OC, amz, baikal });

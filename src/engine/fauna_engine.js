@@ -977,6 +977,14 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeArmoredSwimmer(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 12, y: 0, speed: 1.5, scale: 1 });
         } else if (key === 'cryo_medusa') {
           OC._FaunaBuilders.makeCryoMedusa(tmpGroup, { x: 0, y: 0, z: 0, scale: 1 });
+        } else if (key === 'azotosome_drifter' || key === 'nitrile_motile') {
+          // Метанотрофная биота Титана: собственные геометрии стай
+          const geoBuilder = OC._FaunaBuilders.geoBuilders && OC._FaunaBuilders.geoBuilders[key];
+          if (geoBuilder) built = new T.Mesh(geoBuilder(), previewBiolumMat);
+        } else if (key === 'methane_glider') {
+          OC._FaunaBuilders.makeMethaneGlider(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, y: 0, speed: 1, scale: 1 });
+        } else if (key === 'nitrogen_bubble') {
+          OC._FaunaBuilders.makeNitrogenBubble(tmpGroup, dummyBiome, { x: 0, y: 0, z: 0, n: 60, radius: 6, height: 12 });
         } else if (key === 'vent_crab') {
           OC._FaunaBuilders.makeVentCrab(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: 0, speed: 0.8, scale: 1 });
         } else if (key === 'basal_ice') {

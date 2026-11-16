@@ -133,9 +133,17 @@ window.OC = window.OC || {};
       lines.push(`- Зона: **${rep.ctdCast.zoneName}** (${rep.ctdCast.minDepthM}–${rep.ctdCast.maxDepthM} м, до ${rep.ctdCast.maxPressureAtm} атм)`);
       lines.push(`- Температура (поверхн. / дно): **${rep.ctdCast.surfaceTempC} °C / ${rep.ctdCast.bottomTempC} °C** · Термоклин: **${rep.ctdCast.thermoclineM} м** · Мин. O₂: **${rep.ctdCast.minO2} мг/л**`);
       if (Number.isFinite(rep.ctdCast.conductivityUSCm)) {
-        const chemLabel = rep.ctdCast.waterType === 'freshwater' ? 'Пресноводная химия'
-          : (rep.ctdCast.waterType === 'subglacial' ? 'Химия подлёдного рассола' : 'Химия морской воды');
-        lines.push(`- ${chemLabel}: **${rep.ctdCast.conductivityUSCm} µS/см**, TDS **${rep.ctdCast.tdsMgL} мг/л**, минерализация **${rep.ctdCast.mineralizationPpt}‰**, pH **${rep.ctdCast.pH}**`);
+        const phText = Number.isFinite(rep.ctdCast.pH) ? `pH **${rep.ctdCast.pH}**` : 'pH **не определён** (неводная среда)';
+        if (rep.ctdCast.waterType === 'methane') {
+          /* Метан — неполярный растворитель: проводимость, TDS и минерализация
+             в земном смысле здесь не определены, и писать «0 µS/см» без
+             пояснения значило бы выдать поломку зонда за измерение. */
+          lines.push(`- Углеводородная среда: жидкий метан — диэлектрик, проводимость и TDS не определены (растворены CH₄, C₂H₆, N₂). ${phText}.`);
+        } else {
+          const chemLabel = rep.ctdCast.waterType === 'freshwater' ? 'Пресноводная химия'
+            : (rep.ctdCast.waterType === 'subglacial' ? 'Химия подлёдного рассола' : 'Химия морской воды');
+          lines.push(`- ${chemLabel}: **${rep.ctdCast.conductivityUSCm} µS/см**, TDS **${rep.ctdCast.tdsMgL} мг/л**, минерализация **${rep.ctdCast.mineralizationPpt}‰**, ${phText}`);
+        }
       }
       if (rep.ctdCast.oxygenProfile.length) {
         const top = rep.ctdCast.oxygenProfile[0];
@@ -161,7 +169,8 @@ window.OC = window.OC || {};
       lines.push('_Пробы пока не взяты._');
     } else {
       for (const s of rep.samples) {
-        lines.push(`- **${s.title}** (_${s.latin || s.species}_) — ${s.biomeName}, ${s.depthM} м, ${s.tempC} °C, pH ${s.pH}, O₂ ${s.o2} мг/л${s.chemNote ? ' · ' + s.chemNote : ''}`);
+        const samplePh = Number.isFinite(s.pH) ? `pH ${s.pH}` : 'pH не определён (неводная среда)';
+        lines.push(`- **${s.title}** (_${s.latin || s.species}_) — ${s.biomeName}, ${s.depthM} м, ${s.tempC} °C, ${samplePh}, O₂ ${s.o2} мг/л${s.chemNote ? ' · ' + s.chemNote : ''}`);
       }
     }
     if (rep.photos.length) {
