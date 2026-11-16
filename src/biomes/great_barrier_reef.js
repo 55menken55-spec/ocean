@@ -137,6 +137,7 @@ window.OC = window.OC || {};
       summary: 'Крупнейшая живая структура Земли: мангры, песчаный островок, 88-метровая Голубая дыра и миграции горбатых китов.'
     },
     worldRadius: WORLD_RADIUS,
+    unbounded: true,
     chunkSize: CHUNK_SIZE,
     seaLevel: 0,
     spawn: {

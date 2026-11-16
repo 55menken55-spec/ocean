@@ -183,6 +183,14 @@ self.onmessage = function (e) {
   let lastScanQuality = '';
   let heightGridBuf = new Float32Array(64 * 64);
   let horizonApron = null; // ссылка на горизонтный фартук для сдвига при Floating Origin
+  /* Фартук в мире без края следует за игроком: он centred по apronCx/apronCz
+     (истинные мировые координаты) и пересобирается при уходе от центра. */
+  let apronCx = 0;
+  let apronCz = 0;
+  const APRON_SIZE = 5200;
+  const APRON_SEGS = 32;      // 33×33 = 1089 вершин: на горизонте хватает
+  const APRON_RECENTER = 1200; // пересборка при уходе от центра дальше этого (м)
+  const APRON_SINK_RADIUS = 1350; // внутри этой зоны фартук утоплен под чанки
   let frameCounter = 0;
 
   /* Лимит чанков в памяти одновременно. При превышении удаляются старейшие невидимые. */
@@ -560,38 +568,66 @@ self.onmessage = function (e) {
       (ceilingMat && biomeRef.getCeilingHeight) ? buildCeilingChunkGeometry(rec.cx, rec.cz, segs) : null);
   }
 
-  /* ---- Внешний горизонт дна за пределами детальной карты (только для ограниченных миров) ---- */
-  /* Чанки стримятся только вокруг камеры (terrainFarDist 660...1180 м), а мир
-     ограничен worldRadius 1200 м. Фартук догружает дно до 2600 м, чтобы в
-     прозрачных водах (Байкал, fogDensity 0.0012) на горизонте не было видно
-     резкого обрыва детальной сетки. Внутри игровой зоны он утоплен на 12 м и
-     скрыт под настоящими чанками. Строится в мировом начале координат и вместе
-     со сценой сдвигается при Floating Origin. */
-  function buildHorizonApron() {
-    if (!biomeRef || biomeRef.worldRadius > 4000) return; // для unbounded worlds не строим фартук
-    const g = new T.PlaneGeometry(5200, 5200, 48, 48);
-    g.rotateX(-Math.PI / 2);
+  /* ---- Внешний горизонт дна за пределами детальной карты ---- */
+  /* Чанки стримятся только вокруг камеры (terrainFarDist 660...1180 м). Фартук
+     догружает дно до 2600 м, чтобы в прозрачных водах (Байкал, fogDensity
+     0.0012) на горизонте не было видно резкого обрыва детальной сетки. Внутри
+     игровой зоны он утоплен на 12 м и скрыт под настоящими чанками.
+
+     В мире без края (biome.unbounded, по умолчанию у всех биомов) фартук не
+     может стоять в начале координат — игрок уходит на километры, и静态ный
+     фартук остался бы островом у старта. Поэтому он следует за игроком:
+     центр хранится в apronCx/apronCz (истинные мировые координаты), а при
+     уходе дальше APRON_RECENTER геометрия пересчитывается на новом месте.
+     Пересборка — 1089 вершин, то есть дешевле одного детального чанка, и
+     происходит примерно раз в полторы минуты реального заплыва. */
+  function fillApronGeometry(g, cx, cz) {
     const p = g.attributes.position;
-    const c = new Float32Array(p.count * 3);
+    const c = g.attributes.color;
     const col = new T.Color();
     for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), z = p.getZ(i);
+      const x = cx + p.getX(i), z = cz + p.getZ(i);
       let y = biomeRef.getHeight(x, z);
-      if (Math.abs(x) < biomeRef.worldRadius - 10 && Math.abs(z) < biomeRef.worldRadius - 10) {
-        y -= 12.0;
-      }
+      if (Math.hypot(p.getX(i), p.getZ(i)) < APRON_SINK_RADIUS) y -= 12.0;
       p.setY(i, y);
       biomeRef.getTerrainColor(x, y, z, col);
-      c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b;
+      c.setXYZ(i, col.r, col.g, col.b);
     }
-    g.setAttribute('color', new T.BufferAttribute(c, 3));
-    g.deleteAttribute('uv');
+    p.needsUpdate = true;
+    c.needsUpdate = true;
     g.computeVertexNormals();
     g.computeBoundingSphere(); // чтобы не считать её на первом же кадре
+  }
+
+  function buildHorizonApron() {
+    if (!biomeRef || biomeRef.worldRadius > 4000) return; // для огромных миров фартук не нужен
+    const g = new T.PlaneGeometry(APRON_SIZE, APRON_SIZE, APRON_SEGS, APRON_SEGS);
+    g.rotateX(-Math.PI / 2);
+    g.deleteAttribute('uv');
+    g.setAttribute('color', new T.BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
+    apronCx = 0;
+    apronCz = 0;
+    fillApronGeometry(g, apronCx, apronCz);
     const apron = new T.Mesh(g, terrainMat);
     apron.userData.key = 'floor';
     horizonApron = apron;
     group.add(apron);
+  }
+
+  /* Сдвиг фартука вслед за игроком (миры без края). Возвращает true, если
+     геометрия пересобрана — это редкая и дорогая операция. */
+  function recenterHorizonApron(trueCamX, trueCamZ) {
+    if (!horizonApron) return false;
+    const dx = trueCamX - apronCx;
+    const dz = trueCamZ - apronCz;
+    if (dx * dx + dz * dz < APRON_RECENTER * APRON_RECENTER) return false;
+    /* Центр ставим в узел своей сетки: тогда уже посчитанные вершины не
+       «плывут» относительно мира, и стык с детальными чанками не шевелится. */
+    const step = APRON_SIZE / APRON_SEGS;
+    apronCx = Math.round(trueCamX / step) * step;
+    apronCz = Math.round(trueCamZ / step) * step;
+    fillApronGeometry(horizonApron.geometry, apronCx, apronCz);
+    return true;
   }
 
   OC.Terrain = {
@@ -610,6 +646,8 @@ self.onmessage = function (e) {
       if (ceilingMat) { ceilingMat.dispose(); ceilingMat = null; }
       chunks.clear();
       horizonApron = null; // старый меш живёт в удаляемой группе
+      apronCx = 0;
+      apronCz = 0;
       workerQueue.length = 0;
       workerBusy = false;
       pendingChunkData.clear();
@@ -722,6 +760,14 @@ self.onmessage = function (e) {
       lastScanX = trueCamX;
       lastScanZ = trueCamZ;
       lastScanQuality = q.id;
+
+      /* Мир без края: фартук горизонта едет за игроком. Позиция меша —
+         локальная (мировая минус origin), потому что сцена сдвинута
+         Floating Origin. */
+      if (horizonApron && biomeRef && biomeRef.unbounded) {
+        recenterHorizonApron(trueCamX, trueCamZ);
+        horizonApron.position.set(apronCx - ox, 0, apronCz - oz);
+      }
 
       const t0 = performance.now();
       const budgetMs = 3.5;

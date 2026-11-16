@@ -541,6 +541,7 @@ window.OC = window.OC || {};
       summary: 'Подводные соляные озёра с зеркалом галоклина (230‰) и архимедовой плавучестью, берега мидий и метановых гидратов, сифонофоры и сельдяной король.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     depthOffset: DEPTH_OFFSET,

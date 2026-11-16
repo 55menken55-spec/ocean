@@ -274,6 +274,8 @@ window.OC = window.OC || {};
           updateCtx.dayW = dayW;
 
 
+
+
           updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;

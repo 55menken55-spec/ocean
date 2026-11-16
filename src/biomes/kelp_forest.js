@@ -469,6 +469,7 @@ window.OC = window.OC || {};
       summary: 'Изумрудные соборы 20-метровой ламинарии, гранитные кекуры с морскими львами и холодный апвеллинг глубокого каньона.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     minimapTheme: 'kelp',

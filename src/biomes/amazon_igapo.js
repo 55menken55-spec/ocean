@@ -417,6 +417,7 @@ window.OC = window.OC || {};
     subtitle: 'Затопленная сельва, Рио-Негру и Слияние вод · 0 – 28 м',
     region: 'Амазония (Бразилия)',
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     noSurface: false,
     seaLevel: 0,

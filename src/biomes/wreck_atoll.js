@@ -605,6 +605,7 @@ window.OC = window.OC || {};
       summary: 'Известняковые грибовидные острова, лагуна нежалящих золотых медуз, 68-метровое судно «SS Maru» и акулы-молоты.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     minimapTheme: 'atoll',

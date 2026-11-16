@@ -609,6 +609,7 @@ window.OC = window.OC || {};
     shelteredSurface: true,
     maxCamY: 6.0,
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     spawn: { pos: [0, -11.5, 22], yaw: 3.14, pitch: -0.04 },
     zones: ZONES,

@@ -467,6 +467,7 @@ window.OC = window.OC || {};
     subtitle: 'Арка Дарвина и макро-фауна экватора · 0 – 132 м',
     region: 'Восточная Пацифика (Экватор)',
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     noSurface: false,
     seaLevel: 0,

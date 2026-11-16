@@ -486,6 +486,7 @@ window.OC = window.OC || {};
       summary: 'Хемосинтетический мир на глубине 2.5 км без единого луча солнца: перегретые сульфидные шпили, сады рифтий и морские черти.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     depthOffset: DEPTH_OFFSET,

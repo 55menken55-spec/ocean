@@ -16,6 +16,7 @@ import { createHarness, parseAllSources, ROOT } from './lib/harness.mjs';
 import { run as runChunkPathParity } from './stages/chunk_path_parity.mjs';
 import { run as runAtlasFauna } from './stages/atlas_fauna.mjs';
 import { run as runFloatingOrigin } from './stages/floating_origin.mjs';
+import { run as runPlanetaryWorld } from './stages/planetary_world.mjs';
 import { run as runMultiBiome } from './stages/multi_biome.mjs';
 import { run as runBiomeAmazon } from './stages/biome_amazon.mjs';
 import { run as runBiomeBaikal } from './stages/biome_baikal.mjs';
@@ -162,5 +163,8 @@ runStage5Visual({ T, OC, html, worldSrc });
    позиции в локальных координатах. */
 runAtlasFauna({ T, OC });
 runFloatingOrigin({ T, OC });
+/* Планетарный мир — последним: он копит 14 км в origin и навсегда сдвигает
+   сцену, поэтому любая проверка локальных координат обязана идти до него. */
+runPlanetaryWorld({ T, OC, scene, camera, getEl });
 
 console.log('ALL VERIFICATION CHECKS PASSED!');

@@ -77,10 +77,25 @@ window.OC = window.OC || {};
   const getCanvas = () => canvasRef;
   const setCanvas = (c) => { canvasRef = c; };
 
+  /* Планетарный мир: горизонтальный зажим по кругу worldRadius снят. Дальность
+     обеспечивает Floating Origin (камера всегда около начала координат), а
+     рельеф, флора и чанки стримятся вокруг игрока, поэтому край карты больше
+     не останавливает аппарат — как в настоящем море.
+     Ограничение остаётся только численным: координаты обязаны быть конечными,
+     иначе сломаются матрицы, мини-карта и сохранение. */
+  const COORD_LIMIT = 1.0e6; // 1000 км — заведомо дальше любого разумного заплыва
+
   function clampPosition(p) {
-    const bound = (biomeRef.worldRadius || 1200) - 30;
-    p.x = OC.clamp(p.x, -bound, bound);
-    p.z = OC.clamp(p.z, -bound, bound);
+    if (!biomeRef.unbounded) {
+      const bound = (biomeRef.worldRadius || 1200) - 30;
+      p.x = OC.clamp(p.x, -bound, bound);
+      p.z = OC.clamp(p.z, -bound, bound);
+    } else {
+      if (!Number.isFinite(p.x)) p.x = 0;
+      if (!Number.isFinite(p.z)) p.z = 0;
+      p.x = OC.clamp(p.x, -COORD_LIMIT, COORD_LIMIT);
+      p.z = OC.clamp(p.z, -COORD_LIMIT, COORD_LIMIT);
+    }
     const fl = biomeRef.getHeight(p.x, p.z);
     let minY = fl + 1.65;
     if (biomeRef && biomeRef.getBrineSurfaceAt) {

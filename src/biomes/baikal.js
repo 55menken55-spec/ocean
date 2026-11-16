@@ -213,6 +213,7 @@ window.OC = window.OC || {};
   OC.Biomes.register({
     id: 'baikal', name: 'Озеро Байкал: Большой рифт', region: 'Южная Сибирь · Россия',
     subtitle: 'Пресноводная рифтовая бездна · 0 – 1 642 м', worldRadius: 1200, chunkSize: 150,
+    unbounded: true,
     noSurface: false, seaLevel: 0, depthOffset: 0, minimapTheme: 'baikal',
     globe: { lat: 53.5, lon: 108.0, coordLabel: '53.5° с.ш., 108.0° в.д.', ocean: 'Озеро Байкал · Восточная Сибирь', depthSpan: '0 – 1 642 м', tempSpan: '3.2 – 12.2 °C', color: '#56c7d4',
       country: 'Россия (Сибирь)', waterType: 'lake', protectionStatus: 'Всемирное наследие UNESCO',

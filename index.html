@@ -1631,6 +1631,10 @@ window.OC = window.OC || {};
      * Регистрация нового океанического / водного биома планеты.
      * Контракт биома:
      * - id, name, region, subtitle, worldRadius, chunkSize, seaLevel
+     * - unbounded: true — мир без края: камера не ограничивается кругом worldRadius,
+     *   а рельеф, флора и фауна стримятся вокруг игрока на любом удалении.
+     *   worldRadius при этом остаётся радиусом «ядра» — зоны с достопримечательностями,
+     *   маяками, миссиями и картой Fog of War.
      * - globe: { lat, lon, coordLabel, ocean, depthSpan, tempSpan, color, summary,
      *          country, waterType, protectionStatus, notableFor } — геопривязка к реальной планете
      * - spawn: { pos: [x,y,z], yaw, pitch }
@@ -1647,6 +1651,10 @@ window.OC = window.OC || {};
      */
     register(def) {
       if (!def || !def.id) throw new Error('Biome definition requires id');
+      /* Планетарный мир: по умолчанию биом считается миром без края, поэтому
+         камера не зажимается кругом worldRadius (см. navigation/state.js), а
+         горизонтный фартук дна следует за игроком (см. engine/terrain.js). */
+      if (def.unbounded === undefined) def.unbounded = true;
       if (typeof def.getTemperatureAt === 'function' && !def.getTemperatureAt._seasonWrapped) {
         const baseTemperatureAt = def.getTemperatureAt;
         const seasonalTemperatureAt = function (x, depthM, zone) {
@@ -1676,6 +1684,12 @@ window.OC = window.OC || {};
     getActive() {
       return activeBiome;
     }
+  };
+
+  /* Мир без края: камера может уходить сколь угодно далеко от точки спавна.
+     worldRadius при этом — радиус «ядра»: карты, маяки и миссии живут в нём. */
+  OC.Biomes.isUnbounded = function (b) {
+    return !!(b && b.unbounded);
   };
 
   /* Удобный общий доступ к текущей высоте дна */
@@ -2982,6 +2996,7 @@ window.OC = window.OC || {};
       summary: 'Крупнейшая живая структура Земли: мангры, песчаный островок, 88-метровая Голубая дыра и миграции горбатых китов.'
     },
     worldRadius: WORLD_RADIUS,
+    unbounded: true,
     chunkSize: CHUNK_SIZE,
     seaLevel: 0,
     spawn: {
@@ -3480,6 +3495,7 @@ window.OC = window.OC || {};
       summary: 'Изумрудные соборы 20-метровой ламинарии, гранитные кекуры с морскими львами и холодный апвеллинг глубокого каньона.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     minimapTheme: 'kelp',
@@ -3991,6 +4007,7 @@ window.OC = window.OC || {};
       summary: 'Хемосинтетический мир на глубине 2.5 км без единого луча солнца: перегретые сульфидные шпили, сады рифтий и морские черти.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     depthOffset: DEPTH_OFFSET,
@@ -4578,6 +4595,7 @@ window.OC = window.OC || {};
       summary: 'Изумрудное северное сияние над паковыми льдами, гренландские айсберги, брайниклы, белухи, нарвалы и древние полярные акулы.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     hasAurora: true,
@@ -5210,6 +5228,7 @@ window.OC = window.OC || {};
       summary: 'Известняковые грибовидные острова, лагуна нежалящих золотых медуз, 68-метровое судно «SS Maru» и акулы-молоты.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     minimapTheme: 'atoll',
@@ -5706,6 +5725,7 @@ window.OC = window.OC || {};
       summary: 'Глубочайшая бездна Земли (~10.9 км): 24-метровый скелет китового падения с червями Osedax, серпентинитовые сипы и морские слизни.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     depthOffset: DEPTH_OFFSET,
@@ -6276,6 +6296,7 @@ window.OC = window.OC || {};
       summary: 'Подводные соляные озёра с зеркалом галоклина (230‰) и архимедовой плавучестью, берега мидий и метановых гидратов, сифонофоры и сельдяной король.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     depthOffset: DEPTH_OFFSET,
@@ -6916,6 +6937,7 @@ window.OC = window.OC || {};
     shelteredSurface: true,
     maxCamY: 6.0,
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     spawn: { pos: [0, -11.5, 22], yaw: 3.14, pitch: -0.04 },
     zones: ZONES,
@@ -7409,6 +7431,7 @@ window.OC = window.OC || {};
     subtitle: 'Арка Дарвина и макро-фауна экватора · 0 – 132 м',
     region: 'Восточная Пацифика (Экватор)',
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     noSurface: false,
     seaLevel: 0,
@@ -7861,6 +7884,7 @@ window.OC = window.OC || {};
     subtitle: 'Затопленная сельва, Рио-Негру и Слияние вод · 0 – 28 м',
     region: 'Амазония (Бразилия)',
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     noSurface: false,
     seaLevel: 0,
@@ -8110,6 +8134,7 @@ window.OC = window.OC || {};
   OC.Biomes.register({
     id: 'baikal', name: 'Озеро Байкал: Большой рифт', region: 'Южная Сибирь · Россия',
     subtitle: 'Пресноводная рифтовая бездна · 0 – 1 642 м', worldRadius: 1200, chunkSize: 150,
+    unbounded: true,
     noSurface: false, seaLevel: 0, depthOffset: 0, minimapTheme: 'baikal',
     globe: { lat: 53.5, lon: 108.0, coordLabel: '53.5° с.ш., 108.0° в.д.', ocean: 'Озеро Байкал · Восточная Сибирь', depthSpan: '0 – 1 642 м', tempSpan: '3.2 – 12.2 °C', color: '#56c7d4',
       country: 'Россия (Сибирь)', waterType: 'lake', protectionStatus: 'Всемирное наследие UNESCO',
@@ -8497,6 +8522,7 @@ window.OC = window.OC || {};
       summary: 'Тропическое коралловое море с гиперсолинностью (~40‰), рифовой стеной и богатой эндемичной фауной — один из лучших районов для дайвинга в мире.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     spawn: {
@@ -8893,6 +8919,7 @@ window.OC = window.OC || {};
       summary: 'Подводная карстовая система Флоридского аквифера: галереи, сифоны и источники с кристально чистой пресной водой (~21 °C круглый год).'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     spawn: {
@@ -9542,6 +9569,7 @@ window.OC = window.OC || {};
       summary: 'Верхние 100 метров глобального океана Европы прямо под ледяным панцирем: криолес, живущий на водороде, холодные серпентинитовые трубы и уникальная биолюминесцентная фауна, которой нет на Земле.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     depthOffset: ICE_SHELL_DEPTH,
@@ -10036,6 +10064,7 @@ window.OC = window.OC || {};
       summary: 'Крупнейшее море Титана: больше 300 м жидкого метана с этаном и азотом при −179,6 °C, берега из водяного льда, работающего как скала, приливы Сатурна и гипотетическая метанотрофная жизнь, существующая пока только в моделях.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     depthOffset: 0,
@@ -12293,6 +12322,14 @@ self.onmessage = function (e) {
   let lastScanQuality = '';
   let heightGridBuf = new Float32Array(64 * 64);
   let horizonApron = null; // ссылка на горизонтный фартук для сдвига при Floating Origin
+  /* Фартук в мире без края следует за игроком: он centred по apronCx/apronCz
+     (истинные мировые координаты) и пересобирается при уходе от центра. */
+  let apronCx = 0;
+  let apronCz = 0;
+  const APRON_SIZE = 5200;
+  const APRON_SEGS = 32;      // 33×33 = 1089 вершин: на горизонте хватает
+  const APRON_RECENTER = 1200; // пересборка при уходе от центра дальше этого (м)
+  const APRON_SINK_RADIUS = 1350; // внутри этой зоны фартук утоплен под чанки
   let frameCounter = 0;
 
   /* Лимит чанков в памяти одновременно. При превышении удаляются старейшие невидимые. */
@@ -12670,38 +12707,66 @@ self.onmessage = function (e) {
       (ceilingMat && biomeRef.getCeilingHeight) ? buildCeilingChunkGeometry(rec.cx, rec.cz, segs) : null);
   }
 
-  /* ---- Внешний горизонт дна за пределами детальной карты (только для ограниченных миров) ---- */
-  /* Чанки стримятся только вокруг камеры (terrainFarDist 660...1180 м), а мир
-     ограничен worldRadius 1200 м. Фартук догружает дно до 2600 м, чтобы в
-     прозрачных водах (Байкал, fogDensity 0.0012) на горизонте не было видно
-     резкого обрыва детальной сетки. Внутри игровой зоны он утоплен на 12 м и
-     скрыт под настоящими чанками. Строится в мировом начале координат и вместе
-     со сценой сдвигается при Floating Origin. */
-  function buildHorizonApron() {
-    if (!biomeRef || biomeRef.worldRadius > 4000) return; // для unbounded worlds не строим фартук
-    const g = new T.PlaneGeometry(5200, 5200, 48, 48);
-    g.rotateX(-Math.PI / 2);
+  /* ---- Внешний горизонт дна за пределами детальной карты ---- */
+  /* Чанки стримятся только вокруг камеры (terrainFarDist 660...1180 м). Фартук
+     догружает дно до 2600 м, чтобы в прозрачных водах (Байкал, fogDensity
+     0.0012) на горизонте не было видно резкого обрыва детальной сетки. Внутри
+     игровой зоны он утоплен на 12 м и скрыт под настоящими чанками.
+
+     В мире без края (biome.unbounded, по умолчанию у всех биомов) фартук не
+     может стоять в начале координат — игрок уходит на километры, и静态ный
+     фартук остался бы островом у старта. Поэтому он следует за игроком:
+     центр хранится в apronCx/apronCz (истинные мировые координаты), а при
+     уходе дальше APRON_RECENTER геометрия пересчитывается на новом месте.
+     Пересборка — 1089 вершин, то есть дешевле одного детального чанка, и
+     происходит примерно раз в полторы минуты реального заплыва. */
+  function fillApronGeometry(g, cx, cz) {
     const p = g.attributes.position;
-    const c = new Float32Array(p.count * 3);
+    const c = g.attributes.color;
     const col = new T.Color();
     for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), z = p.getZ(i);
+      const x = cx + p.getX(i), z = cz + p.getZ(i);
       let y = biomeRef.getHeight(x, z);
-      if (Math.abs(x) < biomeRef.worldRadius - 10 && Math.abs(z) < biomeRef.worldRadius - 10) {
-        y -= 12.0;
-      }
+      if (Math.hypot(p.getX(i), p.getZ(i)) < APRON_SINK_RADIUS) y -= 12.0;
       p.setY(i, y);
       biomeRef.getTerrainColor(x, y, z, col);
-      c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b;
+      c.setXYZ(i, col.r, col.g, col.b);
     }
-    g.setAttribute('color', new T.BufferAttribute(c, 3));
-    g.deleteAttribute('uv');
+    p.needsUpdate = true;
+    c.needsUpdate = true;
     g.computeVertexNormals();
     g.computeBoundingSphere(); // чтобы не считать её на первом же кадре
+  }
+
+  function buildHorizonApron() {
+    if (!biomeRef || biomeRef.worldRadius > 4000) return; // для огромных миров фартук не нужен
+    const g = new T.PlaneGeometry(APRON_SIZE, APRON_SIZE, APRON_SEGS, APRON_SEGS);
+    g.rotateX(-Math.PI / 2);
+    g.deleteAttribute('uv');
+    g.setAttribute('color', new T.BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
+    apronCx = 0;
+    apronCz = 0;
+    fillApronGeometry(g, apronCx, apronCz);
     const apron = new T.Mesh(g, terrainMat);
     apron.userData.key = 'floor';
     horizonApron = apron;
     group.add(apron);
+  }
+
+  /* Сдвиг фартука вслед за игроком (миры без края). Возвращает true, если
+     геометрия пересобрана — это редкая и дорогая операция. */
+  function recenterHorizonApron(trueCamX, trueCamZ) {
+    if (!horizonApron) return false;
+    const dx = trueCamX - apronCx;
+    const dz = trueCamZ - apronCz;
+    if (dx * dx + dz * dz < APRON_RECENTER * APRON_RECENTER) return false;
+    /* Центр ставим в узел своей сетки: тогда уже посчитанные вершины не
+       «плывут» относительно мира, и стык с детальными чанками не шевелится. */
+    const step = APRON_SIZE / APRON_SEGS;
+    apronCx = Math.round(trueCamX / step) * step;
+    apronCz = Math.round(trueCamZ / step) * step;
+    fillApronGeometry(horizonApron.geometry, apronCx, apronCz);
+    return true;
   }
 
   OC.Terrain = {
@@ -12720,6 +12785,8 @@ self.onmessage = function (e) {
       if (ceilingMat) { ceilingMat.dispose(); ceilingMat = null; }
       chunks.clear();
       horizonApron = null; // старый меш живёт в удаляемой группе
+      apronCx = 0;
+      apronCz = 0;
       workerQueue.length = 0;
       workerBusy = false;
       pendingChunkData.clear();
@@ -12832,6 +12899,14 @@ self.onmessage = function (e) {
       lastScanX = trueCamX;
       lastScanZ = trueCamZ;
       lastScanQuality = q.id;
+
+      /* Мир без края: фартук горизонта едет за игроком. Позиция меша —
+         локальная (мировая минус origin), потому что сцена сдвинута
+         Floating Origin. */
+      if (horizonApron && biomeRef && biomeRef.unbounded) {
+        recenterHorizonApron(trueCamX, trueCamZ);
+        horizonApron.position.set(apronCx - ox, 0, apronCz - oz);
+      }
 
       const t0 = performance.now();
       const budgetMs = 3.5;
@@ -27489,6 +27564,8 @@ window.OC = window.OC || {};
           updateCtx.dayW = dayW;
 
 
+
+
           updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
           updateCtx.camSpeed = camSpeed || 0;
           updateCtx.flashOn = !!flashOn;
@@ -32334,10 +32411,25 @@ window.OC = window.OC || {};
   const getCanvas = () => canvasRef;
   const setCanvas = (c) => { canvasRef = c; };
 
+  /* Планетарный мир: горизонтальный зажим по кругу worldRadius снят. Дальность
+     обеспечивает Floating Origin (камера всегда около начала координат), а
+     рельеф, флора и чанки стримятся вокруг игрока, поэтому край карты больше
+     не останавливает аппарат — как в настоящем море.
+     Ограничение остаётся только численным: координаты обязаны быть конечными,
+     иначе сломаются матрицы, мини-карта и сохранение. */
+  const COORD_LIMIT = 1.0e6; // 1000 км — заведомо дальше любого разумного заплыва
+
   function clampPosition(p) {
-    const bound = (biomeRef.worldRadius || 1200) - 30;
-    p.x = OC.clamp(p.x, -bound, bound);
-    p.z = OC.clamp(p.z, -bound, bound);
+    if (!biomeRef.unbounded) {
+      const bound = (biomeRef.worldRadius || 1200) - 30;
+      p.x = OC.clamp(p.x, -bound, bound);
+      p.z = OC.clamp(p.z, -bound, bound);
+    } else {
+      if (!Number.isFinite(p.x)) p.x = 0;
+      if (!Number.isFinite(p.z)) p.z = 0;
+      p.x = OC.clamp(p.x, -COORD_LIMIT, COORD_LIMIT);
+      p.z = OC.clamp(p.z, -COORD_LIMIT, COORD_LIMIT);
+    }
     const fl = biomeRef.getHeight(p.x, p.z);
     let minY = fl + 1.65;
     if (biomeRef && biomeRef.getBrineSurfaceAt) {
