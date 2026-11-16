@@ -21,7 +21,7 @@
 import assert from 'node:assert/strict';
 
 export function run(ctx) {
-  const { T, OC, scene, camera, getEl } = ctx;
+  const { T, OC, scene, camera, getEl, worldSrc } = ctx;
 
   // 1. Все биомы — миры без края
   for (const b of OC.Biomes.list()) {
@@ -146,6 +146,16 @@ export function run(ctx) {
   assert(Number.isFinite(coverage) && coverage >= 0 && coverage <= 100,
     `Map coverage must stay a sane percentage outside the core area (got ${coverage})`);
 
+  /* Карта дорисовывается порциями по бюджету кадра: после прыжка на 4 км окно
+     обязано дозаполниться, и пиксель под аппаратом — настоящий цвет дна там,
+     где игрок находится, а не у точки старта. */
+  let mapTicks = 0;
+  while (!OC.Minimap.isMapComplete() && mapTicks < 3000) { OC.Minimap.update(cam, 0.4); mapTicks++; }
+  assert(OC.Minimap.isMapComplete(), 'Minimap must finish refilling its window after a long flight');
+  const mapPixel = OC.Minimap.samplePixel(cam.x, cam.z);
+  assert(mapPixel && mapPixel[3] === 255 && Number.isFinite(mapPixel[0]),
+    'Minimap must chart the seabed under the craft far outside the core area');
+
   // Сонар чертит карту там, где игрок находится сейчас, а не только в ядре
   OC.Minimap.revealSwath(cam.x, cam.z, 0.8, 220);
   assert(OC.Minimap.isRevealed(cam.x, cam.z),
@@ -204,6 +214,67 @@ export function run(ctx) {
   assert(biome.landmarks.every((lm) => Math.abs(lm.x) <= biome.worldRadius && Math.abs(lm.z) <= biome.worldRadius),
     'Landmarks must stay inside the core area of the world');
 
+  /* 12. Окно карты (OC.GridWindow): при прокрутке пиксель обязан оставаться за
+     своей точкой мира, а не за местом на экране. Проверяется на синтетической
+     заливке, где значение пикселя однозначно определяется его координатами. */
+  const GW = 32;
+  const gw = OC.GridWindow.create({
+    size: GW,
+    span: 3200, // 100 м на пиксель
+    fillRow: (data, j, i0, i1) => {
+      for (let i = i0; i < i1; i++) {
+        const p = (j * GW + i) * 4;
+        data[p] = (i * 7 + j * 3) % 251;
+        data[p + 1] = 40;
+        data[p + 2] = 90;
+        data[p + 3] = 255;
+      }
+    },
+    unknown: [1, 2, 3, 255]
+  });
+  gw.resetCenter(0, 0);
+  gw.flush();
+  assert(gw.isComplete(), 'A fresh map window must be fillable to completeness');
+  // Окно 3200 м при 32 пикселях — это 100 м на пиксель, поэтому мировая точка
+  // (0, 0) при центре (0, 0) попадает в пиксель (16, 16)
+  const gwBefore = gw.pixelAt(0, 0);
+  assert(gwBefore && gwBefore[0] === ((16 * 7 + 16 * 3) % 251),
+    `Map window must address pixels by world coordinates (got ${gwBefore && gwBefore[0]})`);
+
+  gw.setCenter(500, 0);
+  gw.flush();
+  const gwAfter = gw.pixelAt(0, 0);
+  assert(JSON.stringify(gwAfter) === JSON.stringify(gwBefore),
+    `Scrolling the map window must keep a pixel bound to its world point (${gwBefore} -> ${gwAfter})`);
+  const gwNew = gw.pixelAt(2000, 0);
+  assert(gwNew && gwNew[0] !== 1,
+    'The strip opened by scrolling must be filled with real data, not with the unknown colour');
+  assert(gw.pixelAt(90000, 0) === null, 'Points outside the window must not be addressed');
+
+  /* 13. Текстура прибоя (uWorldSpan/uFoamCenter): окно едет за аппаратом и
+     считает рельеф под ним, а не круг радиусом worldRadius. */
+  const foam = OC._WorldTextures.createFoamWindow(biome);
+  foam.setCenter(0, 0);
+  foam.flush();
+  const foamSpawn = foam.pixelAt(0, 0);
+  assert(foamSpawn && foamSpawn[3] === 255, 'Foam window must be charted around the spawn');
+  foam.setCenter(FAR, FAR);
+  let foamTicks = 0;
+  while (!foam.isComplete() && foamTicks < 400) { foam.tick(1000); foamTicks++; }
+  assert(foam.isComplete(), 'Foam window must finish refilling after a long jump');
+  const foamFar = foam.pixelAt(FAR, FAR);
+  const hFar = biome.getHeight(FAR, FAR);
+  const expectDepth = Math.round(Math.max(0, Math.min(1, -hFar / 45)) * 255);
+  assert(foamFar && Math.abs(foamFar[0] - expectDepth) <= 1,
+    `Foam window must sample the seabed under the craft (got ${foamFar && foamFar[0]}, expected ${expectDepth} at ${hFar.toFixed(0)} m)`);
+  foam.dispose();
+
+  // Шейдер поверхности больше не привязан к радиусу ядра
+  assert(worldSrc.includes('uFoamCenter') && worldSrc.includes('uOrigin'),
+    'world.js must sample the foam window around the craft in true world coordinates');
+  assert(!/uWorldSpan\.value\s*=\s*\(.*worldRadius/.test(worldSrc),
+    'Foam window span must not be tied to the core radius anymore');
+
   OC.Biomes.setActive('great_barrier_reef');
-  console.log(`   Planetary world (step 1-2): edge removed — flight to ${FAR} m, terrain & flora stream around the player, horizon apron follows (${apronOffset.toFixed(0)} m), map window + sparse fog chart ${(FAR / 1000).toFixed(0)} km out, ${faunaChecked} fauna agents finite, origin absorbs ${(shiftedBy / 1000).toFixed(1)} km.`);
+  console.log(`   Planetary world (steps 1-3): edge removed — flight to ${FAR} m, terrain & flora stream around the player, horizon apron follows (${apronOffset.toFixed(0)} m), map window + foam window + sparse fog chart ${(FAR / 1000).toFixed(0)} km out, ${faunaChecked} fauna agents finite, origin absorbs ${(shiftedBy / 1000).toFixed(1)} km.`);
 }

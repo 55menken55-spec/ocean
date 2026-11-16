@@ -165,6 +165,6 @@ runAtlasFauna({ T, OC });
 runFloatingOrigin({ T, OC });
 /* Планетарный мир — последним: он копит 14 км в origin и навсегда сдвигает
    сцену, поэтому любая проверка локальных координат обязана идти до него. */
-runPlanetaryWorld({ T, OC, scene, camera, getEl });
+runPlanetaryWorld({ T, OC, scene, camera, getEl, worldSrc });
 
 console.log('ALL VERIFICATION CHECKS PASSED!');

@@ -1698,6 +1698,269 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
+// === core/grid_window.js ===
+/* ================= СКРОЛЛЯЩЕЕСЯ ОКНО КАРТЫ (МИР БЕЗ КРАЯ) ================= */
+/* Батиметрическая мини-карта и текстура прибоя когда-то считались «на весь
+   мир»: фиксированный круг радиусом worldRadius, одна сетка на карту. В мире
+   без края это невозможно — карта бесконечна, — но и пересчитывать окно целиком
+   при каждом движении игрока нельзя: один пиксель стоит вызов getHeight, а
+   полных сеток десятки тысяч (сотни миллисекунд на кадр).
+
+   Окно решает это так же, как прокрутка в навигаторе: центр привязан к сетке
+   пикселей, при сдвиге готовые пиксели переезжают на свои новые места (это
+   корректно: пиксель описывает точку мира, а не место на экране), и только
+   открывшаяся полоса считается заново — причём порциями, по бюджету времени
+   на кадр. Игрок плывёт со скоростью метров в секунду, поэтому новая полоса
+   успевает заполниться раньше, чем появится следующая.
+
+   Используется мини-картой (src/ui/minimap.js) и текстурой прибоя
+   (src/engine/world/textures.js). */
+window.OC = window.OC || {};
+OC.GridWindow = (function (OC) {
+  'use strict';
+
+  const FILL_CHUNK = 16;   // пикселей за один замер бюджета
+
+  const now = (typeof performance !== 'undefined' && performance.now)
+    ? () => performance.now()
+    : () => Date.now();
+
+  /* opts: { size, span, fillRow, unknown }
+     unknown — чем заливать пиксели, которых ещё нет (тёмная «необследованная
+     вода»); они заполняются по мере движения.
+     size    — сторона сетки в пикселях;
+     span    — размер окна в метрах мира (шаг ячейки = span / size);
+     fillRow(data, j, i0, i1, cx, cz, cell) — заполнить пиксели [i0, i1)
+               строки j; центр пикселя (i, j) имеет мировые координаты
+               cx + (i + 0.5 - size / 2) * cell, cz + (j + 0.5 - size / 2) * cell. */
+  function create(opts) {
+    const size = opts.size | 0;
+    const span = opts.span;
+    const fillRow = opts.fillRow;
+    const unk = opts.unknown || [6, 14, 26, 255];
+    const cell = span / size;
+    const data = new Uint8Array(size * size * 4);
+    const rowA = new Int32Array(size).fill(-1);   // [rowA, rowB) — незаполненный интервал строки
+    const rowB = new Int32Array(size);
+    const tmpRow = new Uint8Array(size * 4);
+    let cx = 0;
+    let cz = 0;
+    let cursor = 0;      // откуда продолжать заполнение в следующий раз
+    let pending = 0;     // сколько строк ждут заполнения
+    let changed = true;  // данные менялись с прошлой выгрузки в текстуру
+
+    function markRow(j, i0, i1) {
+      if (i1 <= i0) return;
+      if (rowA[j] < 0) {
+        rowA[j] = i0;
+        rowB[j] = i1;
+        pending++;
+      } else {
+        const a = rowA[j] < i0 ? rowA[j] : i0;
+        const b = rowB[j] > i1 ? rowB[j] : i1;
+        if (a !== rowA[j] || b !== rowB[j]) {
+          rowA[j] = a;
+          rowB[j] = b;
+          changed = true;
+        }
+      }
+      changed = true;
+    }
+
+    function markRect(j0, j1, i0, i1) {
+      for (let j = Math.max(0, j0); j < Math.min(size, j1); j++) markRow(j, i0, i1);
+    }
+
+    function markAll() {
+      markRect(0, size, 0, size);
+    }
+
+    /* Сдвиг готовых пикселей: точка мира, описанная пикселем (i, j), после
+       переноса центра на (dx, dz) пикселей описывается пикселем (i - dx, j - dz). */
+    function scroll(dx, dz) {
+      if (dz !== 0) {
+        /* Строка j берёт данные из j + dz, поэтому идём от «дальнего» края:
+           при dz > 0 источник ниже и ещё не тронут, при dz < 0 — выше. */
+        const step = dz > 0 ? 1 : -1;
+        const jStart = dz > 0 ? 0 : size - 1;
+        for (let n = 0; n < size; n++) {
+          const j = jStart + step * n;
+          const src = j + dz;
+          if (src < 0 || src >= size) {
+            fillUnknownRow(j);
+            continue;
+          }
+          shiftRow(src, dx, tmpRow);
+          data.set(tmpRow, j * size * 4);
+        }
+      } else {
+        for (let j = 0; j < size; j++) {
+          shiftRow(j, dx, tmpRow);
+          data.set(tmpRow, j * size * 4);
+        }
+      }
+      changed = true;
+    }
+
+    function shiftRow(j, dx, out) {
+      const base = j * size * 4;
+      if (dx === 0) {
+        out.set(data.subarray(base, base + size * 4));
+        return;
+      }
+      for (let i = 0; i < size; i++) {
+        out[i * 4] = unk[0];
+        out[i * 4 + 1] = unk[1];
+        out[i * 4 + 2] = unk[2];
+        out[i * 4 + 3] = unk[3];
+      }
+      for (let i = 0; i < size; i++) {
+        const src = i + dx;
+        if (src < 0 || src >= size) continue;
+        const s = base + src * 4;
+        const d = i * 4;
+        out[d] = data[s];
+        out[d + 1] = data[s + 1];
+        out[d + 2] = data[s + 2];
+        out[d + 3] = data[s + 3];
+      }
+    }
+
+    function fillUnknownRow(j) {
+      const base = j * size * 4;
+      for (let i = 0; i < size; i++) {
+        const p = base + i * 4;
+        data[p] = unk[0];
+        data[p + 1] = unk[1];
+        data[p + 2] = unk[2];
+        data[p + 3] = unk[3];
+      }
+    }
+
+    function snapCenter(x, z) {
+      cx = Math.round(x / cell) * cell;
+      cz = Math.round(z / cell) * cell;
+    }
+
+    // Свежее окно целиком «необследованное»: всё стоит в очередь на просчёт
+    markAll();
+
+    return {
+      size: size,
+      span: span,
+      cell: cell,
+      data: data,
+
+      /* Перенос центра. Возвращает true, если окно сдвинулось. */
+      setCenter(x, z) {
+        const dx = Math.round((x - cx) / cell);
+        const dz = Math.round((z - cz) / cell);
+        if (dx === 0 && dz === 0) return false;
+        cx += dx * cell;
+        cz += dz * cell;
+        if (Math.abs(dx) >= size || Math.abs(dz) >= size) {
+          // Прыжок дальше окна (телепорт, смена биома): содержимое целиком не годится
+          for (let j = 0; j < size; j++) fillUnknownRow(j);
+          markAll();
+          return true;
+        }
+        scroll(dx, dz);
+        if (dz > 0) markRect(size - dz, size, 0, size);
+        else if (dz < 0) markRect(0, -dz, 0, size);
+        if (dx > 0) markRect(0, size, size - dx, size);
+        else if (dx < 0) markRect(0, size, 0, -dx);
+        return true;
+      },
+
+      /* Сброс к пустому окну (смена биома) — всё считается заново. */
+      clear() {
+        for (let j = 0; j < size; j++) fillUnknownRow(j);
+        cx = 0;
+        cz = 0;
+        cursor = 0;
+        pending = 0;
+        rowA.fill(-1);
+        markAll();
+        snapCenter(0, 0);
+      },
+
+      /* Поставить центр без перерисовки данных (первичная установка). */
+      resetCenter(x, z) {
+        snapCenter(x, z);
+        for (let j = 0; j < size; j++) fillUnknownRow(j);
+        cursor = 0;
+        pending = 0;
+        rowA.fill(-1);
+        markAll();
+      },
+
+      /* Заполнить открывшиеся полосы, уложившись в budgetMs. Строка считается
+         кусками по FILL_CHUNK пикселей: иначе одна длинная строка не влезает в
+         бюджет и кадр всё равно получает лишние миллисекунды.
+         Возвращает true, если работа ещё осталась. */
+      tick(budgetMs) {
+        if (pending <= 0) return false;
+        const t0 = now();
+        const limit = budgetMs === undefined ? 2.0 : budgetMs;
+        let scanned = 0;
+        while (pending > 0 && scanned < size) {
+          const j = cursor;
+          if (rowA[j] < 0) {
+            cursor = cursor + 1 >= size ? 0 : cursor + 1;
+            scanned++;
+            continue;
+          }
+          let i = rowA[j];
+          const end = rowB[j];
+          while (i < end) {
+            const stop = end < i + FILL_CHUNK ? end : i + FILL_CHUNK;
+            fillRow(data, j, i, stop, cx, cz, cell);
+            i = stop;
+            if (now() - t0 > limit) break;
+          }
+          changed = true;
+          if (i >= end) {
+            rowA[j] = -1;
+            pending--;
+            cursor = cursor + 1 >= size ? 0 : cursor + 1;
+            scanned++;
+          }
+          if (now() - t0 > limit) break;
+        }
+        return pending > 0;
+      },
+
+      /* Досчитать всё сразу (тестам и первичной сборке нужен готовый кадр). */
+      flush() {
+        while (this.tick(1e9)) { /* считаем до полной готовности */ }
+      },
+
+      centerX() { return cx; },
+      centerZ() { return cz; },
+      isComplete() { return pending <= 0; },
+      pendingRows() { return pending; },
+
+      /* Были ли изменения с прошлой выгрузки в текстуру/канвас. */
+      consumeChanged() {
+        const v = changed;
+        changed = false;
+        return v;
+      },
+
+      /* Значение окна в мировых координатах (для диагностики и тестов). */
+      pixelAt(wx, wz) {
+        const i = Math.floor((wx - cx) / cell + size / 2);
+        const j = Math.floor((wz - cz) / cell + size / 2);
+        if (i < 0 || j < 0 || i >= size || j >= size) return null;
+        const p = (j * size + i) * 4;
+        return [data[p], data[p + 1], data[p + 2], data[p + 3]];
+      }
+    };
+  }
+
+  return { create };
+})(window.OC);
+
 // === engine/seasons.js ===
 /* ================= СЕЗОННЫЙ ЦИКЛ ПЛАНЕТАРНЫХ ВОДНЫХ БИОМОВ ================= */
 /* Непрерывный годовой цикл: температура зависит от широты региона и глубины,
@@ -10613,75 +10876,152 @@ window.OC = window.OC || {};
     return tex;
   }
 
-  /* ---------- Текстура мелководья, берегового прибоя и кромки пакового льда ---------- */
-  function buildBathymetryFoamTex(biome) {
-    const S = 192;
-    const data = new Uint8Array(S * S * 4);
-    const R = biome ? (biome.worldRadius || 1200) : 1200;
-    for (let iz = 0; iz < S; iz++) {
-      const wz = ((iz / (S - 1)) * 2 - 1) * R;
-      for (let ix = 0; ix < S; ix++) {
-        const wx = ((ix / (S - 1)) * 2 - 1) * R;
-        const h = biome ? biome.getHeight(wx, wz) : -12;
-        const depthNorm = OC.clamp(-h / 45.0, 0, 1);
-        // Пена прибоя над очень мелким гребнем (-3.9 .. +0.55 м) и кромкой берега/скал/колонн
-        const crestFoam = OC.smoothstep(-3.9, -1.4, h) * OC.smoothstep(0.55, -0.3, h);
-        const shoreFoam = OC.smoothstep(-1.45, 0.06, h) * OC.smoothstep(0.62, 0.02, h);
-        const idx = (iz * S + ix) * 4;
-        data[idx] = Math.round(depthNorm * 255);
-        data[idx + 1] = Math.round(crestFoam * 255);
-        data[idx + 2] = Math.round(shoreFoam * 255);
-        data[idx + 3] = 255;
+  /* ---------- Текстура мелководья, берегового прибоя и кромки пакового льда ----------
+     В мире без края текстура не может быть снята один раз с круга worldRadius:
+     игрок уходит на километры, а под ним продолжается процедурный рельеф со
+     своими берегами и отмелями (в Титане вне ядра встречается суша до +22 м).
+     Поэтому это скроллящееся окно вокруг аппарата: готовые пиксели переезжают,
+     открывшаяся полоса досчитывается порциями по бюджету времени. */
+  const FOAM_S = 128;
+  const FOAM_SPAN = 3000;   // метров поперёк окна (шаг ячейки 23.4 м)
+  const FLORA_CACHE_MAX = 512;
+
+  function createFoamWindow(biome) {
+    const S = FOAM_S;
+    const SPAN = FOAM_SPAN;
+    const floraCache = new Map();
+
+    /* Флора чанка нужна только ради ледяной пены в Арктике; считаем лениво и
+       держим ограниченный кэш — окно проезжает много чанков за сеанс. */
+    function floraChunk(cx, cz) {
+      const key = cx + ',' + cz;
+      let items = floraCache.get(key);
+      if (items !== undefined) return items;
+      const cSz = biome.chunkSize || 150;
+      let out = [];
+      try {
+        out = biome.generateChunkFlora(cx, cz, cSz, 1.0, OC.mulberry32(((cx * 9187) ^ (cz * 3571)) >>> 0)) || [];
+      } catch (e) {
+        out = [];
       }
+      if (floraCache.size >= FLORA_CACHE_MAX) {
+        const first = floraCache.keys().next().value;
+        floraCache.delete(first);
+      }
+      floraCache.set(key, out);
+      return out;
     }
 
-    // В Арктике впечатываем контактную ледяную пену вокруг льдин (ice_floe) и айсбергов (iceberg)
-    if (biome && biome.hasAurora && biome.generateChunkFlora) {
+    /* Контактная ледяная пена вокруг льдин (ice_floe) и айсбергов (iceberg):
+       впечатывается в ту же строку, что и батиметрия, поэтому остаётся на
+       своих мировых координатах при прокрутке окна. */
+    function imprintIceRow(data, j, i0, i1, cx, cz, cell) {
+      const half = S / 2;
+      const wz = cz + (j + 0.5 - half) * cell;
+      const wx0 = cx + (i0 + 0.5 - half) * cell;
+      const wx1 = cx + (i1 - 1 + 0.5 - half) * cell;
       const cSz = biome.chunkSize || 150;
-      const cellW = (2 * R) / S;
-      for (let cz = -4; cz <= 4; cz++) {
-        for (let cx = -4; cx <= 4; cx++) {
-          const items = biome.generateChunkFlora(cx, cz, cSz, 1.0, OC.mulberry32(((cx * 9187) ^ (cz * 3571)) >>> 0));
+      const fcz0 = Math.floor((wz - 40) / cSz);
+      const fcz1 = Math.floor((wz + 40) / cSz);
+      const fcx0 = Math.floor((Math.min(wx0, wx1) - 40) / cSz);
+      const fcx1 = Math.floor((Math.max(wx0, wx1) + 40) / cSz);
+
+      for (let fcz = fcz0; fcz <= fcz1; fcz++) {
+        for (let fcx = fcx0; fcx <= fcx1; fcx++) {
+          const items = floraChunk(fcx, fcz);
           for (let i = 0; i < items.length; i++) {
             const it = items[i];
             if (it.species !== 'ice_floe' && it.species !== 'iceberg') continue;
             const rad = (it.species === 'iceberg' ? 23.0 : 13.5) * (it.scale || 1.0);
-            const cX = ((it.x / R) * 0.5 + 0.5) * (S - 1);
-            const cZ = ((it.z / R) * 0.5 + 0.5) * (S - 1);
-            const rPx = Math.ceil((rad + 8.0) / cellW);
-            const minX = Math.max(0, Math.floor(cX - rPx));
-            const maxX = Math.min(S - 1, Math.ceil(cX + rPx));
-            const minZ = Math.max(0, Math.floor(cZ - rPx));
-            const maxZ = Math.min(S - 1, Math.ceil(cZ + rPx));
-            for (let pz = minZ; pz <= maxZ; pz++) {
-              const dwz = (pz - cZ) * cellW;
-              for (let px = minX; px <= maxX; px++) {
-                const dwx = (px - cX) * cellW;
-                const d = Math.hypot(dwx, dwz);
-                const ring = OC.smoothstep(rad - 5.5, rad - 1.0, d) * OC.smoothstep(rad + 7.5, rad + 1.5, d);
-                if (ring > 0.02) {
-                  const idx = (pz * S + px) * 4;
-                  const addVal = Math.round(ring * 240);
-                  if (addVal > data[idx + 2]) data[idx + 2] = addVal;
-                  if (addVal * 0.7 > data[idx + 1]) data[idx + 1] = Math.round(addVal * 0.7);
-                }
-              }
+            if (Math.abs(it.z - wz) > rad + 8.0) continue;
+            const cX = (it.x - (cx - SPAN / 2)) / cell;
+            const cZ = (it.z - (cz - SPAN / 2)) / cell;
+            const rPx = (rad + 8.0) / cell;
+            const minX = Math.max(i0, Math.floor(cX - rPx));
+            const maxX = Math.min(i1 - 1, Math.ceil(cX + rPx));
+            for (let px = minX; px <= maxX; px++) {
+              const dwx = (px - cX) * cell;
+              const dwz = (j - cZ) * cell;
+              const d = Math.hypot(dwx, dwz);
+              const ring = OC.smoothstep(rad - 5.5, rad - 1.0, d) * OC.smoothstep(rad + 7.5, rad + 1.5, d);
+              if (ring <= 0.02) continue;
+              const idx = (j * S + px) * 4;
+              const addVal = Math.round(ring * 240);
+              if (addVal > data[idx + 2]) data[idx + 2] = addVal;
+              const crest = Math.round(addVal * 0.7);
+              if (crest > data[idx + 1]) data[idx + 1] = crest;
             }
           }
         }
       }
     }
 
-    const tex = new T.DataTexture(data, S, S, T.RGBAFormat);
+    function fillRow(data, j, i0, i1, cx, cz, cell) {
+      const half = S / 2;
+      const wz = cz + (j + 0.5 - half) * cell;
+      for (let i = i0; i < i1; i++) {
+        const wx = cx + (i + 0.5 - half) * cell;
+        const h = biome ? biome.getHeight(wx, wz) : -12;
+        const depthNorm = OC.clamp(-h / 45.0, 0, 1);
+        // Пена прибоя над очень мелким гребнем (-3.9 .. +0.55 м) и кромкой берега/скал/колонн
+        const crestFoam = OC.smoothstep(-3.9, -1.4, h) * OC.smoothstep(0.55, -0.3, h);
+        const shoreFoam = OC.smoothstep(-1.45, 0.06, h) * OC.smoothstep(0.62, 0.02, h);
+        const idx = (j * S + i) * 4;
+        data[idx] = Math.round(depthNorm * 255);
+        data[idx + 1] = Math.round(crestFoam * 255);
+        data[idx + 2] = Math.round(shoreFoam * 255);
+        data[idx + 3] = 255;
+      }
+      if (biome && biome.hasAurora && biome.generateChunkFlora) imprintIceRow(data, j, i0, i1, cx, cz, cell);
+    }
+
+    const win = OC.GridWindow.create({
+      size: S,
+      span: SPAN,
+      fillRow: fillRow,
+      unknown: [0, 0, 0, 255] // вне окна — открытая вода без пены
+    });
+    const tex = new T.DataTexture(win.data, S, S, T.RGBAFormat);
     tex.magFilter = T.LinearFilter;
     tex.minFilter = T.LinearFilter;
     tex.wrapS = T.ClampToEdgeWrapping;
     tex.wrapT = T.ClampToEdgeWrapping;
     tex.needsUpdate = true;
-    return tex;
+
+    return {
+      texture: tex,
+      size: S,
+      span: SPAN,
+      centerX() { return win.centerX(); },
+      centerZ() { return win.centerZ(); },
+      isComplete() { return win.isComplete(); },
+      pendingRows() { return win.pendingRows(); },
+      /* Значение окна в мировых координатах — для тестов. */
+      pixelAt(wx, wz) { return win.pixelAt(wx, wz); },
+      setCenter(x, z) {
+        const moved = win.setCenter(x, z);
+        if (moved) tex.needsUpdate = true;
+        return moved;
+      },
+      /* Досчитать открывшуюся полосу, уложившись в бюджет кадра. */
+      tick(budgetMs) {
+        const more = win.tick(budgetMs);
+        if (win.consumeChanged()) tex.needsUpdate = true;
+        return more;
+      },
+      /* Целиком (смена биома): текстура прибоя нужна сразу. */
+      flush() {
+        win.flush();
+        tex.needsUpdate = true;
+      },
+      dispose() {
+        floraCache.clear();
+        if (tex.dispose) tex.dispose();
+      }
+    };
   }
 
-  OC._WorldTextures = { causticTexture, rippleTexture, buildBathymetryFoamTex };
+  OC._WorldTextures = { causticTexture, rippleTexture, createFoamWindow, FOAM_SPAN };
 })(window.OC);
 
 // === engine/world/rays.js ===
@@ -11058,6 +11398,7 @@ window.OC = window.OC || {};
 
   let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget, flashBeam, flashBeamMat;
   let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane;
+  let foamWin = null;   // скроллящееся окно текстуры прибоя (мир без края)
   const raysState = { scene: null, raysGroup: null, rayMats: [], rayMeshes: [] };
   let precipFx = null;
   let postFx = null;
@@ -11494,13 +11835,17 @@ window.OC = window.OC || {};
     /* --- водная поверхность (Y = 0) с окном Снеллиуса, волнами и пеной прибоя --- */
     const rp = rippleTexture();
     const activeBiome = OC.Biomes.getActive();
-    const foamTex = buildBathymetryFoamTex(activeBiome);
+    foamWin = OC._WorldTextures.createFoamWindow(activeBiome);
+    foamWin.flush();   // первая текстура нужна сразу, дальше окно едет за аппаратом
+    const foamTex = foamWin.texture;
     surfaceMat = new T.ShaderMaterial({
       transparent: true, depthWrite: false, side: T.DoubleSide, fog: false,
       uniforms: {
         uTex: { value: rp },
         uFoamTex: { value: foamTex },
-        uWorldSpan: { value: (activeBiome ? activeBiome.worldRadius : 1200) * 2.0 },
+        uWorldSpan: { value: foamWin ? foamWin.span : 2400 },
+        uFoamCenter: { value: new T.Vector2(0, 0) },
+        uOrigin: { value: new T.Vector3(0, 0, 0) },
         uTime: OC.uTime,
         uWaterCol: { value: new T.Color(0x6edcf5) },
         uSkyCol: { value: new T.Color(0x88d8ff) },
@@ -11517,8 +11862,11 @@ window.OC = window.OC || {};
         varying vec3 vWorld;
         varying float vCrest;
         uniform float uTime, uWaveAmp;
+        uniform vec3 uOrigin;
         void main(){
-          vec4 wp = modelMatrix * vec4(position, 1.0);
+          // Floating Origin сдвигает сцену: в шейдере возвращаем истинные мировые
+          // координаты, иначе узор волн и выборка пены прыгают при переносе начала
+          vec4 wp = modelMatrix * vec4(position, 1.0) + vec4(uOrigin, 0.0);
           float w1 = sin(wp.x * 0.075 + uTime * 1.25) * 0.24;
           float w2 = cos(wp.z * 0.088 - uTime * 0.98) * 0.21;
           float w3 = sin((wp.x * 0.68 + wp.z * 0.74) * 0.12 + uTime * 1.85) * 0.11;
@@ -11534,6 +11882,8 @@ window.OC = window.OC || {};
         varying float vCrest;
         uniform sampler2D uTex, uFoamTex;
         uniform float uTime, uDayW, uCamY, uWorldSpan, uStorm, uLightning;
+        uniform vec2 uFoamCenter;
+        uniform vec3 uOrigin;
         uniform vec3 uWaterCol, uSkyCol, uSunCol, uSunDir;
         uniform vec4 uVesselInfo;
         void main(){
@@ -11542,9 +11892,12 @@ window.OC = window.OC || {};
           float r2 = texture2D(uTex, cuv * 1.65 - vec2(uTime * 0.012, uTime * 0.016)).r;
           float rip = r1 * 0.65 + r2 * 0.45;
 
-          // Выборка глубины и мелководной пены прибоя/льда по координатам карты
-          vec2 mapUv = clamp(vWorld.xz / uWorldSpan + 0.5, 0.002, 0.998);
-          vec4 bathy = texture2D(uFoamTex, mapUv);
+          /* Глубина и пена прибоя/льда берутся из окна карты, которое едет за
+             аппаратом; за пределами окна — открытая вода без береговой пены. */
+          vec2 mapUv = (vWorld.xz - uFoamCenter) / uWorldSpan + 0.5;
+          vec2 insideUv = step(vec2(0.0), mapUv) * step(mapUv, vec2(1.0));
+          float inside = insideUv.x * insideUv.y;
+          vec4 bathy = texture2D(uFoamTex, clamp(mapUv, 0.002, 0.998)) * inside;
           float depthT = bathy.r;
           float crestSurf = bathy.g;
           float shoreSurf = bathy.b;
@@ -11572,8 +11925,9 @@ window.OC = window.OC || {};
           float whitecap = smoothstep(0.42, 0.92, vCrest) * uStorm * 0.95;
           float foam = clamp((crestSurf * 0.72 * surge + shoreSurf * 0.96 + swash * 0.78 + whitecap + vesselFoam * 0.92) * max(foamNoise, vesselFoam * 0.72), 0.0, 0.96);
 
-          vec3 toEye = normalize(cameraPosition - vWorld);
-          float dist = length(cameraPosition - vWorld);
+          vec3 eyeWorld = cameraPosition + uOrigin;
+          vec3 toEye = normalize(eyeWorld - vWorld);
+          float dist = length(eyeWorld - vWorld);
           float fade = smoothstep(1350.0, 120.0, dist);
 
           // Волновая нормаль для бликов
@@ -11748,9 +12102,12 @@ window.OC = window.OC || {};
   };
   OC.refreshWorldForBiome = function (biome) {
     if (!surfaceMat || !biome) return;
-    if (surfaceMat.uniforms.uFoamTex.value) surfaceMat.uniforms.uFoamTex.value.dispose();
-    surfaceMat.uniforms.uFoamTex.value = buildBathymetryFoamTex(biome);
-    surfaceMat.uniforms.uWorldSpan.value = (biome.worldRadius || 1200) * 2.0;
+    if (foamWin) foamWin.dispose();
+    foamWin = OC._WorldTextures.createFoamWindow(biome);
+    foamWin.flush();
+    surfaceMat.uniforms.uFoamTex.value = foamWin.texture;
+    surfaceMat.uniforms.uWorldSpan.value = foamWin.span;
+    surfaceMat.uniforms.uFoamCenter.value.set(foamWin.centerX(), foamWin.centerZ());
     if (surfacePlane) surfacePlane.visible = !biome.noSurface;
     if (sunSprite) sunSprite.visible = !biome.noSurface;
   };
@@ -11933,6 +12290,14 @@ window.OC = window.OC || {};
       surfacePlane.position.x = Math.round((trueCamX - ox) / snap) * snap;
       surfacePlane.position.y = waterLevel - oy;
       surfacePlane.position.z = Math.round((trueCamZ - oz) / snap) * snap;
+      surfaceMat.uniforms.uOrigin.value.set(ox, oy, oz);
+      /* Текстура прибоя — окно вокруг аппарата: пена и оттенок мелководья
+         считаются по настоящему рельефу под игроком, а не по кругу старта. */
+      if (foamWin) {
+        foamWin.setCenter(trueCamX, trueCamZ);
+        foamWin.tick(1.5);
+        surfaceMat.uniforms.uFoamCenter.value.set(foamWin.centerX(), foamWin.centerZ());
+      }
       surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
       surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
       surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);
@@ -34406,7 +34771,6 @@ window.OC = window.OC || {};
 
   let canvas = null;
   let ctx = null;
-  let bgImage = null;
   let biomeRef = null;
   let pingState = null; // { x, z, startMs }
   const SIZE = 184;
@@ -34415,6 +34779,7 @@ window.OC = window.OC || {};
      показывает окрестность аппарата, как в навигаторе. */
   const viewRadius = 1200;
   const MAP_RECENTER = 300;   // сдвигать окно, когда игрок ушёл дальше (м)
+  const MAP_FILL_BUDGET_MS = 3.0; // сколько миллисекунд в кадр тратить на дорисовку карты
   const FOG_N = 64;           // пикселей тумана на окно карты
   /* Туман войны больше не одна сетка на весь мир: мир без края, и клетки
      хранятся разрежённо — чанками карты. Ячейка осталась прежней (37.5 м),
@@ -34546,86 +34911,6 @@ window.OC = window.OC || {};
     return [7, 22, 58]; // бездна
   }
 
-  let bathyCanvas = null;   // переиспользуем: карта перерисовывается каждые 300 м пути
-
-  function ensureBathyCanvas() {
-    if (bathyCanvas) return bathyCanvas;
-    if (typeof document === 'undefined' || !document.createElement) return null;
-    bathyCanvas = document.createElement('canvas');
-    bathyCanvas.width = SIZE;
-    bathyCanvas.height = SIZE;
-    return bathyCanvas;
-  }
-
-  function renderBathymetry() {
-    if (!biomeRef) return;
-    const off = ensureBathyCanvas();
-    if (!off) return;
-    const octx = off.getContext('2d');
-    if (!octx) return;
-    const img = octx.createImageData(SIZE, SIZE);
-
-    /* Карта строится вокруг центра окна: в мире без края рельеф рисуется по
-       факту местоположения аппарата, а не по фиксированному кругу ядра. */
-    for (let py = 0; py < SIZE; py++) {
-      const wz = mapCz + (((py / (SIZE - 1)) * 2 - 1) * viewRadius);
-      for (let px = 0; px < SIZE; px++) {
-        const wx = mapCx + (((px / (SIZE - 1)) * 2 - 1) * viewRadius);
-        const y = biomeRef.getHeight(wx, wz);
-        let rgb = depthToRGB(y);
-        const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
-        if (brine) {
-          rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
-        } else if (biomeRef.isCeilingOpen && biomeRef.getCeilingHeight) {
-          if (biomeRef.isCeilingOpen(wx, wz)) {
-            rgb = [48, 224, 204];
-          } else {
-            const ch = biomeRef.getCeilingHeight(wx, wz);
-            if (ch < -10.5) rgb = [Math.round(rgb[0] * 0.54), Math.round(rgb[1] * 0.56), Math.round(rgb[2] * 0.62)];
-            else if (ch > 0) rgb = [164, 154, 126];
-          }
-        }
-        // Лёгкая изогипса каждые 15 м
-        const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
-        const idx = (py * SIZE + px) * 4;
-        img.data[idx] = Math.min(255, rgb[0] * contour);
-        img.data[idx + 1] = Math.min(255, rgb[1] * contour);
-        img.data[idx + 2] = Math.min(255, rgb[2] * contour);
-        img.data[idx + 3] = 255;
-      }
-    }
-    octx.putImageData(img, 0, 0);
-
-    // Ходовые нити Ариадны в пещерном биоме
-    if (biomeRef.ariadnePaths && biomeRef.ariadnePaths.length) {
-      octx.save();
-      octx.strokeStyle = 'rgba(255, 168, 46, 0.85)';
-      octx.lineWidth = 1.6;
-      octx.setLineDash([3, 2]);
-      for (const path of biomeRef.ariadnePaths) {
-        octx.beginPath();
-        for (let i = 0; i < path.length; i++) {
-          const mp = worldToMap(path[i][0], path[i][2]);
-          if (i === 0) octx.moveTo(mp[0], mp[1]);
-          else octx.lineTo(mp[0], mp[1]);
-        }
-        octx.stroke();
-      }
-      octx.restore();
-    }
-
-    // Сетка координат
-    octx.strokeStyle = 'rgba(180,235,255,0.08)';
-    octx.lineWidth = 1;
-    for (let k = 1; k < 4; k++) {
-      const p = (SIZE / 4) * k;
-      octx.beginPath(); octx.moveTo(p, 0); octx.lineTo(p, SIZE); octx.stroke();
-      octx.beginPath(); octx.moveTo(0, p); octx.lineTo(SIZE, p); octx.stroke();
-    }
-
-    bgImage = off;
-  }
-
   /* Мир без края: карта показывает окно ±viewRadius вокруг mapCx/mapCz, а не
      весь круг ядра. Координаты считаются от центра окна, поэтому телепорт и
      вехи работают на любом удалении от точки старта. */
@@ -34641,6 +34926,118 @@ window.OC = window.OC || {};
       ((px / SIZE) * 2 - 1) * viewRadius + mapCx,
       ((py / SIZE) * 2 - 1) * viewRadius + mapCz
     ];
+  }
+
+  /* ---- Батиметрия: скроллящееся окно вокруг аппарата ----
+     Считать всё окно целиком — это SIZE² вызовов getHeight, то есть сотни
+     миллисекунд на кадр. OC.GridWindow переезжает готовыми пикселями и
+     досчитывает только открывшуюся полосу, порциями по бюджету времени. */
+  let bathyWin = null;
+  let bathyCanvas = null;
+  let bathyCtx = null;
+  let bathyImg = null;
+
+  function ensureBathyCanvas() {
+    if (bathyCanvas) return true;
+    if (typeof document === 'undefined' || !document.createElement) return false;
+    bathyCanvas = document.createElement('canvas');
+    bathyCanvas.width = SIZE;
+    bathyCanvas.height = SIZE;
+    bathyCtx = bathyCanvas.getContext('2d');
+    if (bathyCtx && bathyCtx.createImageData) bathyImg = bathyCtx.createImageData(SIZE, SIZE);
+    return !!(bathyCtx && bathyImg);
+  }
+
+  function bathyFillRow(data, j, i0, i1, cx, cz, cell) {
+    const half = SIZE / 2;
+    const wz = cz + (j + 0.5 - half) * cell;
+    for (let i = i0; i < i1; i++) {
+      const wx = cx + (i + 0.5 - half) * cell;
+      const y = biomeRef.getHeight(wx, wz);
+      let rgb = depthToRGB(y);
+      const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
+      if (brine) {
+        rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
+      } else if (biomeRef.isCeilingOpen && biomeRef.getCeilingHeight) {
+        if (biomeRef.isCeilingOpen(wx, wz)) {
+          rgb = [48, 224, 204];
+        } else {
+          const ch = biomeRef.getCeilingHeight(wx, wz);
+          if (ch < -10.5) rgb = [Math.round(rgb[0] * 0.54), Math.round(rgb[1] * 0.56), Math.round(rgb[2] * 0.62)];
+          else if (ch > 0) rgb = [164, 154, 126];
+        }
+      }
+      // Лёгкая изогипса каждые 15 м
+      const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
+      const idx = (j * SIZE + i) * 4;
+      data[idx] = Math.min(255, rgb[0] * contour);
+      data[idx + 1] = Math.min(255, rgb[1] * contour);
+      data[idx + 2] = Math.min(255, rgb[2] * contour);
+      data[idx + 3] = 255;
+    }
+  }
+
+  function ensureBathyWindow(centerX, centerZ) {
+    if (!biomeRef || !OC.GridWindow || !ensureBathyCanvas()) return null;
+    if (!bathyWin) {
+      bathyWin = OC.GridWindow.create({
+        size: SIZE,
+        span: viewRadius * 2,
+        fillRow: bathyFillRow,
+        unknown: [7, 17, 30, 255] // «необследованная вода» на краю окна
+      });
+    } else {
+      bathyWin.clear();
+    }
+    bathyWin.resetCenter(centerX, centerZ);
+    /* Первый кадр биома считаем целиком: это та же стоимость, что и раньше при
+       смене биома, зато карта сразу готова. Дальше досчитываются только полосы. */
+    bathyWin.flush();
+    uploadBathy();
+    mapCx = bathyWin.centerX();
+    mapCz = bathyWin.centerZ();
+    return bathyWin;
+  }
+
+  /* Векторный слой поверх батиметрии: сетка координат и ходовые нити
+     Ариадны. Раньше он впечатывался в растр, но растр теперь живёт и
+     прокручивается между перерисовками, поэтому линии рисуются каждый кадр. */
+  function drawMapOverlay(c) {
+    // Ходовые нити Ариадны в пещерном биоме
+    if (biomeRef.ariadnePaths && biomeRef.ariadnePaths.length) {
+      c.save();
+      c.strokeStyle = 'rgba(255, 168, 46, 0.85)';
+      c.lineWidth = 1.6;
+      c.setLineDash([3, 2]);
+      for (const path of biomeRef.ariadnePaths) {
+        c.beginPath();
+        for (let i = 0; i < path.length; i++) {
+          const mp = worldToMap(path[i][0], path[i][2]);
+          if (i === 0) c.moveTo(mp[0], mp[1]);
+          else c.lineTo(mp[0], mp[1]);
+        }
+        c.stroke();
+      }
+      c.restore();
+    }
+
+    // Сетка координат
+    c.strokeStyle = 'rgba(180,235,255,0.08)';
+    c.lineWidth = 1;
+    for (let k = 1; k < 4; k++) {
+      const p = (SIZE / 4) * k;
+      c.beginPath(); c.moveTo(p, 0); c.lineTo(p, SIZE); c.stroke();
+      c.beginPath(); c.moveTo(0, p); c.lineTo(SIZE, p); c.stroke();
+    }
+  }
+
+  /* Выгрузить посчитанные пиксели в канвас карты. */
+  function uploadBathy() {
+    if (!bathyWin || !bathyImg) return false;
+    if (!bathyWin.consumeChanged()) return false;
+    bathyImg.data.set(bathyWin.data);
+    bathyCtx.putImageData(bathyImg, 0, 0);
+    return true;
   }
 
   function ensureFogCanvas() {
@@ -34936,11 +35333,8 @@ window.OC = window.OC || {};
       canvas.height = SIZE;
       ctx = canvas.getContext('2d');
       biomeRef = biome;
-      if (biome && biome.spawn && biome.spawn.pos) {
-        mapCx = biome.spawn.pos[0];
-        mapCz = biome.spawn.pos[2];
-      }
-      renderBathymetry();
+      const sp = (biome && biome.spawn && biome.spawn.pos) ? biome.spawn.pos : [0, 0, 0];
+      ensureBathyWindow(sp[0], sp[2]);
       loadFogForBiome(biome);
 
       function toggleWaypointAt(px, py) {
@@ -35076,11 +35470,9 @@ window.OC = window.OC || {};
       biomeRef = biome;
       pingState = null;
       covCacheKey = -1;
-      if (biome && biome.spawn && biome.spawn.pos) {
-        mapCx = biome.spawn.pos[0];
-        mapCz = biome.spawn.pos[2];
-      }
-      if (canvas) renderBathymetry();
+      fogDirty = true;
+      const sp = (biome && biome.spawn && biome.spawn.pos) ? biome.spawn.pos : [0, 0, 0];
+      ensureBathyWindow(sp[0], sp[2]);
       loadFogForBiome(biome);
     },
 
@@ -35094,18 +35486,39 @@ window.OC = window.OC || {};
       return isCellRevealed(x, z);
     },
 
+    /* Готова ли батиметрия окна (для тестов) */
+    isMapComplete() {
+      return !bathyWin || bathyWin.isComplete();
+    },
+
+    samplePixel(x, z) {
+      return bathyWin ? bathyWin.pixelAt(x, z) : null;
+    },
+
+
     update(camPos, yaw) {
-      if (!ctx || !bgImage || !biomeRef) return;
+      if (!ctx || !biomeRef) return;
+      if (!bathyWin) {
+        ensureBathyWindow(camPos.x, camPos.z);
+        if (!bathyWin) return;
+      }
 
       /* Окно карты едет за аппаратом: в мире без края карта всегда показывает
-         окрестность игрока, а не фиксированный круг старта. Перерисовка
-         батиметрии — только при уходе дальше MAP_RECENTER метров. */
+         окрестность игрока, а не фиксированный круг старта. Готовые пиксели
+         переезжают на новые места, открывшаяся полоса досчитывается порциями,
+         чтобы карта не стоила сотен миллисекунд на кадр. */
       if (Math.hypot(camPos.x - mapCx, camPos.z - mapCz) > MAP_RECENTER) {
-        mapCx = camPos.x;
-        mapCz = camPos.z;
-        renderBathymetry();
+        bathyWin.setCenter(camPos.x, camPos.z);
+        mapCx = bathyWin.centerX();
+        mapCz = bathyWin.centerZ();
         fogDirty = true;
       }
+      /* Бюджет на дорисовку: пока открылась только полоса, хватает двух
+         миллисекунд; после телепорта окно пустое и можно тратить больше —
+         карта всё равно обновляется несколько раз в секунду. */
+      const fillBudget = bathyWin.pendingRows() > SIZE / 2 ? MAP_FILL_BUDGET_MS * 3 : MAP_FILL_BUDGET_MS;
+      bathyWin.tick(fillBudget);
+      uploadBathy();
 
       // Пассивное картографирование окружающей области при плавании
       if (Math.hypot(camPos.x - lastPassiveX, camPos.z - lastPassiveZ) > 14) {
@@ -35117,7 +35530,8 @@ window.OC = window.OC || {};
       }
 
       ctx.clearRect(0, 0, SIZE, SIZE);
-      ctx.drawImage(bgImage, 0, 0);
+      if (bathyCanvas) ctx.drawImage(bathyCanvas, 0, 0);
+      drawMapOverlay(ctx);
 
       // Слой тумана войны ("Картография экспедиции")
       if (fogEnabled) {

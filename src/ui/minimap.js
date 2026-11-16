@@ -5,7 +5,6 @@ window.OC = window.OC || {};
 
   let canvas = null;
   let ctx = null;
-  let bgImage = null;
   let biomeRef = null;
   let pingState = null; // { x, z, startMs }
   const SIZE = 184;
@@ -14,6 +13,7 @@ window.OC = window.OC || {};
      показывает окрестность аппарата, как в навигаторе. */
   const viewRadius = 1200;
   const MAP_RECENTER = 300;   // сдвигать окно, когда игрок ушёл дальше (м)
+  const MAP_FILL_BUDGET_MS = 3.0; // сколько миллисекунд в кадр тратить на дорисовку карты
   const FOG_N = 64;           // пикселей тумана на окно карты
   /* Туман войны больше не одна сетка на весь мир: мир без края, и клетки
      хранятся разрежённо — чанками карты. Ячейка осталась прежней (37.5 м),
@@ -145,86 +145,6 @@ window.OC = window.OC || {};
     return [7, 22, 58]; // бездна
   }
 
-  let bathyCanvas = null;   // переиспользуем: карта перерисовывается каждые 300 м пути
-
-  function ensureBathyCanvas() {
-    if (bathyCanvas) return bathyCanvas;
-    if (typeof document === 'undefined' || !document.createElement) return null;
-    bathyCanvas = document.createElement('canvas');
-    bathyCanvas.width = SIZE;
-    bathyCanvas.height = SIZE;
-    return bathyCanvas;
-  }
-
-  function renderBathymetry() {
-    if (!biomeRef) return;
-    const off = ensureBathyCanvas();
-    if (!off) return;
-    const octx = off.getContext('2d');
-    if (!octx) return;
-    const img = octx.createImageData(SIZE, SIZE);
-
-    /* Карта строится вокруг центра окна: в мире без края рельеф рисуется по
-       факту местоположения аппарата, а не по фиксированному кругу ядра. */
-    for (let py = 0; py < SIZE; py++) {
-      const wz = mapCz + (((py / (SIZE - 1)) * 2 - 1) * viewRadius);
-      for (let px = 0; px < SIZE; px++) {
-        const wx = mapCx + (((px / (SIZE - 1)) * 2 - 1) * viewRadius);
-        const y = biomeRef.getHeight(wx, wz);
-        let rgb = depthToRGB(y);
-        const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
-        if (brine) {
-          rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
-        } else if (biomeRef.isCeilingOpen && biomeRef.getCeilingHeight) {
-          if (biomeRef.isCeilingOpen(wx, wz)) {
-            rgb = [48, 224, 204];
-          } else {
-            const ch = biomeRef.getCeilingHeight(wx, wz);
-            if (ch < -10.5) rgb = [Math.round(rgb[0] * 0.54), Math.round(rgb[1] * 0.56), Math.round(rgb[2] * 0.62)];
-            else if (ch > 0) rgb = [164, 154, 126];
-          }
-        }
-        // Лёгкая изогипса каждые 15 м
-        const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
-        const idx = (py * SIZE + px) * 4;
-        img.data[idx] = Math.min(255, rgb[0] * contour);
-        img.data[idx + 1] = Math.min(255, rgb[1] * contour);
-        img.data[idx + 2] = Math.min(255, rgb[2] * contour);
-        img.data[idx + 3] = 255;
-      }
-    }
-    octx.putImageData(img, 0, 0);
-
-    // Ходовые нити Ариадны в пещерном биоме
-    if (biomeRef.ariadnePaths && biomeRef.ariadnePaths.length) {
-      octx.save();
-      octx.strokeStyle = 'rgba(255, 168, 46, 0.85)';
-      octx.lineWidth = 1.6;
-      octx.setLineDash([3, 2]);
-      for (const path of biomeRef.ariadnePaths) {
-        octx.beginPath();
-        for (let i = 0; i < path.length; i++) {
-          const mp = worldToMap(path[i][0], path[i][2]);
-          if (i === 0) octx.moveTo(mp[0], mp[1]);
-          else octx.lineTo(mp[0], mp[1]);
-        }
-        octx.stroke();
-      }
-      octx.restore();
-    }
-
-    // Сетка координат
-    octx.strokeStyle = 'rgba(180,235,255,0.08)';
-    octx.lineWidth = 1;
-    for (let k = 1; k < 4; k++) {
-      const p = (SIZE / 4) * k;
-      octx.beginPath(); octx.moveTo(p, 0); octx.lineTo(p, SIZE); octx.stroke();
-      octx.beginPath(); octx.moveTo(0, p); octx.lineTo(SIZE, p); octx.stroke();
-    }
-
-    bgImage = off;
-  }
-
   /* Мир без края: карта показывает окно ±viewRadius вокруг mapCx/mapCz, а не
      весь круг ядра. Координаты считаются от центра окна, поэтому телепорт и
      вехи работают на любом удалении от точки старта. */
@@ -240,6 +160,118 @@ window.OC = window.OC || {};
       ((px / SIZE) * 2 - 1) * viewRadius + mapCx,
       ((py / SIZE) * 2 - 1) * viewRadius + mapCz
     ];
+  }
+
+  /* ---- Батиметрия: скроллящееся окно вокруг аппарата ----
+     Считать всё окно целиком — это SIZE² вызовов getHeight, то есть сотни
+     миллисекунд на кадр. OC.GridWindow переезжает готовыми пикселями и
+     досчитывает только открывшуюся полосу, порциями по бюджету времени. */
+  let bathyWin = null;
+  let bathyCanvas = null;
+  let bathyCtx = null;
+  let bathyImg = null;
+
+  function ensureBathyCanvas() {
+    if (bathyCanvas) return true;
+    if (typeof document === 'undefined' || !document.createElement) return false;
+    bathyCanvas = document.createElement('canvas');
+    bathyCanvas.width = SIZE;
+    bathyCanvas.height = SIZE;
+    bathyCtx = bathyCanvas.getContext('2d');
+    if (bathyCtx && bathyCtx.createImageData) bathyImg = bathyCtx.createImageData(SIZE, SIZE);
+    return !!(bathyCtx && bathyImg);
+  }
+
+  function bathyFillRow(data, j, i0, i1, cx, cz, cell) {
+    const half = SIZE / 2;
+    const wz = cz + (j + 0.5 - half) * cell;
+    for (let i = i0; i < i1; i++) {
+      const wx = cx + (i + 0.5 - half) * cell;
+      const y = biomeRef.getHeight(wx, wz);
+      let rgb = depthToRGB(y);
+      const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
+      if (brine) {
+        rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
+      } else if (biomeRef.isCeilingOpen && biomeRef.getCeilingHeight) {
+        if (biomeRef.isCeilingOpen(wx, wz)) {
+          rgb = [48, 224, 204];
+        } else {
+          const ch = biomeRef.getCeilingHeight(wx, wz);
+          if (ch < -10.5) rgb = [Math.round(rgb[0] * 0.54), Math.round(rgb[1] * 0.56), Math.round(rgb[2] * 0.62)];
+          else if (ch > 0) rgb = [164, 154, 126];
+        }
+      }
+      // Лёгкая изогипса каждые 15 м
+      const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
+      const idx = (j * SIZE + i) * 4;
+      data[idx] = Math.min(255, rgb[0] * contour);
+      data[idx + 1] = Math.min(255, rgb[1] * contour);
+      data[idx + 2] = Math.min(255, rgb[2] * contour);
+      data[idx + 3] = 255;
+    }
+  }
+
+  function ensureBathyWindow(centerX, centerZ) {
+    if (!biomeRef || !OC.GridWindow || !ensureBathyCanvas()) return null;
+    if (!bathyWin) {
+      bathyWin = OC.GridWindow.create({
+        size: SIZE,
+        span: viewRadius * 2,
+        fillRow: bathyFillRow,
+        unknown: [7, 17, 30, 255] // «необследованная вода» на краю окна
+      });
+    } else {
+      bathyWin.clear();
+    }
+    bathyWin.resetCenter(centerX, centerZ);
+    /* Первый кадр биома считаем целиком: это та же стоимость, что и раньше при
+       смене биома, зато карта сразу готова. Дальше досчитываются только полосы. */
+    bathyWin.flush();
+    uploadBathy();
+    mapCx = bathyWin.centerX();
+    mapCz = bathyWin.centerZ();
+    return bathyWin;
+  }
+
+  /* Векторный слой поверх батиметрии: сетка координат и ходовые нити
+     Ариадны. Раньше он впечатывался в растр, но растр теперь живёт и
+     прокручивается между перерисовками, поэтому линии рисуются каждый кадр. */
+  function drawMapOverlay(c) {
+    // Ходовые нити Ариадны в пещерном биоме
+    if (biomeRef.ariadnePaths && biomeRef.ariadnePaths.length) {
+      c.save();
+      c.strokeStyle = 'rgba(255, 168, 46, 0.85)';
+      c.lineWidth = 1.6;
+      c.setLineDash([3, 2]);
+      for (const path of biomeRef.ariadnePaths) {
+        c.beginPath();
+        for (let i = 0; i < path.length; i++) {
+          const mp = worldToMap(path[i][0], path[i][2]);
+          if (i === 0) c.moveTo(mp[0], mp[1]);
+          else c.lineTo(mp[0], mp[1]);
+        }
+        c.stroke();
+      }
+      c.restore();
+    }
+
+    // Сетка координат
+    c.strokeStyle = 'rgba(180,235,255,0.08)';
+    c.lineWidth = 1;
+    for (let k = 1; k < 4; k++) {
+      const p = (SIZE / 4) * k;
+      c.beginPath(); c.moveTo(p, 0); c.lineTo(p, SIZE); c.stroke();
+      c.beginPath(); c.moveTo(0, p); c.lineTo(SIZE, p); c.stroke();
+    }
+  }
+
+  /* Выгрузить посчитанные пиксели в канвас карты. */
+  function uploadBathy() {
+    if (!bathyWin || !bathyImg) return false;
+    if (!bathyWin.consumeChanged()) return false;
+    bathyImg.data.set(bathyWin.data);
+    bathyCtx.putImageData(bathyImg, 0, 0);
+    return true;
   }
 
   function ensureFogCanvas() {
@@ -535,11 +567,8 @@ window.OC = window.OC || {};
       canvas.height = SIZE;
       ctx = canvas.getContext('2d');
       biomeRef = biome;
-      if (biome && biome.spawn && biome.spawn.pos) {
-        mapCx = biome.spawn.pos[0];
-        mapCz = biome.spawn.pos[2];
-      }
-      renderBathymetry();
+      const sp = (biome && biome.spawn && biome.spawn.pos) ? biome.spawn.pos : [0, 0, 0];
+      ensureBathyWindow(sp[0], sp[2]);
       loadFogForBiome(biome);
 
       function toggleWaypointAt(px, py) {
@@ -675,11 +704,9 @@ window.OC = window.OC || {};
       biomeRef = biome;
       pingState = null;
       covCacheKey = -1;
-      if (biome && biome.spawn && biome.spawn.pos) {
-        mapCx = biome.spawn.pos[0];
-        mapCz = biome.spawn.pos[2];
-      }
-      if (canvas) renderBathymetry();
+      fogDirty = true;
+      const sp = (biome && biome.spawn && biome.spawn.pos) ? biome.spawn.pos : [0, 0, 0];
+      ensureBathyWindow(sp[0], sp[2]);
       loadFogForBiome(biome);
     },
 
@@ -693,18 +720,39 @@ window.OC = window.OC || {};
       return isCellRevealed(x, z);
     },
 
+    /* Готова ли батиметрия окна (для тестов) */
+    isMapComplete() {
+      return !bathyWin || bathyWin.isComplete();
+    },
+
+    samplePixel(x, z) {
+      return bathyWin ? bathyWin.pixelAt(x, z) : null;
+    },
+
+
     update(camPos, yaw) {
-      if (!ctx || !bgImage || !biomeRef) return;
+      if (!ctx || !biomeRef) return;
+      if (!bathyWin) {
+        ensureBathyWindow(camPos.x, camPos.z);
+        if (!bathyWin) return;
+      }
 
       /* Окно карты едет за аппаратом: в мире без края карта всегда показывает
-         окрестность игрока, а не фиксированный круг старта. Перерисовка
-         батиметрии — только при уходе дальше MAP_RECENTER метров. */
+         окрестность игрока, а не фиксированный круг старта. Готовые пиксели
+         переезжают на новые места, открывшаяся полоса досчитывается порциями,
+         чтобы карта не стоила сотен миллисекунд на кадр. */
       if (Math.hypot(camPos.x - mapCx, camPos.z - mapCz) > MAP_RECENTER) {
-        mapCx = camPos.x;
-        mapCz = camPos.z;
-        renderBathymetry();
+        bathyWin.setCenter(camPos.x, camPos.z);
+        mapCx = bathyWin.centerX();
+        mapCz = bathyWin.centerZ();
         fogDirty = true;
       }
+      /* Бюджет на дорисовку: пока открылась только полоса, хватает двух
+         миллисекунд; после телепорта окно пустое и можно тратить больше —
+         карта всё равно обновляется несколько раз в секунду. */
+      const fillBudget = bathyWin.pendingRows() > SIZE / 2 ? MAP_FILL_BUDGET_MS * 3 : MAP_FILL_BUDGET_MS;
+      bathyWin.tick(fillBudget);
+      uploadBathy();
 
       // Пассивное картографирование окружающей области при плавании
       if (Math.hypot(camPos.x - lastPassiveX, camPos.z - lastPassiveZ) > 14) {
@@ -716,7 +764,8 @@ window.OC = window.OC || {};
       }
 
       ctx.clearRect(0, 0, SIZE, SIZE);
-      ctx.drawImage(bgImage, 0, 0);
+      if (bathyCanvas) ctx.drawImage(bathyCanvas, 0, 0);
+      drawMapOverlay(ctx);
 
       // Слой тумана войны ("Картография экспедиции")
       if (fogEnabled) {

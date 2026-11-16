@@ -44,6 +44,7 @@ window.OC = window.OC || {};
 
   let renderer, scene, camera, hemi, sun, fillA, fillB, flashlight, flashTarget, flashBeam, flashBeamMat;
   let skyMat, skySphere, sunSprite, surfaceMat, surfacePlane;
+  let foamWin = null;   // скроллящееся окно текстуры прибоя (мир без края)
   const raysState = { scene: null, raysGroup: null, rayMats: [], rayMeshes: [] };
   let precipFx = null;
   let postFx = null;
@@ -480,13 +481,17 @@ window.OC = window.OC || {};
     /* --- водная поверхность (Y = 0) с окном Снеллиуса, волнами и пеной прибоя --- */
     const rp = rippleTexture();
     const activeBiome = OC.Biomes.getActive();
-    const foamTex = buildBathymetryFoamTex(activeBiome);
+    foamWin = OC._WorldTextures.createFoamWindow(activeBiome);
+    foamWin.flush();   // первая текстура нужна сразу, дальше окно едет за аппаратом
+    const foamTex = foamWin.texture;
     surfaceMat = new T.ShaderMaterial({
       transparent: true, depthWrite: false, side: T.DoubleSide, fog: false,
       uniforms: {
         uTex: { value: rp },
         uFoamTex: { value: foamTex },
-        uWorldSpan: { value: (activeBiome ? activeBiome.worldRadius : 1200) * 2.0 },
+        uWorldSpan: { value: foamWin ? foamWin.span : 2400 },
+        uFoamCenter: { value: new T.Vector2(0, 0) },
+        uOrigin: { value: new T.Vector3(0, 0, 0) },
         uTime: OC.uTime,
         uWaterCol: { value: new T.Color(0x6edcf5) },
         uSkyCol: { value: new T.Color(0x88d8ff) },
@@ -503,8 +508,11 @@ window.OC = window.OC || {};
         varying vec3 vWorld;
         varying float vCrest;
         uniform float uTime, uWaveAmp;
+        uniform vec3 uOrigin;
         void main(){
-          vec4 wp = modelMatrix * vec4(position, 1.0);
+          // Floating Origin сдвигает сцену: в шейдере возвращаем истинные мировые
+          // координаты, иначе узор волн и выборка пены прыгают при переносе начала
+          vec4 wp = modelMatrix * vec4(position, 1.0) + vec4(uOrigin, 0.0);
           float w1 = sin(wp.x * 0.075 + uTime * 1.25) * 0.24;
           float w2 = cos(wp.z * 0.088 - uTime * 0.98) * 0.21;
           float w3 = sin((wp.x * 0.68 + wp.z * 0.74) * 0.12 + uTime * 1.85) * 0.11;
@@ -520,6 +528,8 @@ window.OC = window.OC || {};
         varying float vCrest;
         uniform sampler2D uTex, uFoamTex;
         uniform float uTime, uDayW, uCamY, uWorldSpan, uStorm, uLightning;
+        uniform vec2 uFoamCenter;
+        uniform vec3 uOrigin;
         uniform vec3 uWaterCol, uSkyCol, uSunCol, uSunDir;
         uniform vec4 uVesselInfo;
         void main(){
@@ -528,9 +538,12 @@ window.OC = window.OC || {};
           float r2 = texture2D(uTex, cuv * 1.65 - vec2(uTime * 0.012, uTime * 0.016)).r;
           float rip = r1 * 0.65 + r2 * 0.45;
 
-          // Выборка глубины и мелководной пены прибоя/льда по координатам карты
-          vec2 mapUv = clamp(vWorld.xz / uWorldSpan + 0.5, 0.002, 0.998);
-          vec4 bathy = texture2D(uFoamTex, mapUv);
+          /* Глубина и пена прибоя/льда берутся из окна карты, которое едет за
+             аппаратом; за пределами окна — открытая вода без береговой пены. */
+          vec2 mapUv = (vWorld.xz - uFoamCenter) / uWorldSpan + 0.5;
+          vec2 insideUv = step(vec2(0.0), mapUv) * step(mapUv, vec2(1.0));
+          float inside = insideUv.x * insideUv.y;
+          vec4 bathy = texture2D(uFoamTex, clamp(mapUv, 0.002, 0.998)) * inside;
           float depthT = bathy.r;
           float crestSurf = bathy.g;
           float shoreSurf = bathy.b;
@@ -558,8 +571,9 @@ window.OC = window.OC || {};
           float whitecap = smoothstep(0.42, 0.92, vCrest) * uStorm * 0.95;
           float foam = clamp((crestSurf * 0.72 * surge + shoreSurf * 0.96 + swash * 0.78 + whitecap + vesselFoam * 0.92) * max(foamNoise, vesselFoam * 0.72), 0.0, 0.96);
 
-          vec3 toEye = normalize(cameraPosition - vWorld);
-          float dist = length(cameraPosition - vWorld);
+          vec3 eyeWorld = cameraPosition + uOrigin;
+          vec3 toEye = normalize(eyeWorld - vWorld);
+          float dist = length(eyeWorld - vWorld);
           float fade = smoothstep(1350.0, 120.0, dist);
 
           // Волновая нормаль для бликов
@@ -734,9 +748,12 @@ window.OC = window.OC || {};
   };
   OC.refreshWorldForBiome = function (biome) {
     if (!surfaceMat || !biome) return;
-    if (surfaceMat.uniforms.uFoamTex.value) surfaceMat.uniforms.uFoamTex.value.dispose();
-    surfaceMat.uniforms.uFoamTex.value = buildBathymetryFoamTex(biome);
-    surfaceMat.uniforms.uWorldSpan.value = (biome.worldRadius || 1200) * 2.0;
+    if (foamWin) foamWin.dispose();
+    foamWin = OC._WorldTextures.createFoamWindow(biome);
+    foamWin.flush();
+    surfaceMat.uniforms.uFoamTex.value = foamWin.texture;
+    surfaceMat.uniforms.uWorldSpan.value = foamWin.span;
+    surfaceMat.uniforms.uFoamCenter.value.set(foamWin.centerX(), foamWin.centerZ());
     if (surfacePlane) surfacePlane.visible = !biome.noSurface;
     if (sunSprite) sunSprite.visible = !biome.noSurface;
   };
@@ -919,6 +936,14 @@ window.OC = window.OC || {};
       surfacePlane.position.x = Math.round((trueCamX - ox) / snap) * snap;
       surfacePlane.position.y = waterLevel - oy;
       surfacePlane.position.z = Math.round((trueCamZ - oz) / snap) * snap;
+      surfaceMat.uniforms.uOrigin.value.set(ox, oy, oz);
+      /* Текстура прибоя — окно вокруг аппарата: пена и оттенок мелководья
+         считаются по настоящему рельефу под игроком, а не по кругу старта. */
+      if (foamWin) {
+        foamWin.setCenter(trueCamX, trueCamZ);
+        foamWin.tick(1.5);
+        surfaceMat.uniforms.uFoamCenter.value.set(foamWin.centerX(), foamWin.centerZ());
+      }
       surfaceMat.uniforms.uWaterCol.value.copy(pal.water);
       surfaceMat.uniforms.uSkyCol.value.copy(pal.aboveHoriz);
       surfaceMat.uniforms.uSunCol.value.copy(pal.sunCol);
