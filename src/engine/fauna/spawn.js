@@ -215,9 +215,24 @@ window.OC = window.OC || {};
       }
 
       for (const seep of (plan.seepTargets || [])) {
-        const origin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : new T.Vector3();
-        const p = new T.Vector3(seep.x - origin.x, biome.getHeight(seep.x, seep.z) + 1.0, seep.z - origin.z);
-        const target = { key: 'methane_seep_baikal', getPosition: () => p, update() {} };
+        /* Сип — статичная точка мира: её место задано в мировых координатах и
+           не едет вместе с игроком, поэтому локальная позиция пересчитывается
+           каждый кадр (высоту дна берём у вида биома: он ждёт локальные
+           координаты). Раньше позиция считалась один раз при высадке и после
+           переноса начала координат уезжала вместе со сценой. */
+        const p = new T.Vector3();
+        const target = {
+          key: 'methane_seep_baikal',
+          getPosition: () => p,
+          update() {
+            const o = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+            const ox = o ? o.x : 0;
+            const oy = o ? o.y : 0;
+            const oz = o ? o.z : 0;
+            p.set(seep.x - ox, biome.getHeight(seep.x - ox, seep.z - oz) + 1.0 - oy, seep.z - oz);
+          }
+        };
+        target.update();
         agents.push(target);
         sonarTargets.push(target);
       }

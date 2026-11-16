@@ -70,6 +70,11 @@ window.OC = window.OC || {};
       }), { causticStrength: biome.noSurface ? 0.0 : 0.64 });
 
       const plan = biome.faunaPlan || {};
+      /* Фауна живёт в локальных координатах сцены (Floating Origin держит
+         камеру в начале), а рельеф описывается в мировых. Без обёртки рыбы
+         запрашивали дно точкой, смещённой на origin, и в мире без края
+         повисали в сотнях метров над грунтом. */
+      const fBiome = (OC._FaunaSpace && OC._FaunaSpace.wrap) ? OC._FaunaSpace.wrap(biome) : biome;
       const agents = [];
       const impostoredAgents = new Set(); // агенты, для которых сейчас активен impostor
 
@@ -107,7 +112,7 @@ window.OC = window.OC || {};
       }
 
       const { whale, whalesList, primaryVessel } = spawnFauna({
-        faunaGroup, biome, plan, emitSplash,
+        faunaGroup, biome: fBiome, plan, emitSplash,
         agents, schools, predatorAgents, preySchools, sonarTargets,
         surfaceJumpers, huntingAgents
       });
@@ -117,7 +122,7 @@ window.OC = window.OC || {};
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
-        agents.push(OC._FaunaBuilders.makeVentPlume(faunaGroup, biome, texSoft, vp));
+        agents.push(OC._FaunaBuilders.makeVentPlume(faunaGroup, fBiome, texSoft, vp));
       }
       const noSurf = !!biome.noSurface;
       const bubbleMat = createCameraRelativeParticles(faunaGroup, noSurf ? 80 : Math.round(900 * pCountMult), texHard, 'bubbles', noSurf);
@@ -125,9 +130,9 @@ window.OC = window.OC || {};
       const snowMat = createCameraRelativeParticles(faunaGroup, Math.round((noSurf ? 1400 : 1050) * pCountMult), texSoft, 'snow', noSurf);
       const isCoralBiome = (biome.id === 'great_barrier_reef' || biome.id === 'wreck_atoll' || biome.id === 'galapagos_upwelling');
       const coralSpawnSys = isCoralBiome ? createCoralSpawningSystem(faunaGroup, Math.round(340 * pCountMult), texSoft) : null;
-      const thermoHaze = makeThermoclineHaze(faunaGroup, biome);
-      const benthicSilt = makeBenthicSiltSystem(faunaGroup, biome, texSoft);
-      const hydratePlumes = makeHydratePlumeSystem(faunaGroup, biome, texHard);
+      const thermoHaze = makeThermoclineHaze(faunaGroup, fBiome);
+      const benthicSilt = makeBenthicSiltSystem(faunaGroup, fBiome, texSoft);
+      const hydratePlumes = makeHydratePlumeSystem(faunaGroup, fBiome, texHard);
       const biolumTrail = makeBiolumTrail(faunaGroup, texSoft, noSurf);
 
       // Подводный вулкан-сеаунд: редкие события с предвестниками (hydrothermal_vents)

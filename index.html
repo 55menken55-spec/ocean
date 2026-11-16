@@ -12457,12 +12457,21 @@ window.OC = window.OC || {};
     /* Вызывать каждый фрейм с камерой. Возвращает true, если сдвиг произошёл. */
     update(camera, scene) {
       const camPos = camera.position;
-      const dist = Math.hypot(camPos.x, camPos.y, camPos.z);
+      /* Сдвигаем только горизонталь. Вертикаль остаётся в мировой системе,
+         потому что весь мир описан от поверхности воды (y = 0): глубины стай,
+         пороги «не выше −1.3 м», выпрыгивание китов, потолки пещер и ледовый
+         панцирь — всё это абсолютные отметки. Стоило накопить в origin и
+         вертикаль, как локальная поверхность уезжала на −origin.y: в мире без
+         края за десяток переносов это километры, и вся фауна оказывалась под
+         дном (замер: 41 агент из 58 в грунте после 6 переносов на глубине 40 м).
+         По вертикали точность float32 и так достаточна — самый глубокий биом
+         около 2.5 км, то есть погрешность доли миллиметра. */
+      const dist = Math.hypot(camPos.x, camPos.z);
 
       if (dist > threshold) {
-        const delta = camPos.clone(); // насколько сдвигаем всё назад
+        const delta = new T.Vector3(camPos.x, 0, camPos.z); // насколько сдвигаем всё назад
 
-        // Накапливаем в origin
+        // Накапливаем в origin (только горизонталь)
         origin.add(delta);
 
         // Сдвигаем все объекты сцены назад на delta
@@ -12476,7 +12485,8 @@ window.OC = window.OC || {};
                  сдвиг и перезапишет матрицы по-своему). Такие меши помечают
                  себя userData.noFloatingOrigin = true. */
               if (obj.userData && obj.userData.noFloatingOrigin) return;
-              obj.position.sub(delta);
+              obj.position.x -= delta.x;
+              obj.position.z -= delta.z;
               if (obj.isInstancedMesh && obj.instanceMatrix) {
                 obj.instanceMatrix.needsUpdate = true;
               }
@@ -12484,8 +12494,9 @@ window.OC = window.OC || {};
           });
         }
 
-        // Сбрасываем камеру в начало
-        camPos.set(0, 0, 0);
+        // Сбрасываем камеру в начало по горизонтали (глубина остаётся мировой)
+        camPos.x = 0;
+        camPos.z = 0;
         camera.updateMatrixWorld();
 
         // Уведомляем подписчиков
@@ -17604,6 +17615,88 @@ window.OC = window.OC || {};
       return (f.density * f.gravity) / (WATER.density * WATER.gravity);
     }
   };
+})(window.OC);
+
+// === engine/fauna/space.js ===
+/* ================= ПРОСТРАНСТВО ФАУНЫ: ЛОКАЛЬНЫЕ КООРДИНАТЫ ↔ МИРОВЫЕ ================= */
+/* Фауна считает себя в координатах сцены: Floating Origin держит камеру в
+   начале координат, а рыбы лежат в instanceMatrix стай, которые не участвуют
+   в переносе (userData.noFloatingOrigin). Рельеф же описывается в мировых
+   координатах. Пока мир был кругом радиусом 1200 м, origin смещался редко и
+   незаметно; в мире без края origin копит километры, и прямой вызов
+   biome.getHeight(x, z) локальной точкой спрашивает дно на другом конце
+   карты — рыбы повисают в сотнях метров над грунтом или уходят под него.
+
+   Обёртка — это вид биома «глазами фауны»: все запросы с координатами
+   переводятся из локальных в мировые, а высота дна возвращается в локальной
+   вертикали (мировая минус origin.y). Остальные поля биома (id, глубина,
+   энциклопедия, план фауны) читаются с прототипа без копирования. */
+window.OC = window.OC || {};
+OC._FaunaSpace = (function (OC) {
+  'use strict';
+
+  function originOrNull() {
+    return (OC.FloatingOrigin && OC.FloatingOrigin.getOrigin) ? OC.FloatingOrigin.getOrigin() : null;
+  }
+
+  /* Возвращает объект, который отвечает на все запросы биома, но получает
+     координаты в системе сцены. */
+  function wrap(biome) {
+    if (!biome) return biome;
+    const view = Object.create(biome);
+
+    view.getHeight = function (x, z) {
+      const o = originOrNull();
+      if (!o) return biome.getHeight(x, z);
+      return biome.getHeight(x + o.x, z + o.z) - o.y;
+    };
+
+    if (typeof biome.getCeilingHeight === 'function') {
+      view.getCeilingHeight = function (x, z) {
+        const o = originOrNull();
+        if (!o) return biome.getCeilingHeight(x, z);
+        return biome.getCeilingHeight(x + o.x, z + o.z) - o.y;
+      };
+    }
+
+    if (typeof biome.isCeilingOpen === 'function') {
+      view.isCeilingOpen = function (x, z) {
+        const o = originOrNull();
+        if (!o) return biome.isCeilingOpen(x, z);
+        return biome.isCeilingOpen(x + o.x, z + o.z);
+      };
+    }
+
+    if (typeof biome.getIceMaskAt === 'function') {
+      view.getIceMaskAt = function (x, z) {
+        const o = originOrNull();
+        if (!o) return biome.getIceMaskAt(x, z);
+        return biome.getIceMaskAt(x + o.x, z + o.z);
+      };
+    }
+
+    if (typeof biome.getZoneAt === 'function') {
+      view.getZoneAt = function (x, y, z) {
+        const o = originOrNull();
+        if (!o) return biome.getZoneAt(x, y, z);
+        return biome.getZoneAt(x + o.x, y + o.y, z + o.z);
+      };
+    }
+
+    if (typeof biome.getCurrentAt === 'function') {
+      view.getCurrentAt = function (x, y, z, time, out) {
+        const o = originOrNull();
+        if (!o) return biome.getCurrentAt(x, y, z, time, out);
+        return biome.getCurrentAt(x + o.x, y + o.y, z + o.z, time, out);
+      };
+    }
+
+    /* Признак вида: по нему тесты и отладка отличают обёртку от биома. */
+    view.isFaunaSpaceView = true;
+    return view;
+  }
+
+  return { wrap };
 })(window.OC);
 
 // === engine/fauna/schools.js ===
@@ -25215,7 +25308,10 @@ window.OC = window.OC || {};
         const pz = cz + Math.sin(ang) * rad;
         /* Планировщик почти не тратит усилий: медленный набор высоты и длинный
            пологий спуск — в жидкости плотностью 660 кг/м³ это выгоднее всего. */
-        const py = baseY + Math.sin(time * 0.13 + ph) * 9.0;
+        /* Орбита планировщика задана в координатах сцены: вместе с переносом
+           начала координат под ним оказывается другой рельеф. Без привязки к
+           дну он уходит в грунт там, где котловина мельче. */
+        const py = Math.max(baseY + Math.sin(time * 0.13 + ph) * 9.0, biome.getHeight(px, pz) + 8.0);
         group.position.set(px, py, pz);
         group.rotation.y = -ang + Math.PI / 2;
         group.rotation.z = Math.sin(time * 0.13 + ph) * 0.22;
@@ -26462,9 +26558,24 @@ window.OC = window.OC || {};
       }
 
       for (const seep of (plan.seepTargets || [])) {
-        const origin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : new T.Vector3();
-        const p = new T.Vector3(seep.x - origin.x, biome.getHeight(seep.x, seep.z) + 1.0, seep.z - origin.z);
-        const target = { key: 'methane_seep_baikal', getPosition: () => p, update() {} };
+        /* Сип — статичная точка мира: её место задано в мировых координатах и
+           не едет вместе с игроком, поэтому локальная позиция пересчитывается
+           каждый кадр (высоту дна берём у вида биома: он ждёт локальные
+           координаты). Раньше позиция считалась один раз при высадке и после
+           переноса начала координат уезжала вместе со сценой. */
+        const p = new T.Vector3();
+        const target = {
+          key: 'methane_seep_baikal',
+          getPosition: () => p,
+          update() {
+            const o = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+            const ox = o ? o.x : 0;
+            const oy = o ? o.y : 0;
+            const oz = o ? o.z : 0;
+            p.set(seep.x - ox, biome.getHeight(seep.x - ox, seep.z - oz) + 1.0 - oy, seep.z - oz);
+          }
+        };
+        target.update();
         agents.push(target);
         sonarTargets.push(target);
       }
@@ -27725,6 +27836,11 @@ window.OC = window.OC || {};
       }), { causticStrength: biome.noSurface ? 0.0 : 0.64 });
 
       const plan = biome.faunaPlan || {};
+      /* Фауна живёт в локальных координатах сцены (Floating Origin держит
+         камеру в начале), а рельеф описывается в мировых. Без обёртки рыбы
+         запрашивали дно точкой, смещённой на origin, и в мире без края
+         повисали в сотнях метров над грунтом. */
+      const fBiome = (OC._FaunaSpace && OC._FaunaSpace.wrap) ? OC._FaunaSpace.wrap(biome) : biome;
       const agents = [];
       const impostoredAgents = new Set(); // агенты, для которых сейчас активен impostor
 
@@ -27762,7 +27878,7 @@ window.OC = window.OC || {};
       }
 
       const { whale, whalesList, primaryVessel } = spawnFauna({
-        faunaGroup, biome, plan, emitSplash,
+        faunaGroup, biome: fBiome, plan, emitSplash,
         agents, schools, predatorAgents, preySchools, sonarTargets,
         surfaceJumpers, huntingAgents
       });
@@ -27772,7 +27888,7 @@ window.OC = window.OC || {};
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
-        agents.push(OC._FaunaBuilders.makeVentPlume(faunaGroup, biome, texSoft, vp));
+        agents.push(OC._FaunaBuilders.makeVentPlume(faunaGroup, fBiome, texSoft, vp));
       }
       const noSurf = !!biome.noSurface;
       const bubbleMat = createCameraRelativeParticles(faunaGroup, noSurf ? 80 : Math.round(900 * pCountMult), texHard, 'bubbles', noSurf);
@@ -27780,9 +27896,9 @@ window.OC = window.OC || {};
       const snowMat = createCameraRelativeParticles(faunaGroup, Math.round((noSurf ? 1400 : 1050) * pCountMult), texSoft, 'snow', noSurf);
       const isCoralBiome = (biome.id === 'great_barrier_reef' || biome.id === 'wreck_atoll' || biome.id === 'galapagos_upwelling');
       const coralSpawnSys = isCoralBiome ? createCoralSpawningSystem(faunaGroup, Math.round(340 * pCountMult), texSoft) : null;
-      const thermoHaze = makeThermoclineHaze(faunaGroup, biome);
-      const benthicSilt = makeBenthicSiltSystem(faunaGroup, biome, texSoft);
-      const hydratePlumes = makeHydratePlumeSystem(faunaGroup, biome, texHard);
+      const thermoHaze = makeThermoclineHaze(faunaGroup, fBiome);
+      const benthicSilt = makeBenthicSiltSystem(faunaGroup, fBiome, texSoft);
+      const hydratePlumes = makeHydratePlumeSystem(faunaGroup, fBiome, texHard);
       const biolumTrail = makeBiolumTrail(faunaGroup, texSoft, noSurf);
 
       // Подводный вулкан-сеаунд: редкие события с предвестниками (hydrothermal_vents)

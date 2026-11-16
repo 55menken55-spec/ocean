@@ -180,7 +180,10 @@ window.OC = window.OC || {};
         const pz = cz + Math.sin(ang) * rad;
         /* Планировщик почти не тратит усилий: медленный набор высоты и длинный
            пологий спуск — в жидкости плотностью 660 кг/м³ это выгоднее всего. */
-        const py = baseY + Math.sin(time * 0.13 + ph) * 9.0;
+        /* Орбита планировщика задана в координатах сцены: вместе с переносом
+           начала координат под ним оказывается другой рельеф. Без привязки к
+           дну он уходит в грунт там, где котловина мельче. */
+        const py = Math.max(baseY + Math.sin(time * 0.13 + ph) * 9.0, biome.getHeight(px, pz) + 8.0);
         group.position.set(px, py, pz);
         group.rotation.y = -ang + Math.PI / 2;
         group.rotation.z = Math.sin(time * 0.13 + ph) * 0.22;

@@ -96,10 +96,14 @@ export function run(ctx) {
     foCam.position.copy(foPos);
     const didShift = OC.FloatingOrigin.update(foCam, foScene);
     assert(didShift, 'FloatingOrigin must shift the scene when the camera passes the threshold');
-    assert(foCam.position.length() < 1e-9, 'FloatingOrigin must reset the camera to the local origin');
+    /* Сдвиг только по горизонтали: вертикаль остаётся мировой, иначе локальная
+       поверхность воды уезжает на −origin.y и вся фауна оказывается под дном. */
+    assert(Math.hypot(foCam.position.x, foCam.position.z) < 1e-9, 'FloatingOrigin must reset the camera horizontally');
+    assert(Math.abs(foCam.position.y - foPos.y) < 1e-6, 'FloatingOrigin must keep the world depth on the vertical axis');
     const foOrigin = OC.FloatingOrigin.getOrigin();
     assert(Math.abs(foOrigin.x - foPos.x) < 1e-6 && Math.abs(foOrigin.z - foPos.z) < 1e-6,
       `FloatingOrigin must accumulate the travelled offset, got (${foOrigin.x.toFixed(1)}, ${foOrigin.z.toFixed(1)})`);
+    assert(Math.abs(foOrigin.y) < 1e-6, `FloatingOrigin must not accumulate the vertical offset, got ${foOrigin.y.toFixed(1)}`);
 
     // Кадр после сдвига — как в main.js: сначала origin, потом стримеры
     const cp = foCam.position;

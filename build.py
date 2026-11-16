@@ -67,6 +67,7 @@ ORDER = [
     'engine/flora_library.js',
     'engine/flora_streamer.js',
     'engine/fluid.js',
+    'engine/fauna/space.js',
     'engine/fauna/schools.js',
     'engine/fauna/reef_life.js',
     'engine/fauna/rays_sharks.js',

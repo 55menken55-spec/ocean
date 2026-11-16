@@ -1,4 +1,4 @@
-// AB2) Verify Direction 3.1 (steps 1-2): planetary world — no circular edge
+// AB2) Verify Direction 3.1 (steps 1-3): planetary world — no circular edge
 /* Исторически мир был кругом радиусом worldRadius (1200 м): clampPosition
    зажимал камеру по x/z, а горизонтный фартук дна стоял статичным мешем в
    начале координат. Теперь мир без края: камера уходит на любое расстояние,
@@ -188,27 +188,45 @@ export function run(ctx) {
   assert(aboveSky.y <= (biome.maxCamY !== undefined ? biome.maxCamY : 16.0) + 0.001,
     `Camera must stay under the surface ceiling (y = ${aboveSky.y.toFixed(1)})`);
 
-  /* 10. Фауна обязана считаться и вдали от ядра: позиции конечны, агенты не
-     падают. Населённость мира вне ядра — отдельный подшаг 3.1. */
+  /* 10. Фауна без края: жизнь вокруг игрока на любом удалении и на своих
+     глубинах. Раньше фауна спрашивала рельеф локальной точкой, а он описан в
+     мировых координатах: стоило origin накопить километры, как рыбы уходили
+     под дно. Теперь фауна видит биом через обёртку пространства, а сам origin
+     копит только горизонталь — вертикаль остаётся мировой, иначе локальная
+     поверхность воды уезжает на −origin.y вместе со всеми порогами глубин. */
   const pwFauna = OC.FaunaEngine.init(pwScene, biome);
-  const farCamLocal = new T.Vector3(
-    cam.x - OC.FloatingOrigin.getOrigin().x,
-    -40,
-    cam.z - OC.FloatingOrigin.getOrigin().z
-  );
-  for (let i = 0; i < 12; i++) {
+  /* Камера в локальных координатах: после долгого заплыва origin накопил путь,
+     а сама камера стоит в начале сцены. Глубина при этом остаётся мировой —
+     Floating Origin больше не сдвигает вертикаль. */
+  const farCamLocal = new T.Vector3(camera.position.x, cam.y - OC.FloatingOrigin.getOrigin().y, camera.position.z);
+  for (let i = 0; i < 40; i++) {
     OC.uTime.value += 0.16;
     pwFauna.update(0.16, OC.uTime.value, farCamLocal, 2.0, true);
   }
+  const faunaOrigin = OC.FloatingOrigin.getOrigin();
+  assert(Math.abs(faunaOrigin.y) < 1e-6,
+    `Floating Origin must keep the vertical axis in world coordinates (got ${faunaOrigin.y.toFixed(1)} m)`);
   let faunaChecked = 0;
+  let faunaNear = 0;
+  const faunaUnderFloor = [];
   for (const ag of pwFauna.agents) {
     const p = ag.getPosition ? ag.getPosition() : null;
     if (!p) continue;
     faunaChecked++;
     assert(Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z),
       `Fauna agent ${ag.key || '?'} must stay finite 4 km from spawn`);
+    // Высота дна — в мировых координатах (вертикаль origin всегда нулевая)
+    const floorY = biome.getHeight(p.x + faunaOrigin.x, p.z + faunaOrigin.z);
+    if (p.y < floorY - 2.5) {
+      faunaUnderFloor.push(`${ag.key || '?'}: ${(p.y - floorY).toFixed(1)} m`);
+    }
+    if (Math.hypot(p.x - farCamLocal.x, p.z - farCamLocal.z) < 540) faunaNear++;
   }
   assert(faunaChecked > 0, 'Fauna must expose positioned agents');
+  assert(faunaUnderFloor.length === 0,
+    `Fauna must stay above the seabed 4 km from spawn (${faunaUnderFloor.slice(0, 4).join(', ')})`);
+  assert(faunaNear >= 8,
+    `Life must surround the player far outside the core area (${faunaNear} agents within 540 m)`);
 
   // 11. Ядро мира с достопримечательностями никуда не делось
   assert(biome.landmarks.every((lm) => Math.abs(lm.x) <= biome.worldRadius && Math.abs(lm.z) <= biome.worldRadius),
@@ -276,5 +294,5 @@ export function run(ctx) {
     'Foam window span must not be tied to the core radius anymore');
 
   OC.Biomes.setActive('great_barrier_reef');
-  console.log(`   Planetary world (steps 1-3): edge removed — flight to ${FAR} m, terrain & flora stream around the player, horizon apron follows (${apronOffset.toFixed(0)} m), map window + foam window + sparse fog chart ${(FAR / 1000).toFixed(0)} km out, ${faunaChecked} fauna agents finite, origin absorbs ${(shiftedBy / 1000).toFixed(1)} km.`);
+  console.log(`   Planetary world (steps 1-3): edge removed — flight to ${FAR} m, terrain & flora stream around the player, horizon apron follows (${apronOffset.toFixed(0)} m), map window + foam window + sparse fog chart ${(FAR / 1000).toFixed(0)} km out, ${faunaNear} of ${faunaChecked} fauna agents stay within 540 m and above the seabed, origin absorbs ${(shiftedBy / 1000).toFixed(1)} km.`);
 }

@@ -53,12 +53,21 @@ window.OC = window.OC || {};
     /* Вызывать каждый фрейм с камерой. Возвращает true, если сдвиг произошёл. */
     update(camera, scene) {
       const camPos = camera.position;
-      const dist = Math.hypot(camPos.x, camPos.y, camPos.z);
+      /* Сдвигаем только горизонталь. Вертикаль остаётся в мировой системе,
+         потому что весь мир описан от поверхности воды (y = 0): глубины стай,
+         пороги «не выше −1.3 м», выпрыгивание китов, потолки пещер и ледовый
+         панцирь — всё это абсолютные отметки. Стоило накопить в origin и
+         вертикаль, как локальная поверхность уезжала на −origin.y: в мире без
+         края за десяток переносов это километры, и вся фауна оказывалась под
+         дном (замер: 41 агент из 58 в грунте после 6 переносов на глубине 40 м).
+         По вертикали точность float32 и так достаточна — самый глубокий биом
+         около 2.5 км, то есть погрешность доли миллиметра. */
+      const dist = Math.hypot(camPos.x, camPos.z);
 
       if (dist > threshold) {
-        const delta = camPos.clone(); // насколько сдвигаем всё назад
+        const delta = new T.Vector3(camPos.x, 0, camPos.z); // насколько сдвигаем всё назад
 
-        // Накапливаем в origin
+        // Накапливаем в origin (только горизонталь)
         origin.add(delta);
 
         // Сдвигаем все объекты сцены назад на delta
@@ -72,7 +81,8 @@ window.OC = window.OC || {};
                  сдвиг и перезапишет матрицы по-своему). Такие меши помечают
                  себя userData.noFloatingOrigin = true. */
               if (obj.userData && obj.userData.noFloatingOrigin) return;
-              obj.position.sub(delta);
+              obj.position.x -= delta.x;
+              obj.position.z -= delta.z;
               if (obj.isInstancedMesh && obj.instanceMatrix) {
                 obj.instanceMatrix.needsUpdate = true;
               }
@@ -80,8 +90,9 @@ window.OC = window.OC || {};
           });
         }
 
-        // Сбрасываем камеру в начало
-        camPos.set(0, 0, 0);
+        // Сбрасываем камеру в начало по горизонтали (глубина остаётся мировой)
+        camPos.x = 0;
+        camPos.z = 0;
         camera.updateMatrixWorld();
 
         // Уведомляем подписчиков
