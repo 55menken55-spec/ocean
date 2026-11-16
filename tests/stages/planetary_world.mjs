@@ -1,8 +1,9 @@
-// AB2) Verify Direction 3.1 (step 1): planetary world — no circular world edge
+// AB2) Verify Direction 3.1 (steps 1-2): planetary world — no circular edge
 /* Исторически мир был кругом радиусом worldRadius (1200 м): clampPosition
    зажимал камеру по x/z, а горизонтный фартук дна стоял статичным мешем в
    начале координат. Теперь мир без края: камера уходит на любое расстояние,
-   чанки и флора стримятся вокруг игрока, а фартук едет за ним.
+   чанки и флора стримятся вокруг игрока, фартук едет за ним, а карта с
+   туманом войны показывают окрестность аппарата, а не круг старта.
 
    Что здесь ловится (всё проверено откатом правки):
    • clampPosition возвращал камеру на bound = worldRadius − 30, и «заплыть
@@ -10,6 +11,12 @@
    • фартук строился в мировом начале и оставался там навсегда: уйдя на
      километры, игрок видел на горизонте дно из точки старта — проверяется,
      что центр фартука следует за камерой;
+   • мини-карта считала worldToMap по фиксированному R = worldRadius, поэтому
+     за пределами ядра аппарат рисовался за краем полотна — проверяется, что
+     центр окна карты едет за аппаратом;
+   • туман войны был одной сеткой 64×64 на ±worldRadius: вне ядра всё
+     считалось неисследованным и не сохранялось — проверяется чарт в 4 км от
+     старта и возвращение этого чанка из хранилища новой сессией;
    • сама высота дна на больших координатах обязана оставаться конечной. */
 import assert from 'node:assert/strict';
 
@@ -119,12 +126,47 @@ export function run(ctx) {
   assert(shiftedBy > 5000, `A 14 km trip must accumulate in the floating origin (got ${shiftedBy.toFixed(0)} m)`);
   camera.position.set(0, 0, 0);
 
-  // 8. Мини-карта и Fog of War не падают за пределами ядра карты
+  /* 8. Мини-карта без края: окно карты едет за аппаратом, а туман войны
+     хранится разрежёнными чанками, поэтому исследование работает и в четырёх
+     километрах от старта, и сохраняется между сессиями. */
+  OC.Minimap.resetFog(biome.id);
   OC.Minimap.init(getEl('map-cov'), biome, () => {}, () => {});
+  const view0 = OC.Minimap.getViewCenter();
+  assert(Number.isFinite(view0.x) && Number.isFinite(view0.z) && view0.radius > 0,
+    'Minimap must expose the window centre it draws around');
+
   OC.Minimap.update(cam, 0.4);
+  const view1 = OC.Minimap.getViewCenter();
+  assert(Math.hypot(view1.x - cam.x, view1.z - cam.z) <= 320,
+    `Map window must follow the craft (centre ${view1.x.toFixed(0)},${view1.z.toFixed(0)} vs craft ${cam.x.toFixed(0)},${cam.z.toFixed(0)})`);
+  assert(Math.hypot(view1.x - view0.x, view1.z - view0.z) > 100,
+    'Map window must actually move when the craft leaves the core area');
+
   const coverage = OC.Minimap.getCoverage();
   assert(Number.isFinite(coverage) && coverage >= 0 && coverage <= 100,
     `Map coverage must stay a sane percentage outside the core area (got ${coverage})`);
+
+  // Сонар чертит карту там, где игрок находится сейчас, а не только в ядре
+  OC.Minimap.revealSwath(cam.x, cam.z, 0.8, 220);
+  assert(OC.Minimap.isRevealed(cam.x, cam.z),
+    'Fog of War must chart the area around the craft far outside the core area');
+  assert(!OC.Minimap.isRevealed(cam.x + 40000, cam.z + 40000),
+    'Fog of War must stay uncharted where the expedition never went');
+
+  const savedFog = OC.Expedition.getFogGrid(biome.id);
+  assert(typeof savedFog === 'string' && savedFog.indexOf('v3|') === 0 && savedFog.length > 4,
+    'Charted map must persist in the sparse chunk format (v3|...)');
+  /* Эмуляция нового сеанса: хранилище осталось, память пуста. Чанк в четырёх
+     километрах от старта обязан вернуться на карту из хранилища. */
+  OC.Minimap.setBiome(OC.Biomes.get('kelp_forest'));
+  OC.Minimap.resetFog(biome.id);
+  OC.Expedition.setFogGrid(biome.id, savedFog);
+  OC.Minimap.setBiome(biome);
+  assert(OC.Minimap.isRevealed(cam.x, cam.z),
+    'Sparse Fog of War must survive a reload from the expedition storage');
+  const coverageAfterReload = OC.Minimap.getCoverage();
+  assert(coverageAfterReload >= 0 && coverageAfterReload <= 100,
+    `Coverage after reload must stay sane (got ${coverageAfterReload})`);
 
   // 9. Регрессия: вертикальный зажим и protection от дна работают как раньше
   OC.Navigation.flyTo(FAR, biome.getHeight(FAR, FAR) - 40, FAR, 0, 0);
@@ -163,5 +205,5 @@ export function run(ctx) {
     'Landmarks must stay inside the core area of the world');
 
   OC.Biomes.setActive('great_barrier_reef');
-  console.log(`   Planetary world (step 1): edge removed — flight to ${FAR} m, terrain & flora stream around the player, horizon apron follows (${apronOffset.toFixed(0)} m), ${faunaChecked} fauna agents finite, origin absorbs ${(shiftedBy / 1000).toFixed(1)} km.`);
+  console.log(`   Planetary world (step 1-2): edge removed — flight to ${FAR} m, terrain & flora stream around the player, horizon apron follows (${apronOffset.toFixed(0)} m), map window + sparse fog chart ${(FAR / 1000).toFixed(0)} km out, ${faunaChecked} fauna agents finite, origin absorbs ${(shiftedBy / 1000).toFixed(1)} km.`);
 }
