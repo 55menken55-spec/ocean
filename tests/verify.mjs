@@ -43,6 +43,7 @@ import { run as runCenoteCaves } from './stages/cenote_caves.mjs';
 import { run as runGalapagos } from './stages/galapagos.mjs';
 import { run as runSonar } from './stages/sonar.mjs';
 import { run as runHydrophone } from './stages/hydrophone.mjs';
+import { run as runLidar } from './stages/lidar_fallback.mjs';
 import { run as runMuseumCycle } from './stages/museum_cycle.mjs';
 import { run as runCaustics } from './stages/caustics.mjs';
 import { run as runPlumes } from './stages/plumes.mjs';
@@ -77,6 +78,7 @@ for (const domId of [
   'id="map-cov"', 'id="map-fog-btn"',
   'id="btn-hydro"', 'id="hydro-box"', 'id="hydro-canvas"', 'id="hydro-db"', 'id="hydro-source"', 'id="hydro-band"', 'id="hydro-listen-btn"',
   'id="map-home-btn"', 'id="tele-core"',
+  'id="lidar-box"', 'id="btn-lidar"', 'id="lidar-range"', 'id="lidar-readout"',
   'id="rov-btn-museum"', 'data-jtab="museum"'
 ]) {
   assert(html.includes(domId), `index.html missing required element ${domId}`);
@@ -143,6 +145,7 @@ Object.assign(ctx, runCenoteCaves(ctx));
 Object.assign(ctx, runGalapagos(ctx));
 Object.assign(ctx, runSonar(ctx));
 Object.assign(ctx, runHydrophone(ctx));
+Object.assign(ctx, runLidar(ctx));
 Object.assign(ctx, runMuseumCycle(ctx));
 Object.assign(ctx, runCaustics(ctx));
 Object.assign(ctx, runPlumes(ctx));

@@ -131,7 +131,41 @@ window.OC = window.OC || {};
   let journalTab = 'missions';
   let lastEvalCtx = { zoneId: '', depthM: 0, currentKnots: 0, dayW: 1.0, flashOn: false };
   let sonarPingState = { t: -10, range: 140, kind: 'none', label: 'Сканер · Чисто', hit: false };
+  /* Лидар — запасной канал изображения: включается вручную и сам, когда
+     прожектор отказывает. Переживает смену биома. */
+  let lidarOn = false;
+  let lidarTimer = 0;
   const _fwd = new T.Vector3();
+
+  /* Прожектор отказал — без канала изображения остаёшься в темноте: лидар
+     берёт его на себя автоматически, иначе аппарат слепнет. */
+  OC.onFlashlightBreak = (reason) => {
+    const why = OC.getFlashlightReasonText ? OC.getFlashlightReasonText() : 'износ';
+    if (!lidarOn) {
+      setLidar(true, true);
+      toast('Прожектор отказал (' + why + ') — включён лидар');
+    } else {
+      toast('Прожектор отказал (' + why + ') — лидар уже работает');
+    }
+    if (uiHandles && uiHandles.syncFlash) uiHandles.syncFlash(false);
+  };
+
+  OC.onFlashlightRepair = (how) => {
+    toast(how === 'dock' ? 'Прожектор восстановлен у судна обеспечения' : 'Прожектор восстановлен: предохранитель остыл');
+    if (uiHandles && uiHandles.syncFlash) uiHandles.syncFlash(OC.isFlashlightOn());
+  };
+
+  function setLidar(on, silent) {
+    lidarOn = !!on;
+    if (OC.Lidar) OC.Lidar.setActive(lidarOn);
+    if (uiHandles && uiHandles.syncLidar) uiHandles.syncLidar(lidarOn);
+    if (!silent) toast(lidarOn ? 'Лидар включён: облако точек вместо прожектора' : 'Лидар выключен');
+    return lidarOn;
+  }
+
+  function toggleLidar() {
+    return setLidar(!lidarOn, false);
+  }
 
   function updateLensDroplets(dt, camPos, wState, biome) {
     OC._HudPanels.updateLensDroplets(lensCanvas, dt, camPos, wState, biome);
@@ -311,10 +345,13 @@ window.OC = window.OC || {};
       patchSonarState: (patch) => { sonarPingState = Object.assign({}, sonarPingState, patch); },
       getPendingPhotoCapture: () => pendingPhotoCapture,
       setPendingPhotoCapture: (v) => { pendingPhotoCapture = v; },
+      toggleLidar: () => toggleLidar(),
       fadeHero: () => { if (hero) hero.classList.add('fade'); }
     });
     const syncModes = svcHud.syncModes;
     const syncFlash = svcHud.syncFlash;
+    const syncLidar = svcHud.syncLidar;
+    const updateLidarReadout = svcHud.updateLidarReadout;
     const syncSubMode = svcHud.syncSubMode;
     const syncGuideCard = svcHud.syncGuideCard;
     const syncSound = svcHud.syncSound;
@@ -396,6 +433,7 @@ window.OC = window.OC || {};
       syncSubMode: (on) => syncSubMode(on),
       isSubMode: () => subMode,
       syncHydroMode: (on) => syncHydroMode(on),
+      toggleLidar: () => toggleLidar(),
       fireSonarPing: () => fireSonarPing(),
       triggerShutter: () => triggerShutter(),
       toggleLab: (f) => toggleLab(f),
@@ -426,6 +464,7 @@ window.OC = window.OC || {};
       isSubMode: () => subMode,
       syncFlash: (on) => syncFlash(on),
       syncHydroMode: (on) => syncHydroMode(on),
+      toggleLidar: () => toggleLidar(),
       fireSonarPing: () => fireSonarPing(),
       triggerSampleGrab: () => triggerSampleGrab(),
       triggerCtdCast: () => triggerCtdCast(),
@@ -440,7 +479,7 @@ window.OC = window.OC || {};
     const isHelpOpen = guideHud.isHelpOpen;
     const dismissHero = guideHud.dismissHero;
 
-    return { syncModes, syncFlash, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderQualityButtons, renderBiomeUI, renderZoneChips, updateResBadge, syncTouchQuick, syncHudToggle, toggleHud };
+    return { syncModes, syncFlash, syncLidar, updateLidarReadout, toggleLidar, syncCamMode, syncSubMode, syncGuideCard, updateLabDisplay, syncLabControls, updateRovCtdDisplay, syncRovButtons, fireSonarPing, triggerShutter, syncWeatherButtons, renderQualityButtons, renderBiomeUI, renderZoneChips, updateResBadge, syncTouchQuick, syncHudToggle, toggleHud };
   }
 
   function switchBiome(id) {
@@ -561,6 +600,15 @@ window.OC = window.OC || {};
       setBar(0.5);
       OC.Terrain.init(scene, activeBiome, sp);
       if (OC.Sonar) OC.Sonar.init(scene);
+      if (OC.Lidar) {
+        OC.Lidar.init(scene);
+        // Состояние прибора переживает смену биома
+        OC.Lidar.setActive(lidarOn);
+        if (OC.Quality && OC.Quality.get) {
+          const q = OC.Quality.get();
+          OC.Lidar.setQuality(q && typeof q.pointScale === 'number' ? q.pointScale : 1.0);
+        }
+      }
 
       setBar(0.72);
       OC.FloraStreamer.init(scene, activeBiome, sp);
@@ -590,6 +638,8 @@ window.OC = window.OC || {};
             const on = OC.toggleFlashlight();
             uiHandles.syncFlash(on);
             toast(on ? 'Прожектор включён' : 'Прожектор выключен');
+          } else if (action === 'lidar') {
+            toggleLidar();
           } else if (action === 'sonar') {
             uiHandles.fireSonarPing();
           } else if (action === 'sub') {
@@ -636,6 +686,7 @@ window.OC = window.OC || {};
       uiHandles = bindUI();
       uiHandles.syncModes(OC.Navigation.getMode());
       uiHandles.syncGuideCard(OC.Navigation.getTourState());
+      if (uiHandles.syncLidar) uiHandles.syncLidar(lidarOn);
 
       // Мобильный старт: сразу удерживаем целевой FPS динамическим разрешением
       if (OC.Quality && OC.Quality.isMobile && OC.Quality.isMobile()) {
@@ -754,6 +805,16 @@ window.OC = window.OC || {};
       OC.Terrain.update(camPos, scene);
       OC.FloraStreamer.update(camPos);
       if (OC.Sonar) OC.Sonar.update(dt);
+      if (OC.Lidar) {
+        OC.Lidar.update(dt, camera, activeBiome, { fauna: activeFauna });
+        lidarTimer += rawDt;
+        if (lidarTimer > 0.14 && lidarOn) {
+          lidarTimer = 0;
+          if (uiHandles && uiHandles.updateLidarReadout) {
+            uiHandles.updateLidarReadout(OC.Lidar.getState(), OC.getFlashlightStatus ? OC.getFlashlightStatus() : null);
+          }
+        }
+      }
       const camSpeed = OC.Navigation.getSpeed();
       const flashOn = OC.isFlashlightOn();
       if (OC.ROV) {

@@ -371,9 +371,9 @@ function stepFrames(count, dtMs = 16.67) {
   }
 }
 
-function pressKey(code) {
+function pressKey(code, mods) {
   const list = winListeners.keydown || [];
-  const ev = { code, target: { tagName: 'BODY' }, preventDefault: () => {} };
+  const ev = Object.assign({ code, target: { tagName: 'BODY' }, preventDefault: () => {} }, mods || {});
   for (const fn of list) fn(ev);
 }
 
@@ -462,6 +462,40 @@ for (let i = 0; i < 3; i++) OC.Quality.evaluateAutoLod(44.0, 1.0);
 assert.equal(OC.Quality.getId(), 'medium', 'Production Auto-LOD must downgrade high -> medium under simulated frame pressure');
 OC.Quality.set('high');
 stepFrames(2);
+
+// Лидар: запасной канал изображения при отказавшем прожекторе (Shift+F)
+assert(OC.Lidar && typeof OC.Lidar.init === 'function', 'Production bundle must ship the lidar module');
+assert.equal(OC.Lidar.isActive(), false, 'The lidar must stay off until it is asked for');
+pressKey('KeyF', { shiftKey: true });
+stepFrames(4);
+assert.equal(OC.Lidar.isActive(), true, 'Shift+F must switch the lidar on');
+assert(!getEl('lidar-box').classList.contains('hidden'), 'The lidar instrument panel must open with the lidar');
+assert(getEl('sonar-box').classList.contains('lidar-up'), 'The sonar panel must yield the lower instrument row to the lidar');
+stepFrames(30);
+const lidarSt = OC.Lidar.getState();
+assert(lidarSt.points > 100, `The lidar must build a point cloud in the live loop (got ${lidarSt.points} points)`);
+assert(/\d+ м/.test(getEl('lidar-range').textContent), `The panel must show the scan range (got "${getEl('lidar-range').textContent}")`);
+assert(parseInt(getEl('lidar-points').textContent, 10) > 100, 'The panel must show the cloud density');
+// Отказ прожектора: прибор гаснет, лидар подхватывает автоматически
+OC.repairFlashlight(1);
+OC.setFlashlight(true);
+pressKey('KeyF', { shiftKey: true });          // выключаем лидар, чтобы проверить автоподхват
+stepFrames(2);
+assert.equal(OC.Lidar.isActive(), false, 'Shift+F must switch the lidar back off');
+OC.damageFlashlight(1.0, 'depth');
+stepFrames(3);
+assert.equal(OC.isFlashlightBroken(), true, 'Spent health must break the flashlight in the production bundle');
+assert.equal(OC.Lidar.isActive(), true, 'A broken flashlight must hand the image over to the lidar by itself');
+assert(getEl('lidar-flash').textContent.includes('отказ'), `The panel must report the failure (got "${getEl('lidar-flash').textContent}")`);
+assert(/Ремонт/.test(getEl('lidar-repair').textContent), 'The panel must count down the repair timer');
+OC.repairFlashlight(1);
+stepFrames(3);
+assert.equal(OC.isFlashlightBroken(), false, 'Repair must clear the failure');
+pressKey('KeyF', { shiftKey: true });
+stepFrames(2);
+assert.equal(OC.Lidar.isActive(), false, 'The lidar must switch off after the flashlight is back');
+assert(getEl('lidar-box').classList.contains('hidden'), 'The lidar panel must close with the lidar');
+assert.equal(pageErrors.length, 0, `The lidar logged errors:\n${pageErrors.join('\n')}`);
 
 console.log('3) Profiling 14 biomes × 100 continuous frames (1400 frames + 3D Multibeam Sonar scans)...');
 const biomeList = OC.Biomes.list();

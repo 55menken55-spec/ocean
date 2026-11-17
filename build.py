@@ -106,6 +106,7 @@ ORDER = [
     'engine/rov/samples.js',
     'engine/rov.js',
     'engine/sonar.js',
+    'engine/lidar.js',
     'engine/hydrophone.js',
     'ui/navigation/state.js',
     'ui/navigation/core.js',

@@ -56,6 +56,22 @@ window.OC = window.OC || {};
   let flashlightOn = false;
   let timeOfDay = 0.24; // приятное утро / яркий день
 
+  /* --- Ресурс прожектора: оптика, уплотнения и кабель изнашиваются.
+     Сломанный прожектор — штатная ситуация: лидар берёт канал изображения
+     на себя, а прибор чинится либо сам (остывший предохранитель), либо у
+     судна обеспечения в точке старта. --- */
+  const REPAIR_S = 75;        // самовосстановление после отказа, с
+  const DOCK_RADIUS = 70;     // зона судна обеспечения вокруг точки старта, м
+  let flashHealth = 1.0;
+  let flashBroken = false;
+  let flashRepairT = 0;
+  let flashReason = '';
+  let flashFlicker = 1.0;
+  let flashFlickerT = 0;
+  let bottomHitCd = 0;
+  let dockedFor = 0;
+  const flashRng = OC.mulberry32(0x7c1d5b);
+
   const _drawSize = new T.Vector2(1024, 640);
   const sunDir = new T.Vector3(0.4, 0.85, 0.3).normalize();
   const _refractRayDir = new T.Vector3();
@@ -644,6 +660,123 @@ window.OC = window.OC || {};
   };
 
 
+  /* ---------- Отказ и починка прожектора ---------- */
+  /* Ресурс прибора тратится там, где оптике и уплотнениям тяжело: давление на
+     глубине, абразивная взвесь, горячий и химически агрессивный шлейф
+     извержения, удары о грунт. Порог отказа размыт случайностью, поэтому
+     прожектор не умирает по секундомеру, но и не вечен. */
+
+  const FLASH_REASONS = {
+    depth: 'давление',
+    silt: 'взвесь',
+    volcano: 'извержение',
+    bottom: 'касание грунта'
+  };
+
+  function breakFlashlight(reason) {
+    if (flashBroken) return;
+    flashBroken = true;
+    flashHealth = 0;
+    flashRepairT = REPAIR_S;
+    flashReason = reason || 'wear';
+    if (typeof OC.onFlashlightBreak === 'function') OC.onFlashlightBreak(flashReason);
+  }
+
+  function updateFlashlightWear(dt, biome, relativeY, wx, wy, wz) {
+    if (dt <= 0) return;
+
+    if (flashBroken) {
+      flashFlicker = 1.0;
+      flashRepairT -= dt;
+      if (flashRepairT <= 0) {
+        flashBroken = false;
+        flashHealth = 0.55;
+        flashReason = '';
+        if (typeof OC.onFlashlightRepair === 'function') OC.onFlashlightRepair('self');
+      }
+      return;
+    }
+
+    /* У судна обеспечения прибор восстанавливают полностью: это единственное
+       место, где ремонт идёт до единицы. */
+    const sp = biome && biome.spawn && biome.spawn.pos;
+    if (sp) {
+      const dx = wx - sp[0];
+      const dy = wy - sp[1];
+      const dz = wz - sp[2];
+      if (dx * dx + dy * dy + dz * dz < DOCK_RADIUS * DOCK_RADIUS) {
+        if (flashHealth < 1) {
+          flashHealth = OC.clamp(flashHealth + dt * 0.22, 0, 1);
+          dockedFor += dt;
+          if (dockedFor > 0.9 && flashHealth >= 1) {
+            dockedFor = 0;
+            if (typeof OC.onFlashlightRepair === 'function') OC.onFlashlightRepair('dock');
+          }
+        }
+        flashFlicker = 1.0;
+        return;
+      }
+      dockedFor = 0;
+    }
+
+    // 1. Давление: свыше 1500 м уплотнения и колба ведут себя хуже всего дня
+    const depthM = (biome && biome.depthOffset ? biome.depthOffset : 0) + Math.max(0, -relativeY);
+    let wear = Math.max(0, depthM - 1500) * 2.2e-7;
+    let reason = 'depth';
+
+    // 2. Взвесь: ил и «морской снег» абразивят стекло
+    const silt = (OC.faunaInfo && OC.faunaInfo.siltTurbidity) ? OC.faunaInfo.siltTurbidity : 0;
+    const siltWear = silt * 2.2e-4;
+    if (siltWear > wear) { wear = siltWear; reason = 'silt'; }
+
+    // 3. Извержение рядом: тепловой и химический удар по оптике
+    if (OC.Volcano && OC.Volcano.isActive && OC.Volcano.isActive() && OC.Volcano.getSite) {
+      const site = OC.Volcano.getSite();
+      if (site) {
+        const dx = wx - site.x;
+        const dz = wz - site.z;
+        const near = OC.clamp(1 - Math.sqrt(dx * dx + dz * dz) / 150, 0, 1);
+        const volcWear = near * 1.2e-3;
+        if (volcWear > wear) { wear = volcWear; reason = 'volcano'; }
+      }
+    }
+
+    // 4. Касание грунта: разовый удар, не чаще раза в несколько секунд
+    bottomHitCd -= dt;
+    if (biome && biome.getHeight && bottomHitCd <= 0) {
+      const floorH = biome.getHeight(wx, wz);
+      if (wy - floorH < 1.4) {
+        bottomHitCd = 3.0;
+        flashHealth = Math.max(0, flashHealth - (0.018 + flashRng() * 0.032));
+        reason = 'bottom';
+        if (flashHealth <= 0.0001) { breakFlashlight('bottom'); return; }
+      }
+    }
+
+    // Разброс ресурса: одинаковая глубина у двух приборов — разный срок
+    wear *= 0.65 + flashRng() * 0.7;
+    if (wear > 0) {
+      flashHealth = Math.max(0, flashHealth - wear * dt);
+      flashReason = flashHealth < 0.3 ? reason : '';
+      if (flashHealth <= 0.0001) { breakFlashlight(reason); return; }
+    }
+
+    /* Предотказное мерцание: контакт подгорает задолго до полного отказа. */
+    if (flashHealth < 0.35) {
+      flashFlickerT -= dt;
+      if (flashFlickerT <= 0) {
+        flashFlickerT = 0.05 + flashRng() * 0.22;
+        const bad = 1 - OC.clamp((0.35 - flashHealth) / 0.35, 0, 1);
+        flashFlicker = (flashRng() < 0.35 * (1 - bad)) ? 0.05 + flashRng() * 0.3 : OC.lerp(0.72, 1.0, bad);
+      }
+    } else {
+      flashFlicker = 1.0;
+    }
+  }
+
+  OC.getFlashlightReasonText = () => FLASH_REASONS[flashReason] || 'износ';
+
+
   /* ---------- Палитра по времени суток ---------- */
   function updateBasePalette(t) {
     // 0.0 = полночь, 0.25 = утро, 0.5 = полдень, 0.75 = закат
@@ -671,6 +804,37 @@ window.OC = window.OC || {};
   OC.isFlashlightOn = () => flashlightOn;
   OC.setFlashlight = (on) => { flashlightOn = !!on; return flashlightOn; };
   OC.toggleFlashlight = () => { flashlightOn = !flashlightOn; return flashlightOn; };
+  OC.getFlashlightHealth = () => flashHealth;
+  OC.isFlashlightBroken = () => flashBroken;
+  OC.getFlashlightStatus = () => ({
+    on: flashlightOn,
+    broken: flashBroken,
+    health: flashHealth,
+    repairS: Math.max(0, flashRepairT),
+    reason: flashReason
+  });
+  /* Повреждение прожектора. amount — доля ресурса (0..1). */
+  OC.damageFlashlight = (amount, reason) => {
+    const a = Math.max(0, Number(amount) || 0);
+    if (a <= 0 || flashBroken) return flashHealth;
+    flashHealth = Math.max(0, flashHealth - a);
+    if (flashHealth <= 0.0001) breakFlashlight(reason || 'unknown');
+    return flashHealth;
+  };
+  OC.repairFlashlight = (amount) => {
+    flashHealth = OC.clamp(flashHealth + Math.max(0, Number(amount) || 0), 0, 1);
+    if (flashHealth > 0.02) flashBroken = false;
+    if (flashHealth >= 1) { flashRepairT = 0; flashReason = ''; }
+    return flashHealth;
+  };
+  /* Тестовый хук: мгновенный отказ / починка без ожидания событий. */
+  OC._forceFlashlight = (health, reason) => {
+    flashHealth = OC.clamp(Number(health) || 0, 0, 1);
+    flashBroken = flashHealth <= 0.0001;
+    flashRepairT = flashBroken ? REPAIR_S : 0;
+    flashReason = flashBroken ? (reason || 'test') : '';
+    return flashHealth;
+  };
   OC.getScene = () => scene;
   OC.getCamera = () => camera;
   OC.getRenderer = () => renderer;
@@ -860,7 +1024,8 @@ window.OC = window.OC || {};
     fillB.intensity = pal.fillBI * (opt.fillBMult !== undefined ? opt.fillBMult : (0.3 + 0.7 * opt.sunAtten));
 
     /* прожектор дайвера / носовой прожектор ROV и объёмный луч в воде */
-    const targetFlashI = flashlightOn ? 4.2 : 0.0;
+    updateFlashlightWear(dt, biome, relativeY, trueCamX, trueCamY, trueCamZ);
+    const targetFlashI = (flashlightOn && !flashBroken) ? 4.2 * flashFlicker : 0.0;
     flashlight.intensity = OC.lerp(flashlight.intensity, targetFlashI, Math.min(1, dt * 10));
     const rovChase = !!(OC.Navigation && OC.Navigation.isRovView && OC.Navigation.isRovView() && OC.Navigation.getMode() === 'swim' && !(OC.Expedition && OC.Expedition.isPhotoMode()));
     if (rovChase && OC.Navigation.getPosition && OC.Navigation.getForward) {
