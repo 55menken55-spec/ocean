@@ -79,7 +79,7 @@ window.OC = window.OC || {};
     railEl = document.getElementById('topright');
     toggleEl = document.getElementById('btn-rail-toggle');
 
-    /* На узких экранах 14 иконок закрывают пол-экрана — по умолчанию прячем рейл.
+    /* На узких экранах 15 иконок закрывают пол-экрана — по умолчанию прячем рейл.
        Явный выбор пользователя (localStorage) всегда важнее. */
     let stored = null;
     try { stored = localStorage.getItem(COLLAPSE_KEY); } catch (e) { stored = null; }

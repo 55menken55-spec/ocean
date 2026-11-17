@@ -450,7 +450,7 @@ try {
       const restored = { state: railEl ? railEl.dataset.collapsed : null };
       return { groups: groups.length, btns: btns.length, toggle: !!toggle, before, collapsed, restored };
     });
-    assert.equal(rail.btns, 14, `Рейл должен содержать все 14 иконок, найдено ${rail.btns}`);
+    assert.equal(rail.btns, 15, `Рейл должен содержать все 15 иконок (14 + лидар), найдено ${rail.btns}`);
     assert.equal(rail.groups, 4, `Иконки должны быть разбиты на 4 логические группы, найдено ${rail.groups}`);
     assert(rail.toggle, 'Кнопка сворачивания рейла #btn-rail-toggle отсутствует');
     assert.equal(rail.collapsed.state, 'true', `Сворачивание рейла не сработало: ${JSON.stringify(rail)}`);
