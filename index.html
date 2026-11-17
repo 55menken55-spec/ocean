@@ -1919,6 +1919,11 @@ OC.GridWindow = (function (OC) {
             if (now() - t0 > limit) break;
           }
           changed = true;
+          /* Прогресс внутри строки обязательно запоминаем: без этого строка,
+             не влезшая в бюджет кадра, начиналась сначала каждый тик и не
+             завершалась никогда. На машине с холодным кешем рельефа (или под
+             нагрузкой) карта в итоге оставалась недорисованной навсегда. */
+          rowA[j] = i;
           if (i >= end) {
             rowA[j] = -1;
             pending--;
@@ -11416,6 +11421,7 @@ window.OC = window.OC || {};
   const _upAxis = new T.Vector3(0, 1, 0);
   const _rayQuat = new T.Quaternion();
   const camFwd = new T.Vector3();
+  const _flashCraft = new T.Vector3();
   const camRight = new T.Vector3();
   const _beamTint = new T.Color(0xeefaff);
   const _worldCurr = new T.Vector3();
@@ -12217,7 +12223,10 @@ window.OC = window.OC || {};
     flashlight.intensity = OC.lerp(flashlight.intensity, targetFlashI, Math.min(1, dt * 10));
     const rovChase = !!(OC.Navigation && OC.Navigation.isRovView && OC.Navigation.isRovView() && OC.Navigation.getMode() === 'swim' && !(OC.Expedition && OC.Expedition.isPhotoMode()));
     if (rovChase && OC.Navigation.getPosition && OC.Navigation.getForward) {
-      const craft = OC.Navigation.getPosition();
+      /* Фара — объект сцены, а камера и всё в сцене стоят в локальных
+         координатах: мировая позиция аппарата (getPosition) отличается на
+         origin, и с ней фара уехала бы на километры от аппарата. */
+      const craft = OC.Navigation.getLocalPosition ? OC.Navigation.getLocalPosition(_flashCraft) : OC.Navigation.getPosition();
       OC.Navigation.getForward(camFwd);
       flashlight.position.copy(craft).addScaledVector(camFwd, 1.05);
       flashlight.position.y += 0.20;
@@ -12421,15 +12430,19 @@ window.OC = window.OC || {};
       return origin;
     },
 
-    /* Перевести истинную мировую позицию в локальную ( escena ). */
-    toLocal(worldPos) {
-      return worldPos.clone().sub(origin);
+    /* Перевести истинную мировую позицию в локальную ( escena ).
+       out задаётся в горячем коде — без него каждая точка аллокирует вектор. */
+    toLocal(worldPos, out) {
+      const t = out || new T.Vector3();
+      return t.set(worldPos.x - origin.x, worldPos.y - origin.y, worldPos.z - origin.z);
     },
 
     /* Перевести локальную позицию сцены в истинную мировую. */
-    toWorld(localPos) {
-      return localPos.clone().add(origin);
+    toWorld(localPos, out) {
+      const t = out || new T.Vector3();
+      return t.set(localPos.x + origin.x, localPos.y + origin.y, localPos.z + origin.z);
     },
+
 
     /* Истинная позиция камеры в мире (локальная + origin). */
     getTrueCameraPos(camera, out) {
@@ -30617,6 +30630,13 @@ window.OC = window.OC || {};
       return;
     }
 
+    /* Трос — объект сцены: и якорь, и аппарат берём в локальных координатах.
+       Судно НИС стоит в сцене само (оно агент фауны), а точка старта и
+       депрессор заданы в мировых — их надо перевести. */
+    const foOrigin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+    const ox = foOrigin ? foOrigin.x : 0;
+    const oy = foOrigin ? foOrigin.y : 0;
+    const oz = foOrigin ? foOrigin.z : 0;
     const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
     const noSurf = !!(biome && biome.noSurface);
     let ax = 0, ay = 2.6, az = 0, maxLen = 1200, anchorLabel = 'Буй-лебёдка';
@@ -30630,15 +30650,15 @@ window.OC = window.OC || {};
       anchorLabel = vInfo.name || 'НИС';
     } else if (noSurf) {
       const sp = biome && biome.spawn ? biome.spawn.pos : [0, -18, 0];
-      ax = sp[0];
-      ay = 72.0;
-      az = sp[2];
+      ax = sp[0] - ox;
+      ay = 72.0 - oy;
+      az = sp[2] - oz;
       maxLen = 1450;
       anchorLabel = 'Депрессор лебёдки';
     } else if (biome && biome.spawn) {
-      ax = biome.spawn.pos[0];
-      ay = 0.6;
-      az = biome.spawn.pos[2];
+      ax = biome.spawn.pos[0] - ox;
+      ay = 0.6 - oy;
+      az = biome.spawn.pos[2] - oz;
       maxLen = 1200;
       anchorLabel = 'Опорный буй';
     }
@@ -30663,7 +30683,8 @@ window.OC = window.OC || {};
     tetherState.status = tensionPct >= 88 ? 'предел' : (tensionPct >= 62 ? 'натянут' : 'норма');
 
     if (biome && biome.getCurrentAt) {
-      biome.getCurrentAt((ax + rx) * 0.5, (ay + ry) * 0.5, (az + rz) * 0.5, time, _currTmp);
+      // Течение описано в мировых координатах
+      biome.getCurrentAt((ax + rx) * 0.5 + ox, (ay + ry) * 0.5 + oy, (az + rz) * 0.5 + oz, time, _currTmp);
       const mult = labState ? labState.currentMult : 1.0;
       _currTmp.multiplyScalar(mult * (1.0 - ratio * 0.72));
     } else {
@@ -30783,7 +30804,10 @@ window.OC = window.OC || {};
         continue;
       }
       bm.visible = true;
-      bm.position.set(b.x, b.y + Math.sin(time * 1.4 + i * 1.7) * 0.04, b.z);
+      /* Буй запомнен мировой точкой (это научная станция, её надо найти
+         снова), а меш стоит в сцене — переводим в локальные координаты. */
+      const bOrigin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+      bm.position.set(b.x - (bOrigin ? bOrigin.x : 0), b.y - (bOrigin ? bOrigin.y : 0) + Math.sin(time * 1.4 + i * 1.7) * 0.04, b.z - (bOrigin ? bOrigin.z : 0));
       if (bm.userData.strobeMat) {
         const p = Math.pow(Math.max(0, Math.sin(time * 3.1 + i * 2.0)), 14);
         bm.userData.strobeMat.emissiveIntensity = 0.25 + p * 3.4;
@@ -31035,6 +31059,17 @@ window.OC = window.OC || {};
   const T = THREE;
   const _nearOut = { species: '', x: 0, y: 0, z: 0, scale: 1, tint: 0xffffff, dist: 999 };
   const _probe = new T.Vector3();
+  /* Зонд манипулятора в двух системах: мировой — для запросов к биому
+     (дно, зона), локальной — для поиска ближайшей флоры, которая стоит в
+     координатах сцены. */
+  const _probeLocal = new T.Vector3();
+  const _posLocal = new T.Vector3();
+
+  function toLocal(p, out) {
+    const o = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+    if (!o) return out.copy(p);
+    return out.set(p.x - o.x, p.y - o.y, p.z - o.z);
+  }
 
     // Цвета и классификация научных проб
   const CORAL_SPECIES = new Set([
@@ -31068,7 +31103,7 @@ window.OC = window.OC || {};
     _probe.copy(pos).addScaledVector(fwd, 3.6);
 
     const nearFlora = OC.FloraStreamer && OC.FloraStreamer.findNearest
-      ? OC.FloraStreamer.findNearest(_probe, 14.5, _nearOut)
+      ? OC.FloraStreamer.findNearest(toLocal(_probe, _probeLocal), 14.5, _nearOut)
       : null;
 
     if (nearFlora && nearFlora.species) {
@@ -31077,7 +31112,8 @@ window.OC = window.OC || {};
       out.species = nearFlora.species;
       out.label = enc ? enc[0] : nearFlora.species;
       out.latin = enc ? enc[1] : '';
-      out.dist = Math.max(0.8, Math.hypot(nearFlora.x - pos.x, nearFlora.y - pos.y, nearFlora.z - pos.z));
+      const posL = toLocal(pos, _posLocal);
+      out.dist = Math.max(0.8, Math.hypot(nearFlora.x - posL.x, nearFlora.y - posL.y, nearFlora.z - posL.z));
       out.colorHex = nearFlora.tint || (CORAL_SPECIES.has(nearFlora.species) ? 0xff8a7a : 0x5be8b0);
       return out;
     }
@@ -32816,7 +32852,18 @@ window.OC = window.OC || {};
 /* ================= НАВИГАЦИЯ: ОБЩЕЕ СОСТОЯНИЕ И ГРАНИЦЫ МИРА ================= */
 /* Единый объект состояния камеры (режим, позиция, углы, тур, кино, glide),
    разделяемый модулями navigation/*, и удержание камеры в безопасных границах
-   биома (дно + запас, брайниклы, свод пещер, границы карты). */
+   биома (дно + запас, брайниклы, свод пещер, границы карты).
+
+   Система координат: state.pos — МИРОВАЯ точка (или координаты сцены, если
+   аппарат ещё ни разу не уплывал далеко и origin нулевой). Камера же всегда
+   стоит в локальных координатах сцены: Floating Origin держит её у начала,
+   чтобы float32 не терял точность на километрах. Поэтому камера — величина
+   производная: camera.position = state.pos − origin. Раньше было наоборот
+   (state.pos считался локальным), и ежекадровый сдвиг origins раскручивал
+   origin по километру за кадр: навигация перезаписывала camera.position из
+   state.pos, а Floating Origin — сбрасывал его в ноль, не трогая state.pos.
+   Мир при этом полз под игроком, а все запросы к биому (дно, зона, свод)
+   уходили в точку старта. */
 window.OC = window.OC || {};
 (function (OC) {
   'use strict';
@@ -32892,6 +32939,16 @@ window.OC = window.OC || {};
   const getCanvas = () => canvasRef;
   const setCanvas = (c) => { canvasRef = c; };
 
+  /* Мировая точка → локальная (точка сцены). Камера, lookAt и любые объекты
+     сцены обязаны стоять в локальных координатах: их переносит Floating
+     Origin. state.pos и всё, что с ней сравнивается (маяки, зоны, карта), —
+     в мировых. */
+  function toLocal(p, out) {
+    const o = (OC.FloatingOrigin && OC.FloatingOrigin.getOrigin) ? OC.FloatingOrigin.getOrigin() : null;
+    if (!o) return out.copy(p);
+    return out.set(p.x - o.x, p.y - o.y, p.z - o.z);
+  }
+
   /* Планетарный мир: горизонтальный зажим по кругу worldRadius снят. Дальность
      обеспечивает Floating Origin (камера всегда около начала координат), а
      рельеф, флора и чанки стримятся вокруг игрока, поэтому край карты больше
@@ -32928,7 +32985,8 @@ window.OC = window.OC || {};
 
   OC._NavState = {
     state, keys, _fwd, _right, _move, _lookAt, _curr, _cinemaTarget, _chaseGoal,
-    _gpOut, _tourStateOut, getBiome, setBiomeRef, getCanvas, setCanvas, clampPosition
+    _gpOut, _tourStateOut, getBiome, setBiomeRef, getCanvas, setCanvas, clampPosition,
+    toLocal
   };
 })(window.OC);
 
@@ -33087,7 +33145,7 @@ window.OC = window.OC || {};
 
   const {
     state, keys, _fwd, _right, _move, _lookAt, _curr, _cinemaTarget, _chaseGoal, _gpOut,
-    getBiome, setBiomeRef, setCanvas, clampPosition
+    getBiome, setBiomeRef, setCanvas, clampPosition, toLocal
   } = OC._NavState;
   const { buildTourState, emitTourChange, startTourStep } = OC._NavTour;
   const { pollGamepad } = OC._NavGamepad;
@@ -33339,7 +33397,13 @@ window.OC = window.OC || {};
     toggleRovView() {
       return this.setRovView(!state.rovView);
     },
+    /* Мировая позиция аппарата: по ней ищут зону, дно, карту и маяки. */
     getPosition: () => state.pos,
+    /* Та же точка в координатах сцены — то, куда ставить объекты и камеру. */
+    getLocalPosition(out) {
+      out = out || new T.Vector3();
+      return toLocal(state.pos, out);
+    },
     getYaw: () => state.yaw,
     getPitch: () => state.pitch,
     getVelocity: () => state.vel,
@@ -33545,8 +33609,9 @@ window.OC = window.OC || {};
             state.orbitTarget.z + Math.cos(state.yaw) * cp * state.orbitDist
           );
           clampPosition(_chaseGoal);
-          camera.position.copy(_chaseGoal);
-          camera.lookAt(state.orbitTarget);
+          toLocal(_chaseGoal, camera.position);
+          toLocal(state.orbitTarget, _lookAt);
+          camera.lookAt(_lookAt);
         } else {
           state.pos.set(
             state.orbitTarget.x + Math.sin(state.yaw) * cp * state.orbitDist,
@@ -33554,8 +33619,9 @@ window.OC = window.OC || {};
             state.orbitTarget.z + Math.cos(state.yaw) * cp * state.orbitDist
           );
           clampPosition(state.pos);
-          camera.position.copy(state.pos);
-          camera.lookAt(state.orbitTarget);
+          toLocal(state.pos, camera.position);
+          toLocal(state.orbitTarget, _lookAt);
+          camera.lookAt(_lookAt);
         }
         return;
       } else {
@@ -33658,13 +33724,14 @@ window.OC = window.OC || {};
         } else {
           state.chasePos.lerp(_chaseGoal, Math.min(1, dt * 9.5));
         }
-        camera.position.copy(state.chasePos);
-        _lookAt.copy(state.pos).addScaledVector(_fwd, 3.2);
+        toLocal(state.chasePos, camera.position);
+        toLocal(state.pos, _lookAt).addScaledVector(_fwd, 3.2);
         camera.lookAt(_lookAt);
       } else {
         state.chaseInited = false;
         const bob = reduced || (!getBiome().noSurface && state.pos.y > -0.2) ? 0 : Math.sin(time * 0.65) * 0.14;
-        camera.position.set(state.pos.x, state.pos.y + bob, state.pos.z);
+        toLocal(state.pos, camera.position);
+        camera.position.y += bob;
         _lookAt.copy(camera.position).add(_fwd);
         camera.lookAt(_lookAt);
       }
@@ -38023,7 +38090,10 @@ window.OC = window.OC || {};
       const fauna = activeFauna();
       if (fauna && fauna.notifySiltKick) {
         const fl = activeBiome().getHeight(pos.x, pos.z);
-        if (pos.y - fl < 6.0) fauna.notifySiltKick(pos, 1.0);
+        /* Взвесь поднимает фауна, а она стоит в координатах сцены: мировую
+           точку аппарата надо перевести в локальную. */
+        const local = (OC.FloatingOrigin && OC.FloatingOrigin.toLocal) ? OC.FloatingOrigin.toLocal(pos) : pos;
+        if (pos.y - fl < 6.0) fauna.notifySiltKick(local, 1.0);
       }
       renderRovSamples();
       if (smp) toast('Проба взята: ' + smp.title + ' (' + smp.category + (smp.isNewAtlas ? ' · Атлас!' : '') + ')');
@@ -38482,14 +38552,18 @@ window.OC = window.OC || {};
             toast('Нет активного пеленга на источник звука');
             return;
           }
-          const pos = OC.Navigation.getPosition();
+          /* Источник пеленга — агент фауны, а он стоит в координатах сцены.
+             Сравниваем в локальных, а курс прокладываем по мировой точке. */
+          const world = OC.Navigation.getPosition();
+          const pos = (OC.FloatingOrigin && OC.FloatingOrigin.toLocal)
+            ? OC.FloatingOrigin.toLocal(world) : world;
           const dx = tgt.x - pos.x;
           const dy = tgt.y - pos.y;
           const dz = tgt.z - pos.z;
           const horiz = Math.max(0.1, Math.hypot(dx, dz));
           const turnYaw = Math.atan2(dx, dz);
           const turnPitch = OC.clamp(Math.atan2(dy, horiz), -0.65, 0.45);
-          OC.Navigation.flyTo(pos.x, pos.y, pos.z, turnYaw, turnPitch);
+          OC.Navigation.flyTo(world.x, world.y, world.z, turnYaw, turnPitch);
           toast('Курс на пеленг ' + String(tgt.bearingDeg).padStart(3, '0') + '° — ' + tgt.label);
         });
       }
@@ -40575,6 +40649,9 @@ window.OC = window.OC || {};
       const scene = OC.getScene();
       if (scene && OC.FloatingOrigin) OC.FloatingOrigin.update(camera, scene);
       const camPos = camera.position;
+      /* craftPos — МИРОВАЯ точка аппарата: по ней ищут зону, дно, карту и
+         маяки. Всё, что стоит в сцене или сравнивается с фауной (ROV,
+         гидрофон, фара), обязано брать camPos — локальную точку. */
       const craftPos = OC.Navigation.getPosition ? OC.Navigation.getPosition() : camPos;
 
       OC.updateWorld(dt, time, camPos, autoCycle);
@@ -40587,7 +40664,7 @@ window.OC = window.OC || {};
         const photoOn = !!(OC.Expedition && OC.Expedition.isPhotoMode && OC.Expedition.isPhotoMode());
         const navMode = OC.Navigation.getMode();
         const showCraft = !!(OC.Navigation.isRovView && OC.Navigation.isRovView() && (navMode === 'swim' || navMode === 'orbit') && !photoOn);
-        OC.ROV.update(dt, time, camera, craftPos, OC.Navigation.getYaw(), OC.Navigation.getPitch(), camSpeed, activeBiome, {
+        OC.ROV.update(dt, time, camera, camPos, OC.Navigation.getYaw(), OC.Navigation.getPitch(), camSpeed, activeBiome, {
           showCraft,
           flashOn,
           labState: OC.EcoLab ? OC.EcoLab.getState() : null
@@ -40601,7 +40678,7 @@ window.OC = window.OC || {};
         const hOffset = activeBiome.depthOffset || 0;
         const hSeasonLevel = OC.Seasons ? OC.Seasons.getState(activeBiome).waterLevelM : 0;
         const hDepth = hOffset + (hOffset > 0 ? -craftPos.y : Math.max(0, hSeasonLevel - craftPos.y));
-        OC.Hydrophone.update(rawDt, activeBiome, activeFauna, craftPos, OC.Navigation.getYaw(), hDepth, wState.stormMix || 0);
+        OC.Hydrophone.update(rawDt, activeBiome, activeFauna, camPos, OC.Navigation.getYaw(), hDepth, wState.stormMix || 0);
       }
 
       hudTimer += rawDt;

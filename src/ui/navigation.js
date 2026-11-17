@@ -9,7 +9,7 @@ window.OC = window.OC || {};
 
   const {
     state, keys, _fwd, _right, _move, _lookAt, _curr, _cinemaTarget, _chaseGoal, _gpOut,
-    getBiome, setBiomeRef, setCanvas, clampPosition
+    getBiome, setBiomeRef, setCanvas, clampPosition, toLocal
   } = OC._NavState;
   const { buildTourState, emitTourChange, startTourStep } = OC._NavTour;
   const { pollGamepad } = OC._NavGamepad;
@@ -261,7 +261,13 @@ window.OC = window.OC || {};
     toggleRovView() {
       return this.setRovView(!state.rovView);
     },
+    /* Мировая позиция аппарата: по ней ищут зону, дно, карту и маяки. */
     getPosition: () => state.pos,
+    /* Та же точка в координатах сцены — то, куда ставить объекты и камеру. */
+    getLocalPosition(out) {
+      out = out || new T.Vector3();
+      return toLocal(state.pos, out);
+    },
     getYaw: () => state.yaw,
     getPitch: () => state.pitch,
     getVelocity: () => state.vel,
@@ -467,8 +473,9 @@ window.OC = window.OC || {};
             state.orbitTarget.z + Math.cos(state.yaw) * cp * state.orbitDist
           );
           clampPosition(_chaseGoal);
-          camera.position.copy(_chaseGoal);
-          camera.lookAt(state.orbitTarget);
+          toLocal(_chaseGoal, camera.position);
+          toLocal(state.orbitTarget, _lookAt);
+          camera.lookAt(_lookAt);
         } else {
           state.pos.set(
             state.orbitTarget.x + Math.sin(state.yaw) * cp * state.orbitDist,
@@ -476,8 +483,9 @@ window.OC = window.OC || {};
             state.orbitTarget.z + Math.cos(state.yaw) * cp * state.orbitDist
           );
           clampPosition(state.pos);
-          camera.position.copy(state.pos);
-          camera.lookAt(state.orbitTarget);
+          toLocal(state.pos, camera.position);
+          toLocal(state.orbitTarget, _lookAt);
+          camera.lookAt(_lookAt);
         }
         return;
       } else {
@@ -580,13 +588,14 @@ window.OC = window.OC || {};
         } else {
           state.chasePos.lerp(_chaseGoal, Math.min(1, dt * 9.5));
         }
-        camera.position.copy(state.chasePos);
-        _lookAt.copy(state.pos).addScaledVector(_fwd, 3.2);
+        toLocal(state.chasePos, camera.position);
+        toLocal(state.pos, _lookAt).addScaledVector(_fwd, 3.2);
         camera.lookAt(_lookAt);
       } else {
         state.chaseInited = false;
         const bob = reduced || (!getBiome().noSurface && state.pos.y > -0.2) ? 0 : Math.sin(time * 0.65) * 0.14;
-        camera.position.set(state.pos.x, state.pos.y + bob, state.pos.z);
+        toLocal(state.pos, camera.position);
+        camera.position.y += bob;
         _lookAt.copy(camera.position).add(_fwd);
         camera.lookAt(_lookAt);
       }

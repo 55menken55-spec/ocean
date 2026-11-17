@@ -274,7 +274,10 @@ window.OC = window.OC || {};
       const fauna = activeFauna();
       if (fauna && fauna.notifySiltKick) {
         const fl = activeBiome().getHeight(pos.x, pos.z);
-        if (pos.y - fl < 6.0) fauna.notifySiltKick(pos, 1.0);
+        /* Взвесь поднимает фауна, а она стоит в координатах сцены: мировую
+           точку аппарата надо перевести в локальную. */
+        const local = (OC.FloatingOrigin && OC.FloatingOrigin.toLocal) ? OC.FloatingOrigin.toLocal(pos) : pos;
+        if (pos.y - fl < 6.0) fauna.notifySiltKick(local, 1.0);
       }
       renderRovSamples();
       if (smp) toast('Проба взята: ' + smp.title + ' (' + smp.category + (smp.isNewAtlas ? ' · Атлас!' : '') + ')');

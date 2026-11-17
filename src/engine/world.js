@@ -62,6 +62,7 @@ window.OC = window.OC || {};
   const _upAxis = new T.Vector3(0, 1, 0);
   const _rayQuat = new T.Quaternion();
   const camFwd = new T.Vector3();
+  const _flashCraft = new T.Vector3();
   const camRight = new T.Vector3();
   const _beamTint = new T.Color(0xeefaff);
   const _worldCurr = new T.Vector3();
@@ -863,7 +864,10 @@ window.OC = window.OC || {};
     flashlight.intensity = OC.lerp(flashlight.intensity, targetFlashI, Math.min(1, dt * 10));
     const rovChase = !!(OC.Navigation && OC.Navigation.isRovView && OC.Navigation.isRovView() && OC.Navigation.getMode() === 'swim' && !(OC.Expedition && OC.Expedition.isPhotoMode()));
     if (rovChase && OC.Navigation.getPosition && OC.Navigation.getForward) {
-      const craft = OC.Navigation.getPosition();
+      /* Фара — объект сцены, а камера и всё в сцене стоят в локальных
+         координатах: мировая позиция аппарата (getPosition) отличается на
+         origin, и с ней фара уехала бы на километры от аппарата. */
+      const craft = OC.Navigation.getLocalPosition ? OC.Navigation.getLocalPosition(_flashCraft) : OC.Navigation.getPosition();
       OC.Navigation.getForward(camFwd);
       flashlight.position.copy(craft).addScaledVector(camFwd, 1.05);
       flashlight.position.y += 0.20;

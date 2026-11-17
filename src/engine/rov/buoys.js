@@ -81,7 +81,10 @@ window.OC = window.OC || {};
         continue;
       }
       bm.visible = true;
-      bm.position.set(b.x, b.y + Math.sin(time * 1.4 + i * 1.7) * 0.04, b.z);
+      /* Буй запомнен мировой точкой (это научная станция, её надо найти
+         снова), а меш стоит в сцене — переводим в локальные координаты. */
+      const bOrigin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+      bm.position.set(b.x - (bOrigin ? bOrigin.x : 0), b.y - (bOrigin ? bOrigin.y : 0) + Math.sin(time * 1.4 + i * 1.7) * 0.04, b.z - (bOrigin ? bOrigin.z : 0));
       if (bm.userData.strobeMat) {
         const p = Math.pow(Math.max(0, Math.sin(time * 3.1 + i * 2.0)), 14);
         bm.userData.strobeMat.emissiveIntensity = 0.25 + p * 3.4;

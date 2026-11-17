@@ -42,6 +42,13 @@ window.OC = window.OC || {};
       return;
     }
 
+    /* Трос — объект сцены: и якорь, и аппарат берём в локальных координатах.
+       Судно НИС стоит в сцене само (оно агент фауны), а точка старта и
+       депрессор заданы в мировых — их надо перевести. */
+    const foOrigin = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+    const ox = foOrigin ? foOrigin.x : 0;
+    const oy = foOrigin ? foOrigin.y : 0;
+    const oz = foOrigin ? foOrigin.z : 0;
     const vInfo = OC.faunaInfo ? OC.faunaInfo.vessel : null;
     const noSurf = !!(biome && biome.noSurface);
     let ax = 0, ay = 2.6, az = 0, maxLen = 1200, anchorLabel = 'Буй-лебёдка';
@@ -55,15 +62,15 @@ window.OC = window.OC || {};
       anchorLabel = vInfo.name || 'НИС';
     } else if (noSurf) {
       const sp = biome && biome.spawn ? biome.spawn.pos : [0, -18, 0];
-      ax = sp[0];
-      ay = 72.0;
-      az = sp[2];
+      ax = sp[0] - ox;
+      ay = 72.0 - oy;
+      az = sp[2] - oz;
       maxLen = 1450;
       anchorLabel = 'Депрессор лебёдки';
     } else if (biome && biome.spawn) {
-      ax = biome.spawn.pos[0];
-      ay = 0.6;
-      az = biome.spawn.pos[2];
+      ax = biome.spawn.pos[0] - ox;
+      ay = 0.6 - oy;
+      az = biome.spawn.pos[2] - oz;
       maxLen = 1200;
       anchorLabel = 'Опорный буй';
     }
@@ -88,7 +95,8 @@ window.OC = window.OC || {};
     tetherState.status = tensionPct >= 88 ? 'предел' : (tensionPct >= 62 ? 'натянут' : 'норма');
 
     if (biome && biome.getCurrentAt) {
-      biome.getCurrentAt((ax + rx) * 0.5, (ay + ry) * 0.5, (az + rz) * 0.5, time, _currTmp);
+      // Течение описано в мировых координатах
+      biome.getCurrentAt((ax + rx) * 0.5 + ox, (ay + ry) * 0.5 + oy, (az + rz) * 0.5 + oz, time, _currTmp);
       const mult = labState ? labState.currentMult : 1.0;
       _currTmp.multiplyScalar(mult * (1.0 - ratio * 0.72));
     } else {

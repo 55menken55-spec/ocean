@@ -17,15 +17,19 @@ window.OC = window.OC || {};
       return origin;
     },
 
-    /* Перевести истинную мировую позицию в локальную ( escena ). */
-    toLocal(worldPos) {
-      return worldPos.clone().sub(origin);
+    /* Перевести истинную мировую позицию в локальную ( escena ).
+       out задаётся в горячем коде — без него каждая точка аллокирует вектор. */
+    toLocal(worldPos, out) {
+      const t = out || new T.Vector3();
+      return t.set(worldPos.x - origin.x, worldPos.y - origin.y, worldPos.z - origin.z);
     },
 
     /* Перевести локальную позицию сцены в истинную мировую. */
-    toWorld(localPos) {
-      return localPos.clone().add(origin);
+    toWorld(localPos, out) {
+      const t = out || new T.Vector3();
+      return t.set(localPos.x + origin.x, localPos.y + origin.y, localPos.z + origin.z);
     },
+
 
     /* Истинная позиция камеры в мире (локальная + origin). */
     getTrueCameraPos(camera, out) {

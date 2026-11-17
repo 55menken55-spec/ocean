@@ -259,6 +259,24 @@ export function run(ctx) {
   assert(gwBefore && gwBefore[0] === ((16 * 7 + 16 * 3) % 251),
     `Map window must address pixels by world coordinates (got ${gwBefore && gwBefore[0]})`);
 
+  /* Регрессия: строка, не влезшая в бюджет кадра, обязана сохранять прогресс.
+     Без этого карта не дорисовывалась никогда — pending висел на 92 строках из
+     183 сколько угодно тиков, как только одна строка перестала влезать в
+     бюджет (холодный кеш рельефа или загруженная машина). Здесь стоимость
+     строки задана искусственно, поэтому проверка не зависит от железа. */
+  const SLOW_N = 32;
+  const slow = OC.GridWindow.create({
+    size: SLOW_N,
+    span: 3200,
+    fillRow: () => { const t0 = Date.now(); while (Date.now() - t0 < 2) { /* строка дороже бюджета */ } },
+    unknown: [1, 2, 3, 255]
+  });
+  slow.resetCenter(0, 0);
+  let slowTicks = 0;
+  while (!slow.isComplete() && slowTicks < 400) { slow.tick(1.0); slowTicks++; }
+  assert(slow.isComplete(),
+    `A map row that does not fit the frame budget must keep its progress (${slowTicks} ticks, ${slow.pendingRows()} rows left)`);
+
   gw.setCenter(500, 0);
   gw.flush();
   const gwAfter = gw.pixelAt(0, 0);

@@ -197,14 +197,18 @@ window.OC = window.OC || {};
             toast('Нет активного пеленга на источник звука');
             return;
           }
-          const pos = OC.Navigation.getPosition();
+          /* Источник пеленга — агент фауны, а он стоит в координатах сцены.
+             Сравниваем в локальных, а курс прокладываем по мировой точке. */
+          const world = OC.Navigation.getPosition();
+          const pos = (OC.FloatingOrigin && OC.FloatingOrigin.toLocal)
+            ? OC.FloatingOrigin.toLocal(world) : world;
           const dx = tgt.x - pos.x;
           const dy = tgt.y - pos.y;
           const dz = tgt.z - pos.z;
           const horiz = Math.max(0.1, Math.hypot(dx, dz));
           const turnYaw = Math.atan2(dx, dz);
           const turnPitch = OC.clamp(Math.atan2(dy, horiz), -0.65, 0.45);
-          OC.Navigation.flyTo(pos.x, pos.y, pos.z, turnYaw, turnPitch);
+          OC.Navigation.flyTo(world.x, world.y, world.z, turnYaw, turnPitch);
           toast('Курс на пеленг ' + String(tgt.bearingDeg).padStart(3, '0') + '° — ' + tgt.label);
         });
       }

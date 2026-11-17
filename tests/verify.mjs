@@ -18,6 +18,7 @@ import { run as runAtlasFauna } from './stages/atlas_fauna.mjs';
 import { run as runFloatingOrigin } from './stages/floating_origin.mjs';
 import { run as runPlanetaryWorld } from './stages/planetary_world.mjs';
 import { run as runFaunaUnbounded } from './stages/fauna_unbounded.mjs';
+import { run as runNavigationUnbounded } from './stages/navigation_unbounded.mjs';
 import { run as runMultiBiome } from './stages/multi_biome.mjs';
 import { run as runBiomeAmazon } from './stages/biome_amazon.mjs';
 import { run as runBiomeBaikal } from './stages/biome_baikal.mjs';
@@ -169,5 +170,7 @@ runFloatingOrigin({ T, OC });
    Фауна без края идёт после него по той же причине: она копит ещё 45 км. */
 runPlanetaryWorld({ T, OC, scene, camera, getEl, worldSrc });
 runFaunaUnbounded({ T, OC });
+/* Навигация без края — последней: она копит в origin путь перелёта. */
+runNavigationUnbounded({ T, OC, getEl });
 
 console.log('ALL VERIFICATION CHECKS PASSED!');

@@ -8,6 +8,17 @@ window.OC = window.OC || {};
   const T = THREE;
   const _nearOut = { species: '', x: 0, y: 0, z: 0, scale: 1, tint: 0xffffff, dist: 999 };
   const _probe = new T.Vector3();
+  /* Зонд манипулятора в двух системах: мировой — для запросов к биому
+     (дно, зона), локальной — для поиска ближайшей флоры, которая стоит в
+     координатах сцены. */
+  const _probeLocal = new T.Vector3();
+  const _posLocal = new T.Vector3();
+
+  function toLocal(p, out) {
+    const o = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+    if (!o) return out.copy(p);
+    return out.set(p.x - o.x, p.y - o.y, p.z - o.z);
+  }
 
     // Цвета и классификация научных проб
   const CORAL_SPECIES = new Set([
@@ -41,7 +52,7 @@ window.OC = window.OC || {};
     _probe.copy(pos).addScaledVector(fwd, 3.6);
 
     const nearFlora = OC.FloraStreamer && OC.FloraStreamer.findNearest
-      ? OC.FloraStreamer.findNearest(_probe, 14.5, _nearOut)
+      ? OC.FloraStreamer.findNearest(toLocal(_probe, _probeLocal), 14.5, _nearOut)
       : null;
 
     if (nearFlora && nearFlora.species) {
@@ -50,7 +61,8 @@ window.OC = window.OC || {};
       out.species = nearFlora.species;
       out.label = enc ? enc[0] : nearFlora.species;
       out.latin = enc ? enc[1] : '';
-      out.dist = Math.max(0.8, Math.hypot(nearFlora.x - pos.x, nearFlora.y - pos.y, nearFlora.z - pos.z));
+      const posL = toLocal(pos, _posLocal);
+      out.dist = Math.max(0.8, Math.hypot(nearFlora.x - posL.x, nearFlora.y - posL.y, nearFlora.z - posL.z));
       out.colorHex = nearFlora.tint || (CORAL_SPECIES.has(nearFlora.species) ? 0xff8a7a : 0x5be8b0);
       return out;
     }
