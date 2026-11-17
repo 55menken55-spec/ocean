@@ -115,5 +115,38 @@ export function run(ctx) {
   assert(OC.Minimap.isRevealed(world().x, world().z),
     'Fog of War must chart the world point the craft is at, not its local one');
 
-  console.log(`   Navigation without an edge: ${(flown / 1000).toFixed(1)} km trip — origin ${(originLen / 1000).toFixed(1)} km (not ${(200 * 1.0).toFixed(0)} km of runaway), camera ${Math.hypot(localFromCam().x, localFromCam().z).toFixed(0)} m from the scene origin, landmark approach ${landErr.toFixed(1)} m, map window on the craft.`);
+  /* ---- 8. Ядро: дальность, пеленг и курс домой ----
+     За кругом worldRadius нет ни маяков, ни миссий, а карта показывает только
+     окно вокруг аппарата. Игрок должен видеть, где ядро и как далеко оно. */
+  assert(OC._NavCore, 'OC._NavCore must exist: the core bearing belongs to navigation');
+  const CORE_OUT = 12000;
+  OC.Navigation.flyTo(CORE_OUT, -40, 0, 0, 0);
+  frame(300);
+  const core = OC._NavCore.info(biome, world());
+  assert(core.outside, 'The craft 12 km from the spawn must be outside the core area');
+  assert(Math.abs(core.edgeM - (CORE_OUT - biome.worldRadius)) < 20,
+    `The distance to the core must be measured to its edge (got ${core.edgeM.toFixed(0)} m, core radius ${biome.worldRadius})`);
+  // Пеленг на мировое начало: аппарат ушёл строго на восток (+X), ядро на западе
+  assert(core.bearingDeg === 270,
+    `The bearing to the core must point west from a craft on the +X axis (got ${core.bearingDeg}°)`);
+  assert(core.nearest && core.nearest.distM > 0 && Number.isFinite(core.nearest.distM),
+    'Core info must name the nearest landmark to head for');
+  const nearCheck = Math.hypot(core.nearest.x - world().x, core.nearest.z - world().z);
+  assert(Math.abs(nearCheck - core.nearest.distM) < 1e-6,
+    'The distance to the nearest landmark must match its world position');
+  const fmt = OC._NavCore.format(core);
+  assert(/ км · [СВЮЗ]/.test(fmt), `The core readout must carry the distance and the bearing (got "${fmt}")`);
+
+  /* Курс домой: кнопка «К ядру» ведёт к ближайшему ориентиру ядра */
+  const home = OC._NavCore.homeTarget(biome, world());
+  assert(home && home.id === core.nearest.id, 'The "return to core" target must be the nearest landmark');
+  OC.Navigation.flyTo(home.x, home.y, home.z, home.yaw, home.pitch);
+  frame(300);
+  const homeErr = Math.hypot(world().x - home.x, world().z - home.z);
+  assert(homeErr < 12, `Returning to the core must land on its landmark (${home.id}: ${homeErr.toFixed(0)} m off)`);
+  const coreHome = OC._NavCore.info(biome, world());
+  assert(!coreHome.outside, 'After returning to the core the craft must be inside the core area again');
+  assert(OC._NavCore.format(coreHome) === 'в ядре', 'Inside the core the readout must say so');
+
+  console.log(`   Navigation without an edge: ${(flown / 1000).toFixed(1)} km trip — origin ${(originLen / 1000).toFixed(1)} km (not ${(200 * 1.0).toFixed(0)} km of runaway), camera ${Math.hypot(localFromCam().x, localFromCam().z).toFixed(0)} m from the scene origin, landmark approach ${landErr.toFixed(1)} m, map window on the craft, core ${(core.edgeM / 1000).toFixed(1)} km away on bearing ${core.bearingDeg}° ("${fmt}"), return to ${home.id} lands ${homeErr.toFixed(1)} m off.`);
 }

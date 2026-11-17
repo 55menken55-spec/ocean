@@ -41,6 +41,7 @@ window.OC = window.OC || {};
       const hydroTrackBtn = document.getElementById('hydro-track-btn');
       const mapCovEl = document.getElementById('map-cov');
       const mapFogBtn = document.getElementById('map-fog-btn');
+      const mapHomeBtn = document.getElementById('map-home-btn');
       const guideCard = document.getElementById('guide-card');
       const guideStep = document.getElementById('guide-step');
       const guideBiome = document.getElementById('guide-biome');
@@ -265,6 +266,23 @@ window.OC = window.OC || {};
         btnReset.addEventListener('click', () => {
           OC.Navigation.resetToSpawn();
           toast('Возврат к старту: ' + (activeBiome() ? activeBiome().name : 'океан'));
+        });
+      }
+
+      /* ---------- Возврат к ядру ----------
+         Мир без края: за кругом worldRadius нет ни маяков, ни миссий, и окно
+         карты показывает только окрестность аппарата. Кнопка ведёт к
+         ближайшему ориентиру ядра по мировым координатам. */
+      if (mapHomeBtn) {
+        mapHomeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const biome = activeBiome();
+          if (!biome || !OC._NavCore || !OC.Navigation) return;
+          const home = OC._NavCore.homeTarget(biome, OC.Navigation.getPosition());
+          OC.Navigation.flyTo(home.x, home.y, home.z, home.yaw, home.pitch);
+          toast('Курс к ядру: ' + home.name + ' (' + (home.distM >= 1000
+            ? (home.distM / 1000).toFixed(1) + ' км'
+            : Math.round(home.distM) + ' м') + ')');
         });
       }
 

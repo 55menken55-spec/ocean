@@ -108,6 +108,7 @@ ORDER = [
     'engine/sonar.js',
     'engine/hydrophone.js',
     'ui/navigation/state.js',
+    'ui/navigation/core.js',
     'ui/navigation/tour.js',
     'ui/navigation/gamepad.js',
     'ui/navigation.js',

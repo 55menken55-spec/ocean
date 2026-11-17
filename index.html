@@ -624,6 +624,8 @@
   <div class="tele-item" id="tele-weather-wrap"><span>Погода</span><b id="tele-weather">Штиль</b></div>
   <div class="tele-sep tele-wp-hide" id="tele-wp-sep"></div>
   <div class="tele-item tele-wp-hide" id="tele-wp-wrap"><span>Маяк</span><b id="tele-wp">—</b></div>
+  <div class="tele-sep tele-wp-hide" id="tele-core-sep"></div>
+  <div class="tele-item tele-wp-hide" id="tele-core-wrap"><span>Ядро</span><b id="tele-core">в ядре</b></div>
 </div>
 
 <div class="topright hud-hideable" id="topright" data-collapsed="false">
@@ -937,7 +939,7 @@
 
 <div class="minimap-box hud-hideable">
   <canvas id="minimap" title="Клик — переход · ПКМ или Shift+Клик — поставить/убрать маячок"></canvas>
-  <div class="map-cap"><span>Карта: <b id="map-cov">0%</b></span><button class="map-fog-btn" id="map-fog-btn" title="Туман войны / Полная карта">Туман</button><span>ПКМ — маяк</span></div>
+  <div class="map-cap"><span>Карта: <b id="map-cov">0%</b></span><button class="map-fog-btn" id="map-home-btn" title="Вернуться к ядру — к ближайшему маяку">К ядру</button><button class="map-fog-btn" id="map-fog-btn" title="Туман войны / Полная карта">Туман</button><span>ПКМ — маяк</span></div>
 </div>
 
 <div class="hydro-box hidden hud-hideable" id="hydro-box">
@@ -32990,6 +32992,104 @@ window.OC = window.OC || {};
   };
 })(window.OC);
 
+// === ui/navigation/core.js ===
+/* ================= НАВИГАЦИЯ: ЯДРО МИРА И КУРС ДОМОЙ ================= */
+/* Мир без края: рельеф, флора и фауна стримятся вокруг игрока на любом
+   удалении, а маяки, миссии и процент исследования живут в ядре — круге
+   worldRadius вокруг мирового начала. Мини-карта показывает окно ±1200 м
+   вокруг аппарата, поэтому стоит уплыть на пару километров — и ядро уезжает
+   за её край: непонятно ни где оно, ни как далеко, ни как вернуться.
+
+   Модуль отвечает на три вопроса и не знает ни про DOM, ни про сцену:
+   где ядро, как далеко его край и куда лежит курс на ближайший маяк. */
+window.OC = window.OC || {};
+(function (OC) {
+  'use strict';
+
+  const DIRS = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
+
+  /* Название румба по пеленгу в градусах (0° — север, сторона −Z). */
+  function compassName(deg) {
+    const d = ((deg % 360) + 360) % 360;
+    return DIRS[Math.round(d / 45) % 8];
+  }
+
+  /* Пеленг из мировой точки pos на мировую точку (x, z). */
+  function bearingTo(pos, x, z) {
+    const deg = Math.atan2(x - pos.x, -(z - pos.z)) * 180 / Math.PI;
+    return ((Math.round(deg) % 360) + 360) % 360;
+  }
+
+  /* Ближайший ориентир ядра: это и есть цель возврата — маяк, у которого
+     есть своя глубина, курс и название для подсказки. */
+  function nearestLandmark(biome, pos, out) {
+    const list = (biome && biome.landmarks) || [];
+    if (!list.length) return null;
+    let best = null;
+    for (const lm of list) {
+      const d = Math.hypot(lm.x - pos.x, lm.z - pos.z);
+      if (!best || d < best.d) best = { lm, d };
+    }
+    if (!best) return null;
+    const o = out || {};
+    o.id = best.lm.id;
+    o.name = best.lm.name;
+    o.x = best.lm.x;
+    o.y = best.lm.y;
+    o.z = best.lm.z;
+    o.yaw = best.lm.yaw;
+    o.pitch = best.lm.pitch;
+    o.distM = best.d;
+    o.bearingDeg = bearingTo(pos, best.lm.x, best.lm.z);
+    return o;
+  }
+
+  /* Ядро — круг worldRadius вокруг мирового начала. edgeM — сколько ещё
+     плыть до его границы; у самого начала координат это ноль. */
+  function info(biome, pos, out) {
+    /* Свежий объект, если вызывающий не дал свой: результат живёт дольше
+       вызова (его читают и в HUD, и в мини-карте), а общий синглтон
+       перезаписывался бы следующим запросом. */
+    const o = out || {};
+    const R = (biome && biome.worldRadius) || 1200;
+    const centerM = Math.hypot(pos.x, pos.z);
+    o.centerM = centerM;
+    o.edgeM = Math.max(0, centerM - R);
+    o.outside = centerM > R;
+    o.bearingDeg = bearingTo(pos, 0, 0);
+    o.nearest = nearestLandmark(biome, pos);
+    return o;
+  }
+
+  /* Строка для телеметрии: «4.2 км · СЗ» или короткое «в ядре». */
+  function format(o) {
+    if (!o || !o.outside) return 'в ядре';
+    const dist = o.edgeM >= 1000 ? ((o.edgeM / 1000).toFixed(1) + ' км') : (Math.round(o.edgeM) + ' м');
+    return dist + ' · ' + compassName(o.bearingDeg);
+  }
+
+  /* Цель кнопки «К ядру»: ближайший ориентир, а если их нет — точка старта.
+     Возвращает объект, готовый для Navigation.flyTo. */
+  function homeTarget(biome, pos, out) {
+    const lm = nearestLandmark(biome, pos, out);
+    if (lm) return lm;
+    const sp = (biome && biome.spawn && biome.spawn.pos) ? biome.spawn.pos : [0, -8, 0];
+    const o = out || {};
+    o.id = 'spawn';
+    o.name = 'точка старта';
+    o.x = sp[0];
+    o.y = sp[1];
+    o.z = sp[2];
+    o.yaw = (biome && biome.spawn && biome.spawn.yaw) || 0;
+    o.pitch = (biome && biome.spawn && biome.spawn.pitch) || 0;
+    o.distM = Math.hypot(o.x - pos.x, o.z - pos.z);
+    o.bearingDeg = bearingTo(pos, o.x, o.z);
+    return o;
+  }
+
+  OC._NavCore = { info, format, compassName, bearingTo, nearestLandmark, homeTarget };
+})(window.OC);
+
 // === ui/navigation/tour.js ===
 /* ================= НАВИГАЦИЯ: АВТО-ТУР ПО ОСТАНОВКАМ БИОМА ================= */
 /* Состояние тура (шаг, прогресс, пауза), плавный переход между ногами маршрута
@@ -34993,6 +35093,7 @@ window.OC = window.OC || {};
   // Центр окна карты (мировые координаты) — едет за игроком
   let mapCx = 0;
   let mapCz = 0;
+  const _coreOut = { outside: false, edgeM: 0, centerM: 0, bearingDeg: 0, nearest: null };
 
   function depthToRGB(y) {
     const theme = biomeRef && biomeRef.minimapTheme;
@@ -35202,6 +35303,48 @@ window.OC = window.OC || {};
         c.stroke();
       }
       c.restore();
+    }
+
+    /* Курс домой: ядро (маяки и миссии) живёт в круге worldRadius, а окно
+       карты показывает ±1200 м вокруг аппарата. Вдали от ядра его маяки
+       просто уезжают за край окна, и без стрелки непонятно, куда плыть. */
+    if (OC._NavCore && typeof c.fillText === 'function') {
+      const core = OC._NavCore.info(biomeRef, { x: mapCx, z: mapCz }, _coreOut);
+      const tgt = core.nearest;
+      if (core.outside && tgt) {
+        const mp = worldToMap(tgt.x, tgt.z);
+        const half = SIZE / 2;
+        const dx = mp[0] - half;
+        const dy = mp[1] - half;
+        const r = Math.hypot(dx, dy);
+        if (r > half - 20) {
+          const ux = dx / r;
+          const uy = dy / r;
+          c.save();
+          c.translate(half + ux * (half - 12), half + uy * (half - 12));
+          c.rotate(Math.atan2(uy, ux));
+          c.fillStyle = 'rgba(255, 209, 122, 0.95)';
+          c.strokeStyle = 'rgba(2,14,28,0.85)';
+          c.lineWidth = 1.1;
+          c.beginPath();
+          c.moveTo(6.5, 0);
+          c.lineTo(-4.5, 4.2);
+          c.lineTo(-4.5, -4.2);
+          c.closePath();
+          c.fill();
+          c.stroke();
+          c.restore();
+          // Сколько плыть до границы ядра — цифры пишем без поворота
+          c.save();
+          c.font = '600 9px system-ui, sans-serif';
+          c.textAlign = 'center';
+          c.fillStyle = 'rgba(2,14,28,0.72)';
+          const lx = half + ux * (half - 26);
+          const ly = half + uy * (half - 26) + 3;
+          c.fillText(OC._NavCore.format(core), lx, ly);
+          c.restore();
+        }
+      }
     }
 
     // Сетка координат
@@ -37572,8 +37715,7 @@ window.OC = window.OC || {};
   function formatHeading(yawRad) {
     // 0 yaw смотрит на +Z (Юг), PI на -Z (Север)
     const deg = ((Math.round((180 - yawRad * 180 / Math.PI)) % 360) + 360) % 360;
-    const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-    const dName = dirs[Math.round(deg / 45) % 8];
+    const dName = OC._NavCore.compassName(deg);
     return dName + ' ' + String(deg).padStart(3, '0') + '°';
   }
 
@@ -38396,6 +38538,7 @@ window.OC = window.OC || {};
       const hydroTrackBtn = document.getElementById('hydro-track-btn');
       const mapCovEl = document.getElementById('map-cov');
       const mapFogBtn = document.getElementById('map-fog-btn');
+      const mapHomeBtn = document.getElementById('map-home-btn');
       const guideCard = document.getElementById('guide-card');
       const guideStep = document.getElementById('guide-step');
       const guideBiome = document.getElementById('guide-biome');
@@ -38623,6 +38766,23 @@ window.OC = window.OC || {};
         });
       }
 
+      /* ---------- Возврат к ядру ----------
+         Мир без края: за кругом worldRadius нет ни маяков, ни миссий, и окно
+         карты показывает только окрестность аппарата. Кнопка ведёт к
+         ближайшему ориентиру ядра по мировым координатам. */
+      if (mapHomeBtn) {
+        mapHomeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const biome = activeBiome();
+          if (!biome || !OC._NavCore || !OC.Navigation) return;
+          const home = OC._NavCore.homeTarget(biome, OC.Navigation.getPosition());
+          OC.Navigation.flyTo(home.x, home.y, home.z, home.yaw, home.pitch);
+          toast('Курс к ядру: ' + home.name + ' (' + (home.distM >= 1000
+            ? (home.distM / 1000).toFixed(1) + ' км'
+            : Math.round(home.distM) + ' м') + ')');
+        });
+      }
+
       /* ---------- Карточка гида-тура ---------- */
       function syncGuideCard(st) {
         if (!guideCard) return;
@@ -38791,6 +38951,9 @@ window.OC = window.OC || {};
       const teleWpSep = document.getElementById('tele-wp-sep');
       const teleWpWrap = document.getElementById('tele-wp-wrap');
       const teleWp = document.getElementById('tele-wp');
+      const teleCoreSep = document.getElementById('tele-core-sep');
+      const teleCoreWrap = document.getElementById('tele-core-wrap');
+      const teleCore = document.getElementById('tele-core');
       const subHorizon = document.getElementById('sub-horizon');
       const subPressure = document.getElementById('sub-pressure');
       const subClearance = document.getElementById('sub-clearance');
@@ -38861,8 +39024,7 @@ window.OC = window.OC || {};
           if (hydroBand) hydroBand.textContent = hs.bandLabel;
           if (hydroBearingEl) {
             if (hs.targetPos) {
-              const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-              const dName = dirs[Math.round(hs.bearingDeg / 45) % 8];
+              const dName = OC._NavCore.compassName(hs.bearingDeg);
               const relSign = hs.relBearingDeg >= 0 ? ('+' + hs.relBearingDeg) : String(hs.relBearingDeg);
               hydroBearingEl.textContent = String(hs.bearingDeg).padStart(3, '0') + '° (' + dName + ') · курс ' + relSign + '°';
             } else {
@@ -38901,9 +39063,7 @@ window.OC = window.OC || {};
               if (teleWpSep) teleWpSep.classList.add('tele-wp-hide');
               if (teleWpWrap) teleWpWrap.classList.add('tele-wp-hide');
             } else {
-              const deg = ((Math.round(Math.atan2(wpDx, -wpDz) * 180 / Math.PI) % 360) + 360) % 360;
-              const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-              const dStr = dirs[Math.round(deg / 45) % 8];
+              const dStr = OC._NavCore.compassName(OC._NavCore.bearingTo(craftPos, wp.x, wp.z));
               if (teleWpSep) teleWpSep.classList.remove('tele-wp-hide');
               if (teleWpWrap) teleWpWrap.classList.remove('tele-wp-hide');
               if (teleWp) teleWp.textContent = Math.round(wpDist) + ' м · ' + dStr;
@@ -38921,6 +39081,22 @@ window.OC = window.OC || {};
               : 'Наведите центр рамки на вид или коралл';
           }
           onMissionsEvaluated(biome, { zoneId: zone.id, depthM, currentKnots: cKnots, dayW, flashOn });
+        }
+
+        /* --- Ядро мира: сколько плыть обратно к маякам и миссиям.
+           В мире без края за кругом worldRadius нет ни маяков, ни миссий,
+           и мини-карта показывает только окно вокруг аппарата — без этой
+           строки уплывший игрок не знает, где ядро и как далеко оно. --- */
+        if (teleCoreWrap && OC._NavCore) {
+          const core = OC._NavCore.info(biome, craftPos);
+          if (core.outside) {
+            teleCoreSep.classList.remove('tele-wp-hide');
+            teleCoreWrap.classList.remove('tele-wp-hide');
+            if (teleCore) teleCore.textContent = OC._NavCore.format(core);
+          } else {
+            teleCoreSep.classList.add('tele-wp-hide');
+            teleCoreWrap.classList.add('tele-wp-hide');
+          }
         }
 
         /* --- Звук океана, мини-карта и часы суточного цикла --- */

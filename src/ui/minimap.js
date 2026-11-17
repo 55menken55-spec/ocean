@@ -44,6 +44,7 @@ window.OC = window.OC || {};
   // Центр окна карты (мировые координаты) — едет за игроком
   let mapCx = 0;
   let mapCz = 0;
+  const _coreOut = { outside: false, edgeM: 0, centerM: 0, bearingDeg: 0, nearest: null };
 
   function depthToRGB(y) {
     const theme = biomeRef && biomeRef.minimapTheme;
@@ -253,6 +254,48 @@ window.OC = window.OC || {};
         c.stroke();
       }
       c.restore();
+    }
+
+    /* Курс домой: ядро (маяки и миссии) живёт в круге worldRadius, а окно
+       карты показывает ±1200 м вокруг аппарата. Вдали от ядра его маяки
+       просто уезжают за край окна, и без стрелки непонятно, куда плыть. */
+    if (OC._NavCore && typeof c.fillText === 'function') {
+      const core = OC._NavCore.info(biomeRef, { x: mapCx, z: mapCz }, _coreOut);
+      const tgt = core.nearest;
+      if (core.outside && tgt) {
+        const mp = worldToMap(tgt.x, tgt.z);
+        const half = SIZE / 2;
+        const dx = mp[0] - half;
+        const dy = mp[1] - half;
+        const r = Math.hypot(dx, dy);
+        if (r > half - 20) {
+          const ux = dx / r;
+          const uy = dy / r;
+          c.save();
+          c.translate(half + ux * (half - 12), half + uy * (half - 12));
+          c.rotate(Math.atan2(uy, ux));
+          c.fillStyle = 'rgba(255, 209, 122, 0.95)';
+          c.strokeStyle = 'rgba(2,14,28,0.85)';
+          c.lineWidth = 1.1;
+          c.beginPath();
+          c.moveTo(6.5, 0);
+          c.lineTo(-4.5, 4.2);
+          c.lineTo(-4.5, -4.2);
+          c.closePath();
+          c.fill();
+          c.stroke();
+          c.restore();
+          // Сколько плыть до границы ядра — цифры пишем без поворота
+          c.save();
+          c.font = '600 9px system-ui, sans-serif';
+          c.textAlign = 'center';
+          c.fillStyle = 'rgba(2,14,28,0.72)';
+          const lx = half + ux * (half - 26);
+          const ly = half + uy * (half - 26) + 3;
+          c.fillText(OC._NavCore.format(core), lx, ly);
+          c.restore();
+        }
+      }
     }
 
     // Сетка координат

@@ -106,8 +106,7 @@ window.OC = window.OC || {};
   function formatHeading(yawRad) {
     // 0 yaw смотрит на +Z (Юг), PI на -Z (Север)
     const deg = ((Math.round((180 - yawRad * 180 / Math.PI)) % 360) + 360) % 360;
-    const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-    const dName = dirs[Math.round(deg / 45) % 8];
+    const dName = OC._NavCore.compassName(deg);
     return dName + ' ' + String(deg).padStart(3, '0') + '°';
   }
 

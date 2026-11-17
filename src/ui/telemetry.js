@@ -29,6 +29,9 @@ window.OC = window.OC || {};
       const teleWpSep = document.getElementById('tele-wp-sep');
       const teleWpWrap = document.getElementById('tele-wp-wrap');
       const teleWp = document.getElementById('tele-wp');
+      const teleCoreSep = document.getElementById('tele-core-sep');
+      const teleCoreWrap = document.getElementById('tele-core-wrap');
+      const teleCore = document.getElementById('tele-core');
       const subHorizon = document.getElementById('sub-horizon');
       const subPressure = document.getElementById('sub-pressure');
       const subClearance = document.getElementById('sub-clearance');
@@ -99,8 +102,7 @@ window.OC = window.OC || {};
           if (hydroBand) hydroBand.textContent = hs.bandLabel;
           if (hydroBearingEl) {
             if (hs.targetPos) {
-              const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-              const dName = dirs[Math.round(hs.bearingDeg / 45) % 8];
+              const dName = OC._NavCore.compassName(hs.bearingDeg);
               const relSign = hs.relBearingDeg >= 0 ? ('+' + hs.relBearingDeg) : String(hs.relBearingDeg);
               hydroBearingEl.textContent = String(hs.bearingDeg).padStart(3, '0') + '° (' + dName + ') · курс ' + relSign + '°';
             } else {
@@ -139,9 +141,7 @@ window.OC = window.OC || {};
               if (teleWpSep) teleWpSep.classList.add('tele-wp-hide');
               if (teleWpWrap) teleWpWrap.classList.add('tele-wp-hide');
             } else {
-              const deg = ((Math.round(Math.atan2(wpDx, -wpDz) * 180 / Math.PI) % 360) + 360) % 360;
-              const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-              const dStr = dirs[Math.round(deg / 45) % 8];
+              const dStr = OC._NavCore.compassName(OC._NavCore.bearingTo(craftPos, wp.x, wp.z));
               if (teleWpSep) teleWpSep.classList.remove('tele-wp-hide');
               if (teleWpWrap) teleWpWrap.classList.remove('tele-wp-hide');
               if (teleWp) teleWp.textContent = Math.round(wpDist) + ' м · ' + dStr;
@@ -159,6 +159,22 @@ window.OC = window.OC || {};
               : 'Наведите центр рамки на вид или коралл';
           }
           onMissionsEvaluated(biome, { zoneId: zone.id, depthM, currentKnots: cKnots, dayW, flashOn });
+        }
+
+        /* --- Ядро мира: сколько плыть обратно к маякам и миссиям.
+           В мире без края за кругом worldRadius нет ни маяков, ни миссий,
+           и мини-карта показывает только окно вокруг аппарата — без этой
+           строки уплывший игрок не знает, где ядро и как далеко оно. --- */
+        if (teleCoreWrap && OC._NavCore) {
+          const core = OC._NavCore.info(biome, craftPos);
+          if (core.outside) {
+            teleCoreSep.classList.remove('tele-wp-hide');
+            teleCoreWrap.classList.remove('tele-wp-hide');
+            if (teleCore) teleCore.textContent = OC._NavCore.format(core);
+          } else {
+            teleCoreSep.classList.add('tele-wp-hide');
+            teleCoreWrap.classList.add('tele-wp-hide');
+          }
         }
 
         /* --- Звук океана, мини-карта и часы суточного цикла --- */

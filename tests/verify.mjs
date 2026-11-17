@@ -76,6 +76,7 @@ for (const domId of [
   'id="btn-rov"', 'id="rov-panel"', 'id="rov-ctd-chart"', 'id="rov-samples"', 'id="rov-btn-chase"', 'id="rov-btn-currents"', 'id="rov-btn-sample"', 'id="rov-btn-ctd"', 'id="rov-btn-vessel"',
   'id="map-cov"', 'id="map-fog-btn"',
   'id="btn-hydro"', 'id="hydro-box"', 'id="hydro-canvas"', 'id="hydro-db"', 'id="hydro-source"', 'id="hydro-band"', 'id="hydro-listen-btn"',
+  'id="map-home-btn"', 'id="tele-core"',
   'id="rov-btn-museum"', 'data-jtab="museum"'
 ]) {
   assert(html.includes(domId), `index.html missing required element ${domId}`);
