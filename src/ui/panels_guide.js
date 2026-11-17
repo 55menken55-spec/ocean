@@ -53,6 +53,7 @@ window.OC = window.OC || {};
           else if (act === 'orbit') { OC.Navigation.setMode(OC.Navigation.getMode() === 'orbit' ? 'swim' : 'orbit'); }
           else if (act === 'sub') doSubMode();
           else if (act === 'flash') { const on = OC.toggleFlashlight(); syncFlash(on); }
+          else if (act === 'lidar') toggleLidar();
           else if (act === 'sonar') fireSonarPing();
           else if (act === 'hydro') syncHydroMode(!(OC.Hydrophone && OC.Hydrophone.isOpen && OC.Hydrophone.isOpen()));
           else if (act === 'globe' && OC.Globe) OC.Globe.toggle();

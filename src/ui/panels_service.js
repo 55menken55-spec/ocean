@@ -87,6 +87,67 @@ window.OC = window.OC || {};
         });
       }
 
+      /* ---------- Лидар: запасной канал изображения ---------- */
+      const btnLidar = document.getElementById('btn-lidar');
+      const mLidar = document.getElementById('m-lidar');
+      const lidarBox = document.getElementById('lidar-box');
+      const lidarRange = document.getElementById('lidar-range');
+      const lidarPoints = document.getElementById('lidar-points');
+      const lidarAtten = document.getElementById('lidar-atten');
+      const lidarReadout = document.getElementById('lidar-readout');
+      const lidarFlash = document.getElementById('lidar-flash');
+      const lidarRepair = document.getElementById('lidar-repair');
+      const lidarFoot = lidarBox ? lidarBox.querySelector('.lidar-foot') : null;
+      const toggleLidar = ctx.toggleLidar || (() => {});
+
+      function syncLidar(on) {
+        if (btnLidar) {
+          btnLidar.classList.toggle('on', on);
+          btnLidar.title = on ? 'Лидар включён (Shift+F)' : 'Включить лидар — запасной канал изображения (Shift+F)';
+          btnLidar.setAttribute('aria-pressed', on);
+        }
+        if (mLidar) mLidar.classList.toggle('on', on);
+        if (lidarBox) lidarBox.classList.toggle('hidden', !on);
+        // Лидар занимает нижний ряд приборов: эхолот уезжает выше
+        if (sonarBox) sonarBox.classList.toggle('lidar-up', !!on);
+      }
+      syncLidar(false);
+
+      function bindLidarButton(el) {
+        if (!el) return;
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleLidar();
+        });
+      }
+      bindLidarButton(btnLidar);
+      bindLidarButton(mLidar);
+
+      /* Приборный блок: дальность, плотность облака, состояние прожектора */
+      function updateLidarReadout(st, flash) {
+        if (!lidarBox) return;
+        if (lidarRange) lidarRange.textContent = Math.round(st.rangeM) + ' м';
+        if (lidarPoints) lidarPoints.textContent = String(st.points);
+        if (lidarAtten) lidarAtten.textContent = st.atten.toFixed(4) + ' 1/м';
+        if (lidarReadout) {
+          const fill = Math.round((st.points / Math.max(1, st.cells)) * 100);
+          lidarReadout.textContent = fill > 4 ? ('Развёртка · ' + fill + '%') : 'Сканирование';
+        }
+        if (flash && lidarFlash) {
+          const broken = !!flash.broken;
+          const pct = Math.round(flash.health * 100);
+          lidarFlash.textContent = broken
+            ? ('Прожектор: отказ (' + (OC.getFlashlightReasonText ? OC.getFlashlightReasonText() : 'износ') + ')')
+            : ('Прожектор: ' + pct + '%');
+          if (lidarFoot) lidarFoot.classList.toggle('warn', broken || flash.health < 0.35);
+          if (lidarRepair) {
+            if (broken && flash.repairS > 0) lidarRepair.textContent = 'Ремонт ' + Math.ceil(flash.repairS) + ' с';
+            else if (!broken && flash.health < 1) lidarRepair.textContent = 'НИС: ремонт у старта';
+            else lidarRepair.textContent = '';
+          }
+        }
+      }
+
       /* ---------- Атлас и глобус ---------- */
       if (btnAtlas) {
         btnAtlas.addEventListener('click', (e) => {
@@ -312,7 +373,7 @@ window.OC = window.OC || {};
 
       return {
         syncModes, syncFlash, syncSubMode, syncGuideCard, syncSound, syncHydroMode,
-        syncFogButton, fireSonarPing,
+        syncFogButton, fireSonarPing, syncLidar, updateLidarReadout,
         setCinemaUI: (fn) => { setCinemaUI = fn; }
       };
     }

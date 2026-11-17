@@ -197,11 +197,31 @@
     background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
     box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none;transition:opacity .3s, transform .3s}
   .sonar-box.hidden{opacity:0;transform:translateY(14px);pointer-events:none}
+  /* Когда включён лидар, эхолот уступает ему нижний ряд приборов */
+  .sonar-box.lidar-up:not(.hidden){transform:translateY(-106px)}
   .sonar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;
     font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
   .sonar-head b{color:var(--ok);font-weight:600;max-width:162px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #sonar-canvas{display:block;width:246px;height:102px;border-radius:10px;border:1px solid rgba(140,225,255,.18);
     background:rgba(2,13,24,.92)}
+
+  /* Приборный блок лидара: тот же корпус, что у эхолота, но зелёная подсветка */
+  .lidar-box{position:fixed;right:20px;bottom:56px;z-index:23;width:266px;padding:10px;border-radius:16px;
+    /* лидар занимает место эхолота, а тот уезжает выше — см. .sonar-box.lidar-up */
+    background:var(--glass);border:1px solid rgba(120,255,180,.28);backdrop-filter:blur(14px);
+    box-shadow:0 16px 40px rgba(0,0,0,.45);user-select:none;transition:opacity .3s, transform .3s}
+  .lidar-box.hidden{opacity:0;transform:translateY(14px);pointer-events:none}
+  .lidar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;
+    font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  .lidar-head b{color:var(--ok);font-weight:600;max-width:162px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lidar-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .lidar-cell{padding:5px 6px;border-radius:9px;background:rgba(6,30,22,.55);border:1px solid rgba(120,255,180,.14)}
+  .lidar-cell span{display:block;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+  .lidar-cell b{display:block;margin-top:2px;font-size:12.5px;font-weight:600;color:#7dffc0;font-variant-numeric:tabular-nums}
+  .lidar-foot{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;
+    font-size:9px;letter-spacing:.08em;color:var(--dim)}
+  .lidar-foot b{color:var(--accent2);font-weight:600;font-variant-numeric:tabular-nums}
+  .lidar-foot.warn span{color:var(--accent2)}
 
   .hydro-box{position:fixed;left:222px;bottom:20px;z-index:22;width:294px;padding:10px;border-radius:16px;
     background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);
@@ -531,8 +551,8 @@
     .res-badge{display:none}
   }
   @media (max-width:1500px){
-    /* 14 иконок не помещаются в один ряд вместе с брендом и телеметрией:
-       рейл переносится в два ряда, телеметрия уходит вниз по центру. */
+    /* 15 иконок не помещаются в один ряд вместе с брендом и телеметрией:
+       рейл переносится в несколько рядов, телеметрия уходит вниз по центру. */
     .icon-rail{max-width:400px}
     .telemetry{top:auto;bottom:14px;left:50%;transform:translateX(-50%);max-width:min(60vw, 560px)}
     .brand{max-width:calc(100vw - 460px)}
@@ -645,6 +665,7 @@
     </div>
     <div class="icon-group" id="gh-view" role="group" aria-label="Вид и свет">
       <button class="icon-btn" id="btn-flash" title="Прожектор батискафа (F)" aria-label="Прожектор">&#128294;</button>
+      <button class="icon-btn" id="btn-lidar" title="Лидар — запасной канал изображения (Shift+F)" aria-label="Лидар"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"/><path d="M4.5 7.5l2.8 2.8"/><path d="M19.5 7.5l-2.8 2.8"/><circle cx="12" cy="14" r="3"/><path d="M12 17v4"/><path d="M7 20h10"/></svg></button>
       <button class="icon-btn" id="btn-sound" title="Звук океана (M)" aria-label="Звук">&#9835;</button>
       <button class="icon-btn" id="btn-cinema" title="Кинематографический режим и фильтры (N)" aria-label="Кино-режим">&#127916;</button>
       <button class="icon-btn" id="btn-sub" title="Режим батискафа и эхолот (B)" aria-label="Батискаф">&#9678;</button>
@@ -937,6 +958,16 @@
   <canvas id="sonar-canvas" width="246" height="102" title="Профиль дна по курсу (G — 3D-мультилуч)"></canvas>
 </div>
 
+<div class="lidar-box hidden hud-hideable" id="lidar-box">
+  <div class="lidar-head"><span>Лидар 532 нм · облако точек</span><b id="lidar-readout">Сканирование</b></div>
+  <div class="lidar-grid">
+    <div class="lidar-cell"><span>Дальность</span><b id="lidar-range">— м</b></div>
+    <div class="lidar-cell"><span>Точек</span><b id="lidar-points">0</b></div>
+    <div class="lidar-cell"><span>Вода</span><b id="lidar-atten">— 1/м</b></div>
+  </div>
+  <div class="lidar-foot"><span id="lidar-flash">Прожектор: исправен</span><b id="lidar-repair"></b></div>
+</div>
+
 <div class="minimap-box hud-hideable">
   <canvas id="minimap" title="Клик — переход · ПКМ или Shift+Клик — поставить/убрать маячок"></canvas>
   <div class="map-cap"><span>Карта: <b id="map-cov">0%</b></span><button class="map-fog-btn" id="map-home-btn" title="Вернуться к ядру — к ближайшему маяку">К ядру</button><button class="map-fog-btn" id="map-fog-btn" title="Туман войны / Полная карта">Туман</button><span>ПКМ — маяк</span></div>
@@ -962,6 +993,7 @@
 
 <div class="touch-actions hud-hideable" id="touch-actions" aria-label="Быстрые действия для сенсорных экранов">
   <button class="touch-act" id="m-flash" title="Прожектор (F)" aria-label="Прожектор">&#128294;</button>
+  <button class="touch-act" id="m-lidar" title="Лидар (Shift+F)" aria-label="Лидар">&#9788;</button>
   <button class="touch-act" id="m-sonar" title="Сонар (G)" aria-label="Сонар">&#128225;</button>
   <button class="touch-act" id="m-sample" title="Взять пробу (Z)" aria-label="Проба">&#129520;</button>
   <button class="touch-act" id="m-sub" title="Режим батискафа (B)" aria-label="Батискаф">&#9678;</button>
@@ -1119,6 +1151,7 @@
         <button class="help-item" data-help-act="orbit"><span>Всплыть / глубже · Сменить камеру (Орбита)</span><kbd>Space/C · V</kbd></button>
         <button class="help-item" data-help-act="sub"><span>Режим батискафа (HUD и клиренс)</span><kbd>B</kbd></button>
         <button class="help-item" data-help-act="flash"><span>Прожектор батискафа (фототаксис рыб)</span><kbd>F</kbd></button>
+        <button class="help-item" data-help-act="lidar"><span>Лидар: облако точек вместо прожектора</span><kbd>Shift+F</kbd></button>
       </div>
       <div class="help-cat">
         <h4>Сонар, Гидрофон и Карта</h4>

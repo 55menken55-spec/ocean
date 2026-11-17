@@ -31,12 +31,18 @@ window.OC = window.OC || {};
       const triggerDeployBuoy = ctx.triggerDeployBuoy || (() => {});
       const toggleHelp = ctx.toggleHelp || (() => {});
       const isHelpOpen = ctx.isHelpOpen || (() => false);
+      const toggleLidar = ctx.toggleLidar || (() => {});
       const camFovLabel = ctx.camFovLabel || null;
 
       function onKeyDown(e) {
         if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
         if (e.code === 'KeyM') { syncSound(OC.sound.toggle()); }
         if (e.code === 'KeyF') {
+          if (e.shiftKey) { toggleLidar(); return; }
+          if (OC.isFlashlightBroken && OC.isFlashlightBroken()) {
+            toast('Прожектор на ремонте — работает лидар (Shift+F)');
+            return;
+          }
           const on = OC.toggleFlashlight();
           syncFlash(on);
           toast(on ? 'Прожектор включён' : 'Прожектор выключен');
