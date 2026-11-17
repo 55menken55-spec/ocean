@@ -11,6 +11,10 @@ window.OC = window.OC || {};
      * Регистрация нового океанического / водного биома планеты.
      * Контракт биома:
      * - id, name, region, subtitle, worldRadius, chunkSize, seaLevel
+     * - unbounded: true — мир без края: камера не ограничивается кругом worldRadius,
+     *   а рельеф, флора и фауна стримятся вокруг игрока на любом удалении.
+     *   worldRadius при этом остаётся радиусом «ядра» — зоны с достопримечательностями,
+     *   маяками, миссиями и картой Fog of War.
      * - globe: { lat, lon, coordLabel, ocean, depthSpan, tempSpan, color, summary,
      *          country, waterType, protectionStatus, notableFor } — геопривязка к реальной планете
      * - spawn: { pos: [x,y,z], yaw, pitch }
@@ -27,6 +31,10 @@ window.OC = window.OC || {};
      */
     register(def) {
       if (!def || !def.id) throw new Error('Biome definition requires id');
+      /* Планетарный мир: по умолчанию биом считается миром без края, поэтому
+         камера не зажимается кругом worldRadius (см. navigation/state.js), а
+         горизонтный фартук дна следует за игроком (см. engine/terrain.js). */
+      if (def.unbounded === undefined) def.unbounded = true;
       if (typeof def.getTemperatureAt === 'function' && !def.getTemperatureAt._seasonWrapped) {
         const baseTemperatureAt = def.getTemperatureAt;
         const seasonalTemperatureAt = function (x, depthM, zone) {
@@ -56,6 +64,12 @@ window.OC = window.OC || {};
     getActive() {
       return activeBiome;
     }
+  };
+
+  /* Мир без края: камера может уходить сколь угодно далеко от точки спавна.
+     worldRadius при этом — радиус «ядра»: карты, маяки и миссии живут в нём. */
+  OC.Biomes.isUnbounded = function (b) {
+    return !!(b && b.unbounded);
   };
 
   /* Удобный общий доступ к текущей высоте дна */

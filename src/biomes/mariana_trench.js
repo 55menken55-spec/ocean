@@ -471,6 +471,7 @@ window.OC = window.OC || {};
       summary: 'Глубочайшая бездна Земли (~10.9 км): 24-метровый скелет китового падения с червями Osedax, серпентинитовые сипы и морские слизни.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     depthOffset: DEPTH_OFFSET,

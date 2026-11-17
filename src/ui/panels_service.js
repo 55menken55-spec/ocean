@@ -41,6 +41,7 @@ window.OC = window.OC || {};
       const hydroTrackBtn = document.getElementById('hydro-track-btn');
       const mapCovEl = document.getElementById('map-cov');
       const mapFogBtn = document.getElementById('map-fog-btn');
+      const mapHomeBtn = document.getElementById('map-home-btn');
       const guideCard = document.getElementById('guide-card');
       const guideStep = document.getElementById('guide-step');
       const guideBiome = document.getElementById('guide-biome');
@@ -197,14 +198,18 @@ window.OC = window.OC || {};
             toast('Нет активного пеленга на источник звука');
             return;
           }
-          const pos = OC.Navigation.getPosition();
+          /* Источник пеленга — агент фауны, а он стоит в координатах сцены.
+             Сравниваем в локальных, а курс прокладываем по мировой точке. */
+          const world = OC.Navigation.getPosition();
+          const pos = (OC.FloatingOrigin && OC.FloatingOrigin.toLocal)
+            ? OC.FloatingOrigin.toLocal(world) : world;
           const dx = tgt.x - pos.x;
           const dy = tgt.y - pos.y;
           const dz = tgt.z - pos.z;
           const horiz = Math.max(0.1, Math.hypot(dx, dz));
           const turnYaw = Math.atan2(dx, dz);
           const turnPitch = OC.clamp(Math.atan2(dy, horiz), -0.65, 0.45);
-          OC.Navigation.flyTo(pos.x, pos.y, pos.z, turnYaw, turnPitch);
+          OC.Navigation.flyTo(world.x, world.y, world.z, turnYaw, turnPitch);
           toast('Курс на пеленг ' + String(tgt.bearingDeg).padStart(3, '0') + '° — ' + tgt.label);
         });
       }
@@ -261,6 +266,23 @@ window.OC = window.OC || {};
         btnReset.addEventListener('click', () => {
           OC.Navigation.resetToSpawn();
           toast('Возврат к старту: ' + (activeBiome() ? activeBiome().name : 'океан'));
+        });
+      }
+
+      /* ---------- Возврат к ядру ----------
+         Мир без края: за кругом worldRadius нет ни маяков, ни миссий, и окно
+         карты показывает только окрестность аппарата. Кнопка ведёт к
+         ближайшему ориентиру ядра по мировым координатам. */
+      if (mapHomeBtn) {
+        mapHomeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const biome = activeBiome();
+          if (!biome || !OC._NavCore || !OC.Navigation) return;
+          const home = OC._NavCore.homeTarget(biome, OC.Navigation.getPosition());
+          OC.Navigation.flyTo(home.x, home.y, home.z, home.yaw, home.pitch);
+          toast('Курс к ядру: ' + home.name + ' (' + (home.distM >= 1000
+            ? (home.distM / 1000).toFixed(1) + ' км'
+            : Math.round(home.distM) + ' м') + ')');
         });
       }
 

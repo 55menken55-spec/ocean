@@ -53,6 +53,15 @@ window.OC = window.OC || {};
     if (key === 'cryo_forest' || key === 'chemo_mat' || key === 'cryo_tubeworm' || key === 'brine_polyp' || key === 'sulfate_crust') return 'Холодное шёпот криолеса';
     if (key === 'ice_veil') return 'Звон ледяных занавесов';
     if (key === 'cryo_glider' || key === 'cryo_krill') return 'Мерцание стаи криобиоты';
+    /* --- Кракеново море Титана: биота и среда жидкого метана --- */
+    if (key === 'nitrogen_bubble' || key === 'magic_island') return 'Всплывающие пузыри азота';
+    if (key === 'methane_glider') return 'Свист метанового планировщика';
+    if (key === 'azotosome_drifter') return 'Шорох мембранных пластинок';
+    if (key === 'nitrile_motile') return 'Шелест нитрильных колоний';
+    if (key === 'tidal_bore') return 'Гул приливного бора Сатурна';
+    if (key === 'methane_rain') return 'Дробь метанового дождя';
+    if (key === 'shoreline_ice' || key === 'ice_boulder') return 'Скрип водяного льда';
+    if (key === 'organic_silt' || key === 'tholin_dune' || key === 'evaporite_crust' || key === 'nitrile_drift') return 'Шевеление органического дна';
     return 'Подводный отклик';
   };
 
@@ -552,6 +561,85 @@ window.OC = window.OC || {};
             g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 1.1);
             o.connect(g); g.connect(out);
             o.start(now + i * 0.08); o.stop(now + i * 0.08 + 1.15);
+          });
+        }
+      } else if (key === 'azotosome_drifter' || key === 'nitrile_motile' || key === 'methane_glider' || key === 'nitrogen_bubble' || key === 'magic_island' || key === 'tidal_bore' || key === 'methane_rain' || key === 'shoreline_ice' || key === 'ice_boulder' || key === 'organic_silt' || key === 'tholin_dune' || key === 'evaporite_crust' || key === 'nitrile_drift') {
+        /* Кракеново море: среда в полтора раза легче воды и в семь раз медленнее
+           по тяжести, поэтому всё звучит приглушённо, низко и растянуто. */
+        if (key === 'nitrogen_bubble' || key === 'magic_island') {
+          // Пузырь азота: короткий «бульк» с поднимающейся частотой
+          for (let i = 0; i < 9; i++) {
+            const t = now + i * 0.11 + Math.random() * 0.03;
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(210 + Math.random() * 90, t);
+            o.frequency.exponentialRampToValueAtTime(680 + Math.random() * 320, t + 0.07);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.075, t + 0.012);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.085);
+            o.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.09);
+          }
+        } else if (key === 'methane_glider') {
+          // Длинный пологий свист: почти невесомое тело в вязкой среде
+          const o = ctx.createOscillator();
+          const lp = ctx.createBiquadFilter();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.setValueAtTime(148, now);
+          o.frequency.exponentialRampToValueAtTime(62, now + 1.4);
+          lp.type = 'lowpass'; lp.frequency.value = 320;
+          g.gain.setValueAtTime(0.0001, now);
+          g.gain.linearRampToValueAtTime(0.11, now + 0.22);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+          o.connect(lp); lp.connect(g); g.connect(out);
+          o.start(now); o.stop(now + 1.5);
+        } else if (key === 'azotosome_drifter' || key === 'nitrile_motile') {
+          // Шорох мембран: серия коротких расстроенных щелчков
+          for (let i = 0; i < 11; i++) {
+            const t = now + i * 0.045 + Math.random() * 0.02;
+            const o = ctx.createOscillator();
+            const bp = ctx.createBiquadFilter();
+            const g = ctx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(900 + Math.random() * 700, t);
+            bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 2.4;
+            g.gain.setValueAtTime(0.03, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+            o.connect(bp); bp.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.045);
+          }
+        } else if (key === 'methane_rain') {
+          // Дробь по поверхности: редкие, медленно падающие капли
+          for (let i = 0; i < 7; i++) {
+            const t = now + i * 0.19;
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(620 - i * 40, t);
+            o.frequency.exponentialRampToValueAtTime(240, t + 0.12);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.linearRampToValueAtTime(0.055, t + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+            o.connect(g); g.connect(out);
+            o.start(t); o.stop(t + 0.15);
+          }
+        } else {
+          // Гул углеводородного моря: два низких тона и шумовой подтон
+          [44, 67].forEach((f, i) => {
+            const o = ctx.createOscillator();
+            const lp = ctx.createBiquadFilter();
+            const g = ctx.createGain();
+            o.type = i === 0 ? 'sawtooth' : 'sine';
+            o.frequency.setValueAtTime(f, now);
+            o.frequency.linearRampToValueAtTime(f * 0.96, now + 1.7);
+            lp.type = 'lowpass'; lp.frequency.value = 165;
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.linearRampToValueAtTime(i === 0 ? 0.06 : 0.085, now + 0.4);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+            o.connect(lp); lp.connect(g); g.connect(out);
+            o.start(now); o.stop(now + 1.85);
           });
         }
       } else {

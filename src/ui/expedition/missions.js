@@ -531,6 +531,44 @@ window.OC = window.OC || {};
       landmarkId: 'tara_brine',
       goal: 1,
       progress: (ctx) => ctx.hasZone('basal_ice') && ctx.hasPhotoOrPing(['brine_polyp', 'ice_veil', 'cryo_medusa']) ? 1 : 0
+    },
+
+    /* ---- Кракеново море Титана ---- */
+    {
+      id: 'titan_shore_ice',
+      biomeId: 'titan_kraken',
+      title: 'Кромка водяного льда',
+      desc: 'Подойдите к ледяному берегу Кракенова моря и зафиксируйте глыбу льда или толиновую дюну, уходящую под уровень метана.',
+      landmarkId: 'kraken_shore',
+      goal: 2,
+      progress: (ctx) => (ctx.hasPhotoOrPing(['ice_boulder']) ? 1 : 0) + (ctx.hasPhotoOrPing(['tholin_dune']) ? 1 : 0)
+    },
+    {
+      id: 'titan_evaporite',
+      biomeId: 'titan_kraken',
+      title: 'След отступающего моря',
+      desc: 'На шельфе найдите эвапоритовую корку — осадок, который остаётся при испарении метана, и отсканируйте её сонаром или снимите.',
+      landmarkId: 'shelf_break',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('methane_shelf') && ctx.hasPhotoOrPing(['evaporite_crust', 'organic_silt']) ? 1 : 0
+    },
+    {
+      id: 'titan_estuary',
+      biomeId: 'titan_kraken',
+      title: 'Устье метановой реки',
+      desc: 'Зайдите в эстуарий Морей-Синус и зафиксируйте нитриловые наносы или гипотетических нитрильных колонистов.',
+      landmarkId: 'moray_sinus',
+      goal: 2,
+      progress: (ctx) => (ctx.hasPhotoOrPing(['nitrile_drift']) ? 1 : 0) + (ctx.hasPhotoOrPing(['nitrile_motile', 'azotosome_drifter']) ? 1 : 0)
+    },
+    {
+      id: 'titan_magic_island',
+      biomeId: 'titan_kraken',
+      title: 'Охота за «магическим островом»',
+      desc: 'Найдите поле пузырей азота на шельфе и подтвердите явление, которое на снимках Кассини выглядело как появляющийся остров.',
+      landmarkId: 'nitrogen_bubbles',
+      goal: 1,
+      progress: (ctx) => ctx.hasZone('methane_shelf') && ctx.hasPhotoOrPing(['nitrogen_bubble']) ? 1 : 0
     }
   ];
 

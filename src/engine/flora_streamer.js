@@ -106,21 +106,23 @@ function buildChunkData(cx, cz, density) {
     const rng = OC.mulberry32(seed);
     const raw = biomeRef.generateChunkFlora(cx, cz, chunkSize, density, rng);
     const items = [];
-    const origin = getOriginRef();
-    const ox = origin ? origin.x : 0;
-    const oz = origin ? origin.z : 0;
 
     for (let i = 0; i < raw.length; i++) {
       const it = raw[i];
       const basePool = poolLookup.get(it.species + ':0');
       const vCount = basePool ? basePool.variantCount : 1;
       const variant = Math.floor(rng() * vCount);
+      /* Кэш хранит ИСТИННЫЕ мировые координаты. Раньше тут сразу вычитался
+         origin, и после сдвига Floating Origin весь кэш оказывался в системе
+         координат прошлого origin: флора уезжала от дна ровно на delta и
+         возвращалась на место только по мере вытеснения чанков из кэша.
+         Перевод в локальные координаты делается в момент использования. */
       items.push({
         species: it.species,
         variant,
-        x: it.x - ox, // относительно начала координат (Floating Origin)
+        x: it.x,
         y: it.y,
-        z: it.z - oz, // относительно начала координат (Floating Origin)
+        z: it.z,
         ry: it.ry,
         scale: it.scale,
         tint: it.tint || 0xffffff
@@ -136,6 +138,7 @@ function buildChunkData(cx, cz, density) {
     const activeR2 = activeR * activeR;
     const origin = getOriginRef();
     const ox = origin ? origin.x : 0;
+    const oy = origin ? origin.y : 0;
     const oz = origin ? origin.z : 0;
 
     // Истинная мировая позиция камеры (локальная + origin)
@@ -145,7 +148,7 @@ function buildChunkData(cx, cz, density) {
     // Потолочное отсечение для пещерных биомов:
     // если камера под сводом, объекты над сводом в своей точке за потолком — не рисуем
     const hasCeiling = biomeRef && typeof biomeRef.getCeilingHeight === 'function';
-    const camY = camPos.y + (origin ? origin.y : 0);
+    const camY = camPos.y + oy;
     let camCeilY = null;
     if (hasCeiling) {
       camCeilY = biomeRef.getCeilingHeight(trueCamX, trueCamZ);
@@ -175,16 +178,18 @@ function buildChunkData(cx, cz, density) {
 
         for (let i = 0; i < items.length; i++) {
           const it = items[i];
-          const dx = it.x - camPos.x;
-          const dz = it.z - camPos.z;
+          // Истинные мировые координаты -> локальные сцены (Floating Origin)
+          const lx = it.x - ox;
+          const lz = it.z - oz;
+          const ly = it.y - oy;
+          const dx = lx - camPos.x;
+          const dz = lz - camPos.z;
           const d2 = dx * dx + dz * dz;
           if (d2 > activeR2) continue;
 
           // Потолочное отсечение: объект над сводом пещеры, камера под сводом — объект за потолком
           if (hasCeiling && camCeilY !== null && camY < camCeilY) {
-            const objWorldX = it.x + ox;
-            const objWorldZ = it.z + oz;
-            const objCeilY = biomeRef.getCeilingHeight(objWorldX, objWorldZ);
+            const objCeilY = biomeRef.getCeilingHeight(it.x, it.z);
             if (it.y > objCeilY) continue;
           }
 
@@ -200,7 +205,7 @@ function buildChunkData(cx, cz, density) {
             dmg = OC.Volcano.getDamageFactor(it.x, it.z);
           }
           const idx = pool.count++;
-          _pos.set(it.x, it.y, it.z);
+          _pos.set(lx, ly, lz);
           _euler.set(0, it.ry, 0);
           _quat.setFromEuler(_euler);
           _scale.setScalar(it.scale * (1 - dmg * 0.45));
@@ -260,13 +265,11 @@ function buildChunkData(cx, cz, density) {
       cacheComplete = false;
       lastCacheCheckPos.set(1e9, 1e9, 1e9);
 
-      // При сдвиге начала координат (Floating Origin) сдвигаем все пулы инстансов
-      OC.FloatingOrigin.onShift((delta) => {
-        for (let i = 0; i < pools.length; i++) {
-          pools[i].mesh.position.sub(delta);
-          if (pools[i].mesh.instanceMatrix) pools[i].mesh.instanceMatrix.needsUpdate = true;
-        }
-      });
+      /* Сдвиг начала координат (Floating Origin) здесь больше НЕ дублируется:
+         пулы — это InstancedMesh внутри group, а OC.FloatingOrigin.update()
+         обходит сцену и сдвигает их сам (и помечает instanceMatrix). Прежний
+         слушатель вычитал delta повторно, из-за чего вся флора уезжала вместе с
+         двойным сдвигом рельефа; вдобавок он копился при каждой смене биома. */
 
       group = new T.Group();
       scene.add(group);
@@ -279,6 +282,10 @@ function buildChunkData(cx, cz, density) {
 
         for (let v = 0; v < vCount; v++) {
           const mesh = new T.InstancedMesh(spec.geos[v], spec.mat, perVarMax);
+          /* Якорь контейнера всегда в (0,0,0): позиции экземпляров лежат в
+             instanceMatrix. Без флага FloatingOrigin сдвинул бы и его, и
+             матрицы — то есть дважды (см. комментарий в floating_origin.js). */
+          mesh.userData.noFloatingOrigin = true;
           // InstancedMesh хранит все экземпляры в одном меше в (0,0,0). При
           // frustumCulled = true Three.js отсекает ВЕСЬ InstancedMesh целиком,
           // если его единый bounding box попадает за視русна — и вся флора
@@ -400,8 +407,15 @@ function buildChunkData(cx, cz, density) {
       if (!pos || !biomeRef) return null;
       const maxD = maxDist || 16;
       const maxD2 = maxD * maxD;
-      const scx = Math.floor(pos.x / chunkSize);
-      const scz = Math.floor(pos.z / chunkSize);
+      // pos — локальная позиция камеры, кэш хранит мировые координаты
+      const o = getOriginRef();
+      const ox = o ? o.x : 0;
+      const oy = o ? o.y : 0;
+      const oz = o ? o.z : 0;
+      const wx = pos.x + ox;
+      const wz = pos.z + oz;
+      const scx = Math.floor(wx / chunkSize);
+      const scz = Math.floor(wz / chunkSize);
       let best = null;
       let bestD2 = maxD2;
       for (let dz = -1; dz <= 1; dz++) {
@@ -412,9 +426,9 @@ function buildChunkData(cx, cz, density) {
           if (!items) continue;
           for (let i = 0; i < items.length; i++) {
             const it = items[i];
-            const ddx = it.x - pos.x;
-            const ddy = it.y - pos.y;
-            const ddz = it.z - pos.z;
+            const ddx = it.x - wx;
+            const ddy = it.y - (pos.y + oy);
+            const ddz = it.z - wz;
             const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
             if (d2 < bestD2) {
               bestD2 = d2;
@@ -425,10 +439,11 @@ function buildChunkData(cx, cz, density) {
       }
       if (!best) return null;
       const dst = out || {};
+      // Возвращаем в той же системе координат, что и входной pos (локальной)
       dst.species = best.species;
-      dst.x = best.x;
-      dst.y = best.y;
-      dst.z = best.z;
+      dst.x = best.x - ox;
+      dst.y = best.y - oy;
+      dst.z = best.z - oz;
       dst.scale = best.scale;
       dst.tint = best.tint;
       dst.dist = Math.sqrt(bestD2);

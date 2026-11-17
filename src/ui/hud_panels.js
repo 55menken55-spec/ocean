@@ -106,8 +106,7 @@ window.OC = window.OC || {};
   function formatHeading(yawRad) {
     // 0 yaw смотрит на +Z (Юг), PI на -Z (Север)
     const deg = ((Math.round((180 - yawRad * 180 / Math.PI)) % 360) + 360) % 360;
-    const dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
-    const dName = dirs[Math.round(deg / 45) % 8];
+    const dName = OC._NavCore.compassName(deg);
     return dName + ' ' + String(deg).padStart(3, '0') + '°';
   }
 
@@ -176,7 +175,7 @@ window.OC = window.OC || {};
           '<div class="atlas-top"><span style="display:inline-flex;align-items:center;gap:6px"><i style="width:10px;height:10px;border-radius:50%;display:inline-block;background:' + colCss + ';box-shadow:0 0 8px ' + colCss + '"></i>' + s.category + ' · ' + s.biomeName + '</span><span class="atlas-badge ok">' + s.depthM + ' м</span></div>' +
           '<div class="atlas-name">' + s.title + '</div>' +
           '<div class="atlas-latin">' + (s.latin || s.chemNote) + '</div>' +
-          '<div class="atlas-desc">' + s.chemNote + ' · T=' + s.tempC + '°C · ' + s.pH + ' pH · O₂ ' + s.o2 + ' мг/л' + (s.bleachPct > 0 ? (' · обесцв. ' + s.bleachPct + '%') : '') + '</div>' +
+          '<div class="atlas-desc">' + s.chemNote + ' · T=' + s.tempC + '°C · ' + (Number.isFinite(s.pH) ? s.pH + ' pH' : 'pH не определён') + ' · O₂ ' + s.o2 + ' мг/л' + (s.bleachPct > 0 ? (' · обесцв. ' + s.bleachPct + '%') : '') + '</div>' +
           '<div class="atlas-foot"><span>' + new Date(s.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</span>' +
           (hasEnc ? '<button class="atlas-go">3D-Атлас →</button>' : '<button class="atlas-go">В биом →</button>') + '</div>';
         const btn = card.querySelector('.atlas-go');

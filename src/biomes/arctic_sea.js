@@ -559,6 +559,7 @@ window.OC = window.OC || {};
       summary: 'Изумрудное северное сияние над паковыми льдами, гренландские айсберги, брайниклы, белухи, нарвалы и древние полярные акулы.'
     },
     worldRadius: 1200,
+    unbounded: true,
     chunkSize: 150,
     seaLevel: 0,
     hasAurora: true,

@@ -56,19 +56,22 @@ window.OC = window.OC || {};
     const isArctic = biome && biome.id === 'arctic_sea';
     const isKelp = biome && biome.id === 'kelp_forest';
     const isEuropa = biome && biome.id === 'europa_ocean';
+    const isTitan = biome && biome.id === 'titan_kraken';
     const isDeep = biome && (biome.id === 'hydrothermal_vents' || biome.id === 'mariana_trench' || biome.id === 'brine_pool');
     const floodFactor = isAmazon ? 0.5 + 0.5 * Math.cos((localPhase - 0.34) * TAU) : 0;
     const upwellingFactor = isGalapagos ? 1.0 - warmFactor * 0.28 : 1.0;
     const iceFactor = isBaikal ? winterFactor : (isArctic ? 0.68 + winterFactor * 0.32 : (isEuropa ? 1.0 : 0));
     const currentFactor = isGalapagos
       ? 0.78 + upwellingFactor * 0.22
-      : (isAmazon ? 0.84 + floodFactor * 0.28 : (isKelp ? 1.0 + warmFactor * 0.1 : (isEuropa ? 0.94 + warmFactor * 0.08 : (biome && biome.id === 'great_barrier_reef' ? 1.0 + warmFactor * 0.045 : 1.0))));
+      : (isAmazon ? 0.84 + floodFactor * 0.28 : (isKelp ? 1.0 + warmFactor * 0.1 : (isEuropa ? 0.94 + warmFactor * 0.08 : (isTitan ? 0.9 + warmFactor * 0.06 : (biome && biome.id === 'great_barrier_reef' ? 1.0 + warmFactor * 0.045 : 1.0)))));
     const faunaActivity = isGalapagos
       ? 0.82 + upwellingFactor * 0.2
-      : (isKelp ? 0.92 + warmFactor * 0.08 : (isAmazon ? 0.92 + floodFactor * 0.12 : (isEuropa ? 0.9 + warmFactor * 0.1 : (isDeep ? 1.0 : 1.0 + warmFactor * 0.035))));
+      /* Химия при 94 К идёт в тысячи раз медленнее земной: гипотетическая биота
+         Титана почти неподвижна, и сезонный размах активности у неё мизерный. */
+      : (isKelp ? 0.92 + warmFactor * 0.08 : (isAmazon ? 0.92 + floodFactor * 0.12 : (isEuropa ? 0.9 + warmFactor * 0.1 : (isTitan ? 0.62 + warmFactor * 0.05 : (isDeep ? 1.0 : 1.0 + warmFactor * 0.035)))));
     const productivityFactor = isKelp
       ? 0.88 + (0.5 + 0.5 * warmFactor) * 0.24
-      : (isEuropa ? 0.86 + (0.5 + 0.5 * warmFactor) * 0.24 : 1.0);
+      : (isEuropa ? 0.86 + (0.5 + 0.5 * warmFactor) * 0.24 : (isTitan ? 0.34 + (0.5 + 0.5 * warmFactor) * 0.12 : 1.0));
     return {
       id: season.id,
       label: season.label,
@@ -102,6 +105,7 @@ window.OC = window.OC || {};
     const climate = climateFor(biome);
     const phaseLocal = localPhaseFor(climate);
     const isEuropa = biome && biome.id === 'europa_ocean';
+    const isTitan = biome && biome.id === 'titan_kraken';
     // У Европы «поверхность» воды — основание ледяного панциря на 25 км глубже,
     // поэтому глубину считаем от основания панциря, а не от поверхности спутника.
     const depth = isEuropa

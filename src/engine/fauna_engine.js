@@ -70,6 +70,11 @@ window.OC = window.OC || {};
       }), { causticStrength: biome.noSurface ? 0.0 : 0.64 });
 
       const plan = biome.faunaPlan || {};
+      /* Фауна живёт в локальных координатах сцены (Floating Origin держит
+         камеру в начале), а рельеф описывается в мировых. Без обёртки рыбы
+         запрашивали дно точкой, смещённой на origin, и в мире без края
+         повисали в сотнях метров над грунтом. */
+      const fBiome = (OC._FaunaSpace && OC._FaunaSpace.wrap) ? OC._FaunaSpace.wrap(biome) : biome;
       const agents = [];
       const impostoredAgents = new Set(); // агенты, для которых сейчас активен impostor
 
@@ -107,7 +112,7 @@ window.OC = window.OC || {};
       }
 
       const { whale, whalesList, primaryVessel } = spawnFauna({
-        faunaGroup, biome, plan, emitSplash,
+        faunaGroup, biome: fBiome, plan, emitSplash,
         agents, schools, predatorAgents, preySchools, sonarTargets,
         surfaceJumpers, huntingAgents
       });
@@ -117,7 +122,7 @@ window.OC = window.OC || {};
       // ---- Пузыри, планктон, морской снег и шлейфы курильщиков ----
       const pCountMult = OC.Quality.get().particlesScale;
       for (const vp of (plan.ventPlumes || [])) {
-        agents.push(OC._FaunaBuilders.makeVentPlume(faunaGroup, biome, texSoft, vp));
+        agents.push(OC._FaunaBuilders.makeVentPlume(faunaGroup, fBiome, texSoft, vp));
       }
       const noSurf = !!biome.noSurface;
       const bubbleMat = createCameraRelativeParticles(faunaGroup, noSurf ? 80 : Math.round(900 * pCountMult), texHard, 'bubbles', noSurf);
@@ -125,9 +130,9 @@ window.OC = window.OC || {};
       const snowMat = createCameraRelativeParticles(faunaGroup, Math.round((noSurf ? 1400 : 1050) * pCountMult), texSoft, 'snow', noSurf);
       const isCoralBiome = (biome.id === 'great_barrier_reef' || biome.id === 'wreck_atoll' || biome.id === 'galapagos_upwelling');
       const coralSpawnSys = isCoralBiome ? createCoralSpawningSystem(faunaGroup, Math.round(340 * pCountMult), texSoft) : null;
-      const thermoHaze = makeThermoclineHaze(faunaGroup, biome);
-      const benthicSilt = makeBenthicSiltSystem(faunaGroup, biome, texSoft);
-      const hydratePlumes = makeHydratePlumeSystem(faunaGroup, biome, texHard);
+      const thermoHaze = makeThermoclineHaze(faunaGroup, fBiome);
+      const benthicSilt = makeBenthicSiltSystem(faunaGroup, fBiome, texSoft);
+      const hydratePlumes = makeHydratePlumeSystem(faunaGroup, fBiome, texHard);
       const biolumTrail = makeBiolumTrail(faunaGroup, texSoft, noSurf);
 
       // Подводный вулкан-сеаунд: редкие события с предвестниками (hydrothermal_vents)
@@ -272,6 +277,8 @@ window.OC = window.OC || {};
 
           lastCamPos.copy(camPos);
           updateCtx.dayW = dayW;
+
+
 
 
           updateCtx.season = OC.Seasons ? OC.Seasons.getState(biome) : null;
@@ -864,7 +871,7 @@ window.OC = window.OC || {};
             const fg = OC._FaunaBuilders.makeFishGeo(spec.geoOpts || { len: 0.6, height: 0.2, width: 0.1, colA: 0x6b7280, colB: 0x9ca3af, finCol: 0x4b5563, eyeScale: 0 });
             built = new T.Mesh(fg, previewMat);
           }
-        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark') {
+        } else if (key === 'shark_reef' || key === 'shark_whale' || key === 'shark_leopard' || key === 'shark_greenland' || key === 'galapagos_shark' || key === 'reef_shark') {
           OC._FaunaBuilders.makeShark(tmpGroup, dummyBiome, {
             cx: 0, cz: 0, y: 0, r: 10, speed: 2,
             speciesKey: key, whaleShark: key === 'shark_whale'
@@ -947,6 +954,20 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makePinkDolphin(tmpGroup, dummyBiome, { preview: true });
         } else if (key === 'arapaima') {
           OC._FaunaBuilders.makeArapaima(tmpGroup, dummyBiome, { preview: true });
+        } else if (key === 'napoleon') {
+          OC._FaunaBuilders.makeNapoleon(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: -8, speed: 2, scale: 1.35 });
+        } else if (key === 'nudibranch') {
+          OC._FaunaBuilders.makeNudibranch(tmpGroup, dummyBiome, { hue: 0.82, scale: 1 });
+        } else if (key === 'florida_gar') {
+          OC._FaunaBuilders.makeFloridaGar(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 6, y: -4, speed: 2, scale: 1.1 });
+        } else if (key === 'american_alligator') {
+          OC._FaunaBuilders.makeAlligator(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: -3, speed: 1.4, scale: 1.5 });
+        } else if (key === 'florida_softshell') {
+          OC._FaunaBuilders.makeSoftshellTurtle(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: -4, speed: 1.8, scale: 1.2 });
+        } else if (key === 'submarine_volcano') {
+          OC._FaunaBuilders.makeSeamountVolcano(tmpGroup, dummyBiome, {});
+        } else if (key === 'methane_seep_baikal') {
+          OC._FaunaBuilders.makeMethaneSeep(tmpGroup, dummyBiome, {});
         } else if (key === 'seal_baikal') {
           OC._FaunaBuilders.makeBaikalSeal(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 0, y: 0, scale: 0.8 });
         } else if (key === 'electric_eel') {
@@ -963,6 +984,14 @@ window.OC = window.OC || {};
           OC._FaunaBuilders.makeArmoredSwimmer(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 12, y: 0, speed: 1.5, scale: 1 });
         } else if (key === 'cryo_medusa') {
           OC._FaunaBuilders.makeCryoMedusa(tmpGroup, { x: 0, y: 0, z: 0, scale: 1 });
+        } else if (key === 'azotosome_drifter' || key === 'nitrile_motile') {
+          // Метанотрофная биота Титана: собственные геометрии стай
+          const geoBuilder = OC._FaunaBuilders.geoBuilders && OC._FaunaBuilders.geoBuilders[key];
+          if (geoBuilder) built = new T.Mesh(geoBuilder(), previewBiolumMat);
+        } else if (key === 'methane_glider') {
+          OC._FaunaBuilders.makeMethaneGlider(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 10, y: 0, speed: 1, scale: 1 });
+        } else if (key === 'nitrogen_bubble') {
+          OC._FaunaBuilders.makeNitrogenBubble(tmpGroup, dummyBiome, { x: 0, y: 0, z: 0, n: 60, radius: 6, height: 12 });
         } else if (key === 'vent_crab') {
           OC._FaunaBuilders.makeVentCrab(tmpGroup, dummyBiome, { cx: 0, cz: 0, r: 8, y: 0, speed: 0.8, scale: 1 });
         } else if (key === 'basal_ice') {
@@ -1007,11 +1036,14 @@ window.OC = window.OC || {};
         if (!built) {
           /* Заглушка для записей Атласа без собственной 3D-модели. Материал НЕ
              использует vertexColors: у SphereGeometry нет атрибута color, и шейдер
-             получал бы (0,0,0) — на экране это был бы чёрный овал вместо модели. */
+             получал бы (0,0,0) — на экране это был бы чёрный овал вместо модели.
+             Флаг в userData помечает такую модель: tests/verify.mjs проверяет,
+             что ни одна запись Атласа ни одного биома до заглушки не доходит. */
           const placeholderMat = new T.MeshStandardMaterial({
             color: 0x8fa6b8, roughness: 0.55, metalness: 0.05, side: T.DoubleSide
           });
           built = new T.Mesh(new T.SphereGeometry(0.8, 48, 24), placeholderMat);
+          built.userData.isAtlasPlaceholder = true;
         }
 
         // Обнуляем возможный сдвиг (напр. позиция группы в мировой точке) и приводим к единому масштабу 2.6 м
@@ -1032,6 +1064,7 @@ window.OC = window.OC || {};
         wrapper.add(built);
         wrapper.scale.setScalar(s);
         wrapper.updateMatrixWorld(true);
+        if (built.userData && built.userData.isAtlasPlaceholder) wrapper.userData.isAtlasPlaceholder = true;
         return wrapper;
       } finally {
         OC._FaunaCtx.creatureMat = savedMat;

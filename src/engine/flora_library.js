@@ -75,6 +75,10 @@ window.OC = window.OC || {};
           mat: matCoralRigid, maxInstances: 2000, cullDist: 460,
           geos: [need('buildStaghorn')(0.94, rng), need('buildStaghorn')(0.55, rng), need('buildStaghorn')(0.76, rng), need('buildStaghorn')(0.11, rng)]
         },
+        coral_branch: {
+          mat: matCoralRigid, maxInstances: 1600, cullDist: 460,
+          geos: [need('buildAcroporaBranch')(0.98, rng), need('buildAcroporaBranch')(0.06, rng), need('buildAcroporaBranch')(0.72, rng)]
+        },
         coral_table: {
           mat: matCoralRigid, maxInstances: 1700, cullDist: 560,
           geos: [need('buildTable')(0.09, rng), need('buildTable')(0.44, rng), need('buildTable')(0.86, rng), need('buildTable')(0.96, rng)]
@@ -110,6 +114,13 @@ window.OC = window.OC || {};
         crinoid: {
           mat: matSoft, maxInstances: 1100, cullDist: 230,
           geos: [need('buildCrinoid')(0.11, rng), need('buildCrinoid')(0.96, rng), need('buildCrinoid')(0.78, rng)]
+        },
+        /* Морская лилия — тоже Crinoidea, но глубже и мельче: отдельная запись
+           Атласа и отдельный вид в генераторе Красного моря. Геометрия общая
+           с crinoid, оттенки — глубоководные (фиолетово-сиреневые). */
+        sea_lily: {
+          mat: matSoft, maxInstances: 700, cullDist: 260,
+          geos: [need('buildCrinoid')(0.74, rng), need('buildCrinoid')(0.83, rng), need('buildCrinoid')(0.69, rng)]
         },
         sponge_tube: {
           mat: matRigid, maxInstances: 700, cullDist: 420,
@@ -263,6 +274,28 @@ window.OC = window.OC || {};
           mat: matSoft, maxInstances: 320, cullDist: 520,
           geos: [need('buildCenoteVine')(rng), need('buildCenoteVine')(rng)]
         },
+        /* Пресноводные карстовые пещеры Флориды: уступы, валуны, биоплёнка на
+           стенах и растительность у выхода источника. */
+        limestone_ledge: {
+          mat: matRigid, maxInstances: 900, cullDist: 520,
+          geos: [need('buildLimestoneLedge')(rng), need('buildLimestoneLedge')(rng), need('buildLimestoneLedge')(rng)]
+        },
+        mud_rock: {
+          mat: matRigid, maxInstances: 800, cullDist: 420,
+          geos: [need('buildMudRock')(rng), need('buildMudRock')(rng)]
+        },
+        cave_algae: {
+          mat: matPlant, maxInstances: 900, cullDist: 340,
+          geos: [need('buildCaveAlgae')(rng), need('buildCaveAlgae')(rng)]
+        },
+        reed: {
+          mat: matPlant, maxInstances: 900, cullDist: 420,
+          geos: [need('buildReed')(rng), need('buildReed')(rng)]
+        },
+        water_lily: {
+          mat: matFoliage, maxInstances: 620, cullDist: 520,
+          geos: [need('buildWaterLily')(rng), need('buildWaterLily')(rng)]
+        },
         volcanic_fumarole: {
           mat: matChimney, maxInstances: 260, cullDist: 560,
           geos: [need('buildVolcanicFumarole')(rng), need('buildVolcanicFumarole')(rng)]
@@ -335,6 +368,45 @@ window.OC = window.OC || {};
         sulfate_crust: {
           mat: matRigid, maxInstances: 1300, cullDist: 300,
           geos: [need('buildSulfateCrust')(rng), need('buildSulfateCrust')(rng)]
+        },
+        /* --- Кракеново море Титана: осадки и лёд углеводородного моря --- */
+        organic_silt: {
+          mat: matRigid, maxInstances: 1600, cullDist: 300,
+          geos: [need('buildOrganicSilt')(rng), need('buildOrganicSilt')(rng), need('buildOrganicSilt')(rng)]
+        },
+        ice_boulder: {
+          mat: matRigid, maxInstances: 520, cullDist: 520,
+          geos: [need('buildIceBoulder')(rng), need('buildIceBoulder')(rng), need('buildIceBoulder')(rng)]
+        },
+        tholin_dune: {
+          mat: matRigid, maxInstances: 420, cullDist: 460,
+          geos: [need('buildTholinDune')(rng), need('buildTholinDune')(rng)]
+        },
+        evaporite_crust: {
+          mat: matRigid, maxInstances: 900, cullDist: 300,
+          geos: [need('buildEvaporiteCrust')(rng), need('buildEvaporiteCrust')(rng)]
+        },
+        nitrile_drift: {
+          mat: matRigid, maxInstances: 1100, cullDist: 300,
+          geos: [need('buildNitrileDrift')(rng), need('buildNitrileDrift')(rng)]
+        },
+        shoreline_ice: {
+          mat: matRigid, maxInstances: 620, cullDist: 340,
+          geos: [need('buildShorelineIce')(rng), need('buildShorelineIce')(rng)]
+        },
+        /* Явления Кракенова моря: модели нужны Атласу, в мир их раскладывает не
+           стример флоры, а генератор пузырей из faunaPlan. */
+        tidal_bore: {
+          mat: matRigid, maxInstances: 120, cullDist: 520,
+          geos: [need('buildTidalBore')(rng), need('buildTidalBore')(rng)]
+        },
+        methane_rain: {
+          mat: matRigid, maxInstances: 220, cullDist: 460,
+          geos: [need('buildMethaneRain')(rng), need('buildMethaneRain')(rng)]
+        },
+        magic_island: {
+          mat: matRigid, maxInstances: 160, cullDist: 460,
+          geos: [need('buildBubblePatch')(rng), need('buildBubblePatch')(rng)]
         }
       };
 

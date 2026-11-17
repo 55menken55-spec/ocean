@@ -5,14 +5,28 @@ window.OC = window.OC || {};
 
   let canvas = null;
   let ctx = null;
-  let bgImage = null;
   let biomeRef = null;
   let pingState = null; // { x, z, startMs }
   const SIZE = 184;
-  const FOG_N = 64;
-  const FOG_LEN = FOG_N * FOG_N;
+  /* Размер окна карты: ±viewRadius вокруг центра окна. В мире без края центр
+     едет за игроком, поэтому «весь мир» на карте не помещается — карта всегда
+     показывает окрестность аппарата, как в навигаторе. */
+  const viewRadius = 1200;
+  const MAP_RECENTER = 300;   // сдвигать окно, когда игрок ушёл дальше (м)
+  const MAP_FILL_BUDGET_MS = 3.0; // сколько миллисекунд в кадр тратить на дорисовку карты
+  const FOG_N = 64;           // пикселей тумана на окно карты
+  /* Туман войны больше не одна сетка на весь мир: мир без края, и клетки
+     хранятся разрежённо — чанками карты. Ячейка осталась прежней (37.5 м),
+     просто чанк покрывает 1200 м, а сетка чанка — 32×32. */
+  const FOG_CHUNK = 1200;
+  const FOG_CN = 32;
+  const FOG_CELL = FOG_CHUNK / FOG_CN; // 37.5 м
+  const FOG_CELLS = FOG_CN * FOG_CN;
+  const MAX_FOG_CHUNKS = 512;          // 512 × 1 КБ = 512 КБ на биом
+  const FOG_SAVE_CHUNKS = 32;          // столько чанков уходит в localStorage
+  const HEX = '0123456789abcdef';      // упаковка 4 клеток (2 бита) в один байт
   const fogByBiome = new Map();
-  let fogGrid = null;
+  let fogEntry = null;    // { chunks: Map<"cx,cz", {grid, t}>, cnt }
   let fogEnabled = true;
   let fogCanvas = null;
   let fogCtx = null;
@@ -22,6 +36,15 @@ window.OC = window.OC || {};
   let lastPassiveX = 99999;
   let lastPassiveZ = 99999;
   let lastSaveMs = 0;
+  let fogClock = 0;       // счётчик обращений для LRU чанков
+  let covCacheKey = -1;   // кэш процента: пересчёт только при новых клетках
+  let covCacheVal = 0;
+  let covCacheBiome = null;
+
+  // Центр окна карты (мировые координаты) — едет за игроком
+  let mapCx = 0;
+  let mapCz = 0;
+  const _coreOut = { outside: false, edgeM: 0, centerM: 0, bearingDeg: 0, nearest: null };
 
   function depthToRGB(y) {
     const theme = biomeRef && biomeRef.minimapTheme;
@@ -97,6 +120,14 @@ window.OC = window.OC || {};
       if (y > -102) return [46, 60, 94];    // базальтовая равнина
       return [22, 32, 62];                  // глубокая океаническая котловина Европы
     }
+    if (theme === 'titan') {
+      if (y > 0.05) return [214, 201, 168];  // берег водяного льда и галечник толинов
+      if (y > -8) return [176, 128, 68];     // прибойная полоса Кракенова моря
+      if (y > -45) return [136, 96, 50];     // шельф с органическим илом
+      if (y > -95) return [104, 70, 36];     // эстуарий Морей-Синус и бровка
+      if (y > -180) return [70, 48, 26];     // континентальный склон
+      return [40, 27, 15];                   // котловина Кракена
+    }
     if (theme === 'atoll') {
       if (y > 1.2) return [72, 148, 86];   // зелёные шапки известняковых островков
       if (y > 0.05) return [236, 222, 184]; // песчаные пляжи атолла
@@ -115,87 +146,175 @@ window.OC = window.OC || {};
     return [7, 22, 58]; // бездна
   }
 
-  function renderBathymetry() {
-    if (!biomeRef) return;
-    const off = document.createElement('canvas');
-    off.width = off.height = SIZE;
-    const octx = off.getContext('2d');
-    const img = octx.createImageData(SIZE, SIZE);
-    const R = biomeRef.worldRadius || 1200;
-
-    for (let py = 0; py < SIZE; py++) {
-      const wz = ((py / (SIZE - 1)) * 2 - 1) * R;
-      for (let px = 0; px < SIZE; px++) {
-        const wx = ((px / (SIZE - 1)) * 2 - 1) * R;
-        const y = biomeRef.getHeight(wx, wz);
-        let rgb = depthToRGB(y);
-        const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
-        if (brine) {
-          rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
-        } else if (biomeRef.isCeilingOpen && biomeRef.getCeilingHeight) {
-          if (biomeRef.isCeilingOpen(wx, wz)) {
-            rgb = [48, 224, 204];
-          } else {
-            const ch = biomeRef.getCeilingHeight(wx, wz);
-            if (ch < -10.5) rgb = [Math.round(rgb[0] * 0.54), Math.round(rgb[1] * 0.56), Math.round(rgb[2] * 0.62)];
-            else if (ch > 0) rgb = [164, 154, 126];
-          }
-        }
-        // Лёгкая изогипса каждые 15 м
-        const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
-        const idx = (py * SIZE + px) * 4;
-        img.data[idx] = Math.min(255, rgb[0] * contour);
-        img.data[idx + 1] = Math.min(255, rgb[1] * contour);
-        img.data[idx + 2] = Math.min(255, rgb[2] * contour);
-        img.data[idx + 3] = 255;
-      }
-    }
-    octx.putImageData(img, 0, 0);
-
-    // Ходовые нити Ариадны в пещерном биоме
-    if (biomeRef.ariadnePaths && biomeRef.ariadnePaths.length) {
-      octx.save();
-      octx.strokeStyle = 'rgba(255, 168, 46, 0.85)';
-      octx.lineWidth = 1.6;
-      octx.setLineDash([3, 2]);
-      for (const path of biomeRef.ariadnePaths) {
-        octx.beginPath();
-        for (let i = 0; i < path.length; i++) {
-          const mp = worldToMap(path[i][0], path[i][2]);
-          if (i === 0) octx.moveTo(mp[0], mp[1]);
-          else octx.lineTo(mp[0], mp[1]);
-        }
-        octx.stroke();
-      }
-      octx.restore();
-    }
-
-    // Сетка координат
-    octx.strokeStyle = 'rgba(180,235,255,0.08)';
-    octx.lineWidth = 1;
-    for (let k = 1; k < 4; k++) {
-      const p = (SIZE / 4) * k;
-      octx.beginPath(); octx.moveTo(p, 0); octx.lineTo(p, SIZE); octx.stroke();
-      octx.beginPath(); octx.moveTo(0, p); octx.lineTo(SIZE, p); octx.stroke();
-    }
-
-    bgImage = off;
-  }
-
+  /* Мир без края: карта показывает окно ±viewRadius вокруг mapCx/mapCz, а не
+     весь круг ядра. Координаты считаются от центра окна, поэтому телепорт и
+     вехи работают на любом удалении от точки старта. */
   function worldToMap(x, z) {
-    const R = biomeRef.worldRadius || 1200;
     return [
-      ((x / R) * 0.5 + 0.5) * SIZE,
-      ((z / R) * 0.5 + 0.5) * SIZE
+      (((x - mapCx) / viewRadius) * 0.5 + 0.5) * SIZE,
+      (((z - mapCz) / viewRadius) * 0.5 + 0.5) * SIZE
     ];
   }
 
   function mapToWorld(px, py) {
-    const R = biomeRef.worldRadius || 1200;
     return [
-      ((px / SIZE) * 2 - 1) * R,
-      ((py / SIZE) * 2 - 1) * R
+      ((px / SIZE) * 2 - 1) * viewRadius + mapCx,
+      ((py / SIZE) * 2 - 1) * viewRadius + mapCz
     ];
+  }
+
+  /* ---- Батиметрия: скроллящееся окно вокруг аппарата ----
+     Считать всё окно целиком — это SIZE² вызовов getHeight, то есть сотни
+     миллисекунд на кадр. OC.GridWindow переезжает готовыми пикселями и
+     досчитывает только открывшуюся полосу, порциями по бюджету времени. */
+  let bathyWin = null;
+  let bathyCanvas = null;
+  let bathyCtx = null;
+  let bathyImg = null;
+
+  function ensureBathyCanvas() {
+    if (bathyCanvas) return true;
+    if (typeof document === 'undefined' || !document.createElement) return false;
+    bathyCanvas = document.createElement('canvas');
+    bathyCanvas.width = SIZE;
+    bathyCanvas.height = SIZE;
+    bathyCtx = bathyCanvas.getContext('2d');
+    if (bathyCtx && bathyCtx.createImageData) bathyImg = bathyCtx.createImageData(SIZE, SIZE);
+    return !!(bathyCtx && bathyImg);
+  }
+
+  function bathyFillRow(data, j, i0, i1, cx, cz, cell) {
+    const half = SIZE / 2;
+    const wz = cz + (j + 0.5 - half) * cell;
+    for (let i = i0; i < i1; i++) {
+      const wx = cx + (i + 0.5 - half) * cell;
+      const y = biomeRef.getHeight(wx, wz);
+      let rgb = depthToRGB(y);
+      const brine = biomeRef.getBrineSurfaceAt ? biomeRef.getBrineSurfaceAt(wx, wz) : null;
+      if (brine) {
+        rgb = brine.shoreDist < 4.5 ? [208, 250, 246] : [38, 218, 202];
+      } else if (biomeRef.isCeilingOpen && biomeRef.getCeilingHeight) {
+        if (biomeRef.isCeilingOpen(wx, wz)) {
+          rgb = [48, 224, 204];
+        } else {
+          const ch = biomeRef.getCeilingHeight(wx, wz);
+          if (ch < -10.5) rgb = [Math.round(rgb[0] * 0.54), Math.round(rgb[1] * 0.56), Math.round(rgb[2] * 0.62)];
+          else if (ch > 0) rgb = [164, 154, 126];
+        }
+      }
+      // Лёгкая изогипса каждые 15 м
+      const contour = (!brine && y < 0 && Math.abs(y % 15) < 1.0) ? 1.08 : 1.0;
+      const idx = (j * SIZE + i) * 4;
+      data[idx] = Math.min(255, rgb[0] * contour);
+      data[idx + 1] = Math.min(255, rgb[1] * contour);
+      data[idx + 2] = Math.min(255, rgb[2] * contour);
+      data[idx + 3] = 255;
+    }
+  }
+
+  function ensureBathyWindow(centerX, centerZ) {
+    if (!biomeRef || !OC.GridWindow || !ensureBathyCanvas()) return null;
+    if (!bathyWin) {
+      bathyWin = OC.GridWindow.create({
+        size: SIZE,
+        span: viewRadius * 2,
+        fillRow: bathyFillRow,
+        unknown: [7, 17, 30, 255] // «необследованная вода» на краю окна
+      });
+    } else {
+      bathyWin.clear();
+    }
+    bathyWin.resetCenter(centerX, centerZ);
+    /* Первый кадр биома считаем целиком: это та же стоимость, что и раньше при
+       смене биома, зато карта сразу готова. Дальше досчитываются только полосы. */
+    bathyWin.flush();
+    uploadBathy();
+    mapCx = bathyWin.centerX();
+    mapCz = bathyWin.centerZ();
+    return bathyWin;
+  }
+
+  /* Векторный слой поверх батиметрии: сетка координат и ходовые нити
+     Ариадны. Раньше он впечатывался в растр, но растр теперь живёт и
+     прокручивается между перерисовками, поэтому линии рисуются каждый кадр. */
+  function drawMapOverlay(c) {
+    // Ходовые нити Ариадны в пещерном биоме
+    if (biomeRef.ariadnePaths && biomeRef.ariadnePaths.length) {
+      c.save();
+      c.strokeStyle = 'rgba(255, 168, 46, 0.85)';
+      c.lineWidth = 1.6;
+      c.setLineDash([3, 2]);
+      for (const path of biomeRef.ariadnePaths) {
+        c.beginPath();
+        for (let i = 0; i < path.length; i++) {
+          const mp = worldToMap(path[i][0], path[i][2]);
+          if (i === 0) c.moveTo(mp[0], mp[1]);
+          else c.lineTo(mp[0], mp[1]);
+        }
+        c.stroke();
+      }
+      c.restore();
+    }
+
+    /* Курс домой: ядро (маяки и миссии) живёт в круге worldRadius, а окно
+       карты показывает ±1200 м вокруг аппарата. Вдали от ядра его маяки
+       просто уезжают за край окна, и без стрелки непонятно, куда плыть. */
+    if (OC._NavCore && typeof c.fillText === 'function') {
+      const core = OC._NavCore.info(biomeRef, { x: mapCx, z: mapCz }, _coreOut);
+      const tgt = core.nearest;
+      if (core.outside && tgt) {
+        const mp = worldToMap(tgt.x, tgt.z);
+        const half = SIZE / 2;
+        const dx = mp[0] - half;
+        const dy = mp[1] - half;
+        const r = Math.hypot(dx, dy);
+        if (r > half - 20) {
+          const ux = dx / r;
+          const uy = dy / r;
+          c.save();
+          c.translate(half + ux * (half - 12), half + uy * (half - 12));
+          c.rotate(Math.atan2(uy, ux));
+          c.fillStyle = 'rgba(255, 209, 122, 0.95)';
+          c.strokeStyle = 'rgba(2,14,28,0.85)';
+          c.lineWidth = 1.1;
+          c.beginPath();
+          c.moveTo(6.5, 0);
+          c.lineTo(-4.5, 4.2);
+          c.lineTo(-4.5, -4.2);
+          c.closePath();
+          c.fill();
+          c.stroke();
+          c.restore();
+          // Сколько плыть до границы ядра — цифры пишем без поворота
+          c.save();
+          c.font = '600 9px system-ui, sans-serif';
+          c.textAlign = 'center';
+          c.fillStyle = 'rgba(2,14,28,0.72)';
+          const lx = half + ux * (half - 26);
+          const ly = half + uy * (half - 26) + 3;
+          c.fillText(OC._NavCore.format(core), lx, ly);
+          c.restore();
+        }
+      }
+    }
+
+    // Сетка координат
+    c.strokeStyle = 'rgba(180,235,255,0.08)';
+    c.lineWidth = 1;
+    for (let k = 1; k < 4; k++) {
+      const p = (SIZE / 4) * k;
+      c.beginPath(); c.moveTo(p, 0); c.lineTo(p, SIZE); c.stroke();
+      c.beginPath(); c.moveTo(0, p); c.lineTo(SIZE, p); c.stroke();
+    }
+  }
+
+  /* Выгрузить посчитанные пиксели в канвас карты. */
+  function uploadBathy() {
+    if (!bathyWin || !bathyImg) return false;
+    if (!bathyWin.consumeChanged()) return false;
+    bathyImg.data.set(bathyWin.data);
+    bathyCtx.putImageData(bathyImg, 0, 0);
+    return true;
   }
 
   function ensureFogCanvas() {
@@ -208,45 +327,119 @@ window.OC = window.OC || {};
     if (fogCtx && fogCtx.createImageData) fogImg = fogCtx.createImageData(FOG_N, FOG_N);
   }
 
-  function encodeFog(arr) {
-    let s = '';
-    for (let i = 0; i < FOG_LEN; i++) s += String(arr[i] || 0);
-    return s;
+  const fogKey = (cx, cz) => cx + ',' + cz;
+
+  /* Чанк тумана создаётся лениво: мир бесконечен, и держать сетку на весь мир
+     нельзя. При переполнении вытесняются давно не использованные чанки — их
+     содержимое теряется только если игрок ушёл очень далеко надолго. */
+  function getFogChunk(cx, cz, create) {
+    if (!fogEntry) return null;
+    const k = fogKey(cx, cz);
+    let rec = fogEntry.chunks.get(k);
+    if (rec) return rec;
+    if (!create) return null;
+    if (fogEntry.chunks.size >= MAX_FOG_CHUNKS) {
+      let oldestKey = null;
+      let oldestT = Infinity;
+      fogEntry.chunks.forEach((r, key) => {
+        if (r.t < oldestT) { oldestT = r.t; oldestKey = key; }
+      });
+      if (oldestKey) fogEntry.chunks.delete(oldestKey);
+    }
+    rec = { grid: new Uint8Array(FOG_CELLS), t: ++fogClock };
+    fogEntry.chunks.set(k, rec);
+    return rec;
   }
 
-  function decodeFog(str, out) {
-    out.fill(0);
+  /* Формат: "v3|cx,cz,<512 hex-символов>;..." — чанк карты упакован по 4
+     клетки в байт (2 бита на клетку), то есть 512 символов вместо 1024.
+     В мире без края исследованных чанков сколько угодно, поэтому хранятся
+     только самые свежие FOG_SAVE_CHUNKS штук, а остальное живёт в памяти. */
+  function encodeChunk(rec) {
+    let out = '';
+    for (let i = 0; i < FOG_CELLS; i += 4) {
+      const b = (rec.grid[i] & 3)
+        | ((rec.grid[i + 1] & 3) << 2)
+        | ((rec.grid[i + 2] & 3) << 4)
+        | ((rec.grid[i + 3] & 3) << 6);
+      out += HEX[(b >> 4) & 15] + HEX[b & 15];
+    }
+    return out;
+  }
+
+  function decodeChunk(data, rec) {
     let cnt = 0;
-    if (typeof str === 'string' && str.length === FOG_LEN) {
-      for (let i = 0; i < FOG_LEN; i++) {
-        const v = str.charCodeAt(i) - 48;
-        if (v === 1 || v === 2) { out[i] = v; cnt++; }
+    for (let i = 0, n = 0; i < data.length - 1; i += 2, n += 4) {
+      const hi = parseInt(data[i], 16);
+      const lo = parseInt(data[i + 1], 16);
+      if (!Number.isFinite(hi) || !Number.isFinite(lo)) return cnt;
+      const b = (hi << 4) | lo;
+      for (let k = 0; k < 4; k++) {
+        const v = (b >> (k * 2)) & 3;
+        if (v === 1 || v === 2) { rec.grid[n + k] = v; cnt++; }
       }
     }
     return cnt;
   }
 
+  function encodeFog() {
+    if (!fogEntry) return 'v3|';
+    const list = Array.from(fogEntry.chunks.entries());
+    list.sort((a, b) => b[1].t - a[1].t);
+    const take = list.slice(0, FOG_SAVE_CHUNKS);
+    let out = 'v3|';
+    for (let n = 0; n < take.length; n++) {
+      const [key, rec] = take[n];
+      let any = false;
+      for (let i = 0; i < FOG_CELLS; i++) { if (rec.grid[i]) { any = true; break; } }
+      if (!any) continue; // пустой чанк не храним
+      out += key + ',' + encodeChunk(rec) + ';';
+    }
+    return out;
+  }
+
+  function decodeFog(str) {
+    if (!fogEntry) return 0;
+    if (typeof str !== 'string' || str.indexOf('v3|') !== 0) return 0;
+    let cnt = 0;
+    const parts = str.slice(3).split(';');
+    for (let p = 0; p < parts.length; p++) {
+      if (!parts[p]) continue;
+      // Ключ — это два индекса через запятую, а сами данные запятых не несут
+      const c1 = parts[p].indexOf(',');
+      const c2 = c1 < 0 ? -1 : parts[p].indexOf(',', c1 + 1);
+      if (c1 < 0 || c2 < 0) continue;
+      const cx = parseInt(parts[p].slice(0, c1), 10);
+      const cz = parseInt(parts[p].slice(c1 + 1, c2), 10);
+      const data = parts[p].slice(c2 + 1);
+      if (data.length !== (FOG_CELLS / 4) * 2) continue;
+      if (!Number.isFinite(cx) || !Number.isFinite(cz)) continue;
+      const rec = getFogChunk(cx, cz, true);
+      if (!rec) continue;
+      cnt += decodeChunk(data, rec);
+    }
+    return cnt;
+  }
+
   function persistFog(force) {
-    if (!biomeRef || !fogGrid || !OC.Expedition || !OC.Expedition.setFogGrid) return;
+    if (!biomeRef || !fogEntry || !OC.Expedition || !OC.Expedition.setFogGrid) return;
     const now = Date.now();
     if (!force && now - lastSaveMs < 2400) return;
     lastSaveMs = now;
-    OC.Expedition.setFogGrid(biomeRef.id, encodeFog(fogGrid));
+    OC.Expedition.setFogGrid(biomeRef.id, encodeFog());
   }
 
   function loadFogForBiome(biome) {
     if (!biome) return;
     let entry = fogByBiome.get(biome.id);
     if (!entry) {
-      const grid = new Uint8Array(FOG_LEN);
-      let cnt = 0;
-      if (OC.Expedition && OC.Expedition.getFogGrid) {
-        cnt = decodeFog(OC.Expedition.getFogGrid(biome.id), grid);
-      }
-      entry = { grid, cnt };
+      entry = { chunks: new Map(), cnt: 0 };
       fogByBiome.set(biome.id, entry);
     }
-    fogGrid = entry.grid;
+    fogEntry = entry;
+    if (entry.cnt === 0 && OC.Expedition && OC.Expedition.getFogGrid) {
+      entry.cnt = decodeFog(OC.Expedition.getFogGrid(biome.id));
+    }
     revealedCells = entry.cnt;
     lastPassiveX = 99999;
     lastPassiveZ = 99999;
@@ -258,36 +451,47 @@ window.OC = window.OC || {};
   }
 
   function syncEntryCount() {
-    if (!biomeRef || !fogGrid) return;
-    const entry = fogByBiome.get(biomeRef.id);
-    if (entry) entry.cnt = revealedCells;
+    if (!fogEntry) return;
+    fogEntry.cnt = revealedCells;
   }
 
+  /* Штамп в мировых координатах: проходит по всем чанкам, которых касается
+     круг, и пишет в локальные сетки. За пределами одного чанка код тот же,
+     что и раньше, — изменилась только адресация. */
   function stampCircle(wx, wz, radius, level) {
-    if (!biomeRef || !fogGrid) return 0;
-    const R = biomeRef.worldRadius || 1200;
-    const cellW = (2 * R) / FOG_N;
-    const cX = ((wx / R) * 0.5 + 0.5) * FOG_N;
-    const cZ = ((wz / R) * 0.5 + 0.5) * FOG_N;
-    const rCells = Math.ceil(radius / cellW);
-    const r2 = (radius / cellW) * (radius / cellW);
-    const minI = Math.max(0, Math.floor(cX - rCells));
-    const maxI = Math.min(FOG_N - 1, Math.ceil(cX + rCells));
-    const minJ = Math.max(0, Math.floor(cZ - rCells));
-    const maxJ = Math.min(FOG_N - 1, Math.ceil(cZ + rCells));
+    if (!biomeRef || !fogEntry) return 0;
+    const cMinX = Math.floor((wx - radius) / FOG_CHUNK);
+    const cMaxX = Math.floor((wx + radius) / FOG_CHUNK);
+    const cMinZ = Math.floor((wz - radius) / FOG_CHUNK);
+    const cMaxZ = Math.floor((wz + radius) / FOG_CHUNK);
+    const rCells = radius / FOG_CELL;
+    const r2 = rCells * rCells;
     let newlyRevealed = 0;
     let changed = false;
 
-    for (let j = minJ; j <= maxJ; j++) {
-      const dz = (j + 0.5) - cZ;
-      for (let i = minI; i <= maxI; i++) {
-        const dx = (i + 0.5) - cX;
-        if (dx * dx + dz * dz <= r2) {
-          const idx = j * FOG_N + i;
-          if (fogGrid[idx] < level) {
-            if (fogGrid[idx] === 0) { revealedCells++; newlyRevealed++; }
-            fogGrid[idx] = level;
-            changed = true;
+    for (let cz = cMinZ; cz <= cMaxZ; cz++) {
+      for (let cx = cMinX; cx <= cMaxX; cx++) {
+        const rec = getFogChunk(cx, cz, true);
+        if (!rec) continue;
+        rec.t = ++fogClock;
+        const grid = rec.grid;
+        const cX = (wx - cx * FOG_CHUNK) / FOG_CELL;
+        const cZ = (wz - cz * FOG_CHUNK) / FOG_CELL;
+        const minI = Math.max(0, Math.floor(cX - rCells));
+        const maxI = Math.min(FOG_CN - 1, Math.ceil(cX + rCells));
+        const minJ = Math.max(0, Math.floor(cZ - rCells));
+        const maxJ = Math.min(FOG_CN - 1, Math.ceil(cZ + rCells));
+        for (let j = minJ; j <= maxJ; j++) {
+          const dz = (j + 0.5) - cZ;
+          for (let i = minI; i <= maxI; i++) {
+            const dx = (i + 0.5) - cX;
+            if (dx * dx + dz * dz > r2) continue;
+            const idx = j * FOG_CN + i;
+            if (grid[idx] < level) {
+              if (grid[idx] === 0) { revealedCells++; newlyRevealed++; }
+              grid[idx] = level;
+              changed = true;
+            }
           }
         }
       }
@@ -299,39 +503,48 @@ window.OC = window.OC || {};
     return newlyRevealed;
   }
 
+  /* Мультилучевой веер сонара: ближнее ядро 55 м плюс направленный конус. */
   function stampSwath(wx, wz, yaw, radius, halfAngle) {
-    if (!biomeRef || !fogGrid) return 0;
-    const R = biomeRef.worldRadius || 1200;
-    const cellW = (2 * R) / FOG_N;
-    const cX = ((wx / R) * 0.5 + 0.5) * FOG_N;
-    const cZ = ((wz / R) * 0.5 + 0.5) * FOG_N;
-    const rCells = Math.ceil(radius / cellW);
-    const r2 = (radius / cellW) * (radius / cellW);
+    if (!biomeRef || !fogEntry) return 0;
+    const cMinX = Math.floor((wx - radius) / FOG_CHUNK);
+    const cMaxX = Math.floor((wx + radius) / FOG_CHUNK);
+    const cMinZ = Math.floor((wz - radius) / FOG_CHUNK);
+    const cMaxZ = Math.floor((wz + radius) / FOG_CHUNK);
+    const rCells = radius / FOG_CELL;
+    const r2 = rCells * rCells;
     const fx = Math.sin(yaw);
     const fz = Math.cos(yaw);
     const cosMin = Math.cos(halfAngle || 0.92);
-    const minI = Math.max(0, Math.floor(cX - rCells));
-    const maxI = Math.min(FOG_N - 1, Math.ceil(cX + rCells));
-    const minJ = Math.max(0, Math.floor(cZ - rCells));
-    const maxJ = Math.min(FOG_N - 1, Math.ceil(cZ + rCells));
     let newlyRevealed = 0;
     let changed = false;
 
-    for (let j = minJ; j <= maxJ; j++) {
-      const dz = (j + 0.5) - cZ;
-      for (let i = minI; i <= maxI; i++) {
-        const dx = (i + 0.5) - cX;
-        const d2 = dx * dx + dz * dz;
-        if (d2 > r2) continue;
-        // Ближнее ядро 55 м открывается вокруг аппарата, далее — направленный мультилучевой веер
-        const d = Math.sqrt(d2);
-        const insideCone = d < (55 / cellW) || ((dx * fx + dz * fz) / Math.max(0.001, d)) >= cosMin;
-        if (insideCone) {
-          const idx = j * FOG_N + i;
-          if (fogGrid[idx] < 2) {
-            if (fogGrid[idx] === 0) { revealedCells++; newlyRevealed++; }
-            fogGrid[idx] = 2;
-            changed = true;
+    for (let cz = cMinZ; cz <= cMaxZ; cz++) {
+      for (let cx = cMinX; cx <= cMaxX; cx++) {
+        const rec = getFogChunk(cx, cz, true);
+        if (!rec) continue;
+        rec.t = ++fogClock;
+        const grid = rec.grid;
+        const cX = (wx - cx * FOG_CHUNK) / FOG_CELL;
+        const cZ = (wz - cz * FOG_CHUNK) / FOG_CELL;
+        const minI = Math.max(0, Math.floor(cX - rCells));
+        const maxI = Math.min(FOG_CN - 1, Math.ceil(cX + rCells));
+        const minJ = Math.max(0, Math.floor(cZ - rCells));
+        const maxJ = Math.min(FOG_CN - 1, Math.ceil(cZ + rCells));
+        for (let j = minJ; j <= maxJ; j++) {
+          const dz = (j + 0.5) - cZ;
+          for (let i = minI; i <= maxI; i++) {
+            const dx = (i + 0.5) - cX;
+            const d2 = dx * dx + dz * dz;
+            if (d2 > r2) continue;
+            const d = Math.sqrt(d2);
+            const insideCone = d < (55 / FOG_CELL) || ((dx * fx + dz * fz) / Math.max(0.001, d)) >= cosMin;
+            if (!insideCone) continue;
+            const idx = j * FOG_CN + i;
+            if (grid[idx] < 2) {
+              if (grid[idx] === 0) { revealedCells++; newlyRevealed++; }
+              grid[idx] = 2;
+              changed = true;
+            }
           }
         }
       }
@@ -344,26 +557,46 @@ window.OC = window.OC || {};
     return newlyRevealed;
   }
 
-  function isCellRevealed(wx, wz) {
-    if (!fogEnabled || !biomeRef || !fogGrid) return true;
-    const R = biomeRef.worldRadius || 1200;
-    const i = OC.clamp(Math.floor(((wx / R) * 0.5 + 0.5) * FOG_N), 0, FOG_N - 1);
-    const j = OC.clamp(Math.floor(((wz / R) * 0.5 + 0.5) * FOG_N), 0, FOG_N - 1);
-    return fogGrid[j * FOG_N + i] > 0;
+  /* Значение клетки в мировых координатах: 0 — туман, 1 — пассивная разведка,
+     2 — чистый скан сонара. Чанк создаётся лениво, поэтому «ещё не бывали»
+     и «ещё не открыли» — одно и то же состояние. */
+  function fogValueAt(wx, wz) {
+    if (!biomeRef || !fogEntry) return 0;
+    const cx = Math.floor(wx / FOG_CHUNK);
+    const cz = Math.floor(wz / FOG_CHUNK);
+    const rec = getFogChunk(cx, cz, false);
+    if (!rec) return 0;
+    const i = OC.clamp(Math.floor((wx - cx * FOG_CHUNK) / FOG_CELL), 0, FOG_CN - 1);
+    const j = OC.clamp(Math.floor((wz - cz * FOG_CHUNK) / FOG_CELL), 0, FOG_CN - 1);
+    return rec.grid[j * FOG_CN + i];
   }
 
+  function isCellRevealed(wx, wz) {
+    if (!fogEnabled || !biomeRef || !fogEntry) return true;
+    return fogValueAt(wx, wz) > 0;
+  }
+
+  /* Слой тумана собирается по пикселям текущего окна карты: для каждого
+     пикселя считаются мировые координаты и читается свой чанк. Окно 2400 м
+     при 64×64 даёт ту же детальность, что и прежняя карта на весь мир. */
   function redrawFogCanvas() {
     ensureFogCanvas();
-    if (!fogCtx || !fogImg || !fogGrid) return;
+    if (!fogCtx || !fogImg || !fogEntry) return;
     const d = fogImg.data;
-    for (let i = 0; i < FOG_LEN; i++) {
-      const v = fogGrid[i];
-      const p = i * 4;
-      d[p] = 4;
-      d[p + 1] = 13;
-      d[p + 2] = 26;
-      // 0: плотный туман неисследованного океана, 1: полу-ясная пассивная разведка, 2: кристально чистый скан сонара
-      d[p + 3] = v === 0 ? 226 : (v === 1 ? 26 : 0);
+    const cell = (viewRadius * 2) / FOG_N;
+    const x0 = mapCx - viewRadius;
+    const z0 = mapCz - viewRadius;
+    for (let j = 0; j < FOG_N; j++) {
+      const wz = z0 + (j + 0.5) * cell;
+      for (let i = 0; i < FOG_N; i++) {
+        const wx = x0 + (i + 0.5) * cell;
+        const p = (j * FOG_N + i) * 4;
+        const v = fogValueAt(wx, wz);
+        d[p] = 4; d[p + 1] = 13; d[p + 2] = 26;
+        // 0: плотный туман неисследованного океана, 1: полу-ясная пассивная
+        // разведка, 2: кристально чистый скан сонара
+        d[p + 3] = v === 0 ? 226 : (v === 1 ? 26 : 0);
+      }
     }
     fogCtx.putImageData(fogImg, 0, 0);
     fogDirty = false;
@@ -377,7 +610,8 @@ window.OC = window.OC || {};
       canvas.height = SIZE;
       ctx = canvas.getContext('2d');
       biomeRef = biome;
-      renderBathymetry();
+      const sp = (biome && biome.spawn && biome.spawn.pos) ? biome.spawn.pos : [0, 0, 0];
+      ensureBathyWindow(sp[0], sp[2]);
       loadFogForBiome(biome);
 
       function toggleWaypointAt(px, py) {
@@ -462,8 +696,35 @@ window.OC = window.OC || {};
       return stampSwath(x, z, yaw, radius || 195, halfAngle || 0.92);
     },
 
+    /* Процент исследованности считается по ядру карты (круг worldRadius, где
+       стоят маяки и миссии): внешний мир бесконечен, и доля «от всего мира»
+       для него всегда была бы нулём. */
     getCoverage() {
-      return Math.round((revealedCells / FOG_LEN) * 100);
+      if (!biomeRef || !fogEntry) return 0;
+      if (covCacheKey === revealedCells && covCacheBiome === biomeRef.id) return covCacheVal;
+      const R = biomeRef.worldRadius || 1200;
+      const total = (Math.PI * R * R) / (FOG_CELL * FOG_CELL);
+      const cMinX = Math.floor(-R / FOG_CHUNK), cMaxX = Math.floor(R / FOG_CHUNK);
+      const cMinZ = Math.floor(-R / FOG_CHUNK), cMaxZ = Math.floor(R / FOG_CHUNK);
+      let cnt = 0;
+      for (let cz = cMinZ; cz <= cMaxZ; cz++) {
+        for (let cx = cMinX; cx <= cMaxX; cx++) {
+          const rec = getFogChunk(cx, cz, false);
+          if (!rec) continue;
+          for (let j = 0; j < FOG_CN; j++) {
+            const wz = cz * FOG_CHUNK + (j + 0.5) * FOG_CELL;
+            for (let i = 0; i < FOG_CN; i++) {
+              if (!rec.grid[j * FOG_CN + i]) continue;
+              const wx = cx * FOG_CHUNK + (i + 0.5) * FOG_CELL;
+              if (wx * wx + wz * wz <= R * R) cnt++;
+            }
+          }
+        }
+      }
+      covCacheVal = Math.max(0, Math.min(100, Math.round((cnt / total) * 100)));
+      covCacheKey = revealedCells;
+      covCacheBiome = biomeRef.id;
+      return covCacheVal;
     },
 
     setFogEnabled(on) {
@@ -477,6 +738,7 @@ window.OC = window.OC || {};
     resetFog(biomeId) {
       if (biomeId) fogByBiome.delete(biomeId);
       else fogByBiome.clear();
+      covCacheKey = -1;
       if (OC.Expedition && OC.Expedition.clearFogGrid) OC.Expedition.clearFogGrid(biomeId);
       if (biomeRef) loadFogForBiome(biomeRef);
     },
@@ -484,12 +746,56 @@ window.OC = window.OC || {};
     setBiome(biome) {
       biomeRef = biome;
       pingState = null;
-      if (canvas) renderBathymetry();
+      covCacheKey = -1;
+      fogDirty = true;
+      const sp = (biome && biome.spawn && biome.spawn.pos) ? biome.spawn.pos : [0, 0, 0];
+      ensureBathyWindow(sp[0], sp[2]);
       loadFogForBiome(biome);
     },
 
+    /* Центр окна карты — для тестов и отладки */
+    getViewCenter() {
+      return { x: mapCx, z: mapCz, radius: viewRadius };
+    },
+
+    /* Открыта ли точка карты (для тестов и подсказок миссий) */
+    isRevealed(x, z) {
+      return isCellRevealed(x, z);
+    },
+
+    /* Готова ли батиметрия окна (для тестов) */
+    isMapComplete() {
+      return !bathyWin || bathyWin.isComplete();
+    },
+
+    samplePixel(x, z) {
+      return bathyWin ? bathyWin.pixelAt(x, z) : null;
+    },
+
+
     update(camPos, yaw) {
-      if (!ctx || !bgImage || !biomeRef) return;
+      if (!ctx || !biomeRef) return;
+      if (!bathyWin) {
+        ensureBathyWindow(camPos.x, camPos.z);
+        if (!bathyWin) return;
+      }
+
+      /* Окно карты едет за аппаратом: в мире без края карта всегда показывает
+         окрестность игрока, а не фиксированный круг старта. Готовые пиксели
+         переезжают на новые места, открывшаяся полоса досчитывается порциями,
+         чтобы карта не стоила сотен миллисекунд на кадр. */
+      if (Math.hypot(camPos.x - mapCx, camPos.z - mapCz) > MAP_RECENTER) {
+        bathyWin.setCenter(camPos.x, camPos.z);
+        mapCx = bathyWin.centerX();
+        mapCz = bathyWin.centerZ();
+        fogDirty = true;
+      }
+      /* Бюджет на дорисовку: пока открылась только полоса, хватает двух
+         миллисекунд; после телепорта окно пустое и можно тратить больше —
+         карта всё равно обновляется несколько раз в секунду. */
+      const fillBudget = bathyWin.pendingRows() > SIZE / 2 ? MAP_FILL_BUDGET_MS * 3 : MAP_FILL_BUDGET_MS;
+      bathyWin.tick(fillBudget);
+      uploadBathy();
 
       // Пассивное картографирование окружающей области при плавании
       if (Math.hypot(camPos.x - lastPassiveX, camPos.z - lastPassiveZ) > 14) {
@@ -501,7 +807,8 @@ window.OC = window.OC || {};
       }
 
       ctx.clearRect(0, 0, SIZE, SIZE);
-      ctx.drawImage(bgImage, 0, 0);
+      if (bathyCanvas) ctx.drawImage(bathyCanvas, 0, 0);
+      drawMapOverlay(ctx);
 
       // Слой тумана войны ("Картография экспедиции")
       if (fogEnabled) {

@@ -53,6 +53,10 @@ window.OC = window.OC || {};
           if (Math.random() < 0.22) S.europaIceGroan();
         } else if (S.currentBiomeId === 'cenote_caves') {
           if (Math.random() < 0.25) S.caveDrip();
+        } else if (S.currentBiomeId === 'titan_kraken') {
+          /* В Кракеновом море вместо щелкунов рачков — всплывающие пузыри
+             азота: именно они выглядят «магическими островами» на радаре. */
+          if (Math.random() < 0.34) S.nitrogenBubble();
         } else if (S.currentDepth < 24 && S.currentZoneId !== 'dropoff' && S.currentBiomeId !== 'hydrothermal_vents' && S.currentBiomeId !== 'mariana_trench' && S.currentBiomeId !== 'brine_pool') {
           S.shrimpSnap();
         }
@@ -143,6 +147,27 @@ window.OC = window.OC || {};
     if (pan) { pan.pan.value = rnd(-0.6, 0.6); g.connect(pan); pan.connect(S.master); }
     else g.connect(S.master);
     osc.start(now); osc.stop(now + 1.85);
+  };
+
+  /* Пузырь азота, всплывающий в жидком метане: тон поднимается, потому что
+     резонансная частота Миннаэрта обратно пропорциональна радиусу пузыря. */
+  S.nitrogenBubble = function () {
+    const ctx = S.ctx;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    osc.type = 'sine';
+    const f0 = rnd(190, 320);
+    osc.frequency.setValueAtTime(f0, now);
+    osc.frequency.exponentialRampToValueAtTime(f0 * rnd(2.4, 3.6), now + rnd(0.06, 0.13));
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(rnd(0.018, 0.034), now + 0.014);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + rnd(0.09, 0.18));
+    osc.connect(g);
+    if (pan) { pan.pan.value = rnd(-0.8, 0.8); g.connect(pan); pan.connect(S.master); }
+    else g.connect(S.master);
+    osc.start(now); osc.stop(now + 0.2);
   };
 
   S.scheduleCreak = function () {

@@ -17,15 +17,19 @@ window.OC = window.OC || {};
       return origin;
     },
 
-    /* Перевести истинную мировую позицию в локальную ( escena ). */
-    toLocal(worldPos) {
-      return worldPos.clone().sub(origin);
+    /* Перевести истинную мировую позицию в локальную ( escena ).
+       out задаётся в горячем коде — без него каждая точка аллокирует вектор. */
+    toLocal(worldPos, out) {
+      const t = out || new T.Vector3();
+      return t.set(worldPos.x - origin.x, worldPos.y - origin.y, worldPos.z - origin.z);
     },
 
     /* Перевести локальную позицию сцены в истинную мировую. */
-    toWorld(localPos) {
-      return localPos.clone().add(origin);
+    toWorld(localPos, out) {
+      const t = out || new T.Vector3();
+      return t.set(localPos.x + origin.x, localPos.y + origin.y, localPos.z + origin.z);
     },
+
 
     /* Истинная позиция камеры в мире (локальная + origin). */
     getTrueCameraPos(camera, out) {
@@ -35,27 +39,54 @@ window.OC = window.OC || {};
       return target.set(c.x + o.x, c.y + o.y, c.z + o.z);
     },
 
-    /* Подписаться на событие сдвига начала координат. */
+    /* Подписаться на событие сдвига начала координат. Возвращает функцию
+       отписки: подписчики обычно регистрируются внутри init(), а init()
+       вызывается при каждой смене биома — без отписки слушатели накапливаются
+       и на каждом сдвиге выполняют одну и ту же работу по несколько раз.
+
+       Меш/лайт/спрайт сдвигает сам update() обходом сцены: повторно вычитать
+       delta в слушателе — значит сдвинуть объект дважды. */
     onShift(cb) {
       shiftListeners.push(cb);
+      return function offShift() {
+        const i = shiftListeners.indexOf(cb);
+        if (i >= 0) shiftListeners.splice(i, 1);
+      };
     },
 
     /* Вызывать каждый фрейм с камерой. Возвращает true, если сдвиг произошёл. */
     update(camera, scene) {
       const camPos = camera.position;
-      const dist = Math.hypot(camPos.x, camPos.y, camPos.z);
+      /* Сдвигаем только горизонталь. Вертикаль остаётся в мировой системе,
+         потому что весь мир описан от поверхности воды (y = 0): глубины стай,
+         пороги «не выше −1.3 м», выпрыгивание китов, потолки пещер и ледовый
+         панцирь — всё это абсолютные отметки. Стоило накопить в origin и
+         вертикаль, как локальная поверхность уезжала на −origin.y: в мире без
+         края за десяток переносов это километры, и вся фауна оказывалась под
+         дном (замер: 41 агент из 58 в грунте после 6 переносов на глубине 40 м).
+         По вертикали точность float32 и так достаточна — самый глубокий биом
+         около 2.5 км, то есть погрешность доли миллиметра. */
+      const dist = Math.hypot(camPos.x, camPos.z);
 
       if (dist > threshold) {
-        const delta = camPos.clone(); // насколько сдвигаем всё назад
+        const delta = new T.Vector3(camPos.x, 0, camPos.z); // насколько сдвигаем всё назад
 
-        // Накапливаем в origin
+        // Накапливаем в origin (только горизонталь)
         origin.add(delta);
 
         // Сдвигаем все объекты сцены назад на delta
         if (scene) {
           scene.traverse((obj) => {
             if (obj.isMesh || obj.isInstancedMesh || obj.isLight || obj.isSprite) {
-              obj.position.sub(delta);
+              /* Контейнер инстансов (InstancedMesh) — это не объект в сцене, а
+                 просто якорь: позиции лежат в instanceMatrix уже в локальных
+                 координатах. Сдвигать его position — значит сдвинуть все
+                 экземпляры второй раз (владелец к тому же не знает про этот
+                 сдвиг и перезапишет матрицы по-своему). Такие меши помечают
+                 себя userData.noFloatingOrigin = true. */
+              if (obj.userData && obj.userData.noFloatingOrigin) return;
+              obj.position.x -= delta.x;
+              obj.position.z -= delta.z;
               if (obj.isInstancedMesh && obj.instanceMatrix) {
                 obj.instanceMatrix.needsUpdate = true;
               }
@@ -63,8 +94,9 @@ window.OC = window.OC || {};
           });
         }
 
-        // Сбрасываем камеру в начало
-        camPos.set(0, 0, 0);
+        // Сбрасываем камеру в начало по горизонтали (глубина остаётся мировой)
+        camPos.x = 0;
+        camPos.z = 0;
         camera.updateMatrixWorld();
 
         // Уведомляем подписчиков

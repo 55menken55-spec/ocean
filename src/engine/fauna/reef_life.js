@@ -515,4 +515,188 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
   OC._FaunaBuilders.makeManatee = makeManatee;
   OC._FaunaBuilders.makeOctopus = makeOctopus;
   OC._FaunaBuilders.makeMoray = makeMoray;
+
+  /* ---------- Наполеон-рыба (Cheilinus undulatus) ---------- */
+  /* Крупная рифовая губана с лобным горбом и толстыми губами. Ходит медленно,
+     держится своего участка рифа — в плане фауны это одиночный агент, а не хищник. */
+  function makeNapoleon(scene, biome, opts) {
+    const group = new T.Group();
+    const L = 2.3; // условная длина до масштабирования
+
+    // Глубокое тело с горбом: лоб резко поднимается над глазами
+    const body = new T.SphereGeometry(1, 26, 18);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = z / 1; // -1 хвост .. +1 голова
+      const taper = t < 0 ? (1 - 0.72 * Math.pow(-t, 1.6)) : (1 - 0.34 * Math.pow(t, 2.2));
+      // Лобный горб: поднятие верхней линии в передней трети
+      const hump = (t > 0.25 && y > 0) ? 1 + 0.55 * Math.sin((t - 0.25) * 3.6) : 1;
+      const deep = t > 0 ? 1.12 : 0.92; // тело выше спереди
+      bp.setXYZ(i, x * 0.34 * taper, y * 0.46 * taper * deep * hump, z * 1.12);
+    }
+    body.computeVertexNormals();
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      const bar = Math.sin(z * 3.1) * 0.5 + 0.5;     // тёмные вертикальные полосы
+      const maze = Math.sin(z * 6.5 + y * 5.0) * 0.5 + 0.5; // «сетчатый» рисунок головы
+      if (y < -0.12) { c.set(0x8fbf9e); return; }    // светлое брюхо
+      c.set(0x3f6f5e).lerp(new T.Color(0x27524a), bar * 0.55);
+      if (z > 0.55) c.lerp(new T.Color(0x2f8f9e), maze * 0.45); // сине-зелёный узор на горбе
+    });
+    group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
+
+    // Толстые губы — визитная карточка вида
+    for (const s of [-1, 1]) {
+      const lip = new T.SphereGeometry(1, 12, 9);
+      lip.scale(0.075, 0.15, 0.2);
+      OC.geoPrep(lip);
+      OC.paint(lip, 0x8fa6a0);
+      const lm = new T.Mesh(lip, OC._FaunaCtx.creatureMat);
+      lm.position.set(s * 0.15, -0.09, 1.06);
+      group.add(lm);
+    }
+
+    // Длинный низкий спинной плавник
+    const dorsal = new T.ConeGeometry(0.16, 1.5, 4);
+    dorsal.scale(0.22, 1, 1.0);
+    OC.geoPrep(dorsal);
+    OC.paint(dorsal, 0x2f5a52);
+    const dm = new T.Mesh(dorsal, OC._FaunaCtx.creatureMat);
+    dm.position.set(0, 0.44, -0.05);
+    dm.rotation.x = -0.12;
+    group.add(dm);
+
+    // Анальный плавник снизу
+    const anal = new T.ConeGeometry(0.13, 0.85, 4);
+    anal.scale(0.22, 1, 1.0);
+    OC.geoPrep(anal);
+    OC.paint(anal, 0x35655a);
+    const am = new T.Mesh(anal, OC._FaunaCtx.creatureMat);
+    am.position.set(0, -0.42, -0.18);
+    am.rotation.x = Math.PI + 0.12;
+    group.add(am);
+
+    // Большой лунный хвост
+    const tail = new T.ConeGeometry(0.52, 0.62, 5);
+    tail.scale(0.16, 1, 1.0);
+    OC.geoPrep(tail);
+    OC.paint(tail, (x, y, z, c) => c.set(0x2f6b5c).lerp(new T.Color(0x9fd6c4), OC.clamp(y * 0.9 + 0.4, 0, 1)));
+    const tm = new T.Mesh(tail, OC._FaunaCtx.creatureMat);
+    tm.position.set(0, 0.05, -1.32);
+    tm.rotation.x = -Math.PI / 2;
+    group.add(tm);
+
+    // Грудные плавники
+    for (const s of [-1, 1]) {
+      const pec = new T.ConeGeometry(0.14, 0.62, 4);
+      pec.scale(0.2, 1, 1);
+      OC.geoPrep(pec);
+      OC.paint(pec, 0x4a7f6f);
+      const pm = new T.Mesh(pec, OC._FaunaCtx.creatureMat);
+      pm.position.set(s * 0.3, -0.1, 0.55);
+      pm.rotation.z = -s * 1.15;
+      pm.rotation.y = s * 0.3;
+      group.add(pm);
+    }
+
+    group.scale.setScalar((opts.scale || 1.3) * 0.62);
+    group.userData.key = 'napoleon';
+    scene.add(group);
+
+    let ang = Math.random() * 6.28, t = Math.random() * 40;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const a = new T.Vector3(), b = new T.Vector3();
+    return {
+      key: 'napoleon',
+      getPosition: () => group.position,
+      update(dt, time, camPos, ctx) {
+        if (Math.hypot((opts.cx || 0) - camPos.x, (opts.cz || 0) - camPos.z) > 480) { group.visible = false; return; }
+        const camFwdX = ctx ? ctx.camFwdX : 0;
+        const camFwdZ = ctx ? ctx.camFwdZ : -1;
+        const dx = (opts.cx || 0) - camPos.x;
+        const dz = (opts.cz || 0) - camPos.z;
+        if (dx * camFwdX + dz * camFwdZ < -6) { group.visible = false; return; }
+        group.visible = true;
+        const dayW = ctx ? ctx.dayW : 1.0;
+        const act = OC.lerp(0.7, 1.15, dayW);
+        t += dt * act;
+        const r = opts.r || opts.radius || 24;
+        // Крупная рыба ходит медленно и чуть «покачивается» по вертикали
+        ang += ((opts.speed || 3.0) * 0.42 * act / r) * dir * dt;
+        const rr = r + Math.sin(t * 0.23) * 4.5;
+        const ax = (opts.cx || 0) + Math.cos(ang) * rr;
+        const az = (opts.cz || 0) + Math.sin(ang) * rr;
+        const ay = Math.max((opts.y || -20) + Math.sin(t * 0.5) * 2.4, biome.getHeight(ax, az) + 2.4);
+        const ah = ang + 0.16 * dir;
+        const bx = (opts.cx || 0) + Math.cos(ah) * rr;
+        const bz = (opts.cz || 0) + Math.sin(ah) * rr;
+        a.set(ax, ay, az);
+        b.set(bx, ay, bz);
+        group.position.copy(a);
+        group.lookAt(b);
+        group.rotateY(-Math.PI / 2);
+        // Гребные движения хвоста
+        group.rotateY(Math.sin(time * 1.6 + t) * 0.07);
+      }
+    };
+  }
+  OC._FaunaBuilders.makeNapoleon = makeNapoleon;
+
+  /* ---------- Голожаберная улитка (Nudibranchia) ---------- */
+  /* Запись Атласа Красного моря: яркий моллюск без раковины. В мире не высаживается
+     (слишком мелок — 3-10 см), используется как модель для 3D-студии Атласа. */
+  function makeNudibranch(scene, biome, opts) {
+    const group = new T.Group();
+    const hue = opts && opts.hue !== undefined ? opts.hue : 0.82;
+
+    const body = new T.SphereGeometry(1, 18, 12);
+    const bp = body.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const t = z;
+      const taper = t < 0 ? (1 - 0.55 * Math.pow(-t, 1.4)) : (1 - 0.3 * t * t);
+      bp.setXYZ(i, x * 0.34 * taper, y * 0.2 * taper * (y > 0 ? 1 : 0.55), z * 1.15);
+    }
+    body.computeVertexNormals();
+    OC.geoPrep(body);
+    OC.paint(body, (x, y, z, c) => {
+      const band = 0.5 + 0.5 * Math.sin(z * 9.0 + x * 3.0);
+      c.setHSL(hue, 0.85, 0.5).lerp(new T.Color(0xffd166), band * 0.55);
+      if (y < -0.05) c.lerp(new T.Color(0xf7f0e4), 0.45); // светлая подошва
+    });
+    group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
+
+    // Спинные выросты (цераты) — жабры и пищеварительные железы
+    for (let i = 0; i < 11; i++) {
+      const t = i / 10;
+      const side = (i % 2 === 0 ? 1 : -1);
+      const cer = new T.ConeGeometry(0.055, 0.34, 5);
+      OC.geoPrep(cer);
+      OC.paint(cer, (x, y, z, c) => c.setHSL((hue + 0.08) % 1, 0.9, 0.62).lerp(new T.Color(0xff9f1c), OC.clamp(y * 2.2 + 0.4, 0, 1)));
+      const cm = new T.Mesh(cer, OC._FaunaCtx.creatureMat);
+      cm.position.set(side * 0.16, 0.14, 0.62 - t * 1.3);
+      cm.rotation.z = -side * 0.42;
+      cm.rotation.x = -0.25 + t * 0.5;
+      group.add(cm);
+    }
+
+    // Ринофоры — органы обоняния на голове
+    for (const s of [-1, 1]) {
+      const rh = new T.ConeGeometry(0.045, 0.26, 5);
+      OC.geoPrep(rh);
+      OC.paint(rh, 0xffb703);
+      const rm = new T.Mesh(rh, OC._FaunaCtx.creatureMat);
+      rm.position.set(s * 0.09, 0.16, 1.0);
+      rm.rotation.z = -s * 0.2;
+      rm.rotation.x = -0.3;
+      group.add(rm);
+    }
+
+    group.scale.setScalar(opts && opts.scale ? opts.scale : 1.0);
+    group.userData.key = 'nudibranch';
+    scene.add(group);
+    return { key: 'nudibranch', getPosition: () => group.position, update() {} };
+  }
+  OC._FaunaBuilders.makeNudibranch = makeNudibranch;
 })(window.OC);

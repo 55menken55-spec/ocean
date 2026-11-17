@@ -16,6 +16,10 @@ window.OC = window.OC || {};
     europa: {
       label: 'Европа',
       hint: 'Вращайте Европу мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть'
+    },
+    titan: {
+      label: 'Титан',
+      hint: 'Вращайте Титан мышью · Клик по маяку — осмотреть · Двойной клик — нырнуть'
     }
   };
   function worldOf(biome) {
@@ -100,6 +104,121 @@ window.OC = window.OC || {};
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
+  }
+
+  /* ---- Титан: оранжевый азотный туман, углеводородные моря, толиновые дюны ---- */
+  function createTitanTextures() {
+    const w = 768, h = 384;
+    const cColor = document.createElement('canvas');
+    cColor.width = w; cColor.height = h;
+    const ctx = cColor.getContext('2d');
+    const cSpec = document.createElement('canvas');
+    cSpec.width = w; cSpec.height = h;
+    const sctx = cSpec.getContext('2d');
+    const seaPatches = [];
+
+    if (ctx) {
+      /* Диск Титана в видимом свете ровный оранжевый: метановая дымка
+         рассеивает синее и пропускает красное, поэтому контраст низкий. */
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0.0, '#c98f45');
+      grad.addColorStop(0.28, '#d79a4e');
+      grad.addColorStop(0.5, '#e0a558');
+      grad.addColorStop(0.72, '#d3974d');
+      grad.addColorStop(1.0, '#c18540');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Мелкомасштабная рябь дымки
+      ctx.save();
+      for (let i = 0; i < 260; i++) {
+        const cx = (i * 79.7) % w;
+        const cy = (i * 53.1) % h;
+        const r = 8 + (i % 11) * 5;
+        ctx.globalAlpha = 0.05 + (i % 4) * 0.015;
+        ctx.strokeStyle = i % 2 ? '#e8b96a' : '#b87d38';
+        ctx.lineWidth = 1 + (i % 3) * 0.7;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, r, r * 0.42, (i % 9) * 0.35, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Экваториальные поля толиновых дюн: тёмные полосы вдоль экватора
+      for (let i = 0; i < 5; i++) {
+        const cy = latY(-8 + i * 7, h);
+        ctx.globalAlpha = 0.16;
+        ctx.fillStyle = '#8d5c22';
+        ctx.beginPath();
+        ctx.ellipse(w * 0.5 + (i % 2 ? 120 : -90), cy, 250 + i * 26, 9 + (i % 3) * 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      /* Моря: Кракеново (68° N, 310° W), Лигея (79° N, 248° W),
+         Пунга (85° N, 340° W). В видимом свете они темнее суши. */
+      const seas = [
+        { lat: 68, lon: 310, rx: 46, ry: 20, name: 'kraken' },
+        { lat: 79, lon: 248, rx: 30, ry: 14, name: 'ligeia' },
+        { lat: 85, lon: 340, rx: 18, ry: 9, name: 'punga' }
+      ];
+      for (let i = 0; i < seas.length; i++) {
+        const S = seas[i];
+        const sx = lonX(S.lon, w);
+        const sy = latY(S.lat, h);
+        seaPatches.push([sx, sy, S.rx, S.ry]);
+        const rg = ctx.createRadialGradient(sx, sy, 0, sx, sy, S.rx);
+        rg.addColorStop(0, 'rgba(46,32,20,0.86)');
+        rg.addColorStop(0.72, 'rgba(66,44,24,0.72)');
+        rg.addColorStop(1, 'rgba(120,84,44,0)');
+        ctx.fillStyle = rg;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, S.rx, S.ry, 0.25, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Более крупное море — с ответвлением Морей-Синус
+        if (S.name === 'kraken') {
+          ctx.strokeStyle = 'rgba(46,32,20,0.7)';
+          ctx.lineWidth = 13;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(sx + 30, sy + 12);
+          ctx.quadraticCurveTo(sx + 66, sy + 34, sx + 96, sy + 30);
+          ctx.stroke();
+        }
+      }
+
+      // Облака метана: редкие светлые пятна у южного полюса и на экваторе
+      for (let i = 0; i < 14; i++) {
+        const cx = (i * 137.5) % w;
+        const cy = latY(-52 + (i % 5) * 26, h);
+        ctx.globalAlpha = 0.14;
+        ctx.fillStyle = '#f6d9a2';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 26 + (i % 4) * 12, 8 + (i % 3) * 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    if (sctx) {
+      /* Спекуляр: суша матовая (толиновая пыль), моря блестят — их
+         поверхность гладкая в пределах миллиметров. */
+      sctx.fillStyle = '#2a2018';
+      sctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < seaPatches.length; i++) {
+        const p = seaPatches[i];
+        sctx.fillStyle = '#f0e2c4';
+        sctx.beginPath();
+        sctx.ellipse(p[0], p[1], p[2] * 0.92, p[3] * 0.92, 0.25, 0, Math.PI * 2);
+        sctx.fill();
+      }
+    }
+
+    const map = new T.CanvasTexture(cColor);
+    map.anisotropy = 4;
+    const specMap = new T.CanvasTexture(cSpec);
+    return { map, specMap };
   }
 
   function createEarthTextures() {
@@ -406,6 +525,7 @@ window.OC = window.OC || {};
   let camera = null;
   let earthGroup = null;
   let europaGroup = null;
+  let titanGroup = null;
   let orbitRing = null;
   let currentWorld = 'earth';
   let raycaster = null;
@@ -461,6 +581,7 @@ window.OC = window.OC || {};
     currentWorld = key;
     if (earthGroup) earthGroup.visible = key === 'earth';
     if (europaGroup) europaGroup.visible = key === 'europa';
+    if (titanGroup) titanGroup.visible = key === 'titan';
     if (orbitRing) orbitRing.visible = key === 'earth';
     if (planetLabelEl) planetLabelEl.textContent = WORLD_INFO[key].label;
     if (globeHintEl) globeHintEl.textContent = WORLD_INFO[key].hint;
@@ -538,6 +659,23 @@ window.OC = window.OC || {};
       const europaGlow = new T.Mesh(new T.SphereGeometry(GLOBE_R * 1.045, 40, 28), createAtmosphereMaterial(0x9fd8ff));
       europaGroup.add(europaGlow);
 
+      // Титан — спутник Сатурна: единственное тело кроме Земли с жидкостью на поверхности
+      titanGroup = new T.Group();
+      titanGroup.visible = false;
+      scene.add(titanGroup);
+      const tTex = createTitanTextures();
+      const titanMat = new T.MeshPhongMaterial({
+        map: tTex.map,
+        specularMap: tTex.specMap,
+        specular: new T.Color(0xffe6b0),
+        shininess: 22,
+        emissive: new T.Color(0x2a1806),
+        emissiveIntensity: 0.42
+      });
+      titanGroup.add(new T.Mesh(new T.SphereGeometry(GLOBE_R, 48, 32), titanMat));
+      // Плотная азотная дымка: гало толще и теплее, чем у Земли
+      titanGroup.add(new T.Mesh(new T.SphereGeometry(GLOBE_R * 1.075, 40, 28), createAtmosphereMaterial(0xffbe6a)));
+
       // Атмосферное гало
       const atmoGeo = new T.SphereGeometry(GLOBE_R * 1.07, 40, 28);
       scene.add(new T.Mesh(atmoGeo, createAtmosphereMaterial()));
@@ -601,7 +739,7 @@ window.OC = window.OC || {};
       hit.userData.biomeId = it.id;
 
       g.add(core, spire, halo, hit);
-      const host = (it.world === 'europa') ? europaGroup : earthGroup;
+      const host = (it.world === 'europa') ? europaGroup : (it.world === 'titan') ? titanGroup : earthGroup;
       if (host) host.add(g);
 
       it.group = g;
@@ -665,7 +803,7 @@ window.OC = window.OC || {};
     if (depthEl) depthEl.textContent = g.depthSpan || '—';
     if (tempEl) tempEl.textContent = g.tempSpan || '—';
     if (countryEl) countryEl.textContent = g.country || '—';
-    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле', subglacial: 'Подлёдный океан' };
+    const waterTypeLabels = { ocean: 'Океан', sea: 'Море', lake: 'Озеро', river: 'Река', cave: 'Пещера', thermal: 'Гидротермальное поле', subglacial: 'Подлёдный океан', methane: 'Углеводородное море (жидкий CH₄)' };
     if (waterTypeEl) waterTypeEl.textContent = g.waterType ? (waterTypeLabels[g.waterType] || g.waterType) : '—';
     if (protectionEl) protectionEl.textContent = g.protectionStatus || '—';
     if (notableEl) notableEl.textContent = g.notableFor || '—';

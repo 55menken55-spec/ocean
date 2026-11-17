@@ -180,7 +180,16 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     const isLeopard = opts.speciesKey === 'shark_leopard';
     const isGreenland = opts.speciesKey === 'shark_greenland';
     const isGalapagos = opts.speciesKey === 'galapagos_shark';
-    const len = isWhale ? 11.5 : (isGreenland ? 5.4 : (isLeopard ? 2.4 : (isGalapagos ? 3.8 : 4.2)));
+    /* Чернопёрая рифовая акула (Carcharhinus melanopterus) — вид Красного моря:
+       заметно мельче серой рифовой и с чёрными кончиками всех плавников. */
+    const isBlacktip = opts.speciesKey === 'reef_shark';
+    const len = isWhale ? 11.5 : (isGreenland ? 5.4 : (isBlacktip ? 2.7 : (isLeopard ? 2.4 : (isGalapagos ? 3.8 : 4.2))));
+    // Кончики плавников: для чернопёрой — чёрные, для остальных однотонные
+    const BLACKTIP = new T.Color(0x14181c);
+    const finPaint = (baseHex, finH) => (x, y, z, c) => {
+      c.set(baseHex);
+      if (isBlacktip) c.lerp(BLACKTIP, OC.smoothstep(0.52, 1.0, (y + finH * 0.5) / finH));
+    };
     const group = new T.Group();
 
     const body = new T.SphereGeometry(1, 18, 12);
@@ -209,6 +218,11 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
         c.set(y > -0.1 ? 0x3b3838 : 0x565252).offsetHSL(0, 0, mott);
       } else if (isGalapagos) {
         c.set(y > -0.05 ? 0x484b44 : 0xe4e5de);
+      } else if (isBlacktip) {
+        // Тёмно-серая спина, белое брюхо, светлая полоса вдоль бока
+        if (y < -0.06) { c.set(0xe8ecec); return; }
+        c.set(y > -0.02 ? 0x6b6f6a : 0xcfd6cf);
+        if (Math.abs(y + 0.02) < 0.16) c.lerp(new T.Color(0xdfe4dc), 0.35);
       } else {
         c.set(y > -0.05 ? 0x5d6e7a : 0xdde6ea);
       }
@@ -216,20 +230,22 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     group.add(new T.Mesh(body, OC._FaunaCtx.creatureMat));
 
     // Спинной плавник
-    const dorsal = new T.ConeGeometry(len * (isGreenland ? 0.07 : 0.11), len * (isGreenland ? 0.16 : (isGalapagos ? 0.28 : 0.24)), 4);
+    const dorsalH = len * (isGreenland ? 0.16 : (isGalapagos ? 0.28 : 0.24));
+    const dorsal = new T.ConeGeometry(len * (isGreenland ? 0.07 : 0.11), dorsalH, 4);
     dorsal.scale(0.25, 1, 1.1);
     OC.geoPrep(dorsal);
-    OC.paint(dorsal, isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : (isGreenland ? 0x343131 : (isGalapagos ? 0x3e413b : 0x455661))));
+    OC.paint(dorsal, finPaint(isWhale ? 0x2c4257 : (isLeopard ? 0x7a663e : (isGreenland ? 0x343131 : (isGalapagos ? 0x3e413b : (isBlacktip ? 0x5f6660 : 0x455661)))), dorsalH));
     const dorM = new T.Mesh(dorsal, OC._FaunaCtx.creatureMat);
     dorM.position.set(0, len * 0.14, isGreenland ? -len * 0.04 : len * 0.04);
     dorM.rotation.x = -0.35;
     group.add(dorM);
 
     // Грудные плавники
-    const pec = new T.ConeGeometry(len * 0.09, len * (isGreenland ? 0.20 : 0.28), 4);
+    const pecH = len * (isGreenland ? 0.20 : 0.28);
+    const pec = new T.ConeGeometry(len * 0.09, pecH, 4);
     pec.scale(0.22, 1, 1);
     OC.geoPrep(pec);
-    OC.paint(pec, isWhale ? 0x2a4054 : (isLeopard ? 0x857046 : (isGreenland ? 0x383535 : 0x52626d)));
+    OC.paint(pec, finPaint(isWhale ? 0x2a4054 : (isLeopard ? 0x857046 : (isGreenland ? 0x383535 : (isBlacktip ? 0x6d736c : 0x52626d))), pecH));
     for (const s of [-1, 1]) {
       const pm = new T.Mesh(pec, OC._FaunaCtx.creatureMat);
       pm.position.set(s * len * 0.17, -len * 0.05, len * 0.12);
@@ -241,17 +257,19 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     // Шарнирный хвост
     const tailPivot = new T.Group();
     tailPivot.position.set(0, 0, -len * 0.42);
-    const tailTop = new T.ConeGeometry(len * 0.08, len * 0.34, 4);
+    const tailTopH = len * 0.34;
+    const tailTop = new T.ConeGeometry(len * 0.08, tailTopH, 4);
     tailTop.scale(0.2, 1, 0.9);
     OC.geoPrep(tailTop);
-    OC.paint(tailTop, isWhale ? 0x2a4054 : (isLeopard ? 0x524229 : (isGreenland ? 0x2e2a2a : 0x28323a)));
+    OC.paint(tailTop, finPaint(isWhale ? 0x2a4054 : (isLeopard ? 0x524229 : (isGreenland ? 0x2e2a2a : (isBlacktip ? 0x545a54 : 0x28323a))), tailTopH));
     const ttM = new T.Mesh(tailTop, OC._FaunaCtx.creatureMat);
     ttM.position.set(0, len * 0.08, -len * 0.14);
     ttM.rotation.x = -0.6;
-    const tailBot = new T.ConeGeometry(len * 0.06, len * 0.22, 4);
+    const tailBotH = len * 0.22;
+    const tailBot = new T.ConeGeometry(len * 0.06, tailBotH, 4);
     tailBot.scale(0.2, 1, 0.8);
     OC.geoPrep(tailBot);
-    OC.paint(tailBot, isWhale ? 0x2a4054 : (isLeopard ? 0x7c6840 : (isGreenland ? 0x3b3737 : 0x455661)));
+    OC.paint(tailBot, finPaint(isWhale ? 0x2a4054 : (isLeopard ? 0x7c6840 : (isGreenland ? 0x3b3737 : (isBlacktip ? 0x6d736c : 0x455661))), tailBotH));
     const tbM = new T.Mesh(tailBot, OC._FaunaCtx.creatureMat);
     tbM.position.set(0, -len * 0.05, -len * 0.1);
     tbM.rotation.x = 2.4;
@@ -259,6 +277,7 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     group.add(tailPivot);
 
     const sKey = opts.speciesKey || (isWhale ? 'shark_whale' : 'shark_reef');
+    // Чернопёрая рифовая акула — некрупный хищник рифового плато, но такой же охотник
     group.userData.key = sKey;
     scene.add(group);
 

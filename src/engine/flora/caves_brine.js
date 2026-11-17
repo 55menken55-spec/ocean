@@ -1,4 +1,4 @@
-/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: карст, сеноты и соляные шпили ================= */
+/* ================= ПРОЦЕДУРНЫЕ ГЕОМЕТРИИ: карст, сеноты, соляные шпили и пресноводные пещеры ================= */
 /* Часть библиотеки OC.FloraLibrary. Каждый builder чистый: (параметры, rng) -> BufferGeometry.
    Материалы и реестр прототипов живут в engine/flora_library.js. */
 window.OC = window.OC || {};
@@ -180,4 +180,239 @@ window.OC = window.OC || {};
     return OC.mergeGeometries(list);
   }
   BUILDERS.buildVolcanicFumarole = buildVolcanicFumarole;
+
+  /* ---- Пресноводные карстовые пещеры Флориды (биом florida_caves) ---- */
+
+  /* Водяная лилия Nymphaea odorata: плавающие листья с радиальным разрывом
+     и белый цветок. Держится у самой поверхности в бассейне источника. */
+  function buildWaterLily(rng) {
+    const list = [];
+    const cPad = COL(0x2f7a3a);
+    const cPadRim = COL(0x8fbf6a);
+    const cPetal = COL(0xfffdf2);
+    const cCore = COL(0xffd75e);
+    const pads = 2 + Math.floor(rng() * 2);
+
+    for (let i = 0; i < pads; i++) {
+      const a = (i / pads) * Math.PI * 2 + rng() * 0.7;
+      const d = i === 0 ? 0 : OC.lerp(0.45, 0.8, rng());
+      const r = i === 0 ? OC.lerp(0.5, 0.68, rng()) : OC.lerp(0.34, 0.5, rng());
+      const g = new T.CylinderGeometry(r, r * 0.98, 0.035, 16, 1, false);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
+        const rr = Math.hypot(x, z);
+        if (rr > 1e-5) {
+          const ang = Math.atan2(z, x);
+          // Лист нимфеи разорван от края к центру — узкий клин у черешка
+          const notch = 1 - 0.55 * Math.exp(-Math.abs(Math.sin(ang * 0.5)) * 6);
+          const curl = (rr / r) * (rr / r) * 0.09;
+          p.setXYZ(k, x * notch, y + curl, z * notch);
+        }
+      }
+      g.computeVertexNormals();
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const rr = Math.hypot(x, z) / r;
+        c.copy(cPad).lerp(cPadRim, OC.smoothstep(0.55, 1.0, rr));
+      });
+      OC.xform(g, { p: [Math.cos(a) * d, 0.02, Math.sin(a) * d] });
+      OC.withSway(g, () => 0.12);
+      list.push(g);
+    }
+
+    if (rng() < 0.85) {
+      const fx = (rng() - 0.5) * 0.45;
+      const fz = (rng() - 0.5) * 0.45;
+      const petals = 7;
+      for (let i = 0; i < petals; i++) {
+        const a = (i / petals) * Math.PI * 2;
+        const pet = new T.ConeGeometry(0.055, 0.19, 4);
+        OC.geoPrep(pet);
+        OC.paint(pet, (x, y, z, c) => c.copy(cPetal).lerp(cCore, y < -0.02 ? 0.5 : 0));
+        OC.xform(pet, { r: [Math.sin(a) * 0.75, a, -Math.cos(a) * 0.75], p: [fx + Math.cos(a) * 0.05, 0.12, fz + Math.sin(a) * 0.05] });
+        OC.withSway(pet, () => 0.2);
+        list.push(pet);
+      }
+      const core = new T.SphereGeometry(0.045, 8, 6);
+      OC.geoPrep(core);
+      OC.paint(core, cCore);
+      OC.xform(core, { p: [fx, 0.13, fz] });
+      OC.withSway(core, () => 0.2);
+      list.push(core);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildWaterLily = buildWaterLily;
+
+  /* Тростник Typha domingensis: пучок изогнутых листьев и 1–2 початка рогоза. */
+  function buildReed(rng) {
+    const list = [];
+    const cBase = COL(0x2f5d2a);
+    const cTip = COL(0x9ede6a);
+    const cSpike = COL(0x6b4423);
+    const n = 7 + Math.floor(rng() * 5);
+
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rng() * 0.5;
+      const d = rng() * 0.34;
+      const h = OC.lerp(1.7, 3.1, rng());
+      const w = OC.lerp(0.055, 0.11, rng());
+      const blade = new T.PlaneGeometry(w, h, 1, 6);
+      const bp = blade.attributes.position;
+      for (let k = 0; k < bp.count; k++) {
+        const x = bp.getX(k), y = bp.getY(k);
+        const t = (y + h * 0.5) / h;
+        bp.setXYZ(k, x * (1 - t * 0.55), y, Math.sin(t * 1.6) * 0.22 * t);
+      }
+      blade.computeVertexNormals();
+      OC.geoPrep(blade);
+      OC.paint(blade, (x, y, z, c) => {
+        const t = OC.clamp((y + h * 0.5) / h, 0, 1);
+        c.copy(cBase).lerp(cTip, t * 0.85);
+      });
+      OC.xform(blade, { r: [0, a + rng(), (rng() - 0.5) * 0.3], p: [Math.cos(a) * d, h * 0.5, Math.sin(a) * d] });
+      OC.withSway(blade, (x, y) => Math.max(0, y) * 0.5);
+      list.push(blade);
+    }
+
+    const spikes = 1 + (rng() < 0.5 ? 1 : 0);
+    for (let s = 0; s < spikes; s++) {
+      const a = rng() * 6.28;
+      const d = rng() * 0.28;
+      const h = OC.lerp(2.0, 2.8, rng());
+      const stem = new T.CylinderGeometry(0.022, 0.032, h, 5, 1);
+      OC.geoPrep(stem);
+      OC.paint(stem, cBase);
+      OC.xform(stem, { p: [Math.cos(a) * d, h * 0.5, Math.sin(a) * d] });
+      OC.withSway(stem, (x, y) => Math.max(0, y) * 0.35);
+      list.push(stem);
+
+      const head = new T.CylinderGeometry(0.052, 0.052, 0.34, 7, 2);
+      OC.geoPrep(head);
+      OC.paint(head, (x, y, z, c) => c.copy(cSpike).offsetHSL(0, 0, OC.clamp((y + 0.17) / 0.34, 0, 1) * 0.12));
+      OC.xform(head, { p: [Math.cos(a) * d, h + 0.13, Math.sin(a) * d] });
+      OC.withSway(head, () => 0.9);
+      list.push(head);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildReed = buildReed;
+
+  /* Известняковый уступ: плоские эродированные плиты со слоистостью. */
+  function buildLimestoneLedge(rng) {
+    const list = [];
+    const cTop = COL(0xd8d2c0);
+    const cFace = COL(0xa9a292);
+    const cBand = COL(0x8b8378);
+    const slabs = 2 + Math.floor(rng() * 2);
+
+    for (let i = 0; i < slabs; i++) {
+      const w = i === 0 ? OC.lerp(2.2, 3.4, rng()) : OC.lerp(1.1, 1.9, rng());
+      const d = i === 0 ? OC.lerp(1.1, 1.8, rng()) : OC.lerp(0.7, 1.2, rng());
+      const h = i === 0 ? OC.lerp(0.42, 0.7, rng()) : OC.lerp(0.28, 0.5, rng());
+      const g = new T.BoxGeometry(w, h, d, 5, 2, 4);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
+        const rug = 1 + 0.06 * Math.sin(x * 2.2 + z * 1.7) + 0.05 * OC.noise2(x * 1.5 + i * 7, z * 1.5);
+        p.setXYZ(k, x * rug, y * (1 + 0.04 * Math.cos(x * 3.1)), z * rug);
+      }
+      g.computeVertexNormals();
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const band = 0.5 + 0.5 * Math.sin(y * 9.0 + x * 0.4);
+        if (y > h * 0.42) c.copy(cTop).lerp(cFace, 0.25);
+        else c.copy(cFace).lerp(cBand, band * 0.6);
+      });
+      OC.xform(g, {
+        r: [(rng() - 0.5) * 0.12, rng() * 6.28, (rng() - 0.5) * 0.12],
+        p: [i === 0 ? 0 : (rng() - 0.5) * 1.4, h * 0.46, i === 0 ? 0 : (rng() - 0.5) * 1.0]
+      });
+      OC.withSway(g, () => 0);
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildLimestoneLedge = buildLimestoneLedge;
+
+  /* Илистый валун: округлая глыба, присыпанная осадком, с натёком ила у подножия. */
+  function buildMudRock(rng) {
+    const list = [];
+    const cRock = COL(0x4a4a58);
+    const cSilt = COL(0x6d6a63);
+    const cWet = COL(0x2f3138);
+    const sx = OC.lerp(0.78, 1.18, rng());
+    const sz = OC.lerp(0.78, 1.18, rng());
+
+    const g = new T.SphereGeometry(1, 14, 10);
+    const p = g.attributes.position;
+    for (let k = 0; k < p.count; k++) {
+      const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
+      const n = OC.fbm2(x * 1.6 + 11, z * 1.6, 3);
+      const rug = 1 + 0.18 * n + 0.09 * Math.sin(Math.atan2(z, x) * 3 + y * 2.4);
+      p.setXYZ(k, x * rug, Math.max(-0.62, y * 0.72 * rug), z * rug);
+    }
+    g.computeVertexNormals();
+    OC.geoPrep(g);
+    OC.paint(g, (x, y, z, c) => {
+      const t = OC.clamp((y + 0.6) / 1.3, 0, 1);
+      c.copy(cWet).lerp(cRock, OC.smoothstep(0.05, 0.55, t)).lerp(cSilt, OC.smoothstep(0.62, 1.0, t));
+    });
+    OC.xform(g, { r: [rng() * 0.2, rng() * 6.28, rng() * 0.2], s: [sx, 1, sz] });
+    OC.withSway(g, () => 0);
+    list.push(g);
+
+    const skirt = new T.CylinderGeometry(1.02, 1.24, 0.16, 14, 1, false);
+    const sp = skirt.attributes.position;
+    for (let k = 0; k < sp.count; k++) {
+      const x = sp.getX(k), z = sp.getZ(k);
+      const rug = 1 + 0.12 * OC.noise2(x * 2.2 + 5, z * 2.2);
+      sp.setXYZ(k, x * rug, sp.getY(k), z * rug);
+    }
+    skirt.computeVertexNormals();
+    OC.geoPrep(skirt);
+    OC.paint(skirt, (x, y, z, c) => c.copy(cSilt).lerp(cWet, OC.clamp((y + 0.08) / 0.16, 0, 1) * 0.45));
+    OC.xform(skirt, { s: [sx, 1, sz], p: [0, -0.52, 0] });
+    OC.withSway(skirt, () => 0);
+    list.push(skirt);
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildMudRock = buildMudRock;
+
+  /* Пещерные водоросли: тонкая биоплёнка пятнами на известняке в зоне рассеянного света. */
+  function buildCaveAlgae(rng) {
+    const list = [];
+    const cDark = COL(0x1f6b46);
+    const cLit = COL(0x6ee7b7);
+    const patches = 5 + Math.floor(rng() * 4);
+
+    for (let i = 0; i < patches; i++) {
+      const a = (i / patches) * Math.PI * 2 + rng() * 0.8;
+      const d = OC.lerp(0.05, 0.55, rng());
+      const w = OC.lerp(0.34, 0.72, rng());
+      const g = new T.PlaneGeometry(w, w * OC.lerp(0.7, 1.2, rng()), 4, 4);
+      const p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) {
+        const x = p.getX(k), y = p.getY(k);
+        const rr = Math.min(1, Math.hypot(x, y) / (w * 0.5));
+        p.setZ(k, Math.cos(rr * Math.PI * 0.5) * 0.075 + OC.noise2(x * 6 + i, y * 6) * 0.02);
+      }
+      g.computeVertexNormals();
+      OC.geoPrep(g);
+      OC.paint(g, (x, y, z, c) => {
+        const m = 0.5 + 0.5 * OC.noise2(x * 7.5 + 3, y * 7.5);
+        c.copy(cDark).lerp(cLit, OC.smoothstep(0.15, 0.85, m));
+      });
+      /* Пятно ложится плашмя ещё до поворота: PlaneGeometry стоит в плоскости XY,
+         а поворот вокруг Y в xform крутил бы его как флаг, а не раскладывал по дну
+         (замер: так пятно получалось высотой 0.72 м вместо 0.07 м). */
+      g.rotateX(-Math.PI / 2);
+      OC.xform(g, { r: [(rng() - 0.5) * 0.22, a, (rng() - 0.5) * 0.22], p: [Math.cos(a) * d, 0.035, Math.sin(a) * d] });
+      OC.withSway(g, () => 0.35);
+      list.push(g);
+    }
+    return OC.mergeGeometries(list);
+  }
+  BUILDERS.buildCaveAlgae = buildCaveAlgae;
 })(window.OC);

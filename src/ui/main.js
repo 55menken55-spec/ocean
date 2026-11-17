@@ -745,6 +745,9 @@ window.OC = window.OC || {};
       const scene = OC.getScene();
       if (scene && OC.FloatingOrigin) OC.FloatingOrigin.update(camera, scene);
       const camPos = camera.position;
+      /* craftPos — МИРОВАЯ точка аппарата: по ней ищут зону, дно, карту и
+         маяки. Всё, что стоит в сцене или сравнивается с фауной (ROV,
+         гидрофон, фара), обязано брать camPos — локальную точку. */
       const craftPos = OC.Navigation.getPosition ? OC.Navigation.getPosition() : camPos;
 
       OC.updateWorld(dt, time, camPos, autoCycle);
@@ -757,7 +760,7 @@ window.OC = window.OC || {};
         const photoOn = !!(OC.Expedition && OC.Expedition.isPhotoMode && OC.Expedition.isPhotoMode());
         const navMode = OC.Navigation.getMode();
         const showCraft = !!(OC.Navigation.isRovView && OC.Navigation.isRovView() && (navMode === 'swim' || navMode === 'orbit') && !photoOn);
-        OC.ROV.update(dt, time, camera, craftPos, OC.Navigation.getYaw(), OC.Navigation.getPitch(), camSpeed, activeBiome, {
+        OC.ROV.update(dt, time, camera, camPos, OC.Navigation.getYaw(), OC.Navigation.getPitch(), camSpeed, activeBiome, {
           showCraft,
           flashOn,
           labState: OC.EcoLab ? OC.EcoLab.getState() : null
@@ -771,7 +774,7 @@ window.OC = window.OC || {};
         const hOffset = activeBiome.depthOffset || 0;
         const hSeasonLevel = OC.Seasons ? OC.Seasons.getState(activeBiome).waterLevelM : 0;
         const hDepth = hOffset + (hOffset > 0 ? -craftPos.y : Math.max(0, hSeasonLevel - craftPos.y));
-        OC.Hydrophone.update(rawDt, activeBiome, activeFauna, craftPos, OC.Navigation.getYaw(), hDepth, wState.stormMix || 0);
+        OC.Hydrophone.update(rawDt, activeBiome, activeFauna, camPos, OC.Navigation.getYaw(), hDepth, wState.stormMix || 0);
       }
 
       hudTimer += rawDt;

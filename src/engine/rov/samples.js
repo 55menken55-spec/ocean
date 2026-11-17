@@ -8,6 +8,17 @@ window.OC = window.OC || {};
   const T = THREE;
   const _nearOut = { species: '', x: 0, y: 0, z: 0, scale: 1, tint: 0xffffff, dist: 999 };
   const _probe = new T.Vector3();
+  /* Зонд манипулятора в двух системах: мировой — для запросов к биому
+     (дно, зона), локальной — для поиска ближайшей флоры, которая стоит в
+     координатах сцены. */
+  const _probeLocal = new T.Vector3();
+  const _posLocal = new T.Vector3();
+
+  function toLocal(p, out) {
+    const o = OC.FloatingOrigin ? OC.FloatingOrigin.getOrigin() : null;
+    if (!o) return out.copy(p);
+    return out.set(p.x - o.x, p.y - o.y, p.z - o.z);
+  }
 
     // Цвета и классификация научных проб
   const CORAL_SPECIES = new Set([
@@ -23,6 +34,9 @@ window.OC = window.OC || {};
   const FLORA_SPECIES = new Set(['seagrass', 'kelp_giant', 'sargassum', 'arctic_kelp', 'kelp_arctic', 'mangrove', 'island_palm', 'cenote_vine', 'ulva_turf', 'igapo_tree', 'victoria_lily', 'amazon_sword', 'sunken_log', 'driftwood_snag', 'charophyte_bed']);
   /* Криобиота подлёдного океана Европы — гипотетические виды без земных аналогов */
   const CRYO_SPECIES = new Set(['cryo_forest', 'ice_veil', 'serpentine_chimney', 'brine_polyp', 'chemo_mat', 'cryo_tubeworm', 'sulfate_crust']);
+  /* Донные отложения Кракенова моря: это не биота, а осадок углеводородного моря */
+  const TITAN_SILT = new Set(['organic_silt', 'nitrile_drift', 'evaporite_crust', 'tholin_dune']);
+  const TITAN_ICE = new Set(['ice_boulder', 'shoreline_ice']);
 
 
     function scanManipulatorTarget(biome, pos, fwd, out) {
@@ -38,7 +52,7 @@ window.OC = window.OC || {};
     _probe.copy(pos).addScaledVector(fwd, 3.6);
 
     const nearFlora = OC.FloraStreamer && OC.FloraStreamer.findNearest
-      ? OC.FloraStreamer.findNearest(_probe, 14.5, _nearOut)
+      ? OC.FloraStreamer.findNearest(toLocal(_probe, _probeLocal), 14.5, _nearOut)
       : null;
 
     if (nearFlora && nearFlora.species) {
@@ -47,7 +61,8 @@ window.OC = window.OC || {};
       out.species = nearFlora.species;
       out.label = enc ? enc[0] : nearFlora.species;
       out.latin = enc ? enc[1] : '';
-      out.dist = Math.max(0.8, Math.hypot(nearFlora.x - pos.x, nearFlora.y - pos.y, nearFlora.z - pos.z));
+      const posL = toLocal(pos, _posLocal);
+      out.dist = Math.max(0.8, Math.hypot(nearFlora.x - posL.x, nearFlora.y - posL.y, nearFlora.z - posL.z));
       out.colorHex = nearFlora.tint || (CORAL_SPECIES.has(nearFlora.species) ? 0xff8a7a : 0x5be8b0);
       return out;
     }
@@ -61,7 +76,7 @@ window.OC = window.OC || {};
       out.label = floorEnc ? floorEnc[0] : 'Донный осадок';
       out.latin = floorEnc ? floorEnc[1] : 'Керн морского дна';
       out.dist = Math.max(1.0, clearance);
-      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : (biome.id === 'baikal' ? 0x71857d : (biome.id === 'europa_ocean' ? 0x4b5468 : 0xe8d9b5))));
+      out.colorHex = biome.id === 'hydrothermal_vents' ? 0x6a5c54 : (biome.id === 'arctic_sea' ? 0x99d6e8 : (biome.id === 'amazon_igapo' ? 0x8f5b2a : (biome.id === 'baikal' ? 0x71857d : (biome.id === 'europa_ocean' ? 0x4b5468 : (biome.id === 'titan_kraken' ? 0x6b4a26 : 0xe8d9b5)))));
       return out;
     }
 
@@ -71,20 +86,24 @@ window.OC = window.OC || {};
   function classifySample(target, biome, depthM, labState, atPos, seq) {
     const pos = atPos || (target && target.pos) || _probe;
     const isEuropa = biome.id === 'europa_ocean';
-    // Эко-лаборатория — инструмент рифового стресс-теста; для Европы его химия неприменима
-    const lab = isEuropa ? null : labState;
+    /* Метан Титана — неполярный растворитель: pH, минерализация и растворимый
+       кислород в земном смысле здесь не определены, а эко-лаборатория (инструмент
+       рифового стресс-теста) к этой среде неприменима — как и к Европе. */
+    const isTitan = !!biome.isTitan;
+    const lab = (isEuropa || isTitan) ? null : labState;
     const tempBase = biome.getTemperatureAt
       ? biome.getTemperatureAt(pos.x, depthM, biome.getZoneAt(pos.x, pos.y, pos.z))
       : (biome.getZoneAt(pos.x, pos.y, pos.z).tempC || 18);
     const delta = lab ? lab.tempDelta : 0;
-    const waterTemp = Math.max(-1.9, tempBase + delta);
-    const pH = lab ? lab.pH : (isEuropa ? 11.2 : 8.10);
-    const o2 = lab ? lab.dissolvedO2 : (isEuropa ? 0.4 : 7.2);
+    const waterTemp = Math.max(isTitan ? -182.5 : -1.9, tempBase + delta);
+    const pH = isTitan ? null : (lab ? lab.pH : (isEuropa ? 11.2 : 8.10));
+    const phText = pH === null ? 'pH не определён' : pH.toFixed(2) + ' pH';
+    const o2 = lab ? lab.dissolvedO2 : (isEuropa ? 0.4 : (isTitan ? 0.28 : 7.2));
     const bleachPct = labState ? Math.round(labState.bleaching * 100) : 0;
     const calcPct = labState ? Math.round(labState.calcification) : 100;
 
     let category = 'Проба воды';
-    let chemNote = `O₂ ${o2.toFixed(1)} мг/л · ${pH.toFixed(2)} pH`;
+    let chemNote = `O₂ ${o2.toFixed(1)} мг/л · ${phText}`;
     let colorHex = target.colorHex || 0x58e0ff;
 
     if (target.kind === 'flora') {
@@ -150,6 +169,34 @@ window.OC = window.OC || {};
         category = 'Пресноводный губочный био-риф';
         chemNote = 'Кремнистый скелет · эндемик Байкала · пресная вода';
         colorHex = 0x88b89b;
+      } else if (TITAN_SILT.has(sp) || TITAN_ICE.has(sp)) {
+        /* Пробы Кракенова моря: осадок углеводородного моря и водяной лёд,
+           который при 94 К работает как коренная порода, а не как лёд. */
+        if (sp === 'organic_silt') {
+          category = 'Органический ил Титана';
+          chemNote = `Толины и нитрилы · ${depthM.toFixed(0)} м · −179,6 °C · ${phText}`;
+          colorHex = 0x6b4a26;
+        } else if (sp === 'nitrile_drift') {
+          category = 'Нитриловые наносы';
+          chemNote = `HCN / CH₃CN в осадке · эстуарий Морей-Синус · ${phText}`;
+          colorHex = 0x5c3a58;
+        } else if (sp === 'evaporite_crust') {
+          category = 'Эвапоритовая корка';
+          chemNote = `Осадок испарения CH₄/C₂H₆ · след уровня моря · ${phText}`;
+          colorHex = 0xc4a271;
+        } else if (sp === 'tholin_dune') {
+          category = 'Толиновая дюна';
+          chemNote = 'Органический аэрозоль атмосферы · фотохимия CH₄ + N₂';
+          colorHex = 0x9d6f3f;
+        } else if (sp === 'ice_boulder') {
+          category = 'Глыба водяного льда';
+          chemNote = 'H₂O при 94 К · твёрже гранита · коренная порода Титана';
+          colorHex = 0xd7e6f0;
+        } else {
+          category = 'Ледяная береговая кромка';
+          chemNote = `Прибой жидкого метана о водяной лёд · ${depthM.toFixed(0)} м`;
+          colorHex = 0xdfeef8;
+        }
       } else if (CRYO_SPECIES.has(sp)) {
         colorHex = 0x9fe8ff;
         if (sp === 'cryo_forest') {
@@ -178,11 +225,13 @@ window.OC = window.OC || {};
         category = 'Образец бентоса';
         chemNote = sp === 'hadal_sponge'
           ? `Биогенный кремний SiO₂ · ~1090 атм`
-          : `${pH.toFixed(2)} pH · ${waterTemp.toFixed(1)} °C`;
+          : `${phText} · ${waterTemp.toFixed(1)} °C`;
       }
     } else if (target.kind === 'floor') {
       category = 'Керн грунта';
-      chemNote = biome.id === 'mariana_trench'
+      chemNote = biome.id === 'titan_kraken'
+        ? `Органический ил и толины · ${depthM.toFixed(0)} м · ~${(1.45 + depthM / 113.6).toFixed(1)} атм · ${phText}`
+        : (biome.id === 'mariana_trench'
         ? `Радиоляриевый ил · ${depthM.toFixed(0)} м`
         : (biome.id === 'brine_pool'
           ? `Рассол 230‰ и карбонатный ил · ${depthM.toFixed(0)} м`
@@ -196,7 +245,7 @@ window.OC = window.OC || {};
                   ? `Полярный ил · ${waterTemp.toFixed(1)} °C`
                   : (biome.id === 'europa_ocean'
                     ? `Серпентинитовый базальт и сульфатный ил · ${depthM.toFixed(0)} м · ~340 атм`
-                    : (biome.id === 'baikal' ? `Диатомовый ил рифта · ${depthM.toFixed(0)} м · пресная вода` : `Карбонатный ил · ${pH.toFixed(2)} pH`)))))));
+                    : (biome.id === 'baikal' ? `Диатомовый ил рифта · ${depthM.toFixed(0)} м · пресная вода` : `Карбонатный ил · ${phText}`))))))));
     }
 
     return {
@@ -209,7 +258,8 @@ window.OC = window.OC || {};
       category,
       depthM: Number(depthM.toFixed(1)),
       tempC: Number(waterTemp.toFixed(1)),
-      pH: Number(pH.toFixed(2)),
+      /* pH пробы: для неводной среды физически не определён. */
+      pH: pH === null ? null : Number(pH.toFixed(2)),
       o2: Number(o2.toFixed(1)),
       bleachPct,
       chemNote,
@@ -236,6 +286,10 @@ window.OC = window.OC || {};
     let prevT = null;
     let minO2 = 99;
     const isEuropa = biome.id === 'europa_ocean';
+    /* Физика жидкости вынесена в OC.Fluid: вода, жидкие углеводороды Титана и
+       будущие среды описываются в одном месте, а не дублируются формулами. */
+    const fluid = OC.Fluid ? OC.Fluid.of(biome) : null;
+    const isMethane = !!fluid && fluid.id === 'methane';
     // Гравитация Европы — 1/7 земной, поэтому гидростатика в 7 раз слабее
     const pScale = biome.pressureScale || 1;
 
@@ -261,7 +315,7 @@ window.OC = window.OC || {};
         Tval -= OC.smoothstep(2, 26, d) * 1.9;
       } else if (biome.id === 'baikal') {
         // Байкал использует собственный сезонный профиль getTemperatureAt и холодную изотерму глубин.
-      } else if (!biome.noSurface && !biome.hasAurora) {
+      } else if (!biome.noSurface && !biome.hasAurora && !isMethane) {
         const thermoDrop = OC.smoothstep(18, 65, d) * 3.8;
         Tval -= thermoDrop;
       } else if (biome.hasAurora) {
@@ -277,7 +331,10 @@ window.OC = window.OC || {};
         // Европа: лёд сверху холодный (−1,6 °C), у серпентинитовых труб — тёплый флюид (+2…+4 °C)
         Tval += OC.smoothstep(0.72, 1.0, f) * 1.6;
       }
-      Tval = Math.max(-1.9, Tval);
+      /* Порог замерзания своей среды: у морской воды −1,9 °C, у жидкого
+         метана Титана минус 182,5 °C. Один общий порог в −1,9 превращал бы
+         всё метановое море в «почти замёрзшую воду». */
+      Tval = Math.max(isMethane ? fluid.tempC - 3 : -1.9, Tval);
 
       // Байкал остаётся хорошо насыщенным кислородом до глубины; морская OMZ-модель к нему не применяется.
       let o2Val = labO2;
@@ -294,6 +351,12 @@ window.OC = window.OC || {};
         // Океан Европы бескислородный: света нет 25 км, фотосинтез невозможен.
         // Кислород есть только как продукт радиолиза льда — десятые доли мг/л.
         o2Val = OC.clamp(0.42 - f * 0.18 + OC.smoothstep(0.7, 1.0, f) * 0.35, 0.12, 0.9);
+      }
+      if (isMethane) {
+        /* Метановое море Титана: растворённый O₂ — следы (азот и CO из
+           атмосферы), а не продукт фотосинтеза. Для гипотетической
+           метанотрофной экологии значим не O₂, а пара H₂/C₂H₂. */
+        o2Val = OC.clamp(0.28 - f * 0.12 + OC.smoothstep(0.6, 1.0, f) * 0.14, 0.05, 0.4);
       }
       if (o2Val < minO2) minO2 = o2Val;
 
@@ -314,6 +377,13 @@ window.OC = window.OC || {};
         conductivityUSCm = OC.clamp(112000 + ventInfluence * 20000, 108000, 136000);
         tdsMgL = conductivityUSCm * 0.93;
         mineralizationPpt = tdsMgL / 1000;
+      } else if (isMethane) {
+        /* Углеводороды — неполярная среда и диэлектрик: проводимость на
+           семь-восемь порядков ниже морской воды, а TDS и минерализация в
+           земном смысле не определены (растворены CH₄, C₂H₆ и N₂). */
+        conductivityUSCm = 0.02;
+        tdsMgL = 0;
+        mineralizationPpt = 0;
       }
 
       if (prevT !== null) {
@@ -330,7 +400,10 @@ window.OC = window.OC || {};
     const surfaceTemp = bins[0].tempC;
     const bottomTemp = bins[bins.length - 1].tempC;
     const bottomBin = bins[bins.length - 1];
-    const maxPressureAtm = 1 + (maxDepthM / 10.08) * pScale;
+    /* Давление считает OC.Fluid: у воды 1 атм у поверхности и 10,08 м/атм
+       (как и раньше), у метана Титана 1,45 атм и 113,6 м/атм — на 300 м там
+       всего ≈4,1 атм против 31 атм в воде. */
+    const maxPressureAtm = fluid ? OC.Fluid.pressureAtmAt(biome, maxDepthM) : 1 + (maxDepthM / 10.08) * pScale;
 
     return {
       biomeId: biome.id,
@@ -345,10 +418,14 @@ window.OC = window.OC || {};
       bottomTemp: Number(bottomTemp.toFixed(1)),
       thermoclineM: Number(thermoclineM.toFixed(0)),
       minO2: Number(minO2.toFixed(1)),
-      waterType: biome.id === 'baikal' || biome.id === 'amazon_igapo' ? 'freshwater'
-        : (biome.id === 'brine_pool' ? 'brine'
-          : (biome.id === 'europa_ocean' ? 'subglacial' : 'marine')),
-      pH: lab ? Number(lab.pH.toFixed(2)) : (isEuropa ? 11.2 : 8.1),
+      waterType: isMethane ? 'methane'
+        : (biome.id === 'baikal' || biome.id === 'amazon_igapo' ? 'freshwater'
+          : (biome.id === 'brine_pool' ? 'brine'
+            : (biome.id === 'europa_ocean' ? 'subglacial' : 'marine'))),
+      /* pH определён только для полярного растворителя: в жидком метане нет
+         воды как среды, поэтому водородный показатель физически бессмыслен. */
+      pH: isMethane ? null : (lab ? Number(lab.pH.toFixed(2)) : (isEuropa ? 11.2 : 8.1)),
+      fluid: isMethane ? { kind: 'methane', density: 660, soundSpeed: 1420, note: fluid.note } : { kind: 'water', density: 1025, soundSpeed: 1500 },
       conductivityUSCm: bottomBin.conductivityUSCm === null ? null : Number(bottomBin.conductivityUSCm.toFixed(0)),
       tdsMgL: bottomBin.tdsMgL === null ? null : Number(bottomBin.tdsMgL.toFixed(0)),
       mineralizationPpt: bottomBin.mineralizationPpt === null ? null : Number(bottomBin.mineralizationPpt.toFixed(3)),

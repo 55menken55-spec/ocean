@@ -152,6 +152,11 @@ window.OC._FaunaBuilders = window.OC._FaunaBuilders || {};
     mesh.count = n;
     mesh.frustumCulled = false;
     mesh.userData.key = opts.key || 'fish_blue';
+    /* Якорь контейнера всегда в (0,0,0): позиции рыб лежат в instanceMatrix и
+       каждый кадр пересчитываются симуляцией в локальных координатах. Без
+       этого флага FloatingOrigin сдвинул бы контейнер, и стая уехала бы от
+       дна на delta (см. комментарий в floating_origin.js). */
+    mesh.userData.noFloatingOrigin = true;
     mesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
     scene.add(mesh);
 

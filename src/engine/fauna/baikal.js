@@ -98,4 +98,70 @@ window.OC = window.OC || {};
     };
   }
   B.makeBaikalSeal = makeBaikalSeal;
+
+  /* ---------- Метановый сип Байкала ---------- */
+  /* Запись Атласа baikal: пузырьковый выход газа из донных осадков вдоль
+     активных разломов рифта. В мире сип виден как поток пузырей (engine/fauna/haze.js)
+     и как цель гидрофона/сонара; здесь — объёмная модель для 3D-студии Атласа. */
+  B.makeMethaneSeep = function makeMethaneSeep(scene, biome, opts) {
+    const group = new T.Group();
+    const rng = OC.mulberry32((opts && opts.seed) || 5150);
+    const cMud = new T.Color(0x4a4335);
+    const cSilt = new T.Color(0x6d6552);
+    const cCrust = new T.Color(0xc9d6da); // газовая гидраты-корка
+    const cBubble = new T.Color(0xdff6ff);
+
+    // Плоский осадочный бугор с впадиной в центре
+    const mound = new T.SphereGeometry(1, 22, 12);
+    const mp = mound.attributes.position;
+    for (let i = 0; i < mp.count; i++) {
+      const x = mp.getX(i), y = mp.getY(i), z = mp.getZ(i);
+      const d = Math.hypot(x, z);
+      const n = OC.fbm2 ? OC.fbm2(x * 2.2 + 3, z * 2.2, 3) : 0;
+      // Воронка сипа: центр проседает, вокруг — невысокий вал
+      const dip = 1 - 0.5 * Math.exp(-d * d * 6);
+      const yv = y > 0 ? (0.22 + 0.1 * n) * dip : -0.06;
+      mp.setXYZ(i, x * 1.55, yv, z * 1.55);
+    }
+    mound.computeVertexNormals();
+    OC.geoPrep(mound);
+    OC.paint(mound, (x, y, z, c) => {
+      const d = Math.hypot(x, z) / 1.55;
+      c.copy(cMud).lerp(cSilt, OC.smoothstep(0.25, 1.0, d)).lerp(cCrust, OC.smoothstep(0.0, 0.3, d) * 0.35);
+    });
+    group.add(new T.Mesh(mound, OC._FaunaCtx.creatureMat));
+
+    // Гидратная корка вокруг жерла — неровные белёсые пластины
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + rng() * 0.5;
+      const d = OC.lerp(0.28, 0.46, rng());
+      const plate = new T.SphereGeometry(1, 8, 6);
+      plate.scale(OC.lerp(0.12, 0.2, rng()), 0.05, OC.lerp(0.1, 0.16, rng()));
+      OC.geoPrep(plate);
+      OC.paint(plate, (x, y, z, c) => c.copy(cCrust).lerp(cSilt, OC.clamp(-y * 3, 0, 0.5)));
+      const pm = new T.Mesh(plate, OC._FaunaCtx.creatureMat);
+      pm.position.set(Math.cos(a) * d, 0.1 + rng() * 0.04, Math.sin(a) * d);
+      pm.rotation.y = a + rng();
+      group.add(pm);
+    }
+
+    // Струя пузырей: снизу вверх с расширением факела
+    for (let i = 0; i < 22; i++) {
+      const t = i / 21;
+      const a = rng() * Math.PI * 2;
+      const spread = 0.05 + t * 0.24;
+      const r = OC.lerp(0.022, 0.05, rng()) * (0.7 + t * 0.7);
+      const bub = new T.SphereGeometry(r, 7, 5);
+      OC.geoPrep(bub);
+      OC.paint(bub, (x, y, z, c) => c.copy(cBubble).lerp(new T.Color(0x9fd6e8), OC.clamp(-y * 6, 0, 0.6)));
+      const bm = new T.Mesh(bub, OC._FaunaCtx.creatureMat);
+      const rr = Math.sqrt(rng()) * spread;
+      bm.position.set(Math.cos(a) * rr, 0.06 + t * 1.85, Math.sin(a) * rr);
+      group.add(bm);
+    }
+
+    group.userData.key = 'methane_seep_baikal';
+    scene.add(group);
+    return { key: 'methane_seep_baikal', getPosition: () => group.position, update() {} };
+  };
 })(window.OC);

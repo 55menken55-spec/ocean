@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { BROWSER_GATE, checkPerfRows } from './perf_gate.mjs';
 
 let chromium;
 try {
@@ -26,6 +27,17 @@ let stage = 'init';
 function enterStage(name) {
   stage = name;
   console.log(`\n--- stage: ${name} ---`);
+}
+
+/* Ждём заданное число ОТРИСОВАННЫХ кадров, а не миллисекунды: на SwiftShader
+   кадр может идти сотни миллисекунд, и фиксированный sleep даёт на разных
+   машинах разное число кадров — замеры пикселей получаются несравнимыми. */
+async function waitFrames(page, count) {
+  await page.evaluate((n) => new Promise((resolve) => {
+    let left = n;
+    const step = () => (--left <= 0 ? resolve() : requestAnimationFrame(step));
+    requestAnimationFrame(step);
+  }), count);
 }
 
 const browser = await chromium.launch({
@@ -122,9 +134,25 @@ try {
      панцирь (и канал рассола в нём) перестают быть видны. */
   await page.evaluate(() => window.OC.switchBiome('europa_ocean'));
   await page.waitForFunction(() => window.OC.getPerfStats().biomeId === 'europa_ocean' && window.OC.getPerfStats().drawCalls > 0, { timeout: 25000 });
-  await page.waitForTimeout(2500);
+  /* Замер яркости не должен зависеть от производительности машины: SwiftShader
+     медленный, адаптивный Auto-LOD снижает пресет до low и отключает postFx,
+     из-за чего ледяной панцирь темнеет и порог «в 2.5 раза ярче дна» перестаёт
+     выполняться на слабом железе. Качество фиксируется и возвращается назад. */
+  const qualitySaved = await page.evaluate(() => {
+    const st = { auto: window.OC.Quality.isAutoLod(), id: window.OC.Quality.getId() };
+    window.OC.Quality.setAutoLod(false);
+    window.OC.Quality.set('medium');
+    return st;
+  });
+  await waitFrames(page, 45);
   const ceilingProbe = await page.evaluate(async () => {
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Кадры, а не миллисекунды: SwiftShader рисует медленно, и фиксированный
+    // sleep успевает показать разное число кадров от прогона к прогону.
+    const frames = (n) => new Promise((resolve) => {
+      let left = n;
+      const step = () => (--left <= 0 ? resolve() : requestAnimationFrame(step));
+      requestAnimationFrame(step);
+    });
     const sample = () => new Promise((resolve) => {
       requestAnimationFrame(() => {
         const c = document.getElementById('scene');
@@ -137,17 +165,24 @@ try {
         resolve({ r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), lum: Math.round((0.299 * r + 0.587 * g + 0.114 * b) / n) });
       });
     });
+    // Медиана трёх сэмплов: единичный кадр ловит всплеск каустики/планктона
+    const sampleMedian = async () => {
+      const runs = [];
+      for (let i = 0; i < 3; i++) { runs.push(await sample()); await frames(2); }
+      runs.sort((a, b) => a.lum - b.lum);
+      return runs[1];
+    };
     const b = window.OC.Biomes.getActive();
     const lm = b.landmarks.find((l) => l.id === 'basal_ice_view');
     const out = { landmark: lm ? lm.id : null, ceiling: window.OC.Terrain.getCeilingStats(), flashlightWas: window.OC.isFlashlightOn() };
     // Прожектор выключаем: иначе в кадр попадает аддитивный луч и замер становится замером луча
     window.OC.setFlashlight(false);
     window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, -1.25);
-    await sleep(2200);
-    out.floor = await sample();
+    await frames(45);
+    out.floor = await sampleMedian();
     window.OC.Navigation.setPosition(lm.x, lm.y, lm.z, 0.0, 1.25);
-    await sleep(2200);
-    out.ice = await sample();
+    await frames(45);
+    out.ice = await sampleMedian();
     window.OC.setFlashlight(out.flashlightWas);
     return out;
   });
@@ -157,7 +192,11 @@ try {
     `Europa basal ice shell is not readable without the flashlight (looking up luminance ${ceilingProbe.ice.lum}, sample ${JSON.stringify(ceilingProbe.ice)})`);
   assert(ceilingProbe.ice.lum >= ceilingProbe.floor.lum * 2.5,
     `Europa ice ceiling must read brighter than the abyssal floor (ice ${ceilingProbe.ice.lum} vs floor ${ceilingProbe.floor.lum})`);
-  console.log(`   Europa basal ice shell readable in Chromium: looking up luminance ${ceilingProbe.ice.lum} vs abyssal floor ${ceilingProbe.floor.lum} (${ceilingProbe.ceiling.ceilingVisible} ceiling chunks).`);
+  await page.evaluate((st) => {
+    window.OC.Quality.set(st.id);
+    window.OC.Quality.setAutoLod(st.auto);
+  }, qualitySaved);
+  console.log(`   Europa basal ice shell readable in Chromium: looking up luminance ${ceilingProbe.ice.lum} vs abyssal floor ${ceilingProbe.floor.lum} (${ceilingProbe.ceiling.ceilingVisible} ceiling chunks, quality fixed to medium).`);
 
   enterStage('europa-atlas-previews');
   /* Регрессия: карточки Атласа «Базальный слой ледяного панциря» и «Канал рассола»
@@ -216,9 +255,10 @@ try {
 
   const reportMeta = await page.evaluate(() => {
     const exp = window.OC.Expedition && window.OC.Expedition.exportReport ? window.OC.Expedition.exportReport('md') : null;
-    return exp ? { len: exp.content.length, biomes: exp.report.biomes.length } : null;
+    return exp ? { len: exp.content.length, biomes: exp.report.biomes.length, total: window.OC.Biomes.list().length } : null;
   });
-  assert(reportMeta && reportMeta.biomes === 14 && reportMeta.len > 400, `Playwright report export failed: ${JSON.stringify(reportMeta)}`);
+  assert(reportMeta && reportMeta.biomes === reportMeta.total && reportMeta.len > 400,
+    `Playwright report export must cover every registered biome: ${JSON.stringify(reportMeta)}`);
 
   const report = [];
   for (const id of biomeIds) {
@@ -242,6 +282,17 @@ try {
   console.log('\nBiome FPS & Draw-Call Profile (Headless Chromium SwiftShader):');
   console.table(report);
 
+  /* Профиль как гейт сборки. Абсолютных порогов времени здесь нет: скорость
+     SwiftShader зависит от железа раннера в разы, поэтому сравниваются только
+     отношения внутри одного прогона (см. tests/perf_gate.mjs). */
+  enterStage('desktop-perf-gate');
+  const gate = checkPerfRows(report, BROWSER_GATE, 'Chromium SwiftShader');
+  if (gate.violations.length) {
+    const detail = gate.violations.join('\n  - ');
+    throw new Error(`Perf gate exceeded: ${detail} (медиана avg ${gate.medAvg.toFixed(2)} мс)`);
+  }
+  console.log(`   Perf gate: медиана avg ${gate.medAvg.toFixed(2)} мс, худший биом ${gate.worst.biome} ${gate.worst.rel.toFixed(2)}× медианы (порог ${BROWSER_GATE.maxRelativeAvgCpuMs}×), худшие зубья ${gate.worstSpike.biome} p95/avg ${gate.worstSpike.spikes.toFixed(2)}× (порог ${BROWSER_GATE.maxP95OverAvg}×).`);
+
   if (SUMMARY_MD) {
     const lines = [
       '### WebGL Headless Chromium (SwiftShader) Biome E2E Profile',
@@ -252,6 +303,8 @@ try {
     for (const r of report) {
       lines.push(`| \`${r.biomeId}\` | ${r.fps} | ${r.avgCpuMs} | ${r.p95CpuMs} | ${r.maxCpuMs} | ${r.drawCalls} | ${r.triangles} | ${r.chunksVisible} | ${r.floraInstances} | ${r.schoolFish} |`);
     }
+    lines.push('');
+    lines.push(`Perf gate: медиана avg **${gate.medAvg.toFixed(2)} ms**, худший биом \`${gate.worst.biome}\` **${gate.worst.rel.toFixed(2)}x** медианы (порог ${BROWSER_GATE.maxRelativeAvgCpuMs}x), худшие зубья \`${gate.worstSpike.biome}\` p95/avg **${gate.worstSpike.spikes.toFixed(2)}x** (порог ${BROWSER_GATE.maxP95OverAvg}x).`);
     fs.appendFileSync(SUMMARY_MD, lines.join('\n') + '\n');
   }
 

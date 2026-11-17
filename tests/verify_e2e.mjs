@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { VM_GATE, assertPerfGate } from './perf_gate.mjs';
 
 const ROOT = process.cwd();
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -454,7 +455,8 @@ assert.equal(OC.ROV.getBuoys().length, 0, 'ROV buoy recall must clear active buo
 
 // Stage 4 E2E checks: Scientific Report Export & Adaptive Auto-LOD inside production bundle
 const repE2E = OC.Expedition.exportReport('md', { perfStats: OC.getPerfStats(), mapCoveragePct: OC.Minimap.getCoverage() });
-assert(repE2E && repE2E.content.includes('Большой Барьерный риф') && repE2E.report.biomes.length === 14, 'E2E production scientific report export must include all 14 biomes');
+assert(repE2E && repE2E.content.includes('Большой Барьерный риф') && repE2E.report.biomes.length === OC.Biomes.list().length,
+  `E2E production scientific report export must include all ${OC.Biomes.list().length} biomes, got ${repE2E && repE2E.report.biomes.length}`);
 OC.Quality.setAutoLod(true);
 for (let i = 0; i < 3; i++) OC.Quality.evaluateAutoLod(44.0, 1.0);
 assert.equal(OC.Quality.getId(), 'medium', 'Production Auto-LOD must downgrade high -> medium under simulated frame pressure');
@@ -463,7 +465,7 @@ stepFrames(2);
 
 console.log('3) Profiling 14 biomes × 100 continuous frames (1400 frames + 3D Multibeam Sonar scans)...');
 const biomeList = OC.Biomes.list();
-assert.equal(biomeList.length, 14, 'All 14 biomes must be registered in production bundle');
+assert(biomeList.length >= 14, `All registered biomes must be present in the production bundle, got ${biomeList.length}`);
 
 const perfTable = [];
 for (const b of biomeList) {
@@ -485,10 +487,13 @@ for (const b of biomeList) {
 }
 
 console.table(perfTable);
+/* Профиль — гейт сборки, а не справка к логу. Прежний порог avgCpuMs < 250 мс
+   при реальных 8-50 мс не ловил ничего; бюджет отношений см. в perf_gate.mjs. */
 for (const row of perfTable) {
-  assert(Number.isFinite(row.avgCpuMs) && row.avgCpuMs < 250, `Biome ${row.biome} CPU frame time budget exceeded: ${row.avgCpuMs} ms`);
-  assert(row.draws >= 30, `Biome ${row.biome} reported unexpected draw call count: ${row.draws}`);
+  assert(Number.isFinite(row.avgCpuMs) && Number.isFinite(row.p95CpuMs),
+    `Biome ${row.biome} reported non-finite CPU frame time: ${JSON.stringify(row)}`);
 }
+assertPerfGate(perfTable, VM_GATE, 'VM production bundle');
 assert.equal(pageErrors.length, 0, `Production bundle logged runtime errors:\n${pageErrors.join('\n')}`);
 assert.equal(glErrors.length, 0, `WebGL shader compilation errors:\n${glErrors.join('\n')}`);
 assert(compiledShaders.length >= 10, `Expected >= 10 compiled GLSL shaders captured by WebGL spy, got ${compiledShaders.length}`);

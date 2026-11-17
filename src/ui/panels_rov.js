@@ -217,15 +217,20 @@ window.OC = window.OC || {};
       if (rovCtdWater) {
         const typeLabel = cast.waterType === 'freshwater' ? 'Пресная'
           : (cast.waterType === 'brine' ? 'Рассол'
-            : (cast.waterType === 'subglacial' ? 'Подлёдный океан' : 'Морская'));
+            : (cast.waterType === 'subglacial' ? 'Подлёдный океан'
+              : (cast.waterType === 'methane' ? 'Жидкий метан' : 'Морская')));
         rovCtdWater.textContent = Number.isFinite(cast.mineralizationPpt)
           ? typeLabel + ' · ' + cast.mineralizationPpt.toFixed(2) + '‰'
           : typeLabel;
       }
       if (rovCtdConductivity) {
-        rovCtdConductivity.textContent = Number.isFinite(cast.conductivityUSCm)
-          ? cast.conductivityUSCm + ' µS/см · ' + cast.tdsMgL + ' мг/л TDS'
-          : '—';
+        /* Жидкий метан — диэлектрик: нулевая проводимость здесь не ошибка
+           зонда, а свойство среды, поэтому подписываем её отдельно. */
+        rovCtdConductivity.textContent = cast.waterType === 'methane'
+          ? 'диэлектрик · неполярная среда'
+          : (Number.isFinite(cast.conductivityUSCm)
+            ? cast.conductivityUSCm + ' µS/см · ' + cast.tdsMgL + ' мг/л TDS'
+            : '—');
       }
       if (rovCtdPh) rovCtdPh.textContent = Number.isFinite(cast.pH) ? cast.pH.toFixed(2) : '—';
       if (rovCtdChart && activeBiome()) {
@@ -269,7 +274,10 @@ window.OC = window.OC || {};
       const fauna = activeFauna();
       if (fauna && fauna.notifySiltKick) {
         const fl = activeBiome().getHeight(pos.x, pos.z);
-        if (pos.y - fl < 6.0) fauna.notifySiltKick(pos, 1.0);
+        /* Взвесь поднимает фауна, а она стоит в координатах сцены: мировую
+           точку аппарата надо перевести в локальную. */
+        const local = (OC.FloatingOrigin && OC.FloatingOrigin.toLocal) ? OC.FloatingOrigin.toLocal(pos) : pos;
+        if (pos.y - fl < 6.0) fauna.notifySiltKick(local, 1.0);
       }
       renderRovSamples();
       if (smp) toast('Проба взята: ' + smp.title + ' (' + smp.category + (smp.isNewAtlas ? ' · Атлас!' : '') + ')');
